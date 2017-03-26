@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 
@@ -27,7 +28,7 @@ namespace XTMF2
     /// <summary>
     /// The parameter hook connects a parameter to the module instance
     /// </summary>
-    public abstract class ParameterHook
+    public abstract class ParameterHook : INotifyPropertyChanged
     {
         /// <summary>
         /// The name of the parameter hook
@@ -57,6 +58,7 @@ namespace XTMF2
                 return false;
             }
             Parameter = parameter;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Parameter)));
             return true;
         }
 
@@ -69,6 +71,8 @@ namespace XTMF2
         public abstract bool AssignValueToModule(object module, ref string error);
 
         private static readonly ConcurrentDictionary<Type, List<ParameterHook>> StoredHooks = new ConcurrentDictionary<Type, List<ParameterHook>>();
+
+        public event PropertyChangedEventHandler PropertyChanged;
 
         internal ParameterAttribute Attribute { get; }
 

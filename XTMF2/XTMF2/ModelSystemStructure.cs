@@ -70,7 +70,22 @@ namespace XTMF2
 
         public ModelSystemStructure(Type t)
         {
+            Type = t;
+            Name = GetName(t);
+        }
 
+        /// <summary>
+        /// Get a default name from the type
+        /// </summary>
+        /// <param name="type">The type to derive the name from</param>
+        /// <returns>True if the operation was successful, false otherwise</returns>
+        private static string GetName(Type type)
+        {
+            if(type == null)
+            {
+                throw new ArgumentNullException(nameof(type));
+            }
+            return type.Name;
         }
     }
 }

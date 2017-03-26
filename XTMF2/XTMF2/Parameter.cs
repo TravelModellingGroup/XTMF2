@@ -18,6 +18,7 @@
 */
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Text;
 
 namespace XTMF2
@@ -26,19 +27,21 @@ namespace XTMF2
     /// A name and value that gets bound to a ParameterHook and thusly to a
     /// model system structure.
     /// </summary>
-    public abstract class Parameter
+    public abstract class Parameter : INotifyPropertyChanged
     {
         /// <summary>
         /// 
         /// </summary>
         public string Name { get; private set; }
 
+        public event PropertyChangedEventHandler PropertyChanged;
+
         /// <summary>
         /// 
         /// </summary>
         /// <param name="name"></param>
         /// <param name="error"></param>
-        /// <returns></returns>
+        /// <returns>True if the operation was successful, false otherwise</returns>
         public bool SetName(string name, ref string error)
         {
             if(!ValidateName(name, ref error))
@@ -46,6 +49,7 @@ namespace XTMF2
                 return false;
             }
             Name = name;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
             return true;
         }
 
@@ -59,7 +63,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="newValue"></param>
         /// <param name="error"></param>
-        /// <returns></returns>
+        /// <returns>True if the operation was successful, false otherwise</returns>
         public bool SetValue (string newValue, ref string error)
         {
             if (!ValidateName(newValue, ref error))
@@ -67,6 +71,7 @@ namespace XTMF2
                 return false;
             }
             Value = newValue;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
             return true;
         }
 
@@ -75,15 +80,15 @@ namespace XTMF2
         /// </summary>
         /// <param name="newValue">The name to change to</param>
         /// <param name="error"></param>
-        /// <returns></returns>
+        /// <returns>True if the value is acceptable, false otherwise</returns>
         protected abstract bool ValidateName(string newValue, ref string error);
-        
+
         /// <summary>
         /// 
         /// </summary>
         /// <param name="newValue"></param>
         /// <param name="error"></param>
-        /// <returns></returns>
+        /// <returns>True if the value is acceptable, false otherwise</returns>
         protected abstract bool ValidateValue(string newValue, ref string error);
     }
 }
