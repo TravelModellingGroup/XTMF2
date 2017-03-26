@@ -46,5 +46,10 @@ namespace XTMF2
             }
             return false;
         }
+
+        protected override ParameterHook Clone()
+        {
+            return new PropertyParameterHook(Info, Attribute);
+        }
     }
 }

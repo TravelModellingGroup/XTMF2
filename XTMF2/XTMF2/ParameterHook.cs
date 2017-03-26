@@ -52,7 +52,12 @@ namespace XTMF2
         /// <returns>True if the operation was successful, false otherwise</returns>
         public bool SetParameter(Parameter parameter, ref string error)
         {
-            return false;
+            if (!ArbitraryParameterParser.Check(Type, parameter.Value, ref error))
+            {
+                return false;
+            }
+            Parameter = parameter;
+            return true;
         }
 
         /// <summary>
@@ -69,12 +74,17 @@ namespace XTMF2
 
         public string DefaultValue => Attribute.DefaultValue;
 
-        public ParameterHook(ParameterAttribute attribute)
+        protected ParameterHook(ParameterAttribute attribute)
         {
             Attribute = attribute;
         }
 
-        internal static List<ParameterHook> CreateParameterHooks(Type moduleType)
+        /// <summary>
+        /// Create the parameter hooks for a given module type
+        /// </summary>
+        /// <param name="moduleType">The module type to generate the parameters for.</param>
+        /// <returns>A list of parameter hooks for a module type.</returns>
+        internal static List<ParameterHook> GetParameterHooks(Type moduleType)
         {
             if (moduleType == null)
             {
@@ -83,7 +93,7 @@ namespace XTMF2
             // check to see if we already have this cached
             if (StoredHooks.TryGetValue(moduleType, out var previouslyStored))
             {
-                return previouslyStored;
+                return previouslyStored.Select(prev => prev.Clone()).ToList();
             }
             // if the values were not previously cached we will need to use reflection to get the parameters
             var moduleTypeInfo = moduleType.GetTypeInfo();
@@ -95,9 +105,12 @@ namespace XTMF2
                                 let parameterAt = (ParameterAttribute)property.GetCustomAttribute(typeof(ParameterAttribute))
                                 where parameterAt != null
                                 select (ParameterHook)new PropertyParameterHook(property, parameterAt);
+
             var ret = fieldHooks.Union(propertyHooks).ToList();
             StoredHooks[moduleType] = ret;
             return ret;
         }
+
+        protected abstract ParameterHook Clone();
     }
 }
