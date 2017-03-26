@@ -17,21 +17,39 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2
+namespace XTMF2.Bus
 {
-    internal class User
+    internal abstract class Host
     {
-        public string MachineName { get; } = Environment.MachineName;
+        private List<Client> Clients { get; } = new List<Client>(1);
 
-        public string UserName { get; private set;
+        internal void AddClient(Client client)
+        {
+            lock(Clients)
+            {
+                Clients.Add(client);
+            }
         }
 
-        public User()
+        /// <summary>
+        /// Remove a client from the host
+        /// </summary>
+        /// <param name="client">The client to remove</param>
+        /// <returns>True if it successfully removed the client</returns>
+        internal bool RemoveClient(Client client)
         {
-            
+            lock(Clients)
+            {
+                if(Clients.Remove(client))
+                {
+                    client.Disconnect();
+                }
+                return false;
+            }
         }
     }
 }

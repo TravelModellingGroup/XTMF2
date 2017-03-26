@@ -17,10 +17,14 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using XTMF2.Configuration;
 
 namespace XTMF2
 {
     public class XTMFRuntime
     {
+        public static readonly XTMFRuntime Reference = new XTMFRuntime();
+
+
     }
 }

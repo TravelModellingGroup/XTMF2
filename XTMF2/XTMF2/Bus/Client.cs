@@ -17,11 +17,32 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
+using System.Text;
 
-namespace XTMF2.Configuration
+namespace XTMF2.Bus
 {
-    public class Configuration
+    /// <summary>
+    /// Represents a client that is connected to the host
+    /// </summary>
+    internal sealed class Client
     {
+        /// <summary>
+        /// The connection bridge to communicate with the client
+        /// </summary>
+        internal ToClientCommunication Connection { get; }
 
+        /// <summary>
+        /// The user that is on this connection
+        /// </summary>
+        internal User User { get; }
+
+        /// <summary>
+        /// Disconnects a client from the host
+        /// </summary>
+        internal void Disconnect()
+        {
+            
+        }
     }
 }

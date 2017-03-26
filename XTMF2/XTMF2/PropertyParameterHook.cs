@@ -18,20 +18,33 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 
 namespace XTMF2
 {
-    internal class User
+    internal sealed class PropertyParameterHook : ParameterHook
     {
-        public string MachineName { get; } = Environment.MachineName;
+        private PropertyInfo Info;
 
-        public string UserName { get; private set;
+        public PropertyParameterHook(PropertyInfo property, ParameterAttribute parameterAt) : base(parameterAt)
+        {
+            Info = property;
         }
 
-        public User()
+        public override string Name => Info.Name;
+
+        public override Type Type => Info.PropertyType;
+
+        public override bool AssignValueToModule(object module, ref string error)
         {
-            
+            var (success, value) = ArbitraryParameterParser.ArbitraryParameterParse(Info.PropertyType, Parameter.Value, ref error);
+            if (success)
+            {
+                Info.SetValue(module, value);
+                return true;
+            }
+            return false;
         }
     }
 }

@@ -17,11 +17,17 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Text;
 
-namespace XTMF2.Configuration
+namespace XTMF2.Bus
 {
-    public class Configuration
+    /// <summary>
+    /// Represents a host that is contained within a fully local instance of XTMF
+    /// </summary>
+    internal class LocalHost : Host
     {
-
+        
     }
 }

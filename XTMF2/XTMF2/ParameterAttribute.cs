@@ -18,10 +18,22 @@
 */
 using System;
 
-namespace XTMF2.Configuration
+namespace XTMF2
 {
-    public class Configuration
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    public sealed class ParameterAttribute : Attribute
     {
+        public string Name { get; private set; }
 
+        public string DefaultValue { get; private set; }
+
+        public string Description { get; private set; }
+
+        public ParameterAttribute(string name, string defaultValue, string description)
+        {
+            Name = name;
+            DefaultValue = defaultValue;
+            Description = description;
+        }
     }
 }
