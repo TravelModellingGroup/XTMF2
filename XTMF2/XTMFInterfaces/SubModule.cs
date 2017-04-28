@@ -22,7 +22,11 @@ using System.Text;
 
 namespace XTMF2
 {
-    internal sealed class SubModuleRemote : SubModule
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    public class SubModule : Attribute
     {
+        public string Name { get; set; }
+
+        public string Description { get; set; }
     }
 }

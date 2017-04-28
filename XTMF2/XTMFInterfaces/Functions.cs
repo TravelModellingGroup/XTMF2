@@ -22,7 +22,28 @@ using System.Text;
 
 namespace XTMF2
 {
-    internal sealed class SubModuleChild : SubModule
+    public interface IFunction
     {
+        string Name { get; }
+    }
+
+    public interface IFunction<Result> : IFunction
+    {   
+        Result Invoke();
+    }
+
+    public interface IFunction<Context,Result> : IFunction
+    {   
+        Result Invoke(Context context);
+    }
+
+    public interface IAction : IFunction
+    {   
+        void Invoke();
+    }
+
+    public interface IAction<Context> : IFunction
+    {
+        void Invoke(out Context context);
     }
 }

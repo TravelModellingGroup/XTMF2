@@ -17,21 +17,11 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace XTMF2
 {
-    public class LocalParameter : Parameter
+    public interface IModule
     {
-        protected override bool ValidateName(string newValue, ref string error)
-        {
-            throw new NotImplementedException();
-        }
 
-        protected override bool ValidateValue(string newValue, ref string error)
-        {
-            throw new NotImplementedException();
-        }
     }
 }
