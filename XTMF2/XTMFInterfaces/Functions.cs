@@ -24,7 +24,7 @@ namespace XTMF2
 {
     public interface IFunction
     {
-        string Name { get; }
+        string Name { get; set; }
     }
 
     public interface IFunction<Result> : IFunction
@@ -44,6 +44,6 @@ namespace XTMF2
 
     public interface IAction<Context> : IFunction
     {
-        void Invoke(out Context context);
+        void Invoke(Context context);
     }
 }
