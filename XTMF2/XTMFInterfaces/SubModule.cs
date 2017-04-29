@@ -23,7 +23,7 @@ using System.Text;
 namespace XTMF2
 {
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class SubModule : Attribute
+    public class SubModuleAttribute : Attribute
     {
         public string Name { get; set; }
 

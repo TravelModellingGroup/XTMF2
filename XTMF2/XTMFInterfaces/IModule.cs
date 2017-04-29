@@ -22,6 +22,6 @@ namespace XTMF2
 {
     public interface IModule
     {
-
+        string Name { get; set; }
     }
 }

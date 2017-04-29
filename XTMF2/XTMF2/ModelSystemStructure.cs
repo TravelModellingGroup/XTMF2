@@ -64,10 +64,6 @@ namespace XTMF2
             return false;
         }
 
-        public List<SubModule> Children { get; } = new List<SubModule>();
-
-        public List<Parameter> Parameters { get; } = new List<Parameter>();
-
         public ModelSystemStructure(Type t)
         {
             Type = t;

@@ -22,27 +22,23 @@ using System.Text;
 
 namespace XTMF2
 {
-    public interface IFunction
-    {
-        string Name { get; set; }
-    }
 
-    public interface IFunction<Result> : IFunction
+    public interface IFunction<Result> : IModule
     {   
         Result Invoke();
     }
 
-    public interface IFunction<Context,Result> : IFunction
+    public interface IFunction<Context,Result> : IModule
     {   
         Result Invoke(Context context);
     }
 
-    public interface IAction : IFunction
+    public interface IAction : IModule
     {   
         void Invoke();
     }
 
-    public interface IAction<Context> : IFunction
+    public interface IAction<Context> : IModule
     {
         void Invoke(Context context);
     }
