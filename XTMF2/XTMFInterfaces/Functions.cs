@@ -42,4 +42,18 @@ namespace XTMF2
     {
         void Invoke(Context context);
     }
+
+    public interface IEvent : IModule
+    {
+        void Invoke();
+
+        void Register(IModule module);
+    }
+
+    public interface IEvent<Context> : IModule
+    {
+        void Invoke(Context context);
+
+        void Register(IModule module);
+    }
 }
