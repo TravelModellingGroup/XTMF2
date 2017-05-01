@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017 Travel Modelling Group, Department of Civil Engineering, University of Toronto
 
     This file is part of XTMF2.
 
@@ -14,7 +14,7 @@
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
+    along with XTMF.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
 using System.Collections.Generic;
@@ -22,7 +22,10 @@ using System.Text;
 
 namespace XTMF2.Bus
 {
-    internal sealed class ToHostCommunication
+    /// <summary>
+    /// Provides communication with the run process
+    /// </summary>
+    internal class RunBusHost
     {
     }
 }
