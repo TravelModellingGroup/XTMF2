@@ -22,7 +22,38 @@ using System.Text;
 
 namespace XTMF2
 {
-    internal sealed class SubModuleRemote : SubModule
+
+    public interface IFunction<Result> : IModule
+    {   
+        Result Invoke();
+    }
+
+    public interface IFunction<Context,Result> : IModule
+    {   
+        Result Invoke(Context context);
+    }
+
+    public interface IAction : IModule
+    {   
+        void Invoke();
+    }
+
+    public interface IAction<Context> : IModule
     {
+        void Invoke(Context context);
+    }
+
+    public interface IEvent : IModule
+    {
+        void Invoke();
+
+        void Register(Action module);
+    }
+
+    public interface IEvent<Context> : IModule
+    {
+        void Invoke(Context context);
+
+        void Register(Action<Context> module);
     }
 }

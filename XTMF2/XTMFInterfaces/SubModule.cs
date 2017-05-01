@@ -22,16 +22,11 @@ using System.Text;
 
 namespace XTMF2
 {
-    public class LocalParameter : Parameter
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    public class SubModuleAttribute : Attribute
     {
-        protected override bool ValidateName(string newValue, ref string error)
-        {
-            throw new NotImplementedException();
-        }
+        public string Name { get; set; }
 
-        protected override bool ValidateValue(string newValue, ref string error)
-        {
-            throw new NotImplementedException();
-        }
+        public string Description { get; set; }
     }
 }

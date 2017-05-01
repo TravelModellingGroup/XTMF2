@@ -17,23 +17,14 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
+using System.Text;
 
 namespace XTMF2
 {
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public sealed class ParameterAttribute : Attribute
+    public class ParameterAttribute : SubModuleAttribute
     {
-        public string Name { get; private set; }
-
-        public string DefaultValue { get; private set; }
-
-        public string Description { get; private set; }
-
-        public ParameterAttribute(string name, string defaultValue, string description)
-        {
-            Name = name;
-            DefaultValue = defaultValue;
-            Description = description;
-        }
+        public string DefaultValue { get; set; }
     }
 }
