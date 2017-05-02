@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
+using System.Linq;
 
 namespace XTMF2
 {
@@ -28,6 +29,17 @@ namespace XTMF2
         public string Name { get; private set; }
         public string Description { get; private set; }
         private ObservableCollection<ModelSystemStructure> _Modules = new ObservableCollection<ModelSystemStructure>();
+
+        internal ModelSystem Clone()
+        {
+            return new ModelSystem()
+            {
+                Name = Name,
+                Description = Description,
+                _Modules = new ObservableCollection<ModelSystemStructure>(from mod in _Modules
+                                                                          select mod.Clone())
+            };
+        }
 
         public ReadOnlyObservableCollection<ModelSystemStructure> Modules => new ReadOnlyObservableCollection<ModelSystemStructure>(_Modules);
 

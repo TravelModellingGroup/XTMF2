@@ -29,5 +29,15 @@ namespace XTMF2
         public string Path { get; private set; }
         List<ModelSystem> _ModelSystems = new List<ModelSystem>();
         public ReadOnlyCollection<ModelSystem> ModelSystems => _ModelSystems.AsReadOnly();
+
+        public bool Remove(ModelSystem modelSystem, ref string error)
+        {
+            return false;
+        }
+
+        public bool Add(ModelSystem modelSystem, ref string error)
+        {
+            return false;
+        }
     }
 }

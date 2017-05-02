@@ -18,11 +18,18 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Text;
 
 namespace XTMF2.Editing
 {
-    public class ProjectSession
+    public sealed class ProjectSession
     {
+        private Project Project;
+
+        public ProjectSession(Project project)
+        {
+            Project = project;
+        }
     }
 }

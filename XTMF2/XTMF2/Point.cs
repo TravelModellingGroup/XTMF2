@@ -20,17 +20,11 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.Editing
+namespace XTMF2
 {
-    public sealed class ModelSystemSession
+    public struct Point
     {
-        private ModelSystem Original;
-        private ModelSystem EditingOn;
-
-        public ModelSystemSession(ModelSystem original)
-        {
-            Original = original;
-            EditingOn = original.Clone();
-        }
+        public float X { get; set; }
+        public float Y { get; set; }
     }
 }

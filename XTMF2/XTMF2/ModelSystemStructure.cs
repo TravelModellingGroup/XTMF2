@@ -25,7 +25,7 @@ namespace XTMF2
     /// <summary>
     /// The basic building block of a model system
     /// </summary>
-    public class ModelSystemStructure
+    public class ModelSystemStructure : INotifyPropertyChanged
     {
         /// <summary>
         /// The type that this will represent
@@ -36,6 +36,25 @@ namespace XTMF2
         /// The name of the model system structure
         /// </summary>
         public string Name { get; private set; }
+
+        public Point Location { get; private set; }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public void SetLocation(float x, float y)
+        {
+            Location = new Point()
+            {
+                X = x,
+                Y = y
+            };
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Location)));
+        }
+
+        internal ModelSystemStructure Clone()
+        {
+            return (ModelSystemStructure)MemberwiseClone();
+        }
 
         /// <summary>
         /// Change the name of the model system structure
