@@ -24,19 +24,36 @@ namespace XTMF2.Configuration
 {
     public class Config
     {
+        private static Config _Reference;
+        public static Config Reference
+        {
+            get
+            {
+                // If no configuration is defined run from the
+                // default path
+                if(_Reference != null)
+                {
+                    _Reference = new Config();
+                }
+                return _Reference;
+            }
+        }
+
         private List<User> _Users;
+        private object UserLock = new object();
 
         public ReadOnlyCollection<User> Users => _Users.AsReadOnly();
-        
 
-        public Config()
+        public Config(string fullPath = null)
         {
-            
-            // Create a new user by default
-            _Users = new List<User>()
+            lock (UserLock)
             {
-                new User("local", true)
-            };
+                // Create a new user by default
+                _Users = new List<User>()
+                {
+                    new User("local", true)
+                };
+            }
         }
     }
 }

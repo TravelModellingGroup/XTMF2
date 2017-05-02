@@ -22,7 +22,7 @@ using System.Text;
 
 namespace XTMF2.Repository
 {
-    public abstract class ModuleRepository
+    public sealed class ModuleRepository : Repository<Type>
     {
     }
 }

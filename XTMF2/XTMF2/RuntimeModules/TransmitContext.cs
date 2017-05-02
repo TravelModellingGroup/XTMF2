@@ -19,10 +19,29 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json;
 
-namespace XTMF2.Repository.Local
+namespace XTMF2.RuntimeModules
 {
-    class TypeRepository
+    public sealed class TransmitContext<Context, Result> : IFunction<Context, Result>
     {
+        public string Name { get; set; }
+
+        public Result Invoke(Context context)
+        {
+            var toSend = JsonConvert.SerializeObject(context);
+            throw new XTMFRuntimeException("Further Implementation Required.");
+        }
+    }
+
+    public sealed class TransmitContext<Context> : IAction<Context>
+    {
+        public string Name { get; set; }
+
+        public void Invoke(Context context)
+        {
+            var toSend = JsonConvert.SerializeObject(context);
+            throw new XTMFRuntimeException("Further Implementation Required.");
+        }
     }
 }

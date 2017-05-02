@@ -17,12 +17,21 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace XTMF2.Repository.Remote
+namespace XTMF2
 {
-    public class ModuleRepository : Repository
+    public class XTMFRuntimeException : Exception
     {
+        public XTMFRuntimeException()
+        {
+        }
+
+        public XTMFRuntimeException(string message) : base(message)
+        {
+        }
+
+        public XTMFRuntimeException(string message, Exception innerException) : base(message, innerException)
+        {
+        }
     }
 }

@@ -27,9 +27,9 @@ namespace XTMF2
     {
         public string Name { get; private set; }
         public string Description { get; private set; }
-        private List<ModelSystemStructure> _Modules = new List<ModelSystemStructure>();
+        private ObservableCollection<ModelSystemStructure> _Modules = new ObservableCollection<ModelSystemStructure>();
 
-        public ReadOnlyCollection<ModelSystemStructure> Modules => _Modules.AsReadOnly();
+        public ReadOnlyObservableCollection<ModelSystemStructure> Modules => new ReadOnlyObservableCollection<ModelSystemStructure>(_Modules);
 
         public bool Save(ref string error)
         {
