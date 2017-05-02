@@ -17,11 +17,26 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace XTMF2.Configuration
 {
-    public class Configuration
+    public class Config
     {
+        private List<User> _Users;
 
+        public ReadOnlyCollection<User> Users => _Users.AsReadOnly();
+        
+
+        public Config()
+        {
+            
+            // Create a new user by default
+            _Users = new List<User>()
+            {
+                new User("local", true)
+            };
+        }
     }
 }

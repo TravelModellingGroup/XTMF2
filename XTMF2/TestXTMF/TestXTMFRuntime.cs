@@ -18,15 +18,25 @@
 */
 using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using XTMF2;
 
 namespace TestXTMF
 {
     [TestClass]
-    public class UnitTest1
+    public class TestXTMFRuntime
     {
         [TestMethod]
-        public void TestMethod1()
+        public void CreateRuntime()
         {
+            XTMFRuntime runtime = XTMFRuntime.Reference;
+        }
+
+        [TestMethod]
+        public void GetUserData()
+        {
+            XTMFRuntime runtime = XTMFRuntime.Reference;
+            var users = runtime.Configuration.Users;
+            Assert.IsTrue(users.Count > 0);
         }
     }
 }

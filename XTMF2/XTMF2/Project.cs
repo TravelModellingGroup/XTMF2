@@ -18,23 +18,16 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Text;
 
 namespace XTMF2
 {
-    public class User
+    public sealed class Project
     {
-        public string UserName { get; private set; }
-
-        public List<Project> Projects { get; private set; }
-
-        public bool Admin { get; private set; }
-
-        public User(string userName, bool admin = false)
-        {
-            UserName = userName;
-            Admin = admin;
-            Projects = new List<Project>();
-        }
+        public string Name { get; private set; }
+        public string Path { get; private set; }
+        List<ModelSystem> _ModelSystems = new List<ModelSystem>();
+        public ReadOnlyCollection<ModelSystem> ModelSystems => _ModelSystems.AsReadOnly();
     }
 }

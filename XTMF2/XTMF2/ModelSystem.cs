@@ -18,14 +18,23 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Text;
 
 namespace XTMF2
 {
-    public sealed class ModelSystemStructureCollection : ModelSystemStructure
+    public sealed class ModelSystem
     {
-        public ModelSystemStructureCollection(Type t) : base(t)
+        public string Name { get; private set; }
+        public string Description { get; private set; }
+        private List<ModelSystemStructure> _Modules = new List<ModelSystemStructure>();
+
+        public ReadOnlyCollection<ModelSystemStructure> Modules => _Modules.AsReadOnly();
+
+        public bool Save(ref string error)
         {
+            error = "Not implemented yet!";
+            return false;
         }
     }
 }

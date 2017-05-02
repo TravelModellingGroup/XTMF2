@@ -23,8 +23,32 @@ namespace XTMF2
 {
     public class XTMFRuntime
     {
-        public static readonly XTMFRuntime Reference = new XTMFRuntime();
+        private static XTMFRuntime _Reference;
+        public static XTMFRuntime Reference
+        {
+            get
+            {
+                if(_Reference == null)
+                {
+                    _Reference = new XTMFRuntime();
+                }
+                return _Reference;
+            }
+            private set
+            {
+                _Reference = value;
+            }
+        }
 
+        public Config Configuration { get; private set; }
 
+        public XTMFRuntime(Config config = null)
+        {
+            if(config == null)
+            {
+                config = new Config();
+            }
+            Configuration = config;
+        }
     }
 }
