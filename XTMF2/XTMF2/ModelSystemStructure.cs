@@ -19,6 +19,7 @@
 using System;
 using System.ComponentModel;
 using System.Collections.Generic;
+using XTMF2.Editing;
 
 namespace XTMF2
 {
@@ -62,7 +63,7 @@ namespace XTMF2
         /// <param name="name">The name to change it to</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        public bool SetName(string name, ref string error)
+        public bool SetName(ModelSystemSession session, string name, ref string error)
         {
             return false;
         }
