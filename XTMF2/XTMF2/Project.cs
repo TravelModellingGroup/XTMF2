@@ -19,25 +19,64 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Text;
+using XTMF2.Editing;
 
 namespace XTMF2
 {
-    public sealed class Project
+    public sealed class Project : INotifyPropertyChanged
     {
         public string Name { get; private set; }
+        public string Description { get; private set; }
         public string Path { get; private set; }
-        List<ModelSystem> _ModelSystems = new List<ModelSystem>();
-        public ReadOnlyCollection<ModelSystem> ModelSystems => _ModelSystems.AsReadOnly();
+        ObservableCollection<ModelSystem> _ModelSystems = new ObservableCollection<ModelSystem>();
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public ReadOnlyObservableCollection<ModelSystem> ModelSystems => new ReadOnlyObservableCollection<ModelSystem>(_ModelSystems);
+
+        public bool SetName(ProjectSession session, string name, ref string error)
+        {
+            if (String.IsNullOrWhiteSpace(name))
+            {
+                error = "A name cannot be whitespace.";
+                return false;
+            }
+            Name = name;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+            return true;
+        }
+
+        public bool SetDescription(ProjectSession session, string description, ref string error)
+        {
+            Description = description;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
+            return true;
+        }
 
         public bool Remove(ModelSystem modelSystem, ref string error)
         {
+            if (modelSystem == null)
+            {
+                throw new ArgumentNullException(nameof(modelSystem));
+            }
+            if (_ModelSystems.Remove(modelSystem))
+            {
+                return true;
+            }
+            error = "Unable to find the model system!";
             return false;
         }
 
         public bool Add(ModelSystem modelSystem, ref string error)
         {
-            return false;
+            if (modelSystem == null)
+            {
+                throw new ArgumentNullException(nameof(modelSystem));
+            }
+            _ModelSystems.Add(modelSystem);
+            return true;
         }
     }
 }

@@ -29,6 +29,11 @@ namespace XTMF2
     public class ModelSystemStructure : INotifyPropertyChanged
     {
         /// <summary>
+        /// The boundary that this model system structure is contained within
+        /// </summary>
+        public Boundary ContainedWithin { get; private set; }
+
+        /// <summary>
         /// The type that this will represent
         /// </summary>
         public Type Type { get; private set; }

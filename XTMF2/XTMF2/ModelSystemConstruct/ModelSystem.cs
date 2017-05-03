@@ -21,27 +21,47 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Linq;
+using System.ComponentModel;
+using XTMF2.Editing;
 
 namespace XTMF2
 {
-    public sealed class ModelSystem
+    public sealed class ModelSystem : INotifyPropertyChanged
     {
         public string Name { get; private set; }
         public string Description { get; private set; }
-        private ObservableCollection<ModelSystemStructure> _Modules = new ObservableCollection<ModelSystemStructure>();
+        public Boundary GlobalBoundary { get; private set; }
 
-        internal ModelSystem Clone()
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public ModelSystem Clone()
         {
             return new ModelSystem()
             {
                 Name = Name,
                 Description = Description,
-                _Modules = new ObservableCollection<ModelSystemStructure>(from mod in _Modules
-                                                                          select mod.Clone())
+                GlobalBoundary = GlobalBoundary.Clone()
             };
         }
 
-        public ReadOnlyObservableCollection<ModelSystemStructure> Modules => new ReadOnlyObservableCollection<ModelSystemStructure>(_Modules);
+        public bool SetName(ModelSystemSession session, string name, ref string error)
+        {
+            if (String.IsNullOrWhiteSpace(name))
+            {
+                error = "A name cannot be whitespace.";
+                return false;
+            }
+            Name = name;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+            return true;
+        }
+
+        public bool SetDescription(ModelSystemSession session, string description, ref string error)
+        {
+            Description = description;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
+            return true;
+        }
 
         public bool Save(ref string error)
         {
