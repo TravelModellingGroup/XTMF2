@@ -28,29 +28,51 @@ namespace XTMF2.Repository
     {
         protected ObservableCollection<T> _Store;
 
+        protected object StoreLock = new object();
+
         public ReadOnlyObservableCollection<T> Store
         {
             get
             {
-                return new ReadOnlyObservableCollection<T>(_Store);
+                lock (StoreLock)
+                {
+                    return new ReadOnlyObservableCollection<T>(_Store);
+                }
             }
         }
 
         public Repository()
         {
-            _Store = new ObservableCollection<T>();
+            lock (StoreLock)
+            {
+                _Store = new ObservableCollection<T>();
+            }
         }
 
         public bool Add(T toAdd)
         {
-            _Store.Add(toAdd);
-            return true;
+            lock (StoreLock)
+            {
+                _Store.Add(toAdd);
+                return true;
+            }
         }
 
         public bool Remove(T toRemove)
         {
-            _Store.Add(toRemove);
-            return true;
+            lock (StoreLock)
+            {
+                _Store.Add(toRemove);
+                return true;
+            }
+        }
+
+        public bool Contains(T toCheck)
+        {
+            lock (StoreLock)
+            {
+                return _Store.Contains(toCheck);
+            }
         }
     }
 }

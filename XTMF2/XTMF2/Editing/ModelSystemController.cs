@@ -20,18 +20,9 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2
+namespace XTMF2.Editing
 {
-    public class User
+    public sealed class ModelSystemController
     {
-        public string UserName { get; }
-
-        public bool Admin { get; private set; }
-
-        public User(string userName, bool admin = false)
-        {
-            UserName = userName;
-            Admin = admin;
-        }
     }
 }

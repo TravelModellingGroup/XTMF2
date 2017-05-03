@@ -18,20 +18,21 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Text;
 
-namespace XTMF2
+namespace XTMF2.Editing
 {
-    public class User
+    public sealed class ProjectController
     {
-        public string UserName { get; }
-
-        public bool Admin { get; private set; }
-
-        public User(string userName, bool admin = false)
+        public ReadOnlyObservableCollection<Project> GetProjects(User user)
         {
-            UserName = userName;
-            Admin = admin;
+            return null;
+        }
+
+        public bool AddProject(User user, string name, ref string error)
+        {
+            return false;
         }
     }
 }
