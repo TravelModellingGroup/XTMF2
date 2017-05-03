@@ -70,7 +70,14 @@ namespace XTMF2
         /// <returns>True if the operation was successful, false otherwise</returns>
         public bool SetName(ModelSystemSession session, string name, ref string error)
         {
-            return false;
+            if (String.IsNullOrWhiteSpace(name))
+            {
+                error = "A name cannot be whitespace.";
+                return false;
+            }
+            Name = name;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+            return true;
         }
 
         /// <summary>
@@ -84,9 +91,11 @@ namespace XTMF2
         /// <param name="description">The description to change to</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        public bool SetDescription(string description, ref string error)
+        public bool SetDescription(ModelSystemSession session, string description, ref string error)
         {
-            return false;
+            Description = description;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
+            return true;
         }
 
         public ModelSystemStructure(Type t)
