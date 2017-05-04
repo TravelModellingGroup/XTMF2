@@ -81,7 +81,7 @@ namespace XTMF2
         }
 
         /// <summary>
-        /// 
+        /// An optional description for this model system structure
         /// </summary>
         public string Description { get; private set; }
 
