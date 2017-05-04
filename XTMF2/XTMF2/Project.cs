@@ -55,7 +55,7 @@ namespace XTMF2
             return true;
         }
 
-        public bool Remove(ModelSystem modelSystem, ref string error)
+        public bool Remove(ProjectSession session, ModelSystem modelSystem, ref string error)
         {
             if (modelSystem == null)
             {
@@ -69,7 +69,7 @@ namespace XTMF2
             return false;
         }
 
-        public bool Add(ModelSystem modelSystem, ref string error)
+        public bool Add(ProjectSession session, ModelSystem modelSystem, ref string error)
         {
             if (modelSystem == null)
             {
