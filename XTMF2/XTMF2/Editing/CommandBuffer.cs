@@ -27,6 +27,54 @@ namespace XTMF2.Editing
         private const int MaxCapacity = 20;
         private EditingStack Undo = new EditingStack(MaxCapacity);
         private EditingStack Redo = new EditingStack(MaxCapacity);
+        private object ExecutionLock = new object();
+
+        public bool ExecuteCommands(CommandBatch batch, ref string error)
+        {
+            lock (ExecutionLock)
+            {
+                var ret = batch.Do(ref error);
+                if (ret)
+                {
+                    Undo.Add(batch);
+                }
+                return ret;
+            }
+        }
+
+        public bool UndoCommands(ref string error)
+        {
+            lock (ExecutionLock)
+            {
+                if (Undo.TryPop(out var batch))
+                {
+                    var ret = batch.Undo(ref error);
+                    if (ret)
+                    {
+                        Redo.Add(batch);
+                    }
+                    return ret;
+                }
+                return false;
+            }
+        }
+
+        public bool RedoCommands(ref string error)
+        {
+            lock (ExecutionLock)
+            {
+                if (Undo.TryPop(out var batch))
+                {
+                    var ret = batch.Redo(ref error);
+                    if (ret)
+                    {
+                        Undo.Add(batch);
+                    }
+                    return ret;
+                }
+                return false;
+            }
+        }
 
     }
 }

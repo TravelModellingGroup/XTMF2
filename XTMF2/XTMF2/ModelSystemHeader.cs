@@ -18,23 +18,22 @@
 */
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Text;
 using XTMF2.Editing;
 
 namespace XTMF2
 {
-    public sealed class Project : INotifyPropertyChanged
+    /// <summary>
+    /// The model system header is the information about the model system contained within the
+    /// project file and provides access to manipulate it.
+    /// </summary>
+    public sealed class ModelSystemHeader : INotifyPropertyChanged
     {
-        public string Name { get; private set; }
-        public string Description { get; private set; }
-        public string Path { get; private set; }
-        ObservableCollection<ModelSystemHeader> _ModelSystems = new ObservableCollection<ModelSystemHeader>();
-
         public event PropertyChangedEventHandler PropertyChanged;
 
-        public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => new ReadOnlyObservableCollection<ModelSystemHeader>(_ModelSystems);
+        public string Name { get; private set; }
+        public string Description { get; private set; }
 
         public bool SetName(ProjectSession session, string name, ref string error)
         {
@@ -55,28 +54,10 @@ namespace XTMF2
             return true;
         }
 
-        public bool Remove(ProjectSession session, ModelSystemHeader modelSystemHeader, ref string error)
+        public bool Load(out ModelSystemSession session, ref string error)
         {
-            if (modelSystemHeader == null)
-            {
-                throw new ArgumentNullException(nameof(modelSystemHeader));
-            }
-            if (_ModelSystems.Remove(modelSystemHeader))
-            {
-                return true;
-            }
-            error = "Unable to find the model system!";
+            session = null;
             return false;
-        }
-
-        public bool Add(ProjectSession session, ModelSystemHeader modelSystemHeader, ref string error)
-        {
-            if (modelSystemHeader == null)
-            {
-                throw new ArgumentNullException(nameof(modelSystemHeader));
-            }
-            _ModelSystems.Add(modelSystemHeader);
-            return true;
         }
     }
 }

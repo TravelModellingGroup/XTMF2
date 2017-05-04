@@ -27,6 +27,8 @@ namespace XTMF2.Editing
     {
         private Project Project;
 
+        private CommandBuffer Commands = new CommandBuffer();
+
         public ProjectSession(Project project)
         {
             Project = project;

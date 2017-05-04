@@ -24,13 +24,11 @@ namespace XTMF2.Editing
 {
     public sealed class ModelSystemSession
     {
-        private ModelSystem Original;
-        private ModelSystem EditingOn;
+        private ModelSystem ModelSystem;
 
-        public ModelSystemSession(ModelSystem original)
+        public ModelSystemSession(ModelSystem modelSystem)
         {
-            Original = original;
-            EditingOn = original.Clone();
+            ModelSystem = modelSystem;
         }
     }
 }
