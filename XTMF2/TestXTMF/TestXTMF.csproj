@@ -11,13 +11,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\XTMF2\XTMF2.csproj" />
-    <ProjectReference Include="..\XTMFInterfaces\XTMFInterfaces.csproj" />
+    <Folder Include="Modules\" />
+    <Folder Include="Editing\" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Modules\" />
-    <Folder Include="Editing\" />
+    <ProjectReference Include="..\XTMF2\XTMF2.csproj" />
+    <ProjectReference Include="..\XTMFInterfaces\XTMFInterfaces.csproj" />
   </ItemGroup>
 
   <ItemGroup>

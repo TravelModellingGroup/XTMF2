@@ -19,10 +19,17 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Reflection;
 
 namespace XTMF2.Repository
 {
     public sealed class ModuleRepository : Repository<Type>
     {
+        private static TypeInfo IModuleTypeInfo = typeof(IModule).GetTypeInfo();
+
+        protected override bool ValidateInput(Type data)
+        {
+            return IModuleTypeInfo.IsAssignableFrom(data);
+        }
     }
 }

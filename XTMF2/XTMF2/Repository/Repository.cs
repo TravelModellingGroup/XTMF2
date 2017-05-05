@@ -51,11 +51,20 @@ namespace XTMF2.Repository
 
         public bool Add(T toAdd)
         {
+            if (!ValidateInput(toAdd))
+            {
+                return false;
+            }
             lock (StoreLock)
             {
                 _Store.Add(toAdd);
                 return true;
             }
+        }
+
+        protected virtual bool ValidateInput(T data)
+        {
+            return true;
         }
 
         public bool Remove(T toRemove)
