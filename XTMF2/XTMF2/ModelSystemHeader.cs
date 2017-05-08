@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text;
+using Newtonsoft.Json;
 using XTMF2.Editing;
 
 namespace XTMF2
@@ -58,6 +59,46 @@ namespace XTMF2
         {
             session = null;
             return false;
+        }
+
+        internal void Save(JsonTextWriter writer)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("Name");
+            writer.WriteValue(Name);
+            writer.WritePropertyName("Description");
+            writer.WriteValue(Description);
+            writer.WriteEndObject();
+        }
+
+        /// <summary>
+        /// Load a model system header from the project file.
+        /// </summary>
+        /// <param name="reader">The reader mid project load</param>
+        /// <returns>The parsed model system header</returns>
+        internal static ModelSystemHeader Load(JsonTextReader reader)
+        {
+            if(reader.TokenType != JsonToken.StartObject)
+            {
+                throw new ArgumentException(nameof(reader), "Is not processing a model system header!");
+            }
+            ModelSystemHeader ret = new ModelSystemHeader();
+            while(reader.Read() && reader.TokenType != JsonToken.EndObject)
+            {
+                if(reader.TokenType == JsonToken.PropertyName)
+                {
+                    switch(reader.Value)
+                    {
+                        case "Name":
+                            ret.Name = reader.ReadAsString();
+                            break;
+                        case "Description":
+                            ret.Description = reader.ReadAsString();
+                            break;
+                    }
+                }
+            }
+            return ret;
         }
     }
 }

@@ -41,6 +41,9 @@ namespace XTMF2
                 return new ReadOnlyObservableCollection<Project>(_AvailableProjects);
             }
         }
+
+        public string UserPath { get; internal set; }
+
         private ObservableCollection<Project> _AvailableProjects = new ObservableCollection<Project>();
 
         public User(Guid userId, string userName, bool admin = false)

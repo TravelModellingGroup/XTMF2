@@ -47,13 +47,15 @@ namespace XTMF2.Editing
             return user.AvailableProjects;
         }
 
-        public bool CreateNewProject(User owner, string name, ref string error)
+        public bool CreateNewProject(User owner, string name, out ProjectSession session, ref string error)
         {
-            if(!ValidateProjectName(name))
+            session = null;
+            if (!ValidateProjectName(name))
             {
                 error = "Invalid project name!";
                 return false;
             }
+            var path = GetPath(owner, name);
             lock (ControllerLock)
             {
                 if(owner.HasProjectWithName(name))
@@ -61,12 +63,43 @@ namespace XTMF2.Editing
                     error = "A project with that name already exists!";
                     return false;
                 }
-                return Projects.Add(new Project()
+                if (!Projects.CreateNew(path, name, owner, out Project p, ref error))
                 {
-
-                }, ref error); ;
+                    return false;
+                }
+                session = GetSession(p);
+                return true;
             }
         }
+
+        /// <summary>
+        /// This should only be invoked by the project session
+        /// </summary>
+        /// <param name="projectSession"></param>
+        internal void UnloadSession(ProjectSession projectSession)
+        {
+            ActiveSessions.Remove(projectSession.Project);
+        }
+
+        private string GetPath(User owner, string name)
+        {
+            return Path.Combine(owner.UserPath, name);
+        }
+
+        public ProjectSession GetSession(Project project)
+        {
+            lock(ControllerLock)
+            {
+                if(!ActiveSessions.TryGetValue(project, out var session))
+                {
+                    session = new ProjectSession(Runtime, project);
+                }
+                session.IncrementCounter();
+                return session;
+            }
+        }
+
+        private Dictionary<Project, ProjectSession> ActiveSessions = new Dictionary<Project, ProjectSession>();
 
         private static char[] InvalidCharacters =
             Path.GetInvalidPathChars().Union(Path.GetInvalidFileNameChars()).ToArray();

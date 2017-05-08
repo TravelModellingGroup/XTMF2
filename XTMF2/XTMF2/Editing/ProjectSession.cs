@@ -20,18 +20,40 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
+using System.Threading;
 
 namespace XTMF2.Editing
 {
-    public sealed class ProjectSession
+    public sealed class ProjectSession : IDisposable
     {
-        private Project Project;
+        public Project Project { get; private set; }
+
+        private XTMFRuntime Runtime;
 
         private CommandBuffer Commands = new CommandBuffer();
 
-        public ProjectSession(Project project)
+        private int _References = 1;
+
+        public int References => _References;
+
+        public ProjectSession(XTMFRuntime runtime, Project project)
         {
             Project = project;
+            Runtime = runtime;
+        }
+
+        public void Dispose()
+        {
+            var left = Interlocked.Decrement(ref _References);
+            if(left <= 0)
+            {
+                Runtime.ProjectController.UnloadSession(this);
+            }
+        }
+
+        internal void IncrementCounter()
+        {
+            Interlocked.Increment(ref _References);
         }
     }
 }

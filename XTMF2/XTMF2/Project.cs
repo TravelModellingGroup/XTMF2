@@ -20,20 +20,153 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Text;
+using Newtonsoft.Json;
 using XTMF2.Editing;
 
 namespace XTMF2
 {
     public sealed class Project : INotifyPropertyChanged
     {
+        private const string ProjectFile = "Project.xpjt";
         public string Name { get; private set; }
         public string Description { get; private set; }
-        public string Path { get; private set; }
+        public string ProjectFilePath { get; private set; }
+        public string ProjectDirectory => Path.GetDirectoryName(ProjectFilePath);
         public User Owner { get; private set; }
+        public ReadOnlyCollection<User> AdditionalUsers => new ReadOnlyCollection<User>(_AdditionalUsers);
+        ObservableCollection<User> _AdditionalUsers = new ObservableCollection<User>();
         ObservableCollection<ModelSystemHeader> _ModelSystems = new ObservableCollection<ModelSystemHeader>();
 
         public event PropertyChangedEventHandler PropertyChanged;
+
+        private Project()
+        {
+
+        }
+
+        public static bool Load(string filePath, out Project project, ref string error)
+        {
+            project = new Project();
+            try
+            {
+                using (var fileStream = new StreamReader(File.OpenRead(filePath)))
+                {
+                    using (var reader = new JsonTextReader(fileStream))
+                    {
+                        while (reader.Read())
+                        {
+                            if (reader.TokenType == JsonToken.PropertyName)
+                            {
+                                switch (reader.Value)
+                                {
+                                    case "Name":
+                                        project.Name = reader.ReadAsString();
+                                        break;
+                                    case "Description":
+                                        project.Description = reader.ReadAsString();
+                                        break;
+                                    case "ModelSystemHeaders":
+                                        {
+                                            reader.Read();
+                                            if(reader.TokenType != JsonToken.StartArray)
+                                            {
+                                                error = "We expected a start of array but found a " + Enum.GetName(typeof(JsonToken), reader.TokenType);
+                                                return false;
+                                            }
+                                            while(reader.Read() && reader.TokenType != JsonToken.EndArray)
+                                            {
+                                                project._ModelSystems.Add(ModelSystemHeader.Load(reader));
+                                            }
+                                        }
+                                        break;
+                                    // if we don't know what it is just continue on.
+                                    default:
+                                        reader.Skip();
+                                        break;
+                                }
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+            catch (JsonException e)
+            {
+                error = e.Message;
+            }
+            catch (IOException e)
+            {
+                error = e.Message;
+            }
+            return false;
+        }
+
+        public static bool New(User owner, string name, string description, out Project project, ref string error)
+        {
+            project = new Project()
+            {
+                Name = name,
+                Description = description,
+                Owner = owner,
+                ProjectFilePath = GetPath(owner, name)
+            };
+            return project.Save(ref error);
+        }
+
+        private static string GetPath(User owner, string name)
+        {
+            return Path.Combine(owner.UserPath, name, ProjectFile);
+        }
+
+        /// <summary>
+        /// Save the project
+        /// </summary>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        private bool Save(ref string error)
+        {
+            var temp = Path.GetTempFileName();
+            try
+            {
+                using (var tempFile = new StreamWriter(File.Create(temp)))
+                {
+                    using (var writer = new JsonTextWriter(tempFile))
+                    {
+                        writer.WriteStartObject();
+                        writer.WritePropertyName("Name");
+                        writer.WriteValue(Name);
+                        writer.WritePropertyName("Description");
+                        writer.WriteValue(Description);
+                        writer.WritePropertyName("ModelSystemHeaders");
+                        writer.WriteStartArray();
+                        foreach(var ms in ModelSystems)
+                        {
+                            ms.Save(writer);
+                        }
+                        writer.WriteEndArray();
+                        writer.WriteEndObject();
+                    }
+                }
+                File.Copy(temp, ProjectFilePath, true);
+                return true;
+            }
+            catch (IOException e)
+            {
+                error = e.Message;
+                return false;
+            }
+            finally
+            {
+                // ensure we don't leak any data
+                var tempFile = new FileInfo(temp);
+                if(tempFile.Exists)
+                {
+                    tempFile.Delete();
+                }
+            }
+        }
 
         /// <summary>
         /// Get weather a user has access to the given project.

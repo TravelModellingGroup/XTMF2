@@ -35,5 +35,22 @@ namespace XTMF2.Repository
                         select project).ToList();
             }
         }
+
+        /// <summary>
+        /// Create a new project and add it to the repository
+        /// </summary>
+        /// <param name="name">The name of the project</param>
+        /// <param name="owner">The owner of the project</param>
+        /// <param name="error">A message containing a description of the error</param>
+        /// <param name="ret">The returned project</param>
+        /// <returns>The created project, null if there is an error.</returns>
+        internal bool CreateNew(string path, string name, User owner, out Project ret, ref string error)
+        {
+            if (!Project.New(owner, name, null, out ret, ref error))
+            {
+                return false;
+            }
+            return Add(ret, ref error);
+        }
     }
 }
