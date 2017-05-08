@@ -17,14 +17,23 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.ObjectModel;
 using XTMF2.Configuration;
+using XTMF2.Editing;
 using XTMF2.Repository;
 
 namespace XTMF2
 {
+    /// <summary>
+    /// Used to control XTMF
+    /// </summary>
     public class XTMFRuntime
     {
         private static XTMFRuntime _Reference;
+
+        /// <summary>
+        /// Access the instance of XTMF in the process
+        /// </summary>
         public static XTMFRuntime Reference
         {
             get
@@ -41,15 +50,43 @@ namespace XTMF2
             }
         }
 
-        public Config Configuration { get; private set; }
+        /// <summary>
+        /// The configuration for the whole XTMF instance
+        /// </summary>
+        public SystemConfiguration SystemConfiguration { get; private set; }
 
-        public XTMFRuntime(Config config = null)
+        /// <summary>
+        /// The types that belong to this instance of XTMF
+        /// </summary>
+        public TypeRepository Types => SystemConfiguration.Types;
+
+        /// <summary>
+        /// The modules available for model systems to this instance of XTMF
+        /// </summary>
+        public ModuleRepository Modules => SystemConfiguration.Modules;
+
+        /// <summary>
+        /// The users in the system.  Ensure you dereference the
+        /// observable interface if you share this with other objects.
+        /// </summary>
+        public ReadOnlyObservableCollection<User> Users => SystemConfiguration.Users;
+
+        public ProjectController ProjectController { get; set; }
+
+        /// <summary>
+        /// Create a new instance of XTMF
+        /// </summary>
+        /// <param name="config">An alternative configuration to load</param>
+        public XTMFRuntime(SystemConfiguration config = null)
         {
-            if(config == null)
+            // if no configuration is given we need to load the default configuration
+            SystemConfiguration = config ?? new SystemConfiguration();
+            ProjectController = new ProjectController(this);
+            // if there is no reference defined, use this instead
+            if(_Reference == null)
             {
-                config = new Config();
+                _Reference = this;
             }
-            Configuration = config;
         }
     }
 }

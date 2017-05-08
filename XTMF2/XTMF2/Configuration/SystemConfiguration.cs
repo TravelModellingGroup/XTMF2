@@ -19,39 +19,65 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Reflection;
+using System.Threading.Tasks;
+using XTMF2.Repository;
 
 namespace XTMF2.Configuration
 {
-    public class Config
+    public class SystemConfiguration
     {
-        private static Config _Reference;
-        public static Config Reference
+        private static SystemConfiguration _Reference;
+        public static SystemConfiguration Reference
         {
             get
             {
                 // If no configuration is defined run from the
                 // default path
-                if(_Reference != null)
+                if (_Reference != null)
                 {
-                    _Reference = new Config();
+                    _Reference = new SystemConfiguration();
                 }
                 return _Reference;
             }
         }
 
-        private List<User> _Users;
+        private ObservableCollection<User> _Users;
         private object UserLock = new object();
 
-        public ReadOnlyCollection<User> Users => _Users.AsReadOnly();
+        public ReadOnlyObservableCollection<User> Users => new ReadOnlyObservableCollection<User>(_Users);
 
-        public Config(string fullPath = null)
+        public ModuleRepository Modules { get; private set; }
+        public TypeRepository Types { get; private set; }
+
+        public SystemConfiguration(string fullPath = null)
+        {
+            Parallel.Invoke(
+                () => LoadUsers(),
+                () => LoadTypes(),
+                () => LoadProjects()
+            );
+        }
+
+        private void LoadProjects()
+        {
+            
+        }
+
+        private void LoadTypes()
+        {
+            Modules = new ModuleRepository();
+            Types = new TypeRepository();
+        }
+
+        private void LoadUsers()
         {
             lock (UserLock)
             {
                 // Create a new user by default
-                _Users = new List<User>()
+                _Users = new ObservableCollection<User>()
                 {
-                    new User("local", true)
+                    new User(Guid.NewGuid(), "local", true)
                 };
             }
         }

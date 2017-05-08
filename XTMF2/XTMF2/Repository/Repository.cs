@@ -49,9 +49,9 @@ namespace XTMF2.Repository
             }
         }
 
-        public bool Add(T toAdd)
+        public bool Add(T toAdd, ref string error)
         {
-            if (!ValidateInput(toAdd))
+            if (!ValidateInput(toAdd, ref error))
             {
                 return false;
             }
@@ -62,7 +62,7 @@ namespace XTMF2.Repository
             }
         }
 
-        protected virtual bool ValidateInput(T data)
+        protected virtual bool ValidateInput(T data, ref string error)
         {
             return true;
         }

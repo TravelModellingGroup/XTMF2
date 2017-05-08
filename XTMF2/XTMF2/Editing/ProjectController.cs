@@ -19,20 +19,67 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Text;
+using XTMF2.Repository;
+using System.Linq;
 
 namespace XTMF2.Editing
 {
     public sealed class ProjectController
     {
-        public ReadOnlyObservableCollection<Project> GetProjects(User user)
+        /// <summary>
+        /// The collection of projects that are available
+        /// </summary>
+        private ProjectRepository Projects = new ProjectRepository();
+
+        private XTMFRuntime Runtime;
+
+        private object ControllerLock = new object();
+
+        public ProjectController(XTMFRuntime runtime)
         {
-            return null;
+            Runtime = runtime;
         }
 
-        public bool AddProject(User user, string name, ref string error)
+        public ReadOnlyObservableCollection<Project> GetProjects(User user)
         {
-            return false;
+            return user.AvailableProjects;
+        }
+
+        public bool CreateNewProject(User owner, string name, ref string error)
+        {
+            if(!ValidateProjectName(name))
+            {
+                error = "Invalid project name!";
+                return false;
+            }
+            lock (ControllerLock)
+            {
+                if(owner.HasProjectWithName(name))
+                {
+                    error = "A project with that name already exists!";
+                    return false;
+                }
+                return Projects.Add(new Project()
+                {
+
+                }, ref error); ;
+            }
+        }
+
+        private static char[] InvalidCharacters =
+            Path.GetInvalidPathChars().Union(Path.GetInvalidFileNameChars()).ToArray();
+
+        /// <summary>
+        /// Ensure that a project name does not contain
+        /// invalid characters
+        /// </summary>
+        /// <param name="name">The name to validate</param>
+        /// <returns>If the validation allows this project name.</returns>
+        private static bool ValidateProjectName(string name)
+        {
+            return !name.Any(c => InvalidCharacters.Contains(c));
         }
     }
 }

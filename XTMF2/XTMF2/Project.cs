@@ -30,9 +30,25 @@ namespace XTMF2
         public string Name { get; private set; }
         public string Description { get; private set; }
         public string Path { get; private set; }
+        public User Owner { get; private set; }
         ObservableCollection<ModelSystemHeader> _ModelSystems = new ObservableCollection<ModelSystemHeader>();
 
         public event PropertyChangedEventHandler PropertyChanged;
+
+        /// <summary>
+        /// Get weather a user has access to the given project.
+        /// </summary>
+        /// <param name="user">The user to test for</param>
+        /// <returns>True if the user is allowed</returns>
+        public bool CanAccess(User user)
+        {
+            if(user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            // TODO: Implement a real check
+            return true;
+        }
 
         public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => new ReadOnlyObservableCollection<ModelSystemHeader>(_ModelSystems);
 

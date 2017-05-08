@@ -18,11 +18,22 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Text;
+using System.Linq;
 
 namespace XTMF2.Repository
 {
     public sealed class ProjectRepository : Repository<Project>
     {
+        internal List<Project> GetAvailableForUser(User user)
+        {
+            lock (StoreLock)
+            {
+                return (from project in _Store
+                        where project.CanAccess(user)
+                        select project).ToList();
+            }
+        }
     }
 }

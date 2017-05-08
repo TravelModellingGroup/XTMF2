@@ -27,7 +27,7 @@ namespace XTMF2.Repository
     {
         private static TypeInfo IModuleTypeInfo = typeof(IModule).GetTypeInfo();
 
-        protected override bool ValidateInput((Type Type, TypeInfo TypeInfo) data)
+        protected override bool ValidateInput((Type Type, TypeInfo TypeInfo) data, ref string error)
         {
             return IModuleTypeInfo.IsAssignableFrom(data.Type);
         }

@@ -18,20 +18,61 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Text;
+using System.Linq;
 
 namespace XTMF2
 {
-    public class User
+    public sealed class User
     {
+        public Guid UserId { get; set; }
+
         public string UserName { get; }
 
         public bool Admin { get; private set; }
 
-        public User(string userName, bool admin = false)
+        private object ProjectLock = new object();
+
+        public ReadOnlyObservableCollection<Project> AvailableProjects
         {
+            get
+            {
+                return new ReadOnlyObservableCollection<Project>(_AvailableProjects);
+            }
+        }
+        private ObservableCollection<Project> _AvailableProjects = new ObservableCollection<Project>();
+
+        public User(Guid userId, string userName, bool admin = false)
+        {
+            UserId = userId;
             UserName = userName;
             Admin = admin;
+        }
+
+        internal void AddedUserToProject(Project p)
+        {
+            if(p == null)
+            {
+                throw new ArgumentNullException(nameof(p));
+            }
+            lock (ProjectLock)
+            {
+                _AvailableProjects.Add(p);
+            }
+        }
+
+        /// <summary>
+        /// Checks to see if a user has a project with the given name already defined and is the owner.
+        /// </summary>
+        /// <param name="name">The name of the project</param>
+        /// <returns>True if there is already a project defined with the name and is the owner.</returns>
+        internal bool HasProjectWithName(string name)
+        {
+            lock(ProjectLock)
+            {
+                return _AvailableProjects.Any(p => p.Owner == this && p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            }
         }
     }
 }

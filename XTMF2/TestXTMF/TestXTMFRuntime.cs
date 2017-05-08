@@ -25,6 +25,13 @@ namespace TestXTMF
     [TestClass]
     public class TestXTMFRuntime
     {
+        [TestInitialize]
+        public void Setup()
+        {
+            // hide the startup cost of XTMF
+            XTMFRuntime runtime = XTMFRuntime.Reference;
+        }
+
         [TestMethod]
         public void CreateRuntime()
         {
@@ -35,8 +42,16 @@ namespace TestXTMF
         public void GetUserData()
         {
             XTMFRuntime runtime = XTMFRuntime.Reference;
-            var users = runtime.Configuration.Users;
+            var users = runtime.SystemConfiguration.Users;
             Assert.IsTrue(users.Count > 0);
+        }
+
+        [TestMethod]
+        public void GetProjectController()
+        {
+            XTMFRuntime runtime = XTMFRuntime.Reference;
+            var controller = runtime.ProjectController;
+            Assert.IsNotNull(controller);
         }
     }
 }
