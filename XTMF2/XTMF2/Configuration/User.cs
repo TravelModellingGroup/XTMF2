@@ -46,22 +46,27 @@ namespace XTMF2
 
         private ObservableCollection<Project> _AvailableProjects = new ObservableCollection<Project>();
 
-        public User(Guid userId, string userName, bool admin = false)
+        public User(string userPath, Guid userId, string userName, bool admin = false)
         {
             UserId = userId;
             UserName = userName;
             Admin = admin;
+            UserPath = userPath;
         }
 
-        internal void AddedUserToProject(Project p)
+        /// <summary>
+        /// Give a user the access to a project
+        /// </summary>
+        /// <param name="project">The project to access</param>
+        internal void AddedUserToProject(Project project)
         {
-            if(p == null)
+            if(project == null)
             {
-                throw new ArgumentNullException(nameof(p));
+                throw new ArgumentNullException(nameof(project));
             }
             lock (ProjectLock)
             {
-                _AvailableProjects.Add(p);
+                _AvailableProjects.Add(project);
             }
         }
 
@@ -75,6 +80,14 @@ namespace XTMF2
             lock(ProjectLock)
             {
                 return _AvailableProjects.Any(p => p.Owner == this && p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        internal void RemovedUserForProject(Project project)
+        {
+            lock(ProjectLock)
+            {
+                _AvailableProjects.Remove(project);
             }
         }
     }

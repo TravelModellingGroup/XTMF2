@@ -67,7 +67,52 @@ namespace XTMF2.Editing
                 {
                     return false;
                 }
+                owner.AddedUserToProject(p);
                 session = GetSession(p);
+                return true;
+            }
+        }
+
+        public bool DeleteProject(User user, string projectName, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (projectName == null)
+            {
+                throw new ArgumentNullException(nameof(projectName));
+            }
+            var project = GetProjects(user).FirstOrDefault(p => p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase));
+            if(project == null)
+            {
+                error = $"User does not have a project called {projectName}!";
+                return false;
+            }
+            return DeleteProject(user, project, ref error);
+        }
+
+        public bool DeleteProject(User owner, Project project, ref string error)
+        {
+            if(owner == null)
+            {
+                throw new ArgumentNullException(nameof(owner));
+            }
+            if(project == null)
+            {
+                throw new ArgumentNullException(nameof(project));
+            }
+            lock (ControllerLock)
+            {
+                owner.RemovedUserForProject(project);
+                foreach(var user in project.AdditionalUsers)
+                {
+                    user.RemovedUserForProject(project);
+                }
+                ActiveSessions.Remove(project);
+                Projects.Remove(project);
+                var directory = project.ProjectDirectory;
+                Directory.Delete(directory, true);
                 return true;
             }
         }

@@ -18,6 +18,7 @@
 */
 using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using XTMF2.Configuration;
 using XTMF2.Editing;
 using XTMF2.Repository;
@@ -74,10 +75,22 @@ namespace XTMF2
         public ProjectController ProjectController { get; set; }
 
         /// <summary>
+        /// Create a new XTMF Runtime, shutting down any other that
+        /// might have already been created.
+        /// </summary>
+        /// <param name="config">Optionally a custom configuration</param>
+        /// <returns>A new XTMF Runtime</returns>
+        public static XTMFRuntime CreateRuntime(SystemConfiguration config = null)
+        {
+            _Reference?.Shutdown();
+            return _Reference = new XTMFRuntime(config);
+        }
+
+        /// <summary>
         /// Create a new instance of XTMF
         /// </summary>
         /// <param name="config">An alternative configuration to load</param>
-        public XTMFRuntime(SystemConfiguration config = null)
+        private XTMFRuntime(SystemConfiguration config = null)
         {
             // if no configuration is given we need to load the default configuration
             SystemConfiguration = config ?? new SystemConfiguration();
@@ -87,6 +100,22 @@ namespace XTMF2
             {
                 _Reference = this;
             }
+        }
+
+        /// <summary>
+        /// Release all resources consumed by XTMF
+        /// </summary>
+        public void Shutdown()
+        {
+            _Reference = null;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+
+        public User GetUserByName(string userName)
+        {
+            return SystemConfiguration.Users.FirstOrDefault(user => user.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

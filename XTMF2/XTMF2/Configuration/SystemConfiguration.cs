@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
 using XTMF2.Repository;
@@ -49,14 +50,25 @@ namespace XTMF2.Configuration
 
         public ModuleRepository Modules { get; private set; }
         public TypeRepository Types { get; private set; }
+        private string DefaultUserDirectory { get; set; }
 
         public SystemConfiguration(string fullPath = null)
         {
+            CreateDirectory(DefaultUserDirectory = Path.Combine(Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%"), "XTMF", "Users"));
             Parallel.Invoke(
                 () => LoadUsers(),
                 () => LoadTypes(),
                 () => LoadProjects()
             );
+        }
+
+        private void CreateDirectory(string directoryName)
+        {
+            DirectoryInfo dir = new DirectoryInfo(directoryName);
+            if (!dir.Exists)
+            {
+                dir.Create();
+            }
         }
 
         private void LoadProjects()
@@ -74,10 +86,11 @@ namespace XTMF2.Configuration
         {
             lock (UserLock)
             {
+                var userName = "local";
                 // Create a new user by default
                 _Users = new ObservableCollection<User>()
                 {
-                    new User(Guid.NewGuid(), "local", true)
+                    new User(Path.Combine(DefaultUserDirectory, userName), Guid.NewGuid(), userName, true)
                 };
             }
         }

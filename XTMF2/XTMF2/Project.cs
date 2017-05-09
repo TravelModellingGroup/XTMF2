@@ -70,14 +70,36 @@ namespace XTMF2
                                     case "ModelSystemHeaders":
                                         {
                                             reader.Read();
-                                            if(reader.TokenType != JsonToken.StartArray)
+                                            if (reader.TokenType != JsonToken.StartArray)
                                             {
                                                 error = "We expected a start of array but found a " + Enum.GetName(typeof(JsonToken), reader.TokenType);
                                                 return false;
                                             }
-                                            while(reader.Read() && reader.TokenType != JsonToken.EndArray)
+                                            while (reader.Read() && reader.TokenType != JsonToken.EndArray)
                                             {
                                                 project._ModelSystems.Add(ModelSystemHeader.Load(reader));
+                                            }
+                                        }
+                                        break;
+                                    case "Owner":
+                                        {
+                                            var user = XTMFRuntime.Reference.GetUserByName(reader.ReadAsString());
+                                            project.Owner = XTMFRuntime.Reference.GetUserByName(reader.ReadAsString());
+                                            user.AddedUserToProject(project);
+                                        }
+                                        break;
+                                    case "AdditionalUsers":
+                                        {
+                                            reader.Read();
+                                            if(reader.TokenType != JsonToken.StartArray)
+                                            {
+                                                throw new Exception("Expected Start Array while loading project!");
+                                            }
+                                            while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+                                            {
+                                                var user = XTMFRuntime.Reference.GetUserByName(reader.ReadAsString());
+                                                project._AdditionalUsers.Add(user);
+                                                user.AddedUserToProject(project);
                                             }
                                         }
                                         break;
@@ -115,9 +137,16 @@ namespace XTMF2
             return project.Save(ref error);
         }
 
+
         private static string GetPath(User owner, string name)
         {
-            return Path.Combine(owner.UserPath, name, ProjectFile);
+            var dir = Path.Combine(owner.UserPath, name);
+            var info = new DirectoryInfo(dir);
+            if (!info.Exists)
+            {
+                info.Create();
+            }
+            return Path.Combine(dir, ProjectFile);
         }
 
         /// <summary>
@@ -141,7 +170,7 @@ namespace XTMF2
                         writer.WriteValue(Description);
                         writer.WritePropertyName("ModelSystemHeaders");
                         writer.WriteStartArray();
-                        foreach(var ms in ModelSystems)
+                        foreach (var ms in ModelSystems)
                         {
                             ms.Save(writer);
                         }
@@ -161,7 +190,7 @@ namespace XTMF2
             {
                 // ensure we don't leak any data
                 var tempFile = new FileInfo(temp);
-                if(tempFile.Exists)
+                if (tempFile.Exists)
                 {
                     tempFile.Delete();
                 }
@@ -175,7 +204,7 @@ namespace XTMF2
         /// <returns>True if the user is allowed</returns>
         public bool CanAccess(User user)
         {
-            if(user == null)
+            if (user == null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
