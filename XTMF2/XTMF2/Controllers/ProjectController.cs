@@ -23,8 +23,9 @@ using System.IO;
 using System.Text;
 using XTMF2.Repository;
 using System.Linq;
+using XTMF2.Editing;
 
-namespace XTMF2.Editing
+namespace XTMF2.Controller
 {
     public sealed class ProjectController
     {

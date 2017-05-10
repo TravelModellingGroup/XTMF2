@@ -23,7 +23,7 @@ using System.IO;
 using System.Text;
 using XTMF2.Configuration;
 
-namespace XTMF2
+namespace XTMF2.Controller
 {
     public sealed class UserController
     {

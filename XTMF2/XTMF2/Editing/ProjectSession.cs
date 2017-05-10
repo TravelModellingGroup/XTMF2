@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Threading;
+using XTMF2.Editing;
 
 namespace XTMF2.Editing
 {
