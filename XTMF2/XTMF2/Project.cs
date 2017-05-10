@@ -49,6 +49,7 @@ namespace XTMF2
         public static bool Load(string filePath, out Project project, ref string error)
         {
             project = new Project();
+            project.ProjectFilePath = filePath;
             try
             {
                 using (var fileStream = new StreamReader(File.OpenRead(filePath)))
@@ -112,6 +113,11 @@ namespace XTMF2
                         }
                     }
                 }
+                if(project.Owner == null)
+                {
+                    error = "Unable to load an owner for the given project.";
+                    return false;
+                }
                 return true;
             }
             catch (JsonException e)
@@ -168,6 +174,18 @@ namespace XTMF2
                         writer.WriteValue(Name);
                         writer.WritePropertyName("Description");
                         writer.WriteValue(Description);
+                        writer.WritePropertyName("Owner");
+                        writer.WriteValue(Owner.UserName);
+                        if (_AdditionalUsers.Count > 0)
+                        {
+                            writer.WritePropertyName("AdditionalUsers");
+                            writer.WriteStartArray();
+                            foreach(var user in _AdditionalUsers)
+                            {
+                                writer.WriteValue(user.UserName);
+                            }
+                            writer.WriteEndArray();
+                        }
                         writer.WritePropertyName("ModelSystemHeaders");
                         writer.WriteStartArray();
                         foreach (var ms in ModelSystems)

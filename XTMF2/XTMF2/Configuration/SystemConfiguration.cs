@@ -22,27 +22,13 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
+using XTMF2.Editing;
 using XTMF2.Repository;
 
 namespace XTMF2.Configuration
 {
     public class SystemConfiguration
     {
-        private static SystemConfiguration _Reference;
-        public static SystemConfiguration Reference
-        {
-            get
-            {
-                // If no configuration is defined run from the
-                // default path
-                if (_Reference != null)
-                {
-                    _Reference = new SystemConfiguration();
-                }
-                return _Reference;
-            }
-        }
-
         private ObservableCollection<User> _Users;
         private object UserLock = new object();
 
@@ -52,13 +38,12 @@ namespace XTMF2.Configuration
         public TypeRepository Types { get; private set; }
         private string DefaultUserDirectory { get; set; }
 
-        public SystemConfiguration(string fullPath = null)
+        public SystemConfiguration(XTMFRuntime runtime, string fullPath = null)
         {
             CreateDirectory(DefaultUserDirectory = Path.Combine(Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%"), "XTMF", "Users"));
             Parallel.Invoke(
                 () => LoadUsers(),
-                () => LoadTypes(),
-                () => LoadProjects()
+                () => LoadTypes()
             );
         }
 
@@ -69,11 +54,6 @@ namespace XTMF2.Configuration
             {
                 dir.Create();
             }
-        }
-
-        private void LoadProjects()
-        {
-            
         }
 
         private void LoadTypes()

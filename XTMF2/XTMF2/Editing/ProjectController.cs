@@ -40,6 +40,7 @@ namespace XTMF2.Editing
         public ProjectController(XTMFRuntime runtime)
         {
             Runtime = runtime;
+            LoadProjects(runtime);
         }
 
         public ReadOnlyObservableCollection<Project> GetProjects(User user)
@@ -71,6 +72,40 @@ namespace XTMF2.Editing
                 session = GetSession(p);
                 return true;
             }
+        }
+
+        /// <summary>
+        /// Load all project headers.
+        /// Should only be called by system configuration.
+        /// </summary>
+        /// <returns>List of projects that failed to load an reason why</returns>
+        private List<(string Path, string Error)> LoadProjects(XTMFRuntime runtime)
+        {
+            var errors = new List<(string Path, string Error)>();
+            var allUsers = runtime.Users;
+            // go through all users and scan their directory for projects
+            foreach(var user in allUsers)
+            {
+                string dir = user.UserPath;
+                DirectoryInfo userDir = new DirectoryInfo(dir);
+                foreach(var subDir in userDir.GetDirectories())
+                {
+                    var projectFile = subDir.GetFiles().FirstOrDefault(f => f.Name == "Project.xpjt");
+                    if(projectFile != null)
+                    {
+                        string error = null;
+                        if(Project.Load(projectFile.FullName, out Project project, ref error))
+                        {
+                            Projects.Add(project, ref error);
+                        }
+                        else
+                        {
+                            errors.Add((projectFile.FullName, error));
+                        }
+                    }
+                }
+            }
+            return errors;
         }
 
         public bool DeleteProject(User user, string projectName, ref string error)

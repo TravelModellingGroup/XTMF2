@@ -72,7 +72,10 @@ namespace XTMF2
         /// </summary>
         public ReadOnlyObservableCollection<User> Users => SystemConfiguration.Users;
 
-        public ProjectController ProjectController { get; set; }
+        /// <summary>
+        /// The controller for projects
+        /// </summary>
+        public ProjectController ProjectController { get; private set; }
 
         /// <summary>
         /// Create a new XTMF Runtime, shutting down any other that
@@ -92,14 +95,15 @@ namespace XTMF2
         /// <param name="config">An alternative configuration to load</param>
         private XTMFRuntime(SystemConfiguration config = null)
         {
-            // if no configuration is given we need to load the default configuration
-            SystemConfiguration = config ?? new SystemConfiguration();
-            ProjectController = new ProjectController(this);
             // if there is no reference defined, use this instead
-            if(_Reference == null)
+            if (_Reference == null)
             {
                 _Reference = this;
             }
+            // if no configuration is given we need to load the default configuration
+            SystemConfiguration = config ?? new SystemConfiguration(this);
+            // Projects need to be loaded after users are available.
+            ProjectController = new ProjectController(this);
         }
 
         /// <summary>
