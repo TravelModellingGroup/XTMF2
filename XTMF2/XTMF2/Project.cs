@@ -27,6 +27,10 @@ using XTMF2.Editing;
 
 namespace XTMF2
 {
+    /// <summary>
+    /// A collection of model systems with access rights
+    /// for users.
+    /// </summary>
     public sealed class Project : INotifyPropertyChanged
     {
         private const string ProjectFile = "Project.xpjt";
@@ -38,6 +42,7 @@ namespace XTMF2
         public ReadOnlyCollection<User> AdditionalUsers => new ReadOnlyCollection<User>(_AdditionalUsers);
         ObservableCollection<User> _AdditionalUsers = new ObservableCollection<User>();
         ObservableCollection<ModelSystemHeader> _ModelSystems = new ObservableCollection<ModelSystemHeader>();
+        public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => new ReadOnlyObservableCollection<ModelSystemHeader>(_ModelSystems);
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -48,8 +53,10 @@ namespace XTMF2
 
         public static bool Load(string filePath, out Project project, ref string error)
         {
-            project = new Project();
-            project.ProjectFilePath = filePath;
+            project = new Project()
+            {
+                ProjectFilePath = filePath
+            };
             try
             {
                 using (var fileStream = new StreamReader(File.OpenRead(filePath)))
@@ -226,11 +233,8 @@ namespace XTMF2
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            // TODO: Implement a real check
-            return true;
+            return user == Owner || _AdditionalUsers.Contains(user);
         }
-
-        public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => new ReadOnlyObservableCollection<ModelSystemHeader>(_ModelSystems);
 
         public bool SetName(ProjectSession session, string name, ref string error)
         {

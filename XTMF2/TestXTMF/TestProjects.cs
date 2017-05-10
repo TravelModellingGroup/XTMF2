@@ -39,7 +39,7 @@ namespace TestXTMF
             var runtime = XTMFRuntime.Reference;
             var controller = runtime.ProjectController;
             string error = null;
-            var localUser = runtime.Users[0];
+            var localUser = runtime.UserController.Users[0];
             if(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error))
             {
                 using (session)
@@ -64,7 +64,7 @@ namespace TestXTMF
             var controller = runtime.ProjectController;
             string projectName = "Test";
             string error = null;
-            var localUser = runtime.Users[0];
+            var localUser = runtime.UserController.Users[0];
             // delete the project just in case it survived
             controller.DeleteProject(localUser, projectName, ref error);
             // now create it
@@ -87,7 +87,7 @@ namespace TestXTMF
             //Startup XTMF again
             runtime = XTMFRuntime.Reference;
             controller = runtime.ProjectController;
-            localUser = runtime.Users[0];
+            localUser = runtime.UserController.Users[0];
             Assert.AreEqual(numberOfProjects, localUser.AvailableProjects.Count);
             var regainedProject = localUser.AvailableProjects[0];
             Assert.AreEqual(projectName, regainedProject.Name);

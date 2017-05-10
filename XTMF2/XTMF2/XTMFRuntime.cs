@@ -70,7 +70,7 @@ namespace XTMF2
         /// The users in the system.  Ensure you dereference the
         /// observable interface if you share this with other objects.
         /// </summary>
-        public ReadOnlyObservableCollection<User> Users => SystemConfiguration.Users;
+        public UserController UserController { get; private set; }
 
         /// <summary>
         /// The controller for projects
@@ -102,8 +102,10 @@ namespace XTMF2
             }
             // if no configuration is given we need to load the default configuration
             SystemConfiguration = config ?? new SystemConfiguration(this);
+            UserController = new UserController(SystemConfiguration);
             // Projects need to be loaded after users are available.
             ProjectController = new ProjectController(this);
+
         }
 
         /// <summary>
@@ -119,7 +121,7 @@ namespace XTMF2
 
         public User GetUserByName(string userName)
         {
-            return SystemConfiguration.Users.FirstOrDefault(user => user.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
+            return UserController.Users.FirstOrDefault(user => user.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

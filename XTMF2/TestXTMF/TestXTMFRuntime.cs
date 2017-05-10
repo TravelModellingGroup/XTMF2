@@ -42,7 +42,7 @@ namespace TestXTMF
         public void GetUserData()
         {
             XTMFRuntime runtime = XTMFRuntime.Reference;
-            var users = runtime.SystemConfiguration.Users;
+            var users = runtime.UserController.Users;
             Assert.IsTrue(users.Count > 0);
         }
 

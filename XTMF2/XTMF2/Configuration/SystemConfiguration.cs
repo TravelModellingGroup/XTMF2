@@ -29,22 +29,14 @@ namespace XTMF2.Configuration
 {
     public class SystemConfiguration
     {
-        private ObservableCollection<User> _Users;
-        private object UserLock = new object();
-
-        public ReadOnlyObservableCollection<User> Users => new ReadOnlyObservableCollection<User>(_Users);
-
         public ModuleRepository Modules { get; private set; }
         public TypeRepository Types { get; private set; }
-        private string DefaultUserDirectory { get; set; }
+        public string DefaultUserDirectory { get; private set; }
 
         public SystemConfiguration(XTMFRuntime runtime, string fullPath = null)
         {
             CreateDirectory(DefaultUserDirectory = Path.Combine(Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%"), "XTMF", "Users"));
-            Parallel.Invoke(
-                () => LoadUsers(),
-                () => LoadTypes()
-            );
+            LoadTypes();
         }
 
         private void CreateDirectory(string directoryName)
@@ -60,19 +52,6 @@ namespace XTMF2.Configuration
         {
             Modules = new ModuleRepository();
             Types = new TypeRepository();
-        }
-
-        private void LoadUsers()
-        {
-            lock (UserLock)
-            {
-                var userName = "local";
-                // Create a new user by default
-                _Users = new ObservableCollection<User>()
-                {
-                    new User(Path.Combine(DefaultUserDirectory, userName), Guid.NewGuid(), userName, true)
-                };
-            }
         }
     }
 }

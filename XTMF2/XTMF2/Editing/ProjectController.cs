@@ -82,7 +82,7 @@ namespace XTMF2.Editing
         private List<(string Path, string Error)> LoadProjects(XTMFRuntime runtime)
         {
             var errors = new List<(string Path, string Error)>();
-            var allUsers = runtime.Users;
+            var allUsers = runtime.UserController.Users;
             // go through all users and scan their directory for projects
             foreach(var user in allUsers)
             {
@@ -146,9 +146,13 @@ namespace XTMF2.Editing
                 }
                 ActiveSessions.Remove(project);
                 Projects.Remove(project);
-                var directory = project.ProjectDirectory;
-                Directory.Delete(directory, true);
-                return true;
+                var directory = new DirectoryInfo(project.ProjectDirectory);
+                if (directory.Exists)
+                {
+                    directory.Delete(true);
+                    return true;
+                }
+                return false;
             }
         }
 

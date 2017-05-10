@@ -26,8 +26,6 @@ namespace XTMF2
 {
     public sealed class User
     {
-        public Guid UserId { get; set; }
-
         public string UserName { get; }
 
         public bool Admin { get; private set; }
@@ -46,9 +44,8 @@ namespace XTMF2
 
         private ObservableCollection<Project> _AvailableProjects = new ObservableCollection<Project>();
 
-        public User(string userPath, Guid userId, string userName, bool admin = false)
+        public User(string userPath, string userName, bool admin = false)
         {
-            UserId = userId;
             UserName = userName;
             Admin = admin;
             UserPath = userPath;
