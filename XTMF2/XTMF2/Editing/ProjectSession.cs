@@ -116,5 +116,31 @@ namespace XTMF2.Editing
                 return Project.GiveOwnership(newOwner, ref error);
             }
         }
+
+        public bool RestrictAccess(User owner, User toRestrict, ref string error)
+        {
+            if (owner == null)
+            {
+                throw new ArgumentNullException(nameof(owner));
+            }
+            if (toRestrict == null)
+            {
+                throw new ArgumentNullException(nameof(toRestrict));
+            }
+            lock (SessionLock)
+            {
+                if (!(owner.Admin || owner == Project.Owner))
+                {
+                    error = "The owner must either be an administrator or the original owner of the project.";
+                    return false;
+                }
+                if (toRestrict == Project.Owner)
+                {
+                    error = "You can not restrict access to the owner of a project.";
+                    return false;
+                }
+                return Project.RemoveAdditionalUser(toRestrict, ref error);
+            }
+        }
     }
 }
