@@ -28,6 +28,11 @@ namespace XTMF2
 {
     public sealed class ModelSystem : INotifyPropertyChanged
     {
+        public ModelSystem(string name)
+        {
+            Name = name;
+        }
+
         public string Name { get; private set; }
         public string Description { get; private set; }
         public Boundary GlobalBoundary { get; private set; }
@@ -36,9 +41,8 @@ namespace XTMF2
 
         public ModelSystem Clone()
         {
-            return new ModelSystem()
+            return new ModelSystem(Name)
             {
-                Name = Name,
                 Description = Description,
                 GlobalBoundary = GlobalBoundary.Clone()
             };

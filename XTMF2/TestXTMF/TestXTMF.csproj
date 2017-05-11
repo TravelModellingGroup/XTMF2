@@ -11,8 +11,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Modules\" />
     <Folder Include="Editing\" />
+    <Folder Include="Modules\" />
   </ItemGroup>
 
   <ItemGroup>

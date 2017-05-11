@@ -38,6 +38,21 @@ namespace XTMF2.Editing
 
         public int References => _References;
 
+        private Dictionary<ModelSystemHeader, ModelSystemSession> ActiveSessions = new Dictionary<ModelSystemHeader, ModelSystemSession>();
+
+        public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => Project.ModelSystems;
+
+        internal ProjectSession AddReference()
+        {
+            Interlocked.Increment(ref _References);
+            return this;
+        }
+
+        internal void UnloadSession(ModelSystemSession modelSystemSession)
+        {
+            Dispose();
+        }
+
         public ProjectSession(XTMFRuntime runtime, Project project)
         {
             Project = project;
@@ -53,9 +68,39 @@ namespace XTMF2.Editing
             }
         }
 
-        internal void IncrementCounter()
+        public bool Save(ref string error)
         {
-            Interlocked.Increment(ref _References);
+            lock(SessionLock)
+            {
+                return Project.Save(ref error);
+
+            }
+        }
+
+        /// <summary>
+        /// Create a new model system with the given name.  The name must be unique.
+        /// </summary>
+        /// <param name="modelSystemName">The name of the model system (must be unique within the project).</param>
+        /// <param name="modelSystem">The resulting model system session</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool CreateNewModelSystem(string modelSystemName, out ModelSystemHeader modelSystem, ref string error)
+        {
+            modelSystem = null;
+            if(!Controller.ProjectController.ValidateProjectName(modelSystemName, ref error))
+            {
+                return false;
+            }
+            lock(SessionLock)
+            {
+                if(Project.ContainsModelSystem(modelSystemName))
+                {
+                    error = "A model system with this name already exists.";
+                    return false;
+                }
+                modelSystem = new ModelSystemHeader(modelSystemName);
+                return Project.Add(this, modelSystem, ref error); ;
+            }
         }
 
         /// <summary>

@@ -25,6 +25,7 @@ using System.Text;
 using Newtonsoft.Json;
 using XTMF2.Editing;
 using XTMF2.Controller;
+using System.Linq;
 
 namespace XTMF2
 {
@@ -94,8 +95,8 @@ namespace XTMF2
                                     case "Owner":
                                         {
                                             var user = userController.GetUserByName(reader.ReadAsString());
-                                            project.Owner = userController.GetUserByName(reader.ReadAsString());
-                                            user.AddedUserToProject(project);
+                                            project.Owner = user;
+                                            user?.AddedUserToProject(project);
                                         }
                                         break;
                                     case "AdditionalUsers":
@@ -138,6 +139,11 @@ namespace XTMF2
                 error = e.Message;
             }
             return false;
+        }
+
+        internal bool ContainsModelSystem(string modelSystemName)
+        {
+            return _ModelSystems.Any(ms => ms.Name.Equals(modelSystemName, StringComparison.OrdinalIgnoreCase));
         }
 
         internal bool GiveOwnership(User newOwner, ref string error)
@@ -219,7 +225,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="error"></param>
         /// <returns></returns>
-        private bool Save(ref string error)
+        internal bool Save(ref string error)
         {
             var temp = Path.GetTempFileName();
             try

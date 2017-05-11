@@ -37,6 +37,13 @@ namespace XTMF2
         public string Name { get; private set; }
         public string Description { get; private set; }
 
+
+        public ModelSystemHeader(string name, string description = null)
+        {
+            Name = name;
+            Description = description;
+        }
+
         public bool SetName(ProjectSession session, string name, ref string error)
         {
             if (String.IsNullOrWhiteSpace(name))
@@ -83,7 +90,7 @@ namespace XTMF2
             {
                 throw new ArgumentException(nameof(reader), "Is not processing a model system header!");
             }
-            ModelSystemHeader ret = new ModelSystemHeader();
+            string name = null, description = null;
             while(reader.Read() && reader.TokenType != JsonToken.EndObject)
             {
                 if(reader.TokenType == JsonToken.PropertyName)
@@ -91,15 +98,15 @@ namespace XTMF2
                     switch(reader.Value)
                     {
                         case "Name":
-                            ret.Name = reader.ReadAsString();
+                            name = reader.ReadAsString();
                             break;
                         case "Description":
-                            ret.Description = reader.ReadAsString();
+                            description = reader.ReadAsString();
                             break;
                     }
                 }
             }
-            return ret;
+            return new ModelSystemHeader(name, description);
         }
     }
 }

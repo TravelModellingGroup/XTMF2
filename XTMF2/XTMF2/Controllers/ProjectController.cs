@@ -52,15 +52,14 @@ namespace XTMF2.Controller
         public bool CreateNewProject(User owner, string name, out ProjectSession session, ref string error)
         {
             session = null;
-            if (!ValidateProjectName(name))
+            if (!ValidateProjectName(name, ref error))
             {
-                error = "Invalid project name!";
                 return false;
             }
             var path = GetPath(owner, name);
             lock (ControllerLock)
             {
-                if(owner.HasProjectWithName(name))
+                if (owner.HasProjectWithName(name))
                 {
                     error = "A project with that name already exists!";
                     return false;
@@ -85,17 +84,17 @@ namespace XTMF2.Controller
             var errors = new List<(string Path, string Error)>();
             var allUsers = runtime.UserController.Users;
             // go through all users and scan their directory for projects
-            foreach(var user in allUsers)
+            foreach (var user in allUsers)
             {
                 string dir = user.UserPath;
                 DirectoryInfo userDir = new DirectoryInfo(dir);
-                foreach(var subDir in userDir.GetDirectories())
+                foreach (var subDir in userDir.GetDirectories())
                 {
                     var projectFile = subDir.GetFiles().FirstOrDefault(f => f.Name == "Project.xpjt");
-                    if(projectFile != null)
+                    if (projectFile != null)
                     {
                         string error = null;
-                        if(Project.Load(runtime.UserController, projectFile.FullName, out Project project, ref error))
+                        if (Project.Load(runtime.UserController, projectFile.FullName, out Project project, ref error))
                         {
                             Projects.Add(project, ref error);
                         }
@@ -120,7 +119,7 @@ namespace XTMF2.Controller
                 throw new ArgumentNullException(nameof(projectName));
             }
             var project = GetProjects(user).FirstOrDefault(p => p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase));
-            if(project == null)
+            if (project == null)
             {
                 error = $"User does not have a project called {projectName}!";
                 return false;
@@ -130,18 +129,18 @@ namespace XTMF2.Controller
 
         public bool DeleteProject(User owner, Project project, ref string error)
         {
-            if(owner == null)
+            if (owner == null)
             {
                 throw new ArgumentNullException(nameof(owner));
             }
-            if(project == null)
+            if (project == null)
             {
                 throw new ArgumentNullException(nameof(project));
             }
             lock (ControllerLock)
             {
                 owner.RemovedUserForProject(project);
-                foreach(var user in project.AdditionalUsers)
+                foreach (var user in project.AdditionalUsers)
                 {
                     user.RemovedUserForProject(project);
                 }
@@ -173,31 +172,41 @@ namespace XTMF2.Controller
 
         public ProjectSession GetSession(Project project)
         {
-            lock(ControllerLock)
+            lock (ControllerLock)
             {
-                if(!ActiveSessions.TryGetValue(project, out var session))
+                if (!ActiveSessions.TryGetValue(project, out var session))
                 {
                     session = new ProjectSession(Runtime, project);
                 }
-                session.IncrementCounter();
-                return session;
+                return session.AddReference();
             }
         }
-
-        private Dictionary<Project, ProjectSession> ActiveSessions = new Dictionary<Project, ProjectSession>();
-
-        private static char[] InvalidCharacters =
-            Path.GetInvalidPathChars().Union(Path.GetInvalidFileNameChars()).ToArray();
 
         /// <summary>
         /// Ensure that a project name does not contain
         /// invalid characters
         /// </summary>
         /// <param name="name">The name to validate</param>
+        /// <param name="error">A description of why the name was invalid.</param>
         /// <returns>If the validation allows this project name.</returns>
-        private static bool ValidateProjectName(string name)
+        public static bool ValidateProjectName(string name, ref string error)
         {
-            return !name.Any(c => InvalidCharacters.Contains(c));
+            if (String.IsNullOrWhiteSpace(name))
+            {
+                error = "A name must contain characters";
+                return false;
+            }
+            if (name.Any(c => InvalidCharacters.Contains(c)))
+            {
+                error = "An invalid character was found in the name.";
+                return false;
+            }
+            return true;
         }
+
+        private Dictionary<Project, ProjectSession> ActiveSessions = new Dictionary<Project, ProjectSession>();
+
+        private static char[] InvalidCharacters =
+            Path.GetInvalidPathChars().Union(Path.GetInvalidFileNameChars()).ToArray();
     }
 }

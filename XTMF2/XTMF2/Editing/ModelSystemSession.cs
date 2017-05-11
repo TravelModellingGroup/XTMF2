@@ -19,16 +19,32 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 
 namespace XTMF2.Editing
 {
-    public sealed class ModelSystemSession
+    public sealed class ModelSystemSession : IDisposable
     {
+        private int _References = 1;
+
+        public int References => _References;
+
         private ModelSystem ModelSystem;
 
-        public ModelSystemSession(ModelSystem modelSystem)
+        private ProjectSession Session;
+
+        public ModelSystemSession(ProjectSession session, ModelSystem modelSystem)
         {
             ModelSystem = modelSystem;
+            Session = session.AddReference();
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Decrement(ref _References) <= 0)
+            {
+                Session.UnloadSession(this);
+            }
         }
     }
 }
