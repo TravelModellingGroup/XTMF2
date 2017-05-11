@@ -30,9 +30,9 @@ namespace XTMF2.Controller
     {
         private ObservableCollection<User> _Users;
 
-
-        private SystemConfiguration SystemConfiguration;
-        private ProjectController ProjectController;
+        private XTMFRuntime Runtime;
+        private SystemConfiguration SystemConfiguration => Runtime.SystemConfiguration;
+        private ProjectController ProjectController => Runtime.ProjectController;
 
         private object UserLock = new object();
 
@@ -146,8 +146,7 @@ namespace XTMF2.Controller
 
         public UserController(XTMFRuntime runtime)
         {
-            SystemConfiguration = runtime.SystemConfiguration;
-            ProjectController = runtime.ProjectController;
+            Runtime = runtime;
             LoadUsers();
         }
 

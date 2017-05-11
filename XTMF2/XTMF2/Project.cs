@@ -44,6 +44,7 @@ namespace XTMF2
         ObservableCollection<User> _AdditionalUsers = new ObservableCollection<User>();
         ObservableCollection<ModelSystemHeader> _ModelSystems = new ObservableCollection<ModelSystemHeader>();
         public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => new ReadOnlyObservableCollection<ModelSystemHeader>(_ModelSystems);
+        private object ProjectLock = new object();
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -137,6 +138,56 @@ namespace XTMF2
                 error = e.Message;
             }
             return false;
+        }
+
+        internal bool GiveOwnership(User newOwner, ref string error)
+        {
+            lock(ProjectLock)
+            {
+                var previousOwner = Owner;
+                Owner = newOwner;
+                previousOwner.RemovedUserForProject(this);
+                // update the references to this project
+                if (_AdditionalUsers.Contains(newOwner))
+                {
+                    _AdditionalUsers.Remove(newOwner);
+                }
+                else
+                {
+                    newOwner.AddedUserToProject(this);
+                }
+                return true;
+            }
+        }
+
+        internal bool AddAdditionalUser(User toShareWith, ref string error)
+        {
+            lock (ProjectLock)
+            {
+                if (_AdditionalUsers.Contains(toShareWith))
+                {
+                    error = "The user already has access to this project.";
+                    return false;
+                }
+                _AdditionalUsers.Add(toShareWith);
+                toShareWith.AddedUserToProject(this);
+                return true;
+            }
+        }
+
+        internal bool RemoveAdditionalUser(User toRemove, ref string error)
+        {
+            lock (ProjectLock)
+            {
+                if (!_AdditionalUsers.Contains(toRemove))
+                {
+                    error = "The user already does not access to this project.";
+                    return false;
+                }
+                _AdditionalUsers.Remove(toRemove);
+                toRemove.RemovedUserForProject(this);
+                return true;
+            }
         }
 
         public static bool New(User owner, string name, string description, out Project project, ref string error)

@@ -31,7 +31,8 @@ namespace XTMF2.Editing
 
         private XTMFRuntime Runtime;
 
-        private CommandBuffer Commands = new CommandBuffer();
+        private object SessionLock = new object();
+
 
         private int _References = 1;
 
@@ -55,6 +56,65 @@ namespace XTMF2.Editing
         internal void IncrementCounter()
         {
             Interlocked.Increment(ref _References);
+        }
+
+        /// <summary>
+        /// Share the project with the given user
+        /// </summary>
+        /// <param name="doingShare">The user that is issuing the share command</param>
+        /// <param name="toSharWith">The person to share with</param>
+        /// <param name="error">An error message if appropriate</param>
+        /// <returns>True if the share was completed successfully.</returns>
+        public bool ShareWith(User doingShare, User toSharWith, ref string error)
+        {
+            // test our arguments
+            if(doingShare == null)
+            {
+                throw new ArgumentNullException(nameof(doingShare));
+            }
+            if(toSharWith == null)
+            {
+                throw new ArgumentNullException(nameof(doingShare));
+            }
+            lock (SessionLock)
+            {
+                if (!(doingShare.Admin || doingShare == Project.Owner))
+                {
+
+                    error = "The user sharing the project must either be the owner or an administrator!";
+                    return false;
+                }
+                // now that we know that we can do the share
+                return Project.AddAdditionalUser(toSharWith, ref error);
+            }
+        }
+
+        /// <summary>
+        /// Give ownership of a project to a different user
+        /// </summary>
+        /// <param name="owner"></param>
+        /// <param name="newOwner"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        public bool SwitchOwner(User owner, User newOwner, ref string error)
+        {
+            if(owner == null)
+            {
+                throw new ArgumentNullException(nameof(owner));
+            }
+            if (newOwner == null)
+            {
+                throw new ArgumentNullException(nameof(newOwner));
+            }
+            lock (SessionLock)
+            {
+                if (!(owner.Admin || owner == Project.Owner))
+                {
+                    error = "The owner must either be an administrator or the original owner of the project.";
+                    return false;
+                }
+                return Project.GiveOwnership(newOwner, ref error);
+            }
         }
     }
 }
