@@ -32,6 +32,7 @@ namespace XTMF2.Controller
 
 
         private SystemConfiguration SystemConfiguration;
+        private ProjectController ProjectController;
 
         private object UserLock = new object();
 
@@ -58,7 +59,7 @@ namespace XTMF2.Controller
                     return false;
                 }
                 _Users.Add(user = new User(GetUserPath(userName), userName, admin));
-                return true;
+                return user.Save(ref error);
             }
         }
 
@@ -95,17 +96,26 @@ namespace XTMF2.Controller
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            var projectController = XTMFRuntime.Reference.ProjectController;
+            var projectController = ProjectController;
             lock (UserLock)
             {
 
                 var userProjects = user.AvailableProjects;
+                // make a copy of the projects to avoid altering a list
+                // that is being enumerated
                 foreach (var toDelete in (from p in userProjects
                                         where user == p.Owner
                                         select p ).ToList())
                 {
                     string error = null;
                     projectController.DeleteProject(user, toDelete, ref error);
+                }
+                _Users.Remove(user);
+                // now remove all of the users files from the system.
+                var userDir = new DirectoryInfo(user.UserPath);
+                if(userDir.Exists)
+                {
+                    userDir.Delete(true);
                 }
                 return true;
             }
@@ -125,24 +135,71 @@ namespace XTMF2.Controller
             return !name.Any(c => InvalidCharacters.Contains(c));
         }
 
-
-        public UserController(SystemConfiguration configuration)
+        public User GetUserByName(string userName)
         {
-            SystemConfiguration = configuration;
+            lock (UserLock)
+            {
+                return _Users.FirstOrDefault(user => user.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+
+        public UserController(XTMFRuntime runtime)
+        {
+            SystemConfiguration = runtime.SystemConfiguration;
+            ProjectController = runtime.ProjectController;
             LoadUsers();
         }
 
         private void LoadUsers()
         {
-            lock (UserLock)
+            _Users = new ObservableCollection<User>();
+            var usersDir = new DirectoryInfo(SystemConfiguration.DefaultUserDirectory);
+            if (!usersDir.Exists)
             {
-                var userName = "local";
-                // Create a new user by default
-                _Users = new ObservableCollection<User>()
-                {
-                    new User(GetUserPath(userName), userName, true)
-                };
+                // if we need to create the directory then there are no users in the system
+                usersDir.Create();
+                CreateInitialUser();
+                return;
             }
+            else
+            {
+                // if the directory exists load it
+                lock (UserLock)
+                {
+                    foreach(var potentialDir in usersDir.GetDirectories())
+                    {
+                        var userFile = potentialDir.GetFiles("User.xusr").FirstOrDefault();
+                        if(userFile != null)
+                        {
+                            string error = null;
+                            if(User.Load(userFile.FullName, out var loadedUser, ref error))
+                            {
+                                _Users.Add(loadedUser);
+                            }
+                        }
+                    }
+                }
+            }
+            // if we have no users create a default user
+            if(_Users.Count <= 0)
+            {
+                lock(UserLock)
+                {
+                    CreateInitialUser();
+                }
+            }
+        }
+
+        private void CreateInitialUser()
+        {
+            var userName = "local";
+            // Create a new user by default
+            var firstUser = new User(GetUserPath(userName), userName, true);
+            _Users.Add(firstUser);
+            string error = null;
+            firstUser.Save(ref error);
+            return;
         }
 
         private string GetUserPath(string userName)

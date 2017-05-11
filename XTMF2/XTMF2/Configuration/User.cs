@@ -21,6 +21,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Linq;
+using System.IO;
+using Newtonsoft.Json;
 
 namespace XTMF2
 {
@@ -57,7 +59,7 @@ namespace XTMF2
         /// <param name="project">The project to access</param>
         internal void AddedUserToProject(Project project)
         {
-            if(project == null)
+            if (project == null)
             {
                 throw new ArgumentNullException(nameof(project));
             }
@@ -74,7 +76,7 @@ namespace XTMF2
         /// <returns>True if there is already a project defined with the name and is the owner.</returns>
         internal bool HasProjectWithName(string name)
         {
-            lock(ProjectLock)
+            lock (ProjectLock)
             {
                 return _AvailableProjects.Any(p => p.Owner == this && p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
             }
@@ -82,9 +84,101 @@ namespace XTMF2
 
         internal void RemovedUserForProject(Project project)
         {
-            lock(ProjectLock)
+            lock (ProjectLock)
             {
                 _AvailableProjects.Remove(project);
+            }
+        }
+
+        internal static bool Load(string userFile, out User user, ref string error)
+        {
+            string userName = null;
+            bool admin = false;
+            try
+            {
+                using (var stream = new StreamReader(File.OpenRead(userFile)))
+                using (var reader = new JsonTextReader(stream))
+                {
+                    while(reader.Read())
+                    {
+                        if(reader.TokenType == JsonToken.PropertyName)
+                        {
+                            switch(reader.Value)
+                            {
+                                case "UserName":
+                                    userName = reader.ReadAsString();
+                                    break;
+                                case "Admin":
+                                    {
+                                        
+                                        var result = reader.ReadAsBoolean();
+                                        if(result == null)
+                                        {
+                                            user = null;
+                                            error = "Invalid Admin element!";
+                                            return false;
+                                        }
+                                        admin = (bool)result;
+                                    }
+                                    break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch(JsonException e)
+            {
+                error = e.Message;
+                user = null;
+                return false;
+            }
+            if(userName == null)
+            {
+                user = null;
+                error = "The user file failed to contain a user name!";
+                return false;
+            }
+            user = new User(Path.GetDirectoryName(userFile), userName, admin);
+            return true;
+        }
+
+        internal bool Save(ref string error)
+        {
+            var temp = Path.GetTempFileName();
+            try
+            {
+                var userDir = new DirectoryInfo(UserPath);
+                if(!userDir.Exists)
+                {
+                    userDir.Create();
+                }
+                using (var stream = new StreamWriter(File.Create(temp)))
+                using (JsonTextWriter writer = new JsonTextWriter(stream))
+                {
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("UserName");
+                    writer.WriteValue(UserName);
+                    writer.WritePropertyName("Admin");
+                    writer.WriteValue(Admin);
+                    writer.WriteEndObject();
+                }
+                // when we have complete copy the results
+                File.Copy(temp, Path.Combine(UserPath, "User.xusr"), true);
+                return true;
+            }
+            catch (IOException e)
+            {
+                error = e.Message;
+                return false;
+            }
+            finally
+            {
+                // make sure we cleanup the temporary file
+                var tempFile = new FileInfo(temp);
+                if (tempFile.Exists)
+                {
+                    tempFile.Delete();
+                }
             }
         }
     }

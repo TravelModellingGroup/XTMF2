@@ -29,19 +29,19 @@ namespace TestXTMF
         public void Setup()
         {
             // hide the startup cost of XTMF
-            XTMFRuntime runtime = XTMFRuntime.Reference;
+            XTMFRuntime runtime = XTMFRuntime.CreateRuntime();
         }
 
         [TestMethod]
         public void CreateRuntime()
         {
-            XTMFRuntime runtime = XTMFRuntime.Reference;
+            XTMFRuntime runtime = XTMFRuntime.CreateRuntime();
         }
 
         [TestMethod]
         public void GetUserData()
         {
-            XTMFRuntime runtime = XTMFRuntime.Reference;
+            XTMFRuntime runtime = XTMFRuntime.CreateRuntime();
             var users = runtime.UserController.Users;
             Assert.IsTrue(users.Count > 0);
         }
@@ -49,7 +49,7 @@ namespace TestXTMF
         [TestMethod]
         public void GetProjectController()
         {
-            XTMFRuntime runtime = XTMFRuntime.Reference;
+            XTMFRuntime runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
             Assert.IsNotNull(controller);
         }

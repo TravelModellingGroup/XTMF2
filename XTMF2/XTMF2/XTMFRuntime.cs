@@ -31,27 +31,6 @@ namespace XTMF2
     /// </summary>
     public class XTMFRuntime
     {
-        private static XTMFRuntime _Reference;
-
-        /// <summary>
-        /// Access the instance of XTMF in the process
-        /// </summary>
-        public static XTMFRuntime Reference
-        {
-            get
-            {
-                if(_Reference == null)
-                {
-                    _Reference = new XTMFRuntime();
-                }
-                return _Reference;
-            }
-            private set
-            {
-                _Reference = value;
-            }
-        }
-
         /// <summary>
         /// The configuration for the whole XTMF instance
         /// </summary>
@@ -86,8 +65,7 @@ namespace XTMF2
         /// <returns>A new XTMF Runtime</returns>
         public static XTMFRuntime CreateRuntime(SystemConfiguration config = null)
         {
-            _Reference?.Shutdown();
-            return _Reference = new XTMFRuntime(config);
+            return new XTMFRuntime(config);
         }
 
         /// <summary>
@@ -96,14 +74,9 @@ namespace XTMF2
         /// <param name="config">An alternative configuration to load</param>
         private XTMFRuntime(SystemConfiguration config = null)
         {
-            // if there is no reference defined, use this instead
-            if (_Reference == null)
-            {
-                _Reference = this;
-            }
             // if no configuration is given we need to load the default configuration
             SystemConfiguration = config ?? new SystemConfiguration(this);
-            UserController = new UserController(SystemConfiguration);
+            UserController = new UserController(this);
             // Projects need to be loaded after users are available.
             ProjectController = new ProjectController(this);
 
@@ -114,15 +87,9 @@ namespace XTMF2
         /// </summary>
         public void Shutdown()
         {
-            _Reference = null;
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
-        }
-
-        public User GetUserByName(string userName)
-        {
-            return UserController.Users.FirstOrDefault(user => user.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

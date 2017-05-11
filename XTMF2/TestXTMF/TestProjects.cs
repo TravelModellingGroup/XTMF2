@@ -31,13 +31,13 @@ namespace TestXTMF
         public void Setup()
         {
             // hide the startup cost of XTMF
-            XTMFRuntime runtime = XTMFRuntime.Reference;
+            XTMFRuntime runtime = XTMFRuntime.CreateRuntime();
         }
 
         [TestMethod]
         public void CreateNewProject()
         {
-            var runtime = XTMFRuntime.Reference;
+            var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
             string error = null;
             var localUser = runtime.UserController.Users[0];
@@ -61,7 +61,7 @@ namespace TestXTMF
         [TestMethod]
         public void ProjectPersistance()
         {
-            var runtime = XTMFRuntime.Reference;
+            var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
             string projectName = "Test";
             string error = null;
@@ -86,7 +86,7 @@ namespace TestXTMF
             // Simulate a shutdown of XTMF
             runtime.Shutdown();
             //Startup XTMF again
-            runtime = XTMFRuntime.Reference;
+            runtime = XTMFRuntime.CreateRuntime();
             controller = runtime.ProjectController;
             localUser = runtime.UserController.Users[0];
             Assert.AreEqual(numberOfProjects, localUser.AvailableProjects.Count);

@@ -21,6 +21,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2;
 using XTMF2.Editing;
 using XTMF2.Controller;
+using System.Linq;
 
 namespace TestXTMF
 {
@@ -30,7 +31,7 @@ namespace TestXTMF
         [TestMethod]
         public void CreateUser()
         {
-            var runtime = XTMFRuntime.Reference;
+            var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             string error = null;
             const string userName = "NewUser";
@@ -42,6 +43,25 @@ namespace TestXTMF
             Assert.IsNotNull(error);
             error = null;
             Assert.IsTrue(userController.Delete(user));
+        }
+
+        [TestMethod]
+        public void UserPersistance()
+        {
+            //ensure that a user can survive between different XTMF sessions
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            string error = null;
+            const string userName = "NewUser";
+            // ensure the user doesn't exist before we start
+            userController.Delete(userName);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error));
+            // unload XTMF to simulate it shutting down
+            runtime.Shutdown();
+            // rebuild XTMF
+            runtime = XTMFRuntime.CreateRuntime();
+            userController = runtime.UserController;
+            Assert.IsNotNull(userController.Users.FirstOrDefault(u => u.UserName == user.UserName));
         }
     }
 }

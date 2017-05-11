@@ -95,7 +95,7 @@ namespace XTMF2.Controller
                     if(projectFile != null)
                     {
                         string error = null;
-                        if(Project.Load(projectFile.FullName, out Project project, ref error))
+                        if(Project.Load(runtime.UserController, projectFile.FullName, out Project project, ref error))
                         {
                             Projects.Add(project, ref error);
                         }

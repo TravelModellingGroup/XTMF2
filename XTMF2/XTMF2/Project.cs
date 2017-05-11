@@ -24,6 +24,7 @@ using System.IO;
 using System.Text;
 using Newtonsoft.Json;
 using XTMF2.Editing;
+using XTMF2.Controller;
 
 namespace XTMF2
 {
@@ -51,7 +52,7 @@ namespace XTMF2
 
         }
 
-        public static bool Load(string filePath, out Project project, ref string error)
+        public static bool Load(UserController userController, string filePath, out Project project, ref string error)
         {
             project = new Project()
             {
@@ -91,8 +92,8 @@ namespace XTMF2
                                         break;
                                     case "Owner":
                                         {
-                                            var user = XTMFRuntime.Reference.GetUserByName(reader.ReadAsString());
-                                            project.Owner = XTMFRuntime.Reference.GetUserByName(reader.ReadAsString());
+                                            var user = userController.GetUserByName(reader.ReadAsString());
+                                            project.Owner = userController.GetUserByName(reader.ReadAsString());
                                             user.AddedUserToProject(project);
                                         }
                                         break;
@@ -105,7 +106,7 @@ namespace XTMF2
                                             }
                                             while (reader.Read() && reader.TokenType != JsonToken.EndArray)
                                             {
-                                                var user = XTMFRuntime.Reference.GetUserByName(reader.ReadAsString());
+                                                var user = userController.GetUserByName(reader.ReadAsString());
                                                 project._AdditionalUsers.Add(user);
                                                 user.AddedUserToProject(project);
                                             }
