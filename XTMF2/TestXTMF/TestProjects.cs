@@ -41,7 +41,9 @@ namespace TestXTMF
             var controller = runtime.ProjectController;
             string error = null;
             var localUser = runtime.UserController.Users[0];
-            if(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error))
+            // delete the project in case it has survived.
+            controller.DeleteProject(localUser, "Test", ref error);
+            if (controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error))
             {
                 using (session)
                 {
