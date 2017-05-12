@@ -43,12 +43,11 @@ namespace TestXTMF
             // clear out the user if possible
             userController.Delete(userName);
             Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
-            Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, ref error), error);
-            using (session)
+            Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, ref error).UsingIf(session, () =>
             {
                 Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
                 Assert.IsTrue(session.Save(ref error));
-            }
+            }), error);
             runtime.Shutdown();
             runtime = XTMFRuntime.CreateRuntime();
             userController = runtime.UserController;
@@ -77,8 +76,7 @@ namespace TestXTMF
             // clear out the user if possible
             userController.Delete(userName);
             Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
-            Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, ref error), error);
-            using (session)
+            Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, ref error).UsingIf(session, () =>
             {
                 Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
                 Assert.IsTrue(session.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(
@@ -89,7 +87,8 @@ namespace TestXTMF
                         Assert.IsFalse(modelSystemSession.AddModelSystemStart(user, globalBoundary, "Start", out Start start_, ref error));
                     }), error);
                 Assert.IsTrue(session.Save(ref error));
-            }
+            }), error);
+
             //cleanup
             userController.Delete(user);
         }
