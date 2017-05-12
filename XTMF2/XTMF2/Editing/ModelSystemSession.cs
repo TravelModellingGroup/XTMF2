@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.Editing
 {
@@ -29,9 +30,11 @@ namespace XTMF2.Editing
 
         public int References => _References;
 
-        private ModelSystem ModelSystem;
+        public ModelSystem ModelSystem { get; private set; }
 
         private ProjectSession Session;
+
+        private object SessionLock = new object();
 
         public ModelSystemSession(ProjectSession session, ModelSystem modelSystem)
         {
@@ -45,6 +48,44 @@ namespace XTMF2.Editing
             {
                 Session.UnloadSession(this);
             }
+        }
+
+        /// <summary>
+        /// Adds a new model system start element.
+        /// </summary>
+        /// <param name="user">The user requesting to add the new structure.</param>
+        /// <param name="startName">The name of the start element.  This must be unique in the model system.</param>
+        /// <param name="start">The newly created start structure</param>
+        /// <param name="error">A message describing why the structure was rejected.</param>
+        /// <returns>True if the operation succeeds, false otherwise.</returns>
+        public bool AddModelSystemStart(User user, Boundary boundary, string startName, out Start start, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (boundary == null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+            const string badStartName = "The start name must be unique within the model system and not empty.";
+            start = null;
+            if (String.IsNullOrWhiteSpace(startName))
+            {
+                error = badStartName;
+                return false;
+            }
+            lock (SessionLock)
+            {
+                var ms = ModelSystem;
+                if (!ms.Contains(boundary))
+                {
+                    error = "The passed in boundary is not part of the model system!";
+                    return false;
+                }
+                return boundary.AddStart(startName, out start, ref error);
+            }
+            
         }
     }
 }

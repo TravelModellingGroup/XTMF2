@@ -31,19 +31,19 @@ namespace XTMF2
         /// <summary>
         /// The boundary that this model system structure is contained within
         /// </summary>
-        public Boundary ContainedWithin { get; private set; }
+        public Boundary ContainedWithin { get; protected set; }
 
         /// <summary>
         /// The type that this will represent
         /// </summary>
-        public Type Type { get; private set; }
+        public Type Type { get; protected set; }
 
         /// <summary>
         /// The name of the model system structure
         /// </summary>
-        public string Name { get; private set; }
+        public string Name { get; protected set; }
 
-        public Point Location { get; private set; }
+        public Point Location { get; protected set; }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -83,7 +83,7 @@ namespace XTMF2
         /// <summary>
         /// An optional description for this model system structure
         /// </summary>
-        public string Description { get; private set; }
+        public string Description { get; protected set; }
 
         /// <summary>
         /// Change the name of the model system structure
@@ -96,6 +96,11 @@ namespace XTMF2
             Description = description;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
             return true;
+        }
+
+        protected ModelSystemStructure(string name)
+        {
+            Name = name;
         }
 
         public ModelSystemStructure(Type t)

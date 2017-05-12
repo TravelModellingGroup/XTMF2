@@ -23,6 +23,7 @@ using System.Text;
 using System.Linq;
 using System.ComponentModel;
 using XTMF2.Editing;
+using System.IO;
 
 namespace XTMF2
 {
@@ -33,9 +34,15 @@ namespace XTMF2
             Name = name;
         }
 
+        private ModelSystem()
+        {
+            GlobalBoundary = new Boundary("global");
+        }
+
         public string Name { get; private set; }
         public string Description { get; private set; }
         public Boundary GlobalBoundary { get; private set; }
+        private object ModelSystemLock = new object();
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -48,7 +55,7 @@ namespace XTMF2
             };
         }
 
-        public bool SetName(ModelSystemSession session, string name, ref string error)
+        internal bool SetName(ModelSystemSession session, string name, ref string error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -60,17 +67,52 @@ namespace XTMF2
             return true;
         }
 
-        public bool SetDescription(ModelSystemSession session, string description, ref string error)
+        internal bool SetDescription(ModelSystemSession session, string description, ref string error)
         {
             Description = description;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
             return true;
         }
 
-        public bool Save(ref string error)
+        internal bool Save(ref string error)
         {
             error = "Not implemented yet!";
             return false;
+        }
+
+        /// <summary>
+        /// Check to see if the given boundary is within the model system.
+        /// </summary>
+        /// <param name="boundary"></param>
+        /// <returns></returns>
+        internal bool Contains(Boundary boundary)
+        {
+            lock(ModelSystemLock)
+            {
+                if(GlobalBoundary == boundary)
+                {
+                    return true;
+                }
+                return GlobalBoundary.Contains(boundary);
+            }
+        }
+
+        internal static bool Load(ProjectSession session, ModelSystemHeader modelSystemHeader, out ModelSystemSession msSession, ref string error)
+        {
+            // the parameters are have already been vetted
+            var path = modelSystemHeader.ModelSystemPath;
+            var info = new FileInfo(path);
+            if(info.Exists)
+            {
+                // load the existing model system
+                throw new NotImplementedException();
+            }
+            else
+            {
+                // create a new model system
+                msSession = new ModelSystemSession(session, new ModelSystem());
+                return true;
+            }
         }
     }
 }

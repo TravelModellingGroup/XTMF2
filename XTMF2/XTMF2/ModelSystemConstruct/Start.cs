@@ -29,9 +29,11 @@ namespace XTMF2.ModelSystemConstruct
     /// </summary>
     public sealed class Start : ModelSystemStructure
     {
-        public Start() : base(null)
+        public Start(string startName, Boundary boundary, string description, Point point) : base(startName)
         {
-
+            ContainedWithin = boundary;
+            Description = description;
+            Location = point;
         }
     }
 }

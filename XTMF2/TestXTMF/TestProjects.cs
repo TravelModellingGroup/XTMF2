@@ -21,7 +21,6 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2;
 using XTMF2.Editing;
 using XTMF2.Controller;
-
 namespace TestXTMF
 {
     [TestClass]
@@ -43,19 +42,12 @@ namespace TestXTMF
             var localUser = runtime.UserController.Users[0];
             // delete the project in case it has survived.
             controller.DeleteProject(localUser, "Test", ref error);
-            if (controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error))
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
             {
-                using (session)
-                {
-                    var project = session.Project;
-                    Assert.AreEqual("Test", project.Name);
-                    Assert.AreEqual(localUser, project.Owner);
-                }
-            }
-            else
-            {
-                Assert.Fail("Unable to create project");
-            }
+                var project = session.Project;
+                Assert.AreEqual("Test", project.Name);
+                Assert.AreEqual(localUser, project.Owner);
+            }), "Unable to create project");
             Assert.IsTrue(controller.DeleteProject(localUser, "Test", ref error));
             Assert.IsFalse(controller.DeleteProject(localUser, "Test", ref error));
         }
@@ -71,19 +63,12 @@ namespace TestXTMF
             // delete the project just in case it survived
             controller.DeleteProject(localUser, projectName, ref error);
             // now create it
-            if (controller.CreateNewProject(localUser, projectName, out ProjectSession session, ref error))
+            Assert.IsTrue(controller.CreateNewProject(localUser, projectName, out ProjectSession session, ref error).UsingIf(session, () =>
             {
-                using (session)
-                {
-                    var project = session.Project;
-                    Assert.AreEqual(projectName, project.Name);
-                    Assert.AreEqual(localUser, project.Owner);
-                }
-            }
-            else
-            {
-                Assert.Fail("Unable to create project");
-            }
+                var project = session.Project;
+                Assert.AreEqual(projectName, project.Name);
+                Assert.AreEqual(localUser, project.Owner);
+            }), "Unable to create project");
             var numberOfProjects = localUser.AvailableProjects.Count;
             // Simulate a shutdown of XTMF
             runtime.Shutdown();

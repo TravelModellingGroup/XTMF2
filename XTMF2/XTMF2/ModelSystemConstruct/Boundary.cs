@@ -23,6 +23,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using XTMF2.Editing;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2
 {
@@ -33,6 +34,24 @@ namespace XTMF2
         private object WriteLock = new object();
         private ObservableCollection<ModelSystemStructure> _Modules = new ObservableCollection<ModelSystemStructure>();
         private ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
+
+        public Boundary(string name)
+        {
+            Name = name;
+        }
+
+        internal bool Contains(Boundary boundary)
+        {
+            foreach(var b in _Boundaries)
+            {
+                if(b == boundary || b.Contains(boundary))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -81,7 +100,7 @@ namespace XTMF2
         {
             lock (WriteLock)
             {
-                var ret = new Boundary()
+                var ret = new Boundary(Name)
                 {
                     _Modules = new ObservableCollection<ModelSystemStructure>(from mod in _Modules
                                                                               select mod.Clone()),
@@ -90,6 +109,26 @@ namespace XTMF2
                 };
                 return ret;
             }
+        }
+
+        internal bool AddStart(string startName, out Start start, ref string error)
+        {
+            start = null;
+            // ensure the name is unique between starting points
+            foreach (var ms in _Modules)
+            {
+                if(ms is Start s)
+                {
+                    if(s.Name.Equals(startName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        error = "There already exists a start with the same name!";
+                        return false;
+                    }
+                }
+            }
+            start = new Start(startName, this, null, new Point() { X = 0, Y = 0 });
+            _Modules.Add(start);
+            return true;
         }
     }
 }

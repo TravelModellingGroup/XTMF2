@@ -88,7 +88,7 @@ namespace XTMF2
                                             }
                                             while (reader.Read() && reader.TokenType != JsonToken.EndArray)
                                             {
-                                                project._ModelSystems.Add(ModelSystemHeader.Load(reader));
+                                                project._ModelSystems.Add(ModelSystemHeader.Load(project, reader));
                                             }
                                         }
                                         break;
@@ -139,6 +139,11 @@ namespace XTMF2
                 error = e.Message;
             }
             return false;
+        }
+
+        internal bool ContainsModelSystem(ModelSystemHeader modelSystemHeader)
+        {
+            return _ModelSystems.Contains(modelSystemHeader);
         }
 
         internal bool ContainsModelSystem(string modelSystemName)

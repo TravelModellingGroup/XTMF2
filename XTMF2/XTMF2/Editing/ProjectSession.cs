@@ -98,8 +98,35 @@ namespace XTMF2.Editing
                     error = "A model system with this name already exists.";
                     return false;
                 }
-                modelSystem = new ModelSystemHeader(modelSystemName);
+                modelSystem = new ModelSystemHeader(Project, modelSystemName);
                 return Project.Add(this, modelSystem, ref error); ;
+            }
+        }
+
+        public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, out ModelSystemSession session, ref string error)
+        {
+            if(user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if(modelSystemHeader == null)
+            {
+                throw new ArgumentNullException(nameof(modelSystemHeader));
+            }
+            session = null;
+            lock(SessionLock)
+            {
+                if(!Project.ContainsModelSystem(modelSystemHeader))
+                {
+                    error = "The model system header provided does not belong to this project!";
+                    return false;
+                }
+                if(!Project.CanAccess(user))
+                {
+                    error = "The given user does not have access to this project!";
+                    return false;
+                }
+                return ModelSystem.Load(this, modelSystemHeader, out session, ref error);
             }
         }
 

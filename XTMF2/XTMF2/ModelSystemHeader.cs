@@ -23,6 +23,7 @@ using System.Text;
 using Newtonsoft.Json;
 using XTMF2.Editing;
 using XTMF2.Controller;
+using System.IO;
 
 namespace XTMF2
 {
@@ -37,9 +38,13 @@ namespace XTMF2
         public string Name { get; private set; }
         public string Description { get; private set; }
 
+        private readonly Project Project;
+        internal string ModelSystemPath => Path.Combine(Project.ProjectDirectory, "ModelSystems", Name + ".xmsys");
 
-        public ModelSystemHeader(string name, string description = null)
+
+        internal ModelSystemHeader(Project project, string name, string description = null)
         {
+            Project = project;
             Name = name;
             Description = description;
         }
@@ -63,12 +68,6 @@ namespace XTMF2
             return true;
         }
 
-        public bool Load(out ModelSystemSession session, ref string error)
-        {
-            session = null;
-            return false;
-        }
-
         internal void Save(JsonTextWriter writer)
         {
             writer.WriteStartObject();
@@ -84,7 +83,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="reader">The reader mid project load</param>
         /// <returns>The parsed model system header</returns>
-        internal static ModelSystemHeader Load(JsonTextReader reader)
+        internal static ModelSystemHeader Load(Project project, JsonTextReader reader)
         {
             if(reader.TokenType != JsonToken.StartObject)
             {
@@ -106,7 +105,7 @@ namespace XTMF2
                     }
                 }
             }
-            return new ModelSystemHeader(name, description);
+            return new ModelSystemHeader(project, name, description);
         }
     }
 }

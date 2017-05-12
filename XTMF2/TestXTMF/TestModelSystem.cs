@@ -22,6 +22,8 @@ using XTMF2;
 using XTMF2.Editing;
 using XTMF2.Controller;
 using System.Linq;
+using XTMF2.ModelSystemConstruct;
+using static XTMF2.Helper;
 
 namespace TestXTMF
 {
@@ -44,7 +46,7 @@ namespace TestXTMF
             Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, ref error), error);
             using (session)
             {
-                Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystemSession, ref error), error);
+                Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
                 Assert.IsTrue(session.Save(ref error));
             }
             runtime.Shutdown();
@@ -57,6 +59,36 @@ namespace TestXTMF
                 var modelSystems = session.ModelSystems;
                 Assert.AreEqual(1, modelSystems.Count);
                 Assert.AreEqual(modelSystemName, modelSystems[0].Name);
+            }
+            //cleanup
+            userController.Delete(user);
+        }
+
+        [TestMethod]
+        public void GetModelSystemSession()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            string error = null;
+            const string userName = "NewUser";
+            const string projectName = "TestProject";
+            const string modelSystemName = "ModelSystem1";
+            // clear out the user if possible
+            userController.Delete(userName);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, ref error), error);
+            using (session)
+            {
+                Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
+                Assert.IsTrue(session.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(
+                    modelSystemSession, () =>
+                    {
+                        var globalBoundary = modelSystemSession.ModelSystem.GlobalBoundary;
+                        Assert.IsTrue(modelSystemSession.AddModelSystemStart(user, globalBoundary, "Start", out Start start, ref error), error);
+                        Assert.IsFalse(modelSystemSession.AddModelSystemStart(user, globalBoundary, "Start", out Start start_, ref error));
+                    }), error);
+                Assert.IsTrue(session.Save(ref error));
             }
             //cleanup
             userController.Delete(user);
