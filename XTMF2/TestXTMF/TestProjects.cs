@@ -105,5 +105,36 @@ namespace TestXTMF
             // cleanup
             Assert.IsTrue(controller.DeleteProject(localUser, "Test", ref error));
         }
+
+        [TestMethod]
+        public void EnsureDifferentProjectSession()
+        {
+            /* When a project session is closed it should be disposed of.
+             * A subsequent request for a project session to the same project should
+             * be a new object.
+             */
+            var runtime = XTMFRuntime.CreateRuntime();
+            var controller = runtime.ProjectController;
+            string error = null;
+            var localUser = runtime.UserController.Users[0];
+            runtime.UserController.Delete("NewUser");
+            Assert.IsTrue(runtime.UserController.CreateNew("NewUser", false, out var newUser, ref error), error);
+            // delete the project in case it has survived.
+            controller.DeleteProject(localUser, "Test", ref error);
+            Project project = null;
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
+            {
+                project = session.Project;
+                Assert.IsTrue(session.ShareWith(localUser, newUser, ref error), error);
+                
+            }), "Unable to create project");
+            Assert.IsTrue(controller.GetProjectSession(newUser, project, out var session2, ref error).UsingIf(session2, () =>
+            {
+                Assert.AreNotSame(session, session2);
+            }), error);
+
+            // cleanup
+            Assert.IsTrue(controller.DeleteProject(localUser, "Test", ref error));
+        }
     }
 }

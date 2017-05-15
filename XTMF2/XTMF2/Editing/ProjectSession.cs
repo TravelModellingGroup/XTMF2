@@ -33,8 +33,8 @@ namespace XTMF2.Editing
 
         private object SessionLock = new object();
 
-
-        private int _References = 1;
+        // This is 0 instead of 1 intensionally so that the controller adds a reference
+        private int _References = 0;
 
         public int References => _References;
 
@@ -64,8 +64,22 @@ namespace XTMF2.Editing
             var left = Interlocked.Decrement(ref _References);
             if(left <= 0)
             {
-                Runtime.ProjectController.UnloadSession(this);
+                Dispose(true);
             }
+        }
+
+        private void Dispose(bool managed)
+        {
+            if (managed)
+            {
+                GC.SuppressFinalize(this);
+            }
+            Runtime.ProjectController.UnloadSession(this);
+        }
+
+        ~ProjectSession()
+        {
+            Dispose(false);
         }
 
         public bool Save(ref string error)
@@ -126,7 +140,16 @@ namespace XTMF2.Editing
                     error = "The given user does not have access to this project!";
                     return false;
                 }
-                return ModelSystem.Load(this, modelSystemHeader, out session, ref error);
+                if(!ActiveSessions.TryGetValue(modelSystemHeader, out session))
+                {
+                    if (ModelSystem.Load(this, modelSystemHeader, out session, ref error))
+                    {
+                        ActiveSessions.Add(modelSystemHeader, session);
+                        return true;
+                    }
+                    return false;
+                }
+                return true;
             }
         }
 
