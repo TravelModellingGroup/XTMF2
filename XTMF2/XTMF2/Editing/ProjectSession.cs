@@ -50,6 +50,11 @@ namespace XTMF2.Editing
 
         internal void UnloadSession(ModelSystemSession modelSystemSession)
         {
+            lock (SessionLock)
+            {
+                ActiveSessions.Remove(modelSystemSession.ModelSystemHeader);
+            }
+            // remove one reference to the project session
             Dispose();
         }
 

@@ -26,7 +26,7 @@ namespace XTMF2.Editing
 {
     public sealed class ModelSystemSession : IDisposable
     {
-        private int _References = 1;
+        private int _References = 0;
 
         public int References => _References;
 
@@ -36,8 +36,11 @@ namespace XTMF2.Editing
 
         private object SessionLock = new object();
 
-        public ModelSystemSession(ProjectSession session, ModelSystem modelSystem)
+        public ModelSystemHeader ModelSystemHeader { get; private set; }
+
+        public ModelSystemSession(ProjectSession session, ModelSystemHeader header, ModelSystem modelSystem)
         {
+            ModelSystemHeader = header;
             ModelSystem = modelSystem;
             Session = session.AddReference();
         }

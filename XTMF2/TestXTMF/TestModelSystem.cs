@@ -129,5 +129,43 @@ namespace TestXTMF
             //cleanup
             userController.Delete(user);
         }
+
+        [TestMethod]
+        public void EnsureDifferentModelSystemSession()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            string error = null;
+            const string userName = "NewUser";
+            const string userName2 = "NewUser2";
+            const string projectName = "TestProject";
+            const string modelSystemName = "ModelSystem1";
+            // clear out the user if possible
+            userController.Delete(userName);
+            userController.Delete(userName2);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, ref error), error);
+            Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, ref error).UsingIf(session, () =>
+            {
+                // share the session with the second user
+                Assert.IsTrue(session.ShareWith(user, user2, ref error), error);
+                // create a new model system for both users to try to edit
+                Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
+                Assert.IsTrue(session.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(
+                    modelSystemSession, () =>
+                    {
+                        
+                    }), error);
+                Assert.IsTrue(session.EditModelSystem(user2, modelSystemHeader, out var modelSystemSession2, ref error).UsingIf(modelSystemSession2, () =>
+                {
+                    Assert.AreNotSame(modelSystemSession, modelSystemSession2);
+                }), error);
+                Assert.IsTrue(session.Save(ref error));
+            }), error);
+
+            //cleanup
+            userController.Delete(user);
+        }
     }
 }

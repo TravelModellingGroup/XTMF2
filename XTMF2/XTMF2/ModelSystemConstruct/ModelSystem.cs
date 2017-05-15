@@ -42,6 +42,7 @@ namespace XTMF2
         public string Name { get; private set; }
         public string Description { get; private set; }
         public Boundary GlobalBoundary { get; private set; }
+
         private object ModelSystemLock = new object();
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -110,7 +111,7 @@ namespace XTMF2
             else
             {
                 // create a new model system
-                msSession = new ModelSystemSession(session, new ModelSystem());
+                msSession = new ModelSystemSession(session, modelSystemHeader, new ModelSystem());
                 return true;
             }
         }
