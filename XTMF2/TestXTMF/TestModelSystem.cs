@@ -53,12 +53,12 @@ namespace TestXTMF
             userController = runtime.UserController;
             projectController = runtime.ProjectController;
             user = userController.GetUserByName(userName);
-            using (session = projectController.GetSession(user.AvailableProjects[0]))
-            {
-                var modelSystems = session.ModelSystems;
-                Assert.AreEqual(1, modelSystems.Count);
-                Assert.AreEqual(modelSystemName, modelSystems[0].Name);
-            }
+            Assert.IsTrue(projectController.GetProjectSession(user, user.AvailableProjects[0], out session, ref error).UsingIf(session, () =>
+             {
+                 var modelSystems = session.ModelSystems;
+                 Assert.AreEqual(1, modelSystems.Count);
+                 Assert.AreEqual(modelSystemName, modelSystems[0].Name);
+             }), error);
             //cleanup
             userController.Delete(user);
         }

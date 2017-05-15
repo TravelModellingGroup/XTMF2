@@ -80,5 +80,30 @@ namespace TestXTMF
             var regainedProject = localUser.AvailableProjects[0];
             Assert.AreEqual(projectName, regainedProject.Name);
         }
+
+        [TestMethod]
+        public void EnsureSameProjectSession()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var controller = runtime.ProjectController;
+            string error = null;
+            var localUser = runtime.UserController.Users[0];
+            runtime.UserController.Delete("NewUser");
+            Assert.IsTrue(runtime.UserController.CreateNew("NewUser", false, out var newUser, ref error), error);
+            // delete the project in case it has survived.
+            controller.DeleteProject(localUser, "Test", ref error);
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
+            {
+                var project = session.Project;
+                Assert.IsTrue(session.ShareWith(localUser, newUser, ref error), error);
+                Assert.IsTrue(controller.GetProjectSession(newUser, project, out var session2, ref error).UsingIf(session2, () =>
+                {
+                    Assert.AreSame(session, session2);
+                }), error);
+            }), "Unable to create project");
+
+            // cleanup
+            Assert.IsTrue(controller.DeleteProject(localUser, "Test", ref error));
+        }
     }
 }

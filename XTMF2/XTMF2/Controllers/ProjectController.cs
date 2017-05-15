@@ -74,6 +74,29 @@ namespace XTMF2.Controller
             }
         }
 
+        public bool GetProjectSession(User user, Project project, out ProjectSession session, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (project == null)
+            {
+                throw new ArgumentNullException(nameof(project));
+            }
+            lock(ControllerLock)
+            {
+                if(!project.CanAccess(user))
+                {
+                    error = "The user does not have access to this project!";
+                    session = null;
+                    return false;
+                }
+                session = GetSession(project);
+                return true;
+            }
+        }
+
         /// <summary>
         /// Load all project headers.
         /// Should only be called by system configuration.
@@ -170,13 +193,14 @@ namespace XTMF2.Controller
             return Path.Combine(owner.UserPath, name);
         }
 
-        public ProjectSession GetSession(Project project)
+        private ProjectSession GetSession(Project project)
         {
             lock (ControllerLock)
             {
                 if (!ActiveSessions.TryGetValue(project, out var session))
                 {
                     session = new ProjectSession(Runtime, project);
+                    ActiveSessions.Add(project, session);
                 }
                 return session.AddReference();
             }
