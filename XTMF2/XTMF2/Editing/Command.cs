@@ -24,20 +24,17 @@ namespace XTMF2.Editing
 {
     public sealed class Command
     {
-        internal Func<(bool Success, string Message)> Do;
         internal Func<(bool Success, string Message)> Undo;
         internal Func<(bool Success, string Message)> Redo;
         public Command(
-            Func<(bool Success, string Message)> Do,
             Func<(bool Success, string Message)> Undo,
             Func<(bool Success, string Message)> Redo
             )
         {
-            if (Undo == null ^ Redo == null)
+            if (Undo == null || Redo == null)
             {
-                throw new ArgumentException($"Both {nameof(Undo)} and {nameof(Redo)} must be either assigned or null.");
+                throw new ArgumentException($"Both {nameof(Undo)} and {nameof(Redo)} must be either assigned.");
             }
-            this.Do = Do ?? throw new ArgumentNullException(nameof(Do));
             this.Undo = Undo;
             this.Redo = Redo;
         }

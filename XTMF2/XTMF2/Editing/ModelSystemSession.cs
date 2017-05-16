@@ -38,6 +38,8 @@ namespace XTMF2.Editing
 
         public ModelSystemHeader ModelSystemHeader { get; private set; }
 
+        private CommandBuffer Buffer = new CommandBuffer();
+
         public ModelSystemSession(ProjectSession session, ModelSystemHeader header, ModelSystem modelSystem)
         {
             ModelSystemHeader = header;
@@ -80,15 +82,27 @@ namespace XTMF2.Editing
             }
             lock (SessionLock)
             {
-                var ms = ModelSystem;
-                if (!ms.Contains(boundary))
+                if (!ModelSystem.Contains(boundary))
                 {
                     error = "The passed in boundary is not part of the model system!";
                     return false;
                 }
-                return boundary.AddStart(startName, out start, ref error);
+                var success = boundary.AddStart(startName, out start, ref error);
+                if(success)
+                {
+                    Start _start = start;
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (boundary.RemoveStart(_start, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (boundary.AddStart(startName, out _start, ref e), e);
+                    }));
+                }
+                return success;
             }
-            
         }
     }
 }

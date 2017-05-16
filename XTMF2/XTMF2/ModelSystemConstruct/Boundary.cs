@@ -111,6 +111,11 @@ namespace XTMF2
             }
         }
 
+        internal bool RemoveStart(Start start, ref string error)
+        {
+            throw new NotImplementedException();
+        }
+
         internal bool AddStart(string startName, out Start start, ref string error)
         {
             start = null;

@@ -25,19 +25,20 @@ namespace XTMF2.Editing
     public sealed class CommandBatch
     {
         private List<Command> Commands = new List<Command>();
-
-        public bool Do(ref string error)
+        
+        public CommandBatch(Command command)
         {
-            foreach(var command in Commands)
-            {
-                var result = command.Do();
-                if(!result.Success)
-                {
-                    error = result.Message;
-                    return false;
-                }
-            }
-            return true;
+            Add(command);
+        }
+
+        public CommandBatch()
+        {
+
+        }
+
+        public void Add(Command command)
+        {
+            Commands.Add(command);
         }
 
         public bool Undo(ref string error)

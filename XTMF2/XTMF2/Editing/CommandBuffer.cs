@@ -29,19 +29,6 @@ namespace XTMF2.Editing
         private EditingStack Redo = new EditingStack(MaxCapacity);
         private object ExecutionLock = new object();
 
-        public bool ExecuteCommands(CommandBatch batch, ref string error)
-        {
-            lock (ExecutionLock)
-            {
-                var ret = batch.Do(ref error);
-                if (ret)
-                {
-                    Undo.Add(batch);
-                }
-                return ret;
-            }
-        }
-
         public bool UndoCommands(ref string error)
         {
             lock (ExecutionLock)
@@ -76,5 +63,12 @@ namespace XTMF2.Editing
             }
         }
 
+        internal void AddUndo(Command command)
+        {
+            lock(ExecutionLock)
+            {
+                Undo.Add(new CommandBatch(command));
+            }
+        }
     }
 }
