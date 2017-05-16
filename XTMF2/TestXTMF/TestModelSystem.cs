@@ -66,31 +66,13 @@ namespace TestXTMF
         [TestMethod]
         public void GetModelSystemSession()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
-            var userController = runtime.UserController;
-            var projectController = runtime.ProjectController;
-            string error = null;
-            const string userName = "NewUser";
-            const string projectName = "TestProject";
-            const string modelSystemName = "ModelSystem1";
-            // clear out the user if possible
-            userController.Delete(userName);
-            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
-            Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, ref error).UsingIf(session, () =>
+            TestHelper.RunInModelSystemContext("GetModelSystemSession", (user, pSession, mSession) =>
             {
-                Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
-                Assert.IsTrue(session.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(
-                    modelSystemSession, () =>
-                    {
-                        var globalBoundary = modelSystemSession.ModelSystem.GlobalBoundary;
-                        Assert.IsTrue(modelSystemSession.AddModelSystemStart(user, globalBoundary, "Start", out Start start, ref error), error);
-                        Assert.IsFalse(modelSystemSession.AddModelSystemStart(user, globalBoundary, "Start", out Start start_, ref error));
-                    }), error);
-                Assert.IsTrue(session.Save(ref error));
-            }), error);
-
-            //cleanup
-            userController.Delete(user);
+                string error = null;
+                var globalBoundary = mSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(mSession.AddModelSystemStart(user, globalBoundary, "Start", out Start start, ref error), error);
+                Assert.IsFalse(mSession.AddModelSystemStart(user, globalBoundary, "Start", out Start start_, ref error));
+            });
         }
 
         [TestMethod]
@@ -166,6 +148,19 @@ namespace TestXTMF
 
             //cleanup
             userController.Delete(user);
+        }
+
+        [TestMethod]
+        public void TestModelSystemSaved()
+        {
+            TestHelper.RunInModelSystemContext("ModelSystemSaved", (user, pSession, mSession) =>
+            {
+                // initialization
+
+            }, (user, pSession, mSession) =>
+            {
+                // after shutdown
+            });
         }
     }
 }

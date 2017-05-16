@@ -20,6 +20,7 @@ using System;
 using System.ComponentModel;
 using System.Collections.Generic;
 using XTMF2.Editing;
+using Newtonsoft.Json;
 
 namespace XTMF2
 {
@@ -98,6 +99,11 @@ namespace XTMF2
             return true;
         }
 
+        internal virtual void Save(ref int index, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        {
+            throw new NotImplementedException();
+        }
+
         protected ModelSystemStructure(string name)
         {
             Name = name;
@@ -121,6 +127,11 @@ namespace XTMF2
                 throw new ArgumentNullException(nameof(type));
             }
             return type.Name;
+        }
+
+        internal static bool Load(JsonTextReader reader, out ModelSystemStructure mss, ref string error)
+        {
+            throw new NotImplementedException();
         }
     }
 }

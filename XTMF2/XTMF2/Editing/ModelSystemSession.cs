@@ -90,5 +90,18 @@ namespace XTMF2.Editing
             }
             
         }
+
+        /// <summary>
+        /// Save the model system
+        /// </summary>
+        /// <param name="error">An error message in case the save fails.</param>
+        /// <returns>True if it succeeds, false with an error message otherwise.</returns>
+        public bool Save(ref string error)
+        {
+            lock (SessionLock)
+            {
+                return ModelSystem.Save(ref error);
+            }
+        }
     }
 }

@@ -92,7 +92,6 @@ namespace XTMF2.Editing
             lock(SessionLock)
             {
                 return Project.Save(ref error);
-
             }
         }
 
@@ -155,6 +154,28 @@ namespace XTMF2.Editing
                     return false;
                 }
                 return true;
+            }
+        }
+
+        public bool GetModelSystemHeader(User user, string modelSystemName, out ModelSystemHeader modelSystemHeader, ref string error)
+        {
+            if(user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if(String.IsNullOrWhiteSpace(modelSystemName))
+            {
+                throw new ArgumentNullException(nameof(modelSystemName));
+            }
+            lock(SessionLock)
+            {
+                if(!Project.CanAccess(user))
+                {
+                    modelSystemHeader = null;
+                    error = "User is unable to access project.";
+                    return false;
+                }
+                return Project.GetModelSystemHeader(modelSystemName, out modelSystemHeader, ref error);
             }
         }
 

@@ -22,6 +22,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using Newtonsoft.Json;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
 
@@ -33,6 +34,7 @@ namespace XTMF2
         public string Description { get; private set; }
         private object WriteLock = new object();
         private ObservableCollection<ModelSystemStructure> _Modules = new ObservableCollection<ModelSystemStructure>();
+        private ObservableCollection<Start> _Starts = new ObservableCollection<Start>();
         private ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
 
         public Boundary(string name)
@@ -40,11 +42,18 @@ namespace XTMF2
             Name = name;
         }
 
+        /// <summary>
+        /// Called when loading a boundary
+        /// </summary>
+        internal Boundary()
+        {
+        }
+
         internal bool Contains(Boundary boundary)
         {
-            foreach(var b in _Boundaries)
+            foreach (var b in _Boundaries)
             {
-                if(b == boundary || b.Contains(boundary))
+                if (b == boundary || b.Contains(boundary))
                 {
                     return true;
                 }
@@ -66,6 +75,43 @@ namespace XTMF2
             }
         }
 
+        private ReadOnlyObservableCollection<Start> Starts
+        {
+            get
+            {
+                lock (WriteLock)
+                {
+                    return new ReadOnlyObservableCollection<Start>(_Starts);
+                }
+            }
+        }
+
+        internal Dictionary<Type, int> GetUsedTypes()
+        {
+            return GetUsedTypes(new List<Type>()).Select((type, index) => (type: type, index: index))
+                .ToDictionary(e => e.type, e => e.index);
+        }
+
+        private List<Type> GetUsedTypes(List<Type> included)
+        {
+            foreach (var module in _Modules)
+            {
+                var t = module.Type;
+                if (t != null)
+                {
+                    if (!included.Contains(t))
+                    {
+                        included.Add(t);
+                    }
+                }
+            }
+            foreach (var child in _Boundaries)
+            {
+                child.GetUsedTypes(included);
+            }
+            return included;
+        }
+
         public ReadOnlyObservableCollection<Boundary> Boundaries
         {
             get
@@ -77,9 +123,109 @@ namespace XTMF2
             }
         }
 
+        internal void Save(ref int index, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("Starts");
+            writer.WriteStartArray();
+            foreach (var start in _Starts)
+            {
+                start.Save(ref index, typeDictionary, writer);
+            }
+            writer.WriteEndArray();
+            writer.WritePropertyName("Modules");
+            writer.WriteStartArray();
+            foreach (var module in _Modules)
+            {
+                module.Save(ref index, typeDictionary, writer);
+            }
+            writer.WriteEndArray();
+            writer.WritePropertyName("Boundaries");
+            writer.WriteStartArray();
+            foreach (var child in _Boundaries)
+            {
+                child.Save(ref index, typeDictionary, writer);
+            }
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        private static bool FailWith(ref string error, string message)
+        {
+            error = message;
+            return false;
+        }
+
+        internal bool Load(Dictionary<int, Type> typeLookup, JsonTextReader reader, ref string error)
+        {
+            if (!reader.Read() || reader.TokenType != JsonToken.StartObject)
+            {
+                return FailWith(ref error, "Unexpected token when reading boundary!");
+            }
+            while(reader.Read() && reader.TokenType == JsonToken.EndObject)
+            {
+                if(reader.TokenType != JsonToken.PropertyName || reader.TokenType != JsonToken.Comment)
+                {
+                    return FailWith(ref error, "Unexpected token when reading boundary!");
+                }
+                switch(reader.Value)
+                {
+                    case "Starts":
+                        if(!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                        {
+                            return FailWith(ref error, "Unexpected token when starting to read Starts for a boundary.");
+                        }
+                        while(reader.Read() && reader.TokenType != JsonToken.EndArray)
+                        {
+                            if(!Start.Load(reader, out Start start, ref error))
+                            {
+                                return false;
+                            }
+                        }
+                        break;
+                    case "Modules":
+                        if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                        {
+                            return FailWith(ref error, "Unexpected token when starting to read Modules for a boundary.");
+                        }
+                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+                        {
+                            if (reader.TokenType != JsonToken.Comment)
+                            {
+                                if (!ModelSystemStructure.Load(reader, out ModelSystemStructure mss, ref error))
+                                {
+                                    return false;
+                                }
+                            }
+                        }
+                        break;
+                    case "Boundaries":
+                        if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                        {
+                            return FailWith(ref error, "Unexpected token when starting to read Modules for a boundary.");
+                        }
+                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+                        {
+                            if (reader.TokenType != JsonToken.Comment)
+                            {
+                                var boundary = new Boundary();
+                                if(!boundary.Load(typeLookup, reader, ref error))
+                                {
+                                    return false;
+                                }
+                            }
+                        }
+                        break;
+                    default:
+                        return FailWith(ref error, $"Unexpected value when reading boundary {reader.Value}");
+                }
+            }
+            return true;
+        }
+
         public bool SetName(ModelSystemSession session, string name, ref string error)
         {
-            if(String.IsNullOrWhiteSpace(name))
+            if (String.IsNullOrWhiteSpace(name))
             {
                 error = "A name cannot be whitespace.";
                 return false;
@@ -115,19 +261,16 @@ namespace XTMF2
         {
             start = null;
             // ensure the name is unique between starting points
-            foreach (var ms in _Modules)
+            foreach (var ms in _Starts)
             {
-                if(ms is Start s)
+                if (ms.Name.Equals(startName, StringComparison.OrdinalIgnoreCase))
                 {
-                    if(s.Name.Equals(startName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        error = "There already exists a start with the same name!";
-                        return false;
-                    }
+                    error = "There already exists a start with the same name!";
+                    return false;
                 }
             }
             start = new Start(startName, this, null, new Point() { X = 0, Y = 0 });
-            _Modules.Add(start);
+            _Starts.Add(start);
             return true;
         }
     }

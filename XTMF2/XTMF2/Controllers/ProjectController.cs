@@ -131,6 +131,42 @@ namespace XTMF2.Controller
             return errors;
         }
 
+        public bool GetProject(string userName, string projectName, out Project project, ref string error)
+        {
+            if (String.IsNullOrWhiteSpace(userName))
+            {
+                throw new ArgumentNullException(nameof(userName));
+            }
+            if (String.IsNullOrWhiteSpace(projectName))
+            {
+                throw new ArgumentNullException(nameof(projectName));
+            }
+            var user = Runtime.UserController.GetUserByName(userName);
+            if(user == null)
+            {
+                project = null;
+                error = $"Unable to find a user with the name {userName}!";
+                return false;
+            }
+            return GetProject(user, projectName, out project, ref error);
+        }
+
+        public bool GetProject(User user, string projectName, out Project project, ref string error)
+        {
+            if(user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if(String.IsNullOrWhiteSpace(projectName))
+            {
+                throw new ArgumentNullException(nameof(projectName));
+            }
+            lock (ControllerLock)
+            {
+                return Projects.GetProject(user, projectName, out project, ref error);
+            }
+        }
+
         public bool DeleteProject(User user, string projectName, ref string error)
         {
             if (user == null)
