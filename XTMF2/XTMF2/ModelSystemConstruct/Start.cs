@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -34,6 +35,21 @@ namespace XTMF2.ModelSystemConstruct
             ContainedWithin = boundary;
             Description = description;
             Location = point;
+        }
+
+        internal override void Save(ref int index, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("Name");
+            writer.WriteValue(Name);
+            writer.WritePropertyName("Index");
+            writer.WriteValue(index++);
+            writer.WriteEndObject();
+        }
+
+        internal static bool Load(JsonTextReader reader, out Start start, ref string error)
+        {
+            throw new NotImplementedException();
         }
     }
 }

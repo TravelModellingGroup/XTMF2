@@ -141,6 +141,16 @@ namespace XTMF2
             return false;
         }
 
+        internal bool GetModelSystemHeader(string modelSystemName, out ModelSystemHeader modelSystemHeader, ref string error)
+        {
+            modelSystemHeader = _ModelSystems.FirstOrDefault(msh => msh.Name.Equals(modelSystemName, StringComparison.OrdinalIgnoreCase));
+            if(modelSystemHeader == null)
+            {
+                error = "A model system with the given name was not found!";
+            }
+            return modelSystemHeader != null;
+        }
+
         internal bool ContainsModelSystem(ModelSystemHeader modelSystemHeader)
         {
             return _ModelSystems.Contains(modelSystemHeader);

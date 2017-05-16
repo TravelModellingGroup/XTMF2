@@ -24,24 +24,23 @@ using System.Linq;
 using System.ComponentModel;
 using XTMF2.Editing;
 using System.IO;
+using Newtonsoft.Json;
 
 namespace XTMF2
 {
     public sealed class ModelSystem : INotifyPropertyChanged
     {
-        public ModelSystem(string name)
+        public ModelSystem(ModelSystemHeader header)
         {
-            Name = name;
-        }
-
-        private ModelSystem()
-        {
+            Header = header;
             GlobalBoundary = new Boundary("global");
         }
 
-        public string Name { get; private set; }
-        public string Description { get; private set; }
+        public string Name => Header.Name;
+        public string Description => Header.Description;
+
         public Boundary GlobalBoundary { get; private set; }
+        internal ModelSystemHeader Header { get; private set; }
 
         private object ModelSystemLock = new object();
 
@@ -49,36 +48,71 @@ namespace XTMF2
 
         public ModelSystem Clone()
         {
-            return new ModelSystem(Name)
+            return new ModelSystem(Header)
             {
-                Description = Description,
                 GlobalBoundary = GlobalBoundary.Clone()
             };
         }
 
-        internal bool SetName(ModelSystemSession session, string name, ref string error)
-        {
-            if (String.IsNullOrWhiteSpace(name))
-            {
-                error = "A name cannot be whitespace.";
-                return false;
-            }
-            Name = name;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
-            return true;
-        }
-
-        internal bool SetDescription(ModelSystemSession session, string description, ref string error)
-        {
-            Description = description;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
-            return true;
-        }
-
         internal bool Save(ref string error)
         {
-            error = "Not implemented yet!";
-            return false;
+            lock (ModelSystemLock)
+            {
+                try
+                {
+                    var fileInfo = new FileInfo(Header.ModelSystemPath);
+                    var dir = fileInfo.Directory;
+                    if (!dir.Exists)
+                    {
+                        dir.Create();
+                    }
+                    using (var stream = new StreamWriter(fileInfo.Create()))
+                    using (var writer = new JsonTextWriter(stream))
+                    {
+                        var typeDictionary = GlobalBoundary.GetUsedTypes();
+                        writer.WriteStartObject();
+                        WriteTypes(writer, typeDictionary);
+                        WriteBoundaries(writer, typeDictionary);
+                        writer.WriteEndObject();
+                        return true;
+                    }
+
+                }
+                catch (JsonWriterException e)
+                {
+                    error = e.Message;
+                }
+                catch (IOException e)
+                {
+                    error = e.Message;
+                }
+                return false;
+            }
+        }
+
+        private void WriteBoundaries(JsonTextWriter writer, Dictionary<Type, int> typeDictionary)
+        {
+            int index = 0;
+            writer.WritePropertyName("Boundaries");
+            writer.WriteStartArray();
+            GlobalBoundary.Save(ref index, typeDictionary, writer);
+            writer.WriteEndArray();
+        }
+
+        private static void WriteTypes(JsonTextWriter writer, Dictionary<Type, int> typeDictionary)
+        {
+            writer.WritePropertyName("Types");
+            writer.WriteStartArray();
+            foreach (var type in typeDictionary)
+            {
+                writer.WriteStartObject();
+                writer.WritePropertyName("Index");
+                writer.WriteValue(type.Value);
+                writer.WritePropertyName("Type");
+                writer.WriteValue(type.Key.AssemblyQualifiedName);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
         }
 
         /// <summary>
@@ -88,9 +122,9 @@ namespace XTMF2
         /// <returns></returns>
         internal bool Contains(Boundary boundary)
         {
-            lock(ModelSystemLock)
+            lock (ModelSystemLock)
             {
-                if(GlobalBoundary == boundary)
+                if (GlobalBoundary == boundary)
                 {
                     return true;
                 }
@@ -103,17 +137,141 @@ namespace XTMF2
             // the parameters are have already been vetted
             var path = modelSystemHeader.ModelSystemPath;
             var info = new FileInfo(path);
-            if(info.Exists)
+            var ms = info.Exists ?
+                Load(modelSystemHeader, ref error)
+                : new ModelSystem(modelSystemHeader);
+            if (ms == null)
             {
-                // load the existing model system
-                throw new NotImplementedException();
+                msSession = null;
+                return false;
             }
-            else
+            msSession = new ModelSystemSession(session, modelSystemHeader, ms);
+            return msSession != null;
+        }
+
+        private static ModelSystem Load(ModelSystemHeader modelSystemHeader, ref string error)
+        {
+            try
             {
-                // create a new model system
-                msSession = new ModelSystemSession(session, modelSystemHeader, new ModelSystem());
-                return true;
+                var modelSystem = new ModelSystem(modelSystemHeader);
+                using (var stream = new StreamReader(File.OpenRead(modelSystemHeader.ModelSystemPath)))
+                using (var reader = new JsonTextReader(stream))
+                {
+                    var typeLookup = new Dictionary<int, Type>();
+                    while (reader.Read())
+                    {
+                        if (reader.TokenType == JsonToken.PropertyName)
+                        {
+                            switch (reader.Value)
+                            {
+                                case "Types":
+                                    if (!LoadTypes(typeLookup, reader, ref error))
+                                    {
+                                        return null;
+                                    }
+                                    break;
+                                case "Boundaries":
+                                    if(!LoadBoundaries(typeLookup, reader, modelSystem.GlobalBoundary, ref error))
+                                    {
+                                        return null;
+                                    }
+                                    break;
+                                default:
+                                    error = $"Unknown token found '{reader.Value}'";
+                                    return null;
+                            }
+                        }
+                    }
+                    return modelSystem;
+                }
             }
+            catch (JsonWriterException e)
+            {
+                error = e.Message;
+            }
+            catch (IOException e)
+            {
+                error = e.Message;
+            }
+            return null;
+        }
+
+        private static bool FailWith(ref string error, string message)
+        {
+            error = message;
+            return false;
+        }
+
+        private static bool LoadTypes(Dictionary<int, Type> typeLookup, JsonTextReader reader, ref string error)
+        {
+            if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+            {
+                return FailWith(ref error, "Expected to read in an array of types!");
+            }
+            while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+            {
+                string type = null;
+                int index = -1;
+                if (reader.TokenType != JsonToken.StartObject)
+                {
+                    return FailWith(ref error, "Expected a start object token when starting to read in a type.");
+                }
+                while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+                {
+                    if (reader.TokenType != JsonToken.PropertyName)
+                    {
+                        return FailWith(ref error, "Invalid index!");
+                    }
+                    switch (reader.Value)
+                    {
+                        case "Index":
+                            {
+                                var ret = reader.ReadAsInt32();
+                                if(ret == null)
+                                {
+                                    return FailWith(ref error, "While reading types we encountered an invalid index!");
+                                }
+                                index = (int)ret;
+                            }
+                            break;
+                        case "Type":
+                            type = reader.ReadAsString();
+                            break;
+                    }
+                }
+                if(type == null || index < 0)
+                {
+                    return FailWith(ref error, $"An invalid type entry was found!");
+                }
+                var trueType = Type.GetType(type);
+                if(trueType == null)
+                {
+                    return FailWith(ref error, $"Unable to find type {type}!");
+                }
+                if(typeLookup.ContainsKey(index))
+                {
+                    return FailWith(ref error, $"While reading types the index {index} was previously defined!");
+                }
+                typeLookup.Add(index, trueType);
+            }
+            return true;
+        }
+
+        private static bool LoadBoundaries(Dictionary<int, Type> typeLookup, JsonTextReader reader, Boundary global, ref string error)
+        {
+            if(!reader.Read() || reader.TokenType != JsonToken.StartArray)
+            {
+                return FailWith(ref error, "Expected to read an array when loading boundaries!");
+            }
+            if(!global.Load(typeLookup, reader, ref error))
+            {
+                return false;
+            }
+            if(!reader.Read() || reader.TokenType != JsonToken.EndArray)
+            {
+                return FailWith(ref error, "Expected to only have one boundary defined in the root!");
+            }
+            return true;
         }
     }
 }

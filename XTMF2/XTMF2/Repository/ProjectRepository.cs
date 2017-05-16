@@ -52,5 +52,15 @@ namespace XTMF2.Repository
             }
             return Add(ret, ref error);
         }
+
+        internal bool GetProject(User user, string projectName, out Project project, ref string error)
+        {
+            project = _Store.FirstOrDefault(p => p.CanAccess(user) && p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase));
+            if(project == null)
+            {
+                error = "Unable to find the project.";
+            }
+            return project != null;
+        }
     }
 }
