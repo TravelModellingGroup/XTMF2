@@ -170,6 +170,11 @@ namespace XTMF2
             writer.WriteEndObject();
         }
 
+        internal bool RemoveModelSystemStructure(ModelSystemStructure mss, ref string e)
+        {
+            throw new NotImplementedException();
+        }
+
         private static bool FailWith(ref string error, string message)
         {
             error = message;
@@ -301,6 +306,13 @@ namespace XTMF2
             }
             start = new Start(startName, this, null, new Point() { X = 0, Y = 0 });
             _Starts.Add(start);
+            return true;
+        }
+
+        internal bool AddModelSystemStructure(string name, Type type, out ModelSystemStructure mss, ref string error)
+        {
+            mss = ModelSystemStructure.Create(name, type);
+            _Modules.Add(mss);
             return true;
         }
     }

@@ -64,7 +64,7 @@ namespace TestXTMF
 
         /// <summary>
         /// Create a context to edit a model system for testing where
-        /// XTMF will be shutdown between contexts.
+        /// XTMF will be saved and then shutdown between contexts.
         /// </summary>
         /// <param name="name">A unique name for the test</param>
         /// <param name="toExecuteFirst">The logic to execute before XTMF has been restarted</param>

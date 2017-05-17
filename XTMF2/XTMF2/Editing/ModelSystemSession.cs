@@ -105,6 +105,36 @@ namespace XTMF2.Editing
             }
         }
 
+        public bool AddModelSystemStructure(User user, Boundary boundary, string name, Type type, out ModelSystemStructure mss, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (boundary == null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+            lock (SessionLock)
+            {
+                bool success = boundary.AddModelSystemStructure(name, type, out mss, ref error);
+                if (success)
+                {
+                    ModelSystemStructure _mss = mss;
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (boundary.RemoveModelSystemStructure(_mss, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (boundary.AddModelSystemStructure(name, type, out _mss, ref e), e);
+                    }));
+                }
+                return success;
+            }
+        }
+
         /// <summary>
         /// Save the model system
         /// </summary>

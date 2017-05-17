@@ -24,6 +24,7 @@ using XTMF2.Controller;
 using System.Linq;
 using XTMF2.ModelSystemConstruct;
 using static XTMF2.Helper;
+using TestXTMF.Modules;
 
 namespace TestXTMF
 {
@@ -137,7 +138,7 @@ namespace TestXTMF
                 Assert.IsTrue(session.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(
                     modelSystemSession, () =>
                     {
-                        
+
                     }), error);
                 Assert.IsTrue(session.EditModelSystem(user2, modelSystemHeader, out var modelSystemSession2, ref error).UsingIf(modelSystemSession2, () =>
                 {
@@ -151,7 +152,7 @@ namespace TestXTMF
         }
 
         [TestMethod]
-        public void TestModelSystemSaved()
+        public void ModelSystemSaved()
         {
             TestHelper.RunInModelSystemContext("ModelSystemSaved", (user, pSession, mSession) =>
             {
@@ -168,6 +169,24 @@ namespace TestXTMF
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 // we shouldn't be able to add another start with the same name in the same boundary
                 Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
+            });
+        }
+
+        [TestMethod]
+        public void AddModelSystemStructure()
+        {
+            TestHelper.RunInModelSystemContext("AddModelSystemStructure", (user, pSession, mSession) =>
+            {
+                // initialization
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                Assert.AreEqual("MyMSS", mss.Name);
+            }, (user, pSession, mSession) =>
+            {
+                // after shutdown
+                var ms = mSession.ModelSystem;
+                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
             });
         }
     }

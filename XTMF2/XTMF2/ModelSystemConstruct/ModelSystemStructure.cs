@@ -99,11 +99,6 @@ namespace XTMF2
             return true;
         }
 
-        internal virtual void Save(ref int index, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
-        {
-            throw new NotImplementedException();
-        }
-
         protected ModelSystemStructure(string name)
         {
             Name = name;
@@ -135,6 +130,24 @@ namespace XTMF2
             mss = null;
             error = message;
             return false;
+        }
+
+        internal virtual void Save(ref int index, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("Name");
+            writer.WriteValue(Name);
+            writer.WritePropertyName("Description");
+            writer.WriteValue(Description);
+            writer.WritePropertyName("Type");
+            writer.WriteValue(typeDictionary[Type]);
+            writer.WritePropertyName("X");
+            writer.WriteValue(Location.X);
+            writer.WritePropertyName("Y");
+            writer.WriteValue(Location.Y);
+            writer.WritePropertyName("Index");
+            writer.WriteValue(index++);
+            writer.WriteEndObject();
         }
 
         internal static bool Load(Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
@@ -203,6 +216,14 @@ namespace XTMF2
             };
             structures.Add(index, mss);
             return true;
+        }
+
+        internal static ModelSystemStructure Create(string name, Type type)
+        {
+            return new ModelSystemStructure(type)
+            {
+                Name = name
+            };
         }
     }
 }
