@@ -48,7 +48,12 @@ namespace XTMF2
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        public void SetLocation(float x, float y)
+        /// <summary>
+        /// Set the location of the model system structure
+        /// </summary>
+        /// <param name="x">The horizontal offset</param>
+        /// <param name="y">The vertical offset</param>
+        internal void SetLocation(float x, float y)
         {
             Location = new Point()
             {

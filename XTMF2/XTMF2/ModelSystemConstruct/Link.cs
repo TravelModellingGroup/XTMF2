@@ -24,6 +24,9 @@ using XTMF2.Editing;
 
 namespace XTMF2
 {
+    /// <summary>
+    /// Defines a directional connection between two model system structures
+    /// </summary>
     public sealed class Link : INotifyPropertyChanged
     {
         public ModelSystemStructure Origin { get; private set; }
