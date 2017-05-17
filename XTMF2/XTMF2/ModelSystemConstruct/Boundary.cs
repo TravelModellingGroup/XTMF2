@@ -149,6 +149,10 @@ namespace XTMF2
         internal void Save(ref int index, Dictionary<ModelSystemStructure, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
             writer.WriteStartObject();
+            writer.WritePropertyName("Name");
+            writer.WriteValue(Name);
+            writer.WritePropertyName("Description");
+            writer.WriteValue(Description);
             writer.WritePropertyName("Starts");
             writer.WriteStartArray();
             foreach (var start in _Starts)
@@ -206,6 +210,12 @@ namespace XTMF2
                 }
                 switch(reader.Value)
                 {
+                    case "Name":
+                        Name = reader.ReadAsString();
+                        break;
+                    case "Description":
+                        Description = reader.ReadAsString();
+                        break;
                     case "Starts":
                         if(!reader.Read() || reader.TokenType != JsonToken.StartArray)
                         {

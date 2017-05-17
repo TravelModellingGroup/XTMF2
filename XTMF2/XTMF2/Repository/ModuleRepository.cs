@@ -93,11 +93,11 @@ namespace XTMF2.Repository
                         if (attributes.First() is ParameterAttribute parameter)
                         {
                             // all parameters are required
-                            hooks.Add(new FieldHook(field, true));
+                            hooks.Add(new FieldHook(parameter.Name, field, true));
                         }
                         else if(attributes.First() is SubModuleAttribute subModule)
                         {
-                            hooks.Add(new FieldHook(field, subModule.Required));
+                            hooks.Add(new FieldHook(subModule.Name, field, subModule.Required));
                         }
                         else
                         {
@@ -139,11 +139,11 @@ namespace XTMF2.Repository
                         if (attributes.First() is ParameterAttribute parameter)
                         {
                             // all parameters are required
-                            hooks.Add(new PropertyHook(property, true));
+                            hooks.Add(new PropertyHook(parameter.Name, property, true));
                         }
                         else if (attributes.First() is SubModuleAttribute subModule)
                         {
-                            hooks.Add(new PropertyHook(property, subModule.Required));
+                            hooks.Add(new PropertyHook(subModule.Name, property, subModule.Required));
                         }
                         else
                         {

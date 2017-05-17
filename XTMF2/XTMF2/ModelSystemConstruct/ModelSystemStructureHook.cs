@@ -51,11 +51,6 @@ namespace XTMF2
             }
             return HookCardinality.Single;
         }
-
-        protected static string GetName(Type type)
-        {
-            return type.Name;
-        }
     }
 
     // Cardinality 
@@ -72,15 +67,10 @@ namespace XTMF2
     sealed class PropertyHook : ModelSystemStructureHook
     {
         readonly PropertyInfo Property;
-        public PropertyHook(PropertyInfo property, bool required)
-            :base(GetName(property), GetCardinality(property, required))
+        public PropertyHook(string name, PropertyInfo property, bool required)
+            :base(name, GetCardinality(property, required))
         {
             Property = property;
-        }
-
-        private static string GetName(PropertyInfo property)
-        {
-            return ModelSystemStructureHook.GetName(property.PropertyType);
         }
 
         private static HookCardinality GetCardinality(PropertyInfo property, bool required)
@@ -95,15 +85,10 @@ namespace XTMF2
     sealed class FieldHook : ModelSystemStructureHook
     {
         readonly FieldInfo Field;
-        public FieldHook(FieldInfo field, bool required)
-            : base(GetName(field), GetCardinality(field, required))
+        public FieldHook(string name, FieldInfo field, bool required)
+            : base(name, GetCardinality(field, required))
         {
             Field = field;
-        }
-
-        private static string GetName(FieldInfo field)
-        {
-            return ModelSystemStructureHook.GetName(field.FieldType);
         }
 
         private static HookCardinality GetCardinality(FieldInfo field, bool required)
