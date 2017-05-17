@@ -27,6 +27,7 @@ namespace XTMF2.RuntimeModules
     {
         public string Name { get; set; }
 
+        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context")]
         public IFunction<Original> ToInvoke;
 
         public ConvertTo Invoke()
@@ -40,6 +41,7 @@ namespace XTMF2.RuntimeModules
     {
         public string Name { get; set; }
 
+        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context" )]
         public IFunction<Context, Original> ToInvoke;
 
         public ConvertTo Invoke(Context context)
@@ -53,6 +55,7 @@ namespace XTMF2.RuntimeModules
     {
         public string Name { get; set; }
 
+        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context")]
         public IAction<ConvertTo> ToInvoke;
 
         public void Invoke(Original context)

@@ -36,6 +36,9 @@ namespace XTMF2
         private ObservableCollection<ModelSystemStructure> _Modules = new ObservableCollection<ModelSystemStructure>();
         private ObservableCollection<Start> _Starts = new ObservableCollection<Start>();
         private ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
+        private ObservableCollection<Link> _Links = new ObservableCollection<Link>();
+
+        public ReadOnlyObservableCollection<Link> Links => new ReadOnlyObservableCollection<Link>(_Links); 
 
         public Boundary(string name, Boundary parent = null)
         {
@@ -249,6 +252,23 @@ namespace XTMF2
                 }
             }
             return true;
+        }
+
+        internal bool AddLink(ModelSystemStructure origin, ModelSystemStructureHook originHook, ModelSystemStructure destination, out Link link, ref string error)
+        {
+            link = new Link()
+            {
+                Origin = origin,
+                OriginHook = originHook,
+                Destination = destination
+            };
+            _Links.Add(link);
+            return true;
+        }
+
+        internal bool RemoveLink(Link link, ref string e)
+        {
+            throw new NotImplementedException();
         }
 
         public bool SetName(ModelSystemSession session, string name, ref string error)

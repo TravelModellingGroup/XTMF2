@@ -29,15 +29,18 @@ namespace XTMF2
     /// </summary>
     public sealed class Link : INotifyPropertyChanged
     {
-        public ModelSystemStructure Origin { get; private set; }
-        public ModelSystemStructure Destination { get; private set; }
+        public ModelSystemStructure Origin { get; internal set; }
+        public ModelSystemStructure Destination { get; internal set; }
+        public ModelSystemStructureHook OriginHook { get; internal set; }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        public bool SetOrigin(ModelSystemSession session, ModelSystemStructure origin, ref string error)
+        public bool SetOrigin(ModelSystemSession session, ModelSystemStructure origin, ModelSystemStructureHook originHook, ref string error)
         {
             Origin = origin;
+            OriginHook = originHook;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Origin)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OriginHook)));
             return true;
         }
 

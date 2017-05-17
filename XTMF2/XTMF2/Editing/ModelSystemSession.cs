@@ -153,5 +153,46 @@ namespace XTMF2.Editing
                 return ModelSystem.Save(ref error);
             }
         }
+
+        /// <summary>
+        /// Add a new link originating at a hook and going to the destination model system structure
+        /// </summary>
+        /// <param name="user"></param>
+        /// <param name="origin"></param>
+        /// <param name="originHook"></param>
+        /// <param name="destination"></param>
+        /// <param name="link"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        public bool AddLink(User user, ModelSystemStructure origin, ModelSystemStructureHook originHook,
+            ModelSystemStructure destination, out Link link, ref string error)
+        {
+            if(user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if(originHook == null)
+            {
+                throw new ArgumentNullException(nameof(originHook));
+            }
+            lock(SessionLock)
+            {
+                var success = origin.ContainedWithin.AddLink(origin, originHook, destination, out link, ref error);
+                if(success)
+                {
+                    Link _link = link;
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (origin.ContainedWithin.RemoveLink(_link, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (origin.ContainedWithin.AddLink(origin, originHook, destination, out _link, ref e), e);
+                    }));
+                }
+                return success;
+            }
+        }
     }
 }

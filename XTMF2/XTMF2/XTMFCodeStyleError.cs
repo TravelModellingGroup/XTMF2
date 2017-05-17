@@ -22,13 +22,12 @@ using System.Text;
 
 namespace XTMF2
 {
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class SubModuleAttribute : Attribute
+    public class XTMFCodeStyleError : Exception
     {
-        public string Name { get; set; }
+        public XTMFCodeStyleError(Type t, string message)
+            : base($"Code style error in type {t.FullName}!\r\n{message}")
+        {
 
-        public string Description { get; set; }
-
-        public bool Required { get; set; }
+        }
     }
 }

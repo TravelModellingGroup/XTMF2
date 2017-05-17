@@ -52,6 +52,20 @@ namespace XTMF2.Configuration
         {
             Modules = new ModuleRepository();
             Types = new TypeRepository();
+            // Load the entry assembly for types
+            LoadAssembly(Assembly.GetEntryAssembly());
+            // Load the
+            LoadAssembly(typeof(SystemConfiguration).GetTypeInfo().Assembly);
+        }
+
+        private void LoadAssembly(Assembly assembly)
+        {
+            Parallel.ForEach(assembly.ExportedTypes, (Type t) =>
+            {
+                string error = null;
+                Modules.AddIfModuleType(t);
+                Types.Add(t, ref error);
+            });
         }
     }
 }

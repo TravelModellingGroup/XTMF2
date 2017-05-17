@@ -222,6 +222,7 @@ namespace TestXTMF
                 string error = null;
                 Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
+                Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], mss, out var link, ref error), error);
                 Assert.AreEqual("MyMSS", mss.Name);
             }, (user, pSession, mSession) =>
             {
@@ -230,6 +231,7 @@ namespace TestXTMF
                 var ms = mSession.ModelSystem;
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
                 Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
             });
         }

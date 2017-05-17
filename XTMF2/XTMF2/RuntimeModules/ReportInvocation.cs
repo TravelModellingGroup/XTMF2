@@ -26,6 +26,7 @@ namespace XTMF2.RuntimeModules
     {
         public string Name { get; set; }
 
+        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
         public IFunction<Return> ToInvoke;
 
         public Return Invoke()
@@ -38,6 +39,7 @@ namespace XTMF2.RuntimeModules
     {
         public string Name { get; set; }
 
+        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
         public IFunction<Context, Return> ToInvoke;
 
         public Return Invoke(Context context)
@@ -50,6 +52,7 @@ namespace XTMF2.RuntimeModules
     {
         public string Name { get; set; }
 
+        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
         public IAction ToInvoke;
 
         public void Invoke()
@@ -62,6 +65,7 @@ namespace XTMF2.RuntimeModules
     {
         public string Name { get; set; }
 
+        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
         public IAction<Context> ToInvoke;
 
         public void Invoke(Context context)

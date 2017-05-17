@@ -55,7 +55,7 @@ namespace XTMF2
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Hooks)));
         }
 
-        public ModelSystemStructureHook[] Hooks;
+        public IReadOnlyList<ModelSystemStructureHook> Hooks;
 
         /// <summary>
         /// The name of the model system structure
