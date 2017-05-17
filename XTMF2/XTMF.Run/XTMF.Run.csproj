@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp1.1</TargetFramework>
+    <RootNamespace>XTMF2.Run</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\XTMF2\XTMF2.csproj" />
+    <ProjectReference Include="..\XTMFInterfaces\XTMFInterfaces.csproj" />
+  </ItemGroup>
+
+</Project>
