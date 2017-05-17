@@ -20,6 +20,8 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Newtonsoft.Json;
+using XTMF2.RuntimeModules;
+using XTMF2.Editing;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -30,11 +32,13 @@ namespace XTMF2.ModelSystemConstruct
     /// </summary>
     public sealed class Start : ModelSystemStructure
     {
-        public Start(string startName, Boundary boundary, string description, Point point) : base(startName)
+        public Start(ModelSystemSession session, string startName, Boundary boundary, string description, Point point) : base(startName)
         {
             ContainedWithin = boundary;
             Description = description;
             Location = point;
+            string error = null;
+            SetType(session, typeof(StartModule), ref error);
         }
 
         internal override void Save(ref int index, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
@@ -60,7 +64,7 @@ namespace XTMF2.ModelSystemConstruct
             return false;
         }
 
-        internal static bool Load(Dictionary<int, ModelSystemStructure> structures,
+        internal static bool Load(ModelSystemSession session, Dictionary<int, ModelSystemStructure> structures,
             Boundary boundary, JsonTextReader reader, out Start start, ref string error)
         {
             if (reader.TokenType != JsonToken.StartObject)
@@ -107,7 +111,7 @@ namespace XTMF2.ModelSystemConstruct
             {
                 return FailWith(out start, ref error, $"Index {index} already exists!");
             }
-            start = new Start(name, boundary, description, point)
+            start = new Start(session, name, boundary, description, point)
             {
                 ContainedWithin = boundary
             };

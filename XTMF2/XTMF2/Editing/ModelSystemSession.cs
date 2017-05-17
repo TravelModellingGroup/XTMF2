@@ -18,9 +18,11 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Text;
 using System.Threading;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.Repository;
 
 namespace XTMF2.Editing
 {
@@ -30,7 +32,7 @@ namespace XTMF2.Editing
 
         public int References => _References;
 
-        public ModelSystem ModelSystem { get; private set; }
+        public ModelSystem ModelSystem { get; internal set; }
 
         private ProjectSession Session;
 
@@ -40,10 +42,9 @@ namespace XTMF2.Editing
 
         private CommandBuffer Buffer = new CommandBuffer();
 
-        public ModelSystemSession(ProjectSession session, ModelSystemHeader header, ModelSystem modelSystem)
+        public ModelSystemSession(ProjectSession session, ModelSystemHeader header)
         {
             ModelSystemHeader = header;
-            ModelSystem = modelSystem;
             Session = session.AddReference();
         }
 
@@ -53,6 +54,11 @@ namespace XTMF2.Editing
             {
                 Session.UnloadSession(this);
             }
+        }
+
+        internal ModuleRepository GetModuleRepository()
+        {
+            return Session.GetModuleRepository();
         }
 
         /// <summary>
@@ -87,7 +93,7 @@ namespace XTMF2.Editing
                     error = "The passed in boundary is not part of the model system!";
                     return false;
                 }
-                var success = boundary.AddStart(startName, out start, ref error);
+                var success = boundary.AddStart(this, startName, out start, ref error);
                 if(success)
                 {
                     Start _start = start;
@@ -98,7 +104,7 @@ namespace XTMF2.Editing
                     }, () =>
                     {
                         string e = null;
-                        return (boundary.AddStart(startName, out _start, ref e), e);
+                        return (boundary.AddStart(this, startName, out _start, ref e), e);
                     }));
                 }
                 return success;
@@ -117,7 +123,7 @@ namespace XTMF2.Editing
             }
             lock (SessionLock)
             {
-                bool success = boundary.AddModelSystemStructure(name, type, out mss, ref error);
+                bool success = boundary.AddModelSystemStructure(this, name, type, out mss, ref error);
                 if (success)
                 {
                     ModelSystemStructure _mss = mss;
@@ -128,7 +134,7 @@ namespace XTMF2.Editing
                     }, () =>
                     {
                         string e = null;
-                        return (boundary.AddModelSystemStructure(name, type, out _mss, ref e), e);
+                        return (boundary.AddModelSystemStructure(this, name, type, out _mss, ref e), e);
                     }));
                 }
                 return success;

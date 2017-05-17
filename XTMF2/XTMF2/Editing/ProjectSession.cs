@@ -22,6 +22,7 @@ using System.Collections.ObjectModel;
 using System.Text;
 using System.Threading;
 using XTMF2.Editing;
+using XTMF2.Repository;
 
 namespace XTMF2.Editing
 {
@@ -56,6 +57,11 @@ namespace XTMF2.Editing
             }
             // remove one reference to the project session
             Dispose();
+        }
+
+        internal ModuleRepository GetModuleRepository()
+        {
+            return Runtime.Modules;
         }
 
         public ProjectSession(XTMFRuntime runtime, Project project)

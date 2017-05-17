@@ -181,7 +181,7 @@ namespace XTMF2
             return false;
         }
 
-        internal bool Load(Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
+        internal bool Load(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
             JsonTextReader reader, ref string error)
         {
             if (!reader.Read() || reader.TokenType != JsonToken.StartObject)
@@ -203,7 +203,7 @@ namespace XTMF2
                         }
                         while(reader.Read() && reader.TokenType != JsonToken.EndArray)
                         {
-                            if(!Start.Load(structures, this, reader, out Start start, ref error))
+                            if(!Start.Load(session, structures, this, reader, out Start start, ref error))
                             {
                                 return false;
                             }
@@ -237,7 +237,7 @@ namespace XTMF2
                             if (reader.TokenType != JsonToken.Comment)
                             {
                                 var boundary = new Boundary(this);
-                                if(!boundary.Load(typeLookup, structures, reader, ref error))
+                                if(!boundary.Load(session, typeLookup, structures, reader, ref error))
                                 {
                                     return false;
                                 }
@@ -292,7 +292,7 @@ namespace XTMF2
             throw new NotImplementedException();
         }
 
-        internal bool AddStart(string startName, out Start start, ref string error)
+        internal bool AddStart(ModelSystemSession session, string startName, out Start start, ref string error)
         {
             start = null;
             // ensure the name is unique between starting points
@@ -304,14 +304,14 @@ namespace XTMF2
                     return false;
                 }
             }
-            start = new Start(startName, this, null, new Point() { X = 0, Y = 0 });
+            start = new Start(session, startName, this, null, new Point() { X = 0, Y = 0 });
             _Starts.Add(start);
             return true;
         }
 
-        internal bool AddModelSystemStructure(string name, Type type, out ModelSystemStructure mss, ref string error)
+        internal bool AddModelSystemStructure(ModelSystemSession session, string name, Type type, out ModelSystemStructure mss, ref string error)
         {
-            mss = ModelSystemStructure.Create(name, type);
+            mss = ModelSystemStructure.Create(session, name, type);
             _Modules.Add(mss);
             return true;
         }

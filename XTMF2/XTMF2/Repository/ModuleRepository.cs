@@ -20,16 +20,40 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Reflection;
+using System.Collections.Concurrent;
 
 namespace XTMF2.Repository
 {
-    public sealed class ModuleRepository : Repository<(Type Type, TypeInfo TypeInfo)>
+    public sealed class ModuleRepository
     {
+        private ConcurrentDictionary<Type, (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)> Data = new ConcurrentDictionary<Type, (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)>();
         private static TypeInfo IModuleTypeInfo = typeof(IModule).GetTypeInfo();
 
-        protected override bool ValidateInput((Type Type, TypeInfo TypeInfo) data, ref string error)
+        public void Add(Type type)
         {
-            return IModuleTypeInfo.IsAssignableFrom(data.Type);
+            if (type == null)
+            {
+                throw new ArgumentNullException(nameof(type));
+            }
+            if (!IModuleTypeInfo.IsAssignableFrom(type))
+            {
+                throw new ArgumentException(nameof(type), "The type is not of a module!");
+            }
+            Data[type] = GetTypeData(type);
+        }
+
+        private (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) GetTypeData(Type type)
+        {
+            throw new NotImplementedException();
+        }
+
+        public (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) this[Type type]
+        {
+            get
+            {
+                Data.TryGetValue(type, out var ret);
+                return ret;
+            }
         }
     }
 }

@@ -152,9 +152,9 @@ namespace TestXTMF
         }
 
         [TestMethod]
-        public void ModelSystemSaved()
+        public void ModelSystemSavedWithStartOnly()
         {
-            TestHelper.RunInModelSystemContext("ModelSystemSaved", (user, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("ModelSystemSavedWithStartOnly", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
@@ -173,9 +173,9 @@ namespace TestXTMF
         }
 
         [TestMethod]
-        public void AddModelSystemStructure()
+        public void ModelSystemSavedWithModelSystemStructureOnly()
         {
-            TestHelper.RunInModelSystemContext("AddModelSystemStructure", (user, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("ModelSystemSavedWithModelSystemStructureOnly", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
@@ -187,6 +187,50 @@ namespace TestXTMF
                 // after shutdown
                 var ms = mSession.ModelSystem;
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+            });
+        }
+
+        [TestMethod]
+        public void ModelSystemSavedWithStartAndModelSystemStructure()
+        {
+            TestHelper.RunInModelSystemContext("ModelSystemSavedWithStartAndModelSystemStructure", (user, pSession, mSession) =>
+            {
+                // initialization
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
+                Assert.AreEqual("MyMSS", mss.Name);
+            }, (user, pSession, mSession) =>
+            {
+                // after shutdown
+                string error = null;
+                var ms = mSession.ModelSystem;
+                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
+            });
+        }
+
+        [TestMethod]
+        public void ModelSystemWithLink()
+        {
+            TestHelper.RunInModelSystemContext("ModelSystemWithLink", (user, pSession, mSession) =>
+            {
+                // initialization
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
+                Assert.AreEqual("MyMSS", mss.Name);
+            }, (user, pSession, mSession) =>
+            {
+                // after shutdown
+                string error = null;
+                var ms = mSession.ModelSystem;
+                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
             });
         }
     }

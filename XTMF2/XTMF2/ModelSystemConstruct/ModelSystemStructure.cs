@@ -21,6 +21,7 @@ using System.ComponentModel;
 using System.Collections.Generic;
 using XTMF2.Editing;
 using Newtonsoft.Json;
+using System.Collections.ObjectModel;
 
 namespace XTMF2
 {
@@ -35,9 +36,26 @@ namespace XTMF2
         public Boundary ContainedWithin { get; protected set; }
 
         /// <summary>
+        /// Don't use this field as the setter
+        /// will properly create the model system structure hooks.
+        /// </summary>
+        private Type _Type;
+
+        /// <summary>
         /// The type that this will represent
         /// </summary>
-        public Type Type { get; protected set; }
+        public Type Type => _Type;
+
+        /// <summary>
+        /// Create the hooks for the model system structure
+        /// </summary>
+        private void CreateModelSystemStructureHooks(ModelSystemSession session)
+        {
+            Hooks = session.GetModuleRepository()[_Type].Hooks;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Hooks)));
+        }
+
+        public ModelSystemStructureHook[] Hooks;
 
         /// <summary>
         /// The name of the model system structure
@@ -104,15 +122,31 @@ namespace XTMF2
             return true;
         }
 
+        /// <summary>
+        /// Change the type of the model system structure.
+        /// </summary>
+        /// <param name="session">The current editing session.</param>
+        /// <param name="type">The type to set this structure to</param>
+        /// <param name="error"></param>
+        internal bool SetType(ModelSystemSession session, Type type, ref string error)
+        {
+            if(type == null)
+            {
+                error = "The given type was null!";
+                return false;
+            }
+            if (_Type != type)
+            {
+                _Type = type;
+                CreateModelSystemStructureHooks(session);
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Type)));
+            }
+            return true;
+        }
+
         protected ModelSystemStructure(string name)
         {
             Name = name;
-        }
-
-        public ModelSystemStructure(Type t)
-        {
-            Type = t;
-            Name = GetName(t);
         }
 
         /// <summary>
@@ -122,7 +156,7 @@ namespace XTMF2
         /// <returns>True if the operation was successful, false otherwise</returns>
         private static string GetName(Type type)
         {
-            if(type == null)
+            if (type == null)
             {
                 throw new ArgumentNullException(nameof(type));
             }
@@ -194,7 +228,7 @@ namespace XTMF2
                     case "Type":
                         {
                             var typeIndex = (int)reader.ReadAsInt32();
-                            if(!typeLookup.TryGetValue(typeIndex, out type))
+                            if (!typeLookup.TryGetValue(typeIndex, out type))
                             {
                                 return FailWith(out mss, ref error, $"Invalid type index {typeIndex}!");
                             }
@@ -217,18 +251,20 @@ namespace XTMF2
                 Description = description,
                 Location = point,
                 ContainedWithin = boundary,
-                Type = type,
             };
             structures.Add(index, mss);
             return true;
         }
 
-        internal static ModelSystemStructure Create(string name, Type type)
+        internal static ModelSystemStructure Create(ModelSystemSession session, string name, Type type)
         {
-            return new ModelSystemStructure(type)
+            string error = null;
+            var ret = new ModelSystemStructure(name);
+            if(!ret.SetType(session, type, ref error))
             {
-                Name = name
-            };
+                return null;
+            }
+            return ret;
         }
     }
 }
