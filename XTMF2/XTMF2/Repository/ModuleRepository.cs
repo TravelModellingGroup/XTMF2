@@ -59,10 +59,17 @@ namespace XTMF2.Repository
         {
             var typeInfo = type.GetTypeInfo();
             var hooks = new List<ModelSystemStructureHook>();
-            // Load properties
+            // Load properties and fields
             LoadFields(type, typeInfo, hooks);
             LoadProperties(type, typeInfo, hooks);
-            // Load fields
+            // ensure there are no duplicates
+            var duplicates = from h in hooks
+                             where hooks.Any(other => h != other && h.Name.Equals(other.Name, StringComparison.OrdinalIgnoreCase))
+                             select h;
+            if (duplicates.Any())
+            {
+                throw new XTMFCodeStyleError(type, $"Duplicate properties with the name {duplicates.First().Name}!");
+            }
             return (typeInfo, hooks.ToArray());
         }
 
@@ -95,7 +102,7 @@ namespace XTMF2.Repository
                             // all parameters are required
                             hooks.Add(new FieldHook(parameter.Name, field, true));
                         }
-                        else if(attributes.First() is SubModuleAttribute subModule)
+                        else if (attributes.First() is SubModuleAttribute subModule)
                         {
                             hooks.Add(new FieldHook(subModule.Name, field, subModule.Required));
                         }
