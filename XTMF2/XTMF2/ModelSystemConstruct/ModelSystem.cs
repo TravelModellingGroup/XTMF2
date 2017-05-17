@@ -158,6 +158,7 @@ namespace XTMF2
                 using (var reader = new JsonTextReader(stream))
                 {
                     var typeLookup = new Dictionary<int, Type>();
+                    var structures = new Dictionary<int, ModelSystemStructure>();
                     while (reader.Read())
                     {
                         if (reader.TokenType == JsonToken.PropertyName)
@@ -171,7 +172,7 @@ namespace XTMF2
                                     }
                                     break;
                                 case "Boundaries":
-                                    if(!LoadBoundaries(typeLookup, reader, modelSystem.GlobalBoundary, ref error))
+                                    if(!LoadBoundaries(typeLookup, structures, reader, modelSystem.GlobalBoundary, ref error))
                                     {
                                         return null;
                                     }
@@ -257,16 +258,18 @@ namespace XTMF2
             return true;
         }
 
-        private static bool LoadBoundaries(Dictionary<int, Type> typeLookup, JsonTextReader reader, Boundary global, ref string error)
+        private static bool LoadBoundaries(Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
+            JsonTextReader reader, Boundary global, ref string error)
         {
             if(!reader.Read() || reader.TokenType != JsonToken.StartArray)
             {
                 return FailWith(ref error, "Expected to read an array when loading boundaries!");
             }
-            if(!global.Load(typeLookup, reader, ref error))
+            if(!global.Load(typeLookup, structures, reader, ref error))
             {
                 return false;
             }
+            
             if(!reader.Read() || reader.TokenType != JsonToken.EndArray)
             {
                 return FailWith(ref error, "Expected to only have one boundary defined in the root!");

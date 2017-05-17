@@ -156,10 +156,18 @@ namespace TestXTMF
             TestHelper.RunInModelSystemContext("ModelSystemSaved", (user, pSession, mSession) =>
             {
                 // initialization
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
 
             }, (user, pSession, mSession) =>
             {
                 // after shutdown
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                // we shouldn't be able to add another start with the same name in the same boundary
+                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
             });
         }
     }

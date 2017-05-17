@@ -42,14 +42,82 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteStartObject();
             writer.WritePropertyName("Name");
             writer.WriteValue(Name);
+            writer.WritePropertyName("Description");
+            writer.WriteValue(Description);
             writer.WritePropertyName("Index");
             writer.WriteValue(index++);
+            writer.WritePropertyName("X");
+            writer.WriteValue(Location.X);
+            writer.WritePropertyName("Y");
+            writer.WriteValue(Location.Y);
             writer.WriteEndObject();
         }
 
-        internal static bool Load(JsonTextReader reader, out Start start, ref string error)
+        private static bool FailWith(out Start start, ref string error, string message)
         {
-            throw new NotImplementedException();
+            start = null;
+            error = message;
+            return false;
+        }
+
+        internal static bool Load(Dictionary<int, ModelSystemStructure> structures,
+            Boundary boundary, JsonTextReader reader, out Start start, ref string error)
+        {
+            if (reader.TokenType != JsonToken.StartObject)
+            {
+                return FailWith(out start, ref error, "Invalid token when loading a start!");
+            }
+            string name = null;
+            int index = -1;
+            Point point = new Point();
+            string description = null;
+            while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+            {
+                if (reader.TokenType == JsonToken.Comment) continue;
+                if (reader.TokenType != JsonToken.PropertyName)
+                {
+                    return FailWith(out start, ref error, "Invalid token when loading start");
+                }
+                switch(reader.Value)
+                {
+                    case "Name":
+                        name = reader.ReadAsString();
+                        break;
+                    case "Description":
+                        description = reader.ReadAsString();
+                        break;
+                    case "X":
+                        point.X = (float)reader.ReadAsDouble();
+                        break;
+                    case "Y":
+                        point.Y = (float)reader.ReadAsDouble();
+                        break;
+                    case "Index":
+                        index = (int)reader.ReadAsInt32();
+                        break;
+                    default:
+                        return FailWith(out start, ref error, $"Undefined parameter type {reader.Value} when loading a start!");
+                }
+            }
+            if (name == null)
+            {
+                return FailWith(out start, ref error, "Undefined name for a start in boundary " + boundary.FullPath);
+            }
+            if (structures.ContainsKey(index))
+            {
+                return FailWith(out start, ref error, $"Index {index} already exists!");
+            }
+            start = new Start(name, boundary, description, point)
+            {
+                ContainedWithin = boundary
+            };
+            structures.Add(index, start);
+            return true;
+        }
+
+        internal override ModelSystemStructure Clone()
+        {
+            return (Start)MemberwiseClone();
         }
     }
 }

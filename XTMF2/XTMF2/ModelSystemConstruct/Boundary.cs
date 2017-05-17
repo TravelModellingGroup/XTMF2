@@ -37,16 +37,18 @@ namespace XTMF2
         private ObservableCollection<Start> _Starts = new ObservableCollection<Start>();
         private ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
 
-        public Boundary(string name)
+        public Boundary(string name, Boundary parent = null)
         {
             Name = name;
+            Parent = parent;
         }
 
         /// <summary>
         /// Called when loading a boundary
         /// </summary>
-        internal Boundary()
+        internal Boundary(Boundary parent)
         {
+            Parent = parent;
         }
 
         internal bool Contains(Boundary boundary)
@@ -75,7 +77,7 @@ namespace XTMF2
             }
         }
 
-        private ReadOnlyObservableCollection<Start> Starts
+        public ReadOnlyObservableCollection<Start> Starts
         {
             get
             {
@@ -123,6 +125,24 @@ namespace XTMF2
             }
         }
 
+        private readonly Boundary Parent;
+
+        public string FullPath
+        {
+            get
+            {
+                Stack<Boundary> stack = new Stack<Boundary>();
+                var current = this;
+                while(current != null)
+                {
+                    stack.Push(current);
+                    current = current.Parent;
+                }
+                return string.Join(".", from b in stack
+                                        select b.Name);
+            }
+        }
+
         internal void Save(ref int index, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
             writer.WriteStartObject();
@@ -156,15 +176,16 @@ namespace XTMF2
             return false;
         }
 
-        internal bool Load(Dictionary<int, Type> typeLookup, JsonTextReader reader, ref string error)
+        internal bool Load(Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
+            JsonTextReader reader, ref string error)
         {
             if (!reader.Read() || reader.TokenType != JsonToken.StartObject)
             {
                 return FailWith(ref error, "Unexpected token when reading boundary!");
             }
-            while(reader.Read() && reader.TokenType == JsonToken.EndObject)
+            while(reader.Read() && reader.TokenType != JsonToken.EndObject)
             {
-                if(reader.TokenType != JsonToken.PropertyName || reader.TokenType != JsonToken.Comment)
+                if(reader.TokenType != JsonToken.PropertyName && reader.TokenType != JsonToken.Comment)
                 {
                     return FailWith(ref error, "Unexpected token when reading boundary!");
                 }
@@ -177,10 +198,11 @@ namespace XTMF2
                         }
                         while(reader.Read() && reader.TokenType != JsonToken.EndArray)
                         {
-                            if(!Start.Load(reader, out Start start, ref error))
+                            if(!Start.Load(structures, this, reader, out Start start, ref error))
                             {
                                 return false;
                             }
+                            _Starts.Add(start);
                         }
                         break;
                     case "Modules":
@@ -192,10 +214,11 @@ namespace XTMF2
                         {
                             if (reader.TokenType != JsonToken.Comment)
                             {
-                                if (!ModelSystemStructure.Load(reader, out ModelSystemStructure mss, ref error))
+                                if (!ModelSystemStructure.Load(typeLookup, structures, this, reader, out ModelSystemStructure mss, ref error))
                                 {
                                     return false;
                                 }
+                                _Modules.Add(mss);
                             }
                         }
                         break;
@@ -208,8 +231,8 @@ namespace XTMF2
                         {
                             if (reader.TokenType != JsonToken.Comment)
                             {
-                                var boundary = new Boundary();
-                                if(!boundary.Load(typeLookup, reader, ref error))
+                                var boundary = new Boundary(this);
+                                if(!boundary.Load(typeLookup, structures, reader, ref error))
                                 {
                                     return false;
                                 }
@@ -248,6 +271,8 @@ namespace XTMF2
             {
                 var ret = new Boundary(Name)
                 {
+                    _Starts = new ObservableCollection<Start>(from start in _Starts
+                                                              select (Start)start.Clone()),
                     _Modules = new ObservableCollection<ModelSystemStructure>(from mod in _Modules
                                                                               select mod.Clone()),
                     _Boundaries = new ObservableCollection<Boundary>(from bound in _Boundaries

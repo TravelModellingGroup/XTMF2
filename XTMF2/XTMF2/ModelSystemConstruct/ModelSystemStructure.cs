@@ -58,7 +58,7 @@ namespace XTMF2
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Location)));
         }
 
-        internal ModelSystemStructure Clone()
+        internal virtual ModelSystemStructure Clone()
         {
             return (ModelSystemStructure)MemberwiseClone();
         }
@@ -129,9 +129,80 @@ namespace XTMF2
             return type.Name;
         }
 
-        internal static bool Load(JsonTextReader reader, out ModelSystemStructure mss, ref string error)
+
+        private static bool FailWith(out ModelSystemStructure mss, ref string error, string message)
         {
-            throw new NotImplementedException();
+            mss = null;
+            error = message;
+            return false;
+        }
+
+        internal static bool Load(Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
+            Boundary boundary, JsonTextReader reader, out ModelSystemStructure mss, ref string error)
+        {
+            if (reader.TokenType != JsonToken.StartObject)
+            {
+                return FailWith(out mss, ref error, "Invalid token when loading a start!");
+            }
+            Type type = null;
+            string name = null;
+            int index = -1;
+            Point point = new Point();
+            string description = null;
+            while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+            {
+                if (reader.TokenType == JsonToken.Comment) continue;
+                if (reader.TokenType != JsonToken.PropertyName)
+                {
+                    return FailWith(out mss, ref error, "Invalid token when loading start");
+                }
+                switch (reader.Value)
+                {
+                    case "Name":
+                        name = reader.ReadAsString();
+                        break;
+                    case "Description":
+                        description = reader.ReadAsString();
+                        break;
+                    case "X":
+                        point.X = (float)reader.ReadAsDouble();
+                        break;
+                    case "Y":
+                        point.Y = (float)reader.ReadAsDouble();
+                        break;
+                    case "Index":
+                        index = (int)reader.ReadAsInt32();
+                        break;
+                    case "Type":
+                        {
+                            var typeIndex = (int)reader.ReadAsInt32();
+                            if(!typeLookup.TryGetValue(typeIndex, out type))
+                            {
+                                return FailWith(out mss, ref error, $"Invalid type index {typeIndex}!");
+                            }
+                        }
+                        break;
+                    default:
+                        return FailWith(out mss, ref error, $"Undefined parameter type {reader.Value} when loading a start!");
+                }
+            }
+            if (name == null)
+            {
+                return FailWith(out mss, ref error, "Undefined name for a start in boundary " + boundary.FullPath);
+            }
+            if (structures.ContainsKey(index))
+            {
+                return FailWith(out mss, ref error, $"Index {index} already exists!");
+            }
+            mss = new ModelSystemStructure(name)
+            {
+                Description = description,
+                Location = point,
+                ContainedWithin = boundary,
+                Type = type,
+            };
+            structures.Add(index, mss);
+            return true;
         }
     }
 }
