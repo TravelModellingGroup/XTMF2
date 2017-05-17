@@ -20,7 +20,9 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text;
+using Newtonsoft.Json;
 using XTMF2.Editing;
+using System.Linq;
 
 namespace XTMF2
 {
@@ -58,6 +60,94 @@ namespace XTMF2
                 Origin = Origin,
                 Destination = Destination
             };
+        }
+
+        internal void Save(Dictionary<ModelSystemStructure, int> moduleDictionary, JsonTextWriter writer)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("Origin");
+            writer.WriteValue(moduleDictionary[Origin]);
+            writer.WritePropertyName("Hook");
+            writer.WriteValue(OriginHook.Name);
+            writer.WritePropertyName("Destination");
+            writer.WriteValue(moduleDictionary[Destination]);
+            writer.WriteEndObject();
+        }
+
+        private static bool FailWith(out Link link, ref string error, string message)
+        {
+            link = null;
+            error = message;
+            return false;
+        }
+
+        internal static bool Create(ModelSystemSession session, Dictionary<int, ModelSystemStructure> structures, JsonTextReader reader, out Link link, ref string error)
+        {
+            if(reader.TokenType != JsonToken.StartObject)
+            {
+                return FailWith(out link, ref error, "Expected a start object when loading a link.");
+            }
+            ModelSystemStructure origin = null, destination = null;
+            string hookName = null;
+            // read in the values
+            while(reader.Read() && reader.TokenType != JsonToken.EndObject)
+            {
+                if(reader.TokenType == JsonToken.Comment)
+                {
+                    continue;
+                }
+                if(reader.TokenType != JsonToken.PropertyName)
+                {
+                    return FailWith(out link, ref error, "Invalid token when loading a link.");
+                }
+                switch(reader.Value)
+                {
+                    case "Origin":
+                        {
+                            var index = (int)reader.ReadAsInt32();
+                            origin = structures[index];
+                        }
+                        break;
+                    case "Hook":
+                        {
+                            hookName = reader.ReadAsString();
+                        }
+                        break;
+                    case "Destination":
+                        {
+                            var index = (int)reader.ReadAsInt32();
+                            destination = structures[index];
+                        }
+                        break;
+                    default:
+                        return FailWith(out link, ref error, "Unknown parameter type when loading link " + reader.Value);
+                }
+            }
+            // ensure all of the types were filled out
+            if(origin == null)
+            {
+                return FailWith(out link, ref error, "No origin specified on link!");
+            }
+            if (hookName == null)
+            {
+                return FailWith(out link, ref error, "No origin hook specified on link!");
+            }
+            if (destination == null)
+            {
+                return FailWith(out link, ref error, "No destination specified on link!");
+            }
+            var hook = session.GetModuleRepository()[origin.Type].Hooks?.FirstOrDefault(h => h.Name.Equals(hookName, StringComparison.OrdinalIgnoreCase));
+            if(hook == null)
+            {
+                return FailWith(out link, ref error, "Unable to find a hook with the name " + hookName);
+            }
+            link = new Link()
+            {
+                Origin = origin,
+                OriginHook = hook,
+                Destination = destination
+            };
+            return true;
         }
     }
 }

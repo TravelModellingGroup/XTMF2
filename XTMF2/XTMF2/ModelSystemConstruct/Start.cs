@@ -41,8 +41,9 @@ namespace XTMF2.ModelSystemConstruct
             SetType(session, typeof(StartModule), ref error);
         }
 
-        internal override void Save(ref int index, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        internal override void Save(ref int index, Dictionary<ModelSystemStructure, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
+            moduleDictionary.Add(this, index);
             writer.WriteStartObject();
             writer.WritePropertyName("Name");
             writer.WriteValue(Name);

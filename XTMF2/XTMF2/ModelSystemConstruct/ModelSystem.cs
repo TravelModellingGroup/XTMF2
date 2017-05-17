@@ -95,7 +95,8 @@ namespace XTMF2
             int index = 0;
             writer.WritePropertyName("Boundaries");
             writer.WriteStartArray();
-            GlobalBoundary.Save(ref index, typeDictionary, writer);
+            Dictionary<ModelSystemStructure, int> moduleDictionary = new Dictionary<ModelSystemStructure, int>();
+            GlobalBoundary.Save(ref index, moduleDictionary, typeDictionary, writer);
             writer.WriteEndArray();
         }
 

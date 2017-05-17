@@ -146,28 +146,35 @@ namespace XTMF2
             }
         }
 
-        internal void Save(ref int index, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        internal void Save(ref int index, Dictionary<ModelSystemStructure, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
             writer.WriteStartObject();
             writer.WritePropertyName("Starts");
             writer.WriteStartArray();
             foreach (var start in _Starts)
             {
-                start.Save(ref index, typeDictionary, writer);
+                start.Save(ref index, moduleDictionary, typeDictionary, writer);
             }
             writer.WriteEndArray();
             writer.WritePropertyName("Modules");
             writer.WriteStartArray();
             foreach (var module in _Modules)
             {
-                module.Save(ref index, typeDictionary, writer);
+                module.Save(ref index, moduleDictionary, typeDictionary, writer);
             }
             writer.WriteEndArray();
             writer.WritePropertyName("Boundaries");
             writer.WriteStartArray();
             foreach (var child in _Boundaries)
             {
-                child.Save(ref index, typeDictionary, writer);
+                child.Save(ref index, moduleDictionary, typeDictionary, writer);
+            }
+            writer.WriteEndArray();
+            writer.WritePropertyName("Links");
+            writer.WriteStartArray();
+            foreach (var link in _Links)
+            {
+                link.Save(moduleDictionary, writer);
             }
             writer.WriteEndArray();
             writer.WriteEndObject();
@@ -244,6 +251,23 @@ namespace XTMF2
                                 {
                                     return false;
                                 }
+                            }
+                        }
+                        break;
+                    case "Links":
+                        if(!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                        {
+                            return FailWith(ref error, "Unexpected token when starting to read Links for a boundary.");
+                        }
+                        while(reader.Read() && reader.TokenType != JsonToken.EndArray)
+                        {
+                            if(reader.TokenType != JsonToken.Comment)
+                            {
+                                if(!Link.Create(session, structures, reader, out var link, ref error))
+                                {
+                                    return false;
+                                }
+                                _Links.Add(link);
                             }
                         }
                         break;

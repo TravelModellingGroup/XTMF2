@@ -171,8 +171,9 @@ namespace XTMF2
             return false;
         }
 
-        internal virtual void Save(ref int index, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        internal virtual void Save(ref int index, Dictionary<ModelSystemStructure, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
+            moduleDictionary.Add(this, index);
             writer.WriteStartObject();
             writer.WritePropertyName("Name");
             writer.WriteValue(Name);
