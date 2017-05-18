@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.IO.Pipes" Version="4.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\XTMF2\XTMF2.csproj" />
     <ProjectReference Include="..\XTMFInterfaces\XTMFInterfaces.csproj" />
   </ItemGroup>
