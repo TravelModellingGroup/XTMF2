@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Text;
 using System.Threading;
 using XTMF2.ModelSystemConstruct;
@@ -151,6 +152,20 @@ namespace XTMF2.Editing
             lock (SessionLock)
             {
                 return ModelSystem.Save(ref error);
+            }
+        }
+
+        /// <summary>
+        /// Save the model system to the given stream
+        /// </summary>
+        /// <param name="error">An error message if something goes wrong saving the model system.</param>
+        /// <param name="saveTo">The stream to save the model system to.</param>
+        /// <returns>True if the model system was saved successfully.</returns>
+        public bool Save(ref string error, Stream saveTo)
+        {
+            lock (SessionLock)
+            {
+                return ModelSystem.Save(ref error, saveTo);
             }
         }
 

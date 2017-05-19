@@ -19,8 +19,12 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Reflection;
 using System.Text;
 using XTMF2;
+using XTMF2.Bus;
 using XTMF2.Editing;
 
 namespace TestXTMF
@@ -116,6 +120,69 @@ namespace TestXTMF
                 //cleanup
                 userController.Delete(user);
             }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="runLogic"></param>
+        public static void CreateRunClient(Action<RunBusHost> runLogic)
+        {
+            var id = "123";//Guid.NewGuid().ToString();
+            string error = null;
+            var xtmfRunFileName = typeof(XTMF2.Run.CreateStreams).GetTypeInfo().Assembly.Location;
+            Process client = null;
+            try
+            {
+                Assert.IsTrue(XTMF2.Run.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, ref error,
+                () =>
+                {
+                    try
+                    {
+                        var startInfo = new ProcessStartInfo("dotnet", $"{xtmfRunFileName} -namedpipe \"{id}\"")
+                        {
+                            CreateNoWindow = false
+                        };
+                        client = new Process()
+                        {
+                            StartInfo = startInfo
+                        };
+                        Debug.WriteLine("test");
+                        client.EnableRaisingEvents = true;
+                        client.Start();
+                    }
+                    catch (Exception e)
+                    {
+                        Assert.Fail(e.Message);
+                    }
+                }).UsingIf(hostStream,
+            () =>
+            {
+                Assert.IsNotNull(client, "The client was never created!");
+                runLogic(new RunBusHost(hostStream, true));
+            }), error);
+            }
+            finally
+            {
+                if (client != null)
+                {
+                    try
+                    {
+                        client.Kill();
+                        client.WaitForExit();
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // This will cover the case that the client has already exited
+                    }
+                }
+            }
+
+        }
+
+        private static void Client_Exited(object sender, EventArgs e)
+        {
+            throw new NotImplementedException();
         }
     }
 }

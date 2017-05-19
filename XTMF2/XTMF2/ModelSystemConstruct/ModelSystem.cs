@@ -66,7 +66,22 @@ namespace XTMF2
                     {
                         dir.Create();
                     }
-                    using (var stream = new StreamWriter(fileInfo.Create()))
+                    return Save(ref error, fileInfo.Create());
+                }
+                catch (IOException e)
+                {
+                    error = e.Message;
+                }
+                return false;
+            }
+        }
+
+        internal bool Save(ref string error, Stream saveTo)
+        {
+            try
+            {
+                using (var stream = new StreamWriter(saveTo))
+                {
                     using (var writer = new JsonTextWriter(stream))
                     {
                         var typeDictionary = GlobalBoundary.GetUsedTypes();
@@ -76,18 +91,13 @@ namespace XTMF2
                         writer.WriteEndObject();
                         return true;
                     }
-
                 }
-                catch (JsonWriterException e)
-                {
-                    error = e.Message;
-                }
-                catch (IOException e)
-                {
-                    error = e.Message;
-                }
-                return false;
             }
+            catch (JsonWriterException e)
+            {
+                error = e.Message;
+            }
+            return false;
         }
 
         private void WriteBoundaries(JsonTextWriter writer, Dictionary<Type, int> typeDictionary)
@@ -174,7 +184,7 @@ namespace XTMF2
                                     }
                                     break;
                                 case "Boundaries":
-                                    if(!LoadBoundaries(session, typeLookup, structures, reader, modelSystem.GlobalBoundary, ref error))
+                                    if (!LoadBoundaries(session, typeLookup, structures, reader, modelSystem.GlobalBoundary, ref error))
                                     {
                                         return null;
                                     }
@@ -230,7 +240,7 @@ namespace XTMF2
                         case "Index":
                             {
                                 var ret = reader.ReadAsInt32();
-                                if(ret == null)
+                                if (ret == null)
                                 {
                                     return FailWith(ref error, "While reading types we encountered an invalid index!");
                                 }
@@ -242,16 +252,16 @@ namespace XTMF2
                             break;
                     }
                 }
-                if(type == null || index < 0)
+                if (type == null || index < 0)
                 {
                     return FailWith(ref error, $"An invalid type entry was found!");
                 }
                 var trueType = Type.GetType(type);
-                if(trueType == null)
+                if (trueType == null)
                 {
                     return FailWith(ref error, $"Unable to find type {type}!");
                 }
-                if(typeLookup.ContainsKey(index))
+                if (typeLookup.ContainsKey(index))
                 {
                     return FailWith(ref error, $"While reading types the index {index} was previously defined!");
                 }
@@ -263,16 +273,16 @@ namespace XTMF2
         private static bool LoadBoundaries(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
             JsonTextReader reader, Boundary global, ref string error)
         {
-            if(!reader.Read() || reader.TokenType != JsonToken.StartArray)
+            if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
             {
                 return FailWith(ref error, "Expected to read an array when loading boundaries!");
             }
-            if(!global.Load(session, typeLookup, structures, reader, ref error))
+            if (!global.Load(session, typeLookup, structures, reader, ref error))
             {
                 return false;
             }
-            
-            if(!reader.Read() || reader.TokenType != JsonToken.EndArray)
+
+            if (!reader.Read() || reader.TokenType != JsonToken.EndArray)
             {
                 return FailWith(ref error, "Expected to only have one boundary defined in the root!");
             }

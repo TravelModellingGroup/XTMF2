@@ -21,8 +21,9 @@ using System.Collections.Generic;
 using System.Text;
 using System.IO;
 using System.IO.Pipes;
+using System.Threading.Tasks;
 
-namespace XTMF2.Run.Run
+namespace XTMF2.Run
 {
     public static class CreateStreams
     {
@@ -33,12 +34,23 @@ namespace XTMF2.Run.Run
         /// <param name="stream">The resulting stream</param>
         /// <param name="error">An error message if there is an exception</param>
         /// <returns>True if successful, false with message otherwise</returns>
-        public static bool CreateNewNamedPipeHost(string name, out Stream stream, ref string error)
+        public static bool CreateNewNamedPipeHost(string name, out Stream stream, ref string error, Action createClient)
         {
             try
             {
                 NamedPipeServerStream host = new NamedPipeServerStream(name, PipeDirection.InOut);
                 stream = host;
+                var waitTask = host.WaitForConnectionAsync();
+                createClient();
+                waitTask.Wait(5000);
+                if (!host.IsConnected)
+                {
+                    // failed to get a connection back from the client
+                    host.Dispose();
+                    stream = null;
+                    error = "No connection from the run client received!";
+                    return false;
+                }
                 return true;
             }
             catch (IOException e)
@@ -62,6 +74,16 @@ namespace XTMF2.Run.Run
             {
                 // Connect to the named pipe server
                 var client = new NamedPipeClientStream(".", name, PipeDirection.InOut);
+                try
+                {
+                    client.Connect(1000);
+                }
+                catch (TimeoutException)
+                {
+                    stream = null;
+                    error = $"Unable to create connection to the host with the named pipe {name}";
+                    return false;
+                }
                 stream = client;
                 return true;
             }
