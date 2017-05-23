@@ -66,7 +66,7 @@ namespace XTMF2
                     {
                         dir.Create();
                     }
-                    return Save(ref error, fileInfo.Create());
+                    return Save(ref error, fileInfo.Create(), false);
                 }
                 catch (IOException e)
                 {
@@ -76,11 +76,11 @@ namespace XTMF2
             }
         }
 
-        internal bool Save(ref string error, Stream saveTo)
+        private bool Save(ref string error, Stream saveTo, bool leaveOpen)
         {
             try
             {
-                using (var stream = new StreamWriter(saveTo))
+                using (var stream = new StreamWriter(saveTo, Encoding.Unicode, 0x1000, leaveOpen))
                 {
                     using (var writer = new JsonTextWriter(stream))
                     {
@@ -98,6 +98,11 @@ namespace XTMF2
                 error = e.Message;
             }
             return false;
+        }
+
+        internal bool Save(ref string error, Stream saveTo)
+        {
+            return Save(ref error, saveTo, true);
         }
 
         private void WriteBoundaries(JsonTextWriter writer, Dictionary<Type, int> typeDictionary)

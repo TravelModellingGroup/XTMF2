@@ -50,15 +50,15 @@ namespace XTMF2.Bus
 
         private void Dispose(bool managed)
         {
-            if(managed)
+            if (managed)
             {
                 GC.SuppressFinalize(this);
             }
             Exit = true;
-            while(!Exited)
+            while (!Exited)
             {
                 Interlocked.MemoryBarrier();
-                if(!Exited)
+                if (!Exited)
                 {
                     Task.WaitAll(Task.Delay(50));
                 }
@@ -184,21 +184,29 @@ namespace XTMF2.Bus
         {
             lock (OutLock)
             {
-                using (var memStream = new MemoryStream())
+                try
                 {
-                    BinaryWriter write = new BinaryWriter(memStream, Encoding.Unicode, true);
-                    if (!modelSystem.Save(ref error, memStream))
+                    using (var memStream = new MemoryStream())
                     {
-                        return false;
+                        BinaryWriter write = new BinaryWriter(memStream, Encoding.Unicode, true);
+                        if (!modelSystem.Save(ref error, memStream))
+                        {
+                            return false;
+                        }
+                        // int64
+                        var writer = new BinaryWriter(HostStream, Encoding.Unicode, true);
+                        writer.Write((int)Out.RunModelSystem);
+                        writer.Write(cwd);
+                        writer.Write(memStream.Length);
+                        memStream.WriteTo(HostStream);
+                        return true;
                     }
-                    // int64
-                    var writer = new BinaryWriter(HostStream, Encoding.Unicode, true);
-                    writer.Write((int)Out.RunModelSystem);
-                    writer.Write(cwd);
-                    writer.Write(memStream.Length);
-                    memStream.WriteTo(HostStream);
-                    return true;
-                } 
+                }
+                catch (IOException e)
+                {
+                    error = e.Message;
+                    return false;
+                }
             }
         }
     }

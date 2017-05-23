@@ -38,7 +38,7 @@ namespace XTMF2.Run
         {
             try
             {
-                NamedPipeServerStream host = new NamedPipeServerStream(name, PipeDirection.InOut);
+                NamedPipeServerStream host = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
                 stream = host;
                 var waitTask = host.WaitForConnectionAsync();
                 createClient();
@@ -73,7 +73,7 @@ namespace XTMF2.Run
             try
             {
                 // Connect to the named pipe server
-                var client = new NamedPipeClientStream(".", name, PipeDirection.InOut);
+                var client = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
                 try
                 {
                     client.Connect(1000);
