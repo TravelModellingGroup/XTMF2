@@ -42,11 +42,11 @@ namespace XTMF2.Bus
 
         private void Dispose(bool managed)
         {
-            if(managed)
+            if (managed)
             {
                 GC.SuppressFinalize(this);
             }
-            if(Owner)
+            if (Owner)
             {
                 ClientHost.Dispose();
             }
@@ -81,6 +81,18 @@ namespace XTMF2.Bus
             SendModelSystemResult = 6
         }
 
+        private static MemoryStream CreateMemoryStreamLoadingFrom(Stream source, int bytes)
+        {
+            // Read things in parts in case the whole dataset is not ready before we start reading.
+            var backend = new byte[bytes];
+            int offset = 0;
+            while (offset < bytes)
+            {
+                offset += source.Read(backend, offset, bytes - offset);
+            }
+            return new MemoryStream(backend);
+        }
+
         /// <summary>
         /// Consumes the current thread to answer requests from the host
         /// </summary>
@@ -88,15 +100,31 @@ namespace XTMF2.Bus
         {
             try
             {
-                BinaryWriter writer = new BinaryWriter(ClientHost, Encoding.Unicode, true);
+                // the writer will clear things up
+                BinaryReader reader = new BinaryReader(ClientHost, Encoding.Unicode, false);
                 while (!Exit)
                 {
-                    writer.Write((int)Out.ClientReady);
-                    Exit = true;
+                    switch ((In)reader.ReadInt32())
+                    {
+                        case In.RunModelSystem:
+                            {
+                                Console.WriteLine("Loading Model System");
+                                var cwd = reader.ReadString();
+                                var msSize = (int)reader.ReadInt64();
+                                using (var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize))
+                                {
+
+                                }
+                            }
+                            break;
+                        // failsafe
+                        default:
+                            return;
+                    }
                     Interlocked.MemoryBarrier();
                 }
             }
-            catch(IOException)
+            catch (IOException)
             {
 
             }

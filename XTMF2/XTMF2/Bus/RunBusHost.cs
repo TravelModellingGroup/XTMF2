@@ -31,7 +31,7 @@ namespace XTMF2.Bus
     /// </summary>
     public sealed class RunBusHost : IDisposable
     {
-        private BinaryWriter HostStream;
+        private Stream HostStream;
         private bool Owner;
         private volatile bool Exit = false;
         private volatile bool Exited = false;
@@ -39,8 +39,7 @@ namespace XTMF2.Bus
         public RunBusHost(Stream hostStream, bool streamOwner)
         {
             Owner = streamOwner;
-            HostStream = new BinaryWriter(hostStream ?? 
-                throw new ArgumentNullException(nameof(hostStream)), Encoding.Unicode, !streamOwner);
+            HostStream = hostStream ?? throw new ArgumentNullException(nameof(hostStream));
             StartListenner();
         }
 
@@ -99,13 +98,7 @@ namespace XTMF2.Bus
             {
                 try
                 {
-                    var baseStream = HostStream.BaseStream;
-                    BinaryReader reader = new BinaryReader(baseStream);
-                    if (baseStream.CanTimeout)
-                    {
-                        baseStream.ReadTimeout = 50;
-                    }
-                    int timeoutCounter = 0;
+                    BinaryReader reader = new BinaryReader(HostStream, Encoding.Unicode, true);
                     while (!Exit)
                     {
                         try
@@ -144,16 +137,9 @@ namespace XTMF2.Bus
                                 default:
                                     throw new Exception($"Unsupported command: {Enum.GetName(typeof(In), command)}");
                             }
-                            timeoutCounter = 0;
                         }
                         catch (TimeoutException)
                         {
-                            // do nothing it is fine
-                            timeoutCounter++;
-                            if(timeoutCounter > 1000)
-                            {
-                                Exit = true;
-                            }
                         }
                         System.Threading.Interlocked.MemoryBarrier();
                     }
@@ -182,7 +168,8 @@ namespace XTMF2.Bus
         {
             lock (OutLock)
             {
-                HostStream.Write((int)Out.Heartbeat);
+                var writer = new BinaryWriter(HostStream, Encoding.Unicode, true);
+                writer.Write((int)Out.Heartbeat);
             }
         }
 
@@ -199,17 +186,17 @@ namespace XTMF2.Bus
             {
                 using (var memStream = new MemoryStream())
                 {
+                    BinaryWriter write = new BinaryWriter(memStream, Encoding.Unicode, true);
                     if (!modelSystem.Save(ref error, memStream))
                     {
                         return false;
                     }
                     // int64
-                    HostStream.Write((int)Out.RunModelSystem);
-                    HostStream.Write(cwd);
-                    HostStream.Write(memStream.Length);
-                    HostStream.Flush();
-                    memStream.CopyTo(HostStream.BaseStream);
-                    HostStream.BaseStream.Flush();
+                    var writer = new BinaryWriter(HostStream, Encoding.Unicode, true);
+                    writer.Write((int)Out.RunModelSystem);
+                    writer.Write(cwd);
+                    writer.Write(memStream.Length);
+                    memStream.WriteTo(HostStream);
                     return true;
                 } 
             }

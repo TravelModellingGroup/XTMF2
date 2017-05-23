@@ -24,10 +24,11 @@ using System.Threading.Tasks;
 using XTMF2.Bus;
 using XTMF2.Run;
 
-namespace XTMF.Run
+namespace XTMF2.Run
 {
     class Program
     {
+        [MTAThread]
         static void Main(string[] args)
         {
             if(args.Length == 0)

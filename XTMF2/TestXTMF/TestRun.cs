@@ -37,7 +37,19 @@ namespace TestXTMF
         {
             TestHelper.RunInModelSystemContext("CreatingClient", (user, pSession, msSession) =>
             {
-                TestHelper.CreateRunClient((runBus) =>
+                TestHelper.CreateRunClient(true, (runBus) =>
+                {
+                    
+                });
+            });
+        }
+
+        [TestMethod]
+        public void SendModelSystem()
+        {
+            TestHelper.RunInModelSystemContext("CreatingClient", (user, pSession, msSession) =>
+            {
+                TestHelper.CreateRunClient(false, (runBus) =>
                 {
                     string error = null;
                     Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), ref error), error);

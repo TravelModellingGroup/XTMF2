@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "XTMF.Run": {
+      "commandName": "Project",
+      "commandLineArgs": "-namedPipe 123"
+    }
+  }
+}

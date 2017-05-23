@@ -126,9 +126,9 @@ namespace TestXTMF
         /// 
         /// </summary>
         /// <param name="runLogic"></param>
-        public static void CreateRunClient(Action<RunBusHost> runLogic)
+        public static void CreateRunClient(bool startClientProcess, Action<RunBusHost> runLogic)
         {
-            var id = "123";//Guid.NewGuid().ToString();
+            var id = startClientProcess ? Guid.NewGuid().ToString() : "123";
             string error = null;
             var xtmfRunFileName = typeof(XTMF2.Run.CreateStreams).GetTypeInfo().Assembly.Location;
             Process client = null;
@@ -137,39 +137,46 @@ namespace TestXTMF
                 Assert.IsTrue(XTMF2.Run.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, ref error,
                 () =>
                 {
-                    try
+                    if (startClientProcess)
                     {
-                        var startInfo = new ProcessStartInfo("dotnet", $"{xtmfRunFileName} -namedpipe \"{id}\"")
+                        try
                         {
-                            CreateNoWindow = false
-                        };
-                        client = new Process()
+
+                            var startInfo = new ProcessStartInfo()
+                            {
+                                FileName = "dotnet",
+                                Arguments = $"\"{xtmfRunFileName}\" -namedPipe \"{id}\"",
+                                CreateNoWindow = false
+                            };
+                            client = new Process()
+                            {
+                                StartInfo = startInfo
+                            };
+                            client.EnableRaisingEvents = true;
+                            client.Start();
+                        }
+                        catch (Exception e)
                         {
-                            StartInfo = startInfo
-                        };
-                        Debug.WriteLine("test");
-                        client.EnableRaisingEvents = true;
-                        client.Start();
-                    }
-                    catch (Exception e)
-                    {
-                        Assert.Fail(e.Message);
+                            Assert.Fail(e.Message);
+                        }
                     }
                 }).UsingIf(hostStream,
             () =>
             {
-                Assert.IsNotNull(client, "The client was never created!");
+                if (startClientProcess)
+                {
+                    Assert.IsNotNull(client, "The client was never created!");
+                }
                 runLogic(new RunBusHost(hostStream, true));
             }), error);
             }
             finally
             {
-                if (client != null)
+                if (startClientProcess)
                 {
                     try
                     {
-                        client.Kill();
-                        client.WaitForExit();
+                        client?.Kill();
                     }
                     catch (InvalidOperationException)
                     {
@@ -178,11 +185,6 @@ namespace TestXTMF
                 }
             }
 
-        }
-
-        private static void Client_Exited(object sender, EventArgs e)
-        {
-            throw new NotImplementedException();
         }
     }
 }
