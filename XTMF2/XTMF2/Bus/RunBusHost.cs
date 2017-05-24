@@ -82,13 +82,14 @@ namespace XTMF2.Bus
             ClientExiting = 2,
             ClientFinishedModelSystem = 3,
             ClientErrorWhenRunningModelSystem = 4,
-            ProgressUpdate = 5,
-            SendModelSystemResult = 6
+            ClientErrorValidatingModelSystem = 5,
+            ProgressUpdate = 6,
+            SendModelSystemResult = 7
         }
 
         public event EventHandler ClientFinishedModelSystem;
 
-        public delegate void RunError(object sender, string errorMessage, string stack);
+        public delegate void RunError(object sender, string runID, string errorMessage, string stack);
 
         public event RunError ClientErrorWhenRunningModelSystem;
 
@@ -114,6 +115,16 @@ namespace XTMF2.Bus
                                 case In.ClientExiting:
                                     Exit = true;
                                     break;
+                                case In.ClientErrorValidatingModelSystem:
+                                    try
+                                    {
+                                        ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), String.Empty);
+                                    }
+                                    catch
+                                    {
+
+                                    }
+                                    break;
                                 case In.ClientFinishedModelSystem:
                                     try
                                     {
@@ -127,7 +138,7 @@ namespace XTMF2.Bus
                                 case In.ClientErrorWhenRunningModelSystem:
                                     try
                                     {
-                                        ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString());
+                                        ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), reader.ReadString());
                                     }
                                     catch
                                     {
@@ -180,8 +191,9 @@ namespace XTMF2.Bus
         /// <param name="cwd">The directory to run in.</param>
         /// <param name="error">An error message if there is an issue creating the model system.</param>
         /// <returns>True if the model system was sent</returns>
-        public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, ref string error)
+        public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, out string id, ref string error)
         {
+            id = null;
             lock (OutLock)
             {
                 try
@@ -193,9 +205,11 @@ namespace XTMF2.Bus
                         {
                             return false;
                         }
+                        id = Guid.NewGuid().ToString();
                         // int64
                         var writer = new BinaryWriter(HostStream, Encoding.Unicode, true);
                         writer.Write((int)Out.RunModelSystem);
+                        writer.Write(id);
                         writer.Write(cwd);
                         writer.Write(memStream.Length);
                         memStream.WriteTo(HostStream);
@@ -207,6 +221,7 @@ namespace XTMF2.Bus
                     error = e.Message;
                     return false;
                 }
+                
             }
         }
     }

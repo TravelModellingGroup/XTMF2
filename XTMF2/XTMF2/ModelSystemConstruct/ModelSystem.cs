@@ -154,24 +154,41 @@ namespace XTMF2
             var path = modelSystemHeader.ModelSystemPath;
             var info = new FileInfo(path);
             msSession = new ModelSystemSession(session, modelSystemHeader);
-            var ms = info.Exists ?
-                Load(msSession, modelSystemHeader, ref error)
-                : new ModelSystem(modelSystemHeader);
-            if (ms == null)
+            try
             {
-                msSession = null;
+                var ms = info.Exists ?
+                    Load(File.OpenRead(modelSystemHeader.ModelSystemPath), msSession, modelSystemHeader, ref error)
+                    : new ModelSystem(modelSystemHeader);
+                if (ms == null)
+                {
+                    msSession = null;
+                    return false;
+                }
+                msSession.ModelSystem = ms;
+                return msSession != null;
+            }
+            catch(IOException e)
+            {
+                error = e.Message;
                 return false;
             }
-            msSession.ModelSystem = ms;
-            return msSession != null;
         }
 
-        private static ModelSystem Load(ModelSystemSession session, ModelSystemHeader modelSystemHeader, ref string error)
+        internal static bool Load(string modelSystem, out ModelSystem ms, ref string error)
+        {
+            using (MemoryStream stream = new MemoryStream(Encoding.Unicode.GetBytes(modelSystem)))
+            {
+                ms = Load(stream, null, new ModelSystemHeader(null, null, null), ref error);
+                return ms != null;
+            }
+        }
+
+        private static ModelSystem Load(Stream rawStream, ModelSystemSession session, ModelSystemHeader modelSystemHeader, ref string error)
         {
             try
             {
                 var modelSystem = new ModelSystem(modelSystemHeader);
-                using (var stream = new StreamReader(File.OpenRead(modelSystemHeader.ModelSystemPath)))
+                using (var stream = new StreamReader(rawStream))
                 using (var reader = new JsonTextReader(stream))
                 {
                     var typeLookup = new Dictionary<int, Type>();

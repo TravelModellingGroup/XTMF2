@@ -26,6 +26,7 @@ using XTMF2.ModelSystemConstruct;
 using static XTMF2.Helper;
 using TestXTMF.Modules;
 using System.IO;
+using System.Threading;
 
 namespace TestXTMF
 {
@@ -49,10 +50,43 @@ namespace TestXTMF
         {
             TestHelper.RunInModelSystemContext("CreatingClient", (user, pSession, msSession) =>
             {
-                TestHelper.CreateRunClient(false, (runBus) =>
+                TestHelper.CreateRunClient(true, (runBus) =>
                 {
                     string error = null;
-                    Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), ref error), error);
+                    Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), out var id, ref error), error);
+                });
+            });
+        }
+
+        [TestMethod]
+        public void RunModelSystemToComplete()
+        {
+            TestHelper.RunInModelSystemContext("RunModelSystemToComplete", (user, pSession, msSession) =>
+            {
+                TestHelper.CreateRunClient(true, (runBus) =>
+                {
+                    string error = null;
+                    bool success = false;
+                    using (SemaphoreSlim sim = new SemaphoreSlim(0))
+                    {
+                        runBus.ClientFinishedModelSystem += (sender, e) =>
+                        {
+                            success = true;
+                            sim.Release();
+                        };
+                        runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                        {
+                            error = e;
+                            sim.Release();
+                        };
+                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), out var id, ref error), error);
+                        // give the models system some time to complete
+                        if (!sim.Wait(60000))
+                        {
+                            Assert.Fail("The model system failed to execute in time!");
+                        }
+                        Assert.IsTrue(success, "The model system failed to execute to success! " + error);
+                    }
                 });
             });
         }

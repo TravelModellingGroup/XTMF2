@@ -34,8 +34,11 @@ namespace XTMF2.Bus
         private bool Owner;
         private volatile bool Exit = false;
 
+        private Scheduler Runs;
+
         public RunBusClient(Stream serverStream, bool owner)
         {
+            Runs = new Scheduler(this);
             ClientHost = serverStream;
             Owner = owner;
         }
@@ -45,6 +48,7 @@ namespace XTMF2.Bus
             if (managed)
             {
                 GC.SuppressFinalize(this);
+                Runs.Dispose();
             }
             if (Owner)
             {
@@ -77,8 +81,51 @@ namespace XTMF2.Bus
             ClientExiting = 2,
             ClientFinishedModelSystem = 3,
             ClientErrorWhenRunningModelSystem = 4,
-            ProgressUpdate = 5,
-            SendModelSystemResult = 6
+            ClientErrorValidatingModelSystem = 5,
+            ProgressUpdate = 6,
+            SendModelSystemResult = 7
+        }
+
+        private object WriteLock = new object();
+
+        private void Write(Action<BinaryWriter> writeWith)
+        {
+            lock (WriteLock)
+            {
+                using (var writer = new BinaryWriter(ClientHost, Encoding.Unicode, true))
+                {
+                    writeWith(writer);
+                }
+            }
+        }
+
+        internal void ModelRunFailedValidation(RunContext context, string error)
+        {
+            Write((writer) =>
+            {
+                writer.Write((int)Out.ClientErrorValidatingModelSystem);
+                writer.Write(context.ID);
+                writer.Write(error);
+            });
+        }
+
+        internal void ModelRunFailed(RunContext context, string message, string stackTrace)
+        {
+            Write((writer) =>
+            {
+                writer.Write((int)(Out.ClientErrorWhenRunningModelSystem));
+                writer.Write(context.ID);
+                writer.Write(message);
+                writer.Write(stackTrace);
+            });
+        }
+
+        internal void ModelRunComplete(RunContext context)
+        {
+            Write((writer) =>
+            {
+                writer.Write((int)Out.ClientFinishedModelSystem);
+            });
         }
 
         private static MemoryStream CreateMemoryStreamLoadingFrom(Stream source, int bytes)
@@ -108,12 +155,15 @@ namespace XTMF2.Bus
                     {
                         case In.RunModelSystem:
                             {
-                                Console.WriteLine("Loading Model System");
+                                var id = reader.ReadString();
                                 var cwd = reader.ReadString();
                                 var msSize = (int)reader.ReadInt64();
                                 using (var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize))
                                 {
-
+                                    if (RunContext.CreateRunContext(id, mem.ToArray(), cwd, out var context))
+                                    {
+                                        Runs.Run(context);
+                                    }
                                 }
                             }
                             break;
