@@ -38,7 +38,7 @@ namespace XTMF2
         private ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
         private ObservableCollection<Link> _Links = new ObservableCollection<Link>();
 
-        public ReadOnlyObservableCollection<Link> Links => new ReadOnlyObservableCollection<Link>(_Links); 
+        public ReadOnlyObservableCollection<Link> Links => new ReadOnlyObservableCollection<Link>(_Links);
 
         public Boundary(string name, Boundary parent = null)
         {
@@ -117,6 +117,52 @@ namespace XTMF2
             return included;
         }
 
+        internal bool ConstructModules(ref string error)
+        {
+            lock (WriteLock)
+            {
+                foreach(var start in _Starts)
+                {
+                    if (!start.ConstructModule(ref error))
+                    {
+                        return false;
+                    }
+                }
+                foreach (var module in _Modules)
+                {
+                    if(!module.ConstructModule(ref error))
+                    {
+                        return false;
+                    }
+                }
+                // now construct all of the children
+                foreach (var child in Boundaries)
+                {
+                    if (!child.ConstructModules(ref error))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+
+        internal bool ConstructLinks(ref string error)
+        {
+            lock(WriteLock)
+            {
+                // now construct all of the children
+                foreach (var child in Boundaries)
+                {
+                    if (!child.ConstructLinks(ref error))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+
         public ReadOnlyObservableCollection<Boundary> Boundaries
         {
             get
@@ -136,7 +182,7 @@ namespace XTMF2
             {
                 Stack<Boundary> stack = new Stack<Boundary>();
                 var current = this;
-                while(current != null)
+                while (current != null)
                 {
                     stack.Push(current);
                     current = current.Parent;
@@ -202,13 +248,13 @@ namespace XTMF2
             {
                 return FailWith(ref error, "Unexpected token when reading boundary!");
             }
-            while(reader.Read() && reader.TokenType != JsonToken.EndObject)
+            while (reader.Read() && reader.TokenType != JsonToken.EndObject)
             {
-                if(reader.TokenType != JsonToken.PropertyName && reader.TokenType != JsonToken.Comment)
+                if (reader.TokenType != JsonToken.PropertyName && reader.TokenType != JsonToken.Comment)
                 {
                     return FailWith(ref error, "Unexpected token when reading boundary!");
                 }
-                switch(reader.Value)
+                switch (reader.Value)
                 {
                     case "Name":
                         Name = reader.ReadAsString();
@@ -217,13 +263,13 @@ namespace XTMF2
                         Description = reader.ReadAsString();
                         break;
                     case "Starts":
-                        if(!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                        if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
                         {
                             return FailWith(ref error, "Unexpected token when starting to read Starts for a boundary.");
                         }
-                        while(reader.Read() && reader.TokenType != JsonToken.EndArray)
+                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
                         {
-                            if(!Start.Load(session, structures, this, reader, out Start start, ref error))
+                            if (!Start.Load(session, structures, this, reader, out Start start, ref error))
                             {
                                 return false;
                             }
@@ -257,7 +303,7 @@ namespace XTMF2
                             if (reader.TokenType != JsonToken.Comment)
                             {
                                 var boundary = new Boundary(this);
-                                if(!boundary.Load(session, typeLookup, structures, reader, ref error))
+                                if (!boundary.Load(session, typeLookup, structures, reader, ref error))
                                 {
                                     return false;
                                 }
@@ -265,15 +311,15 @@ namespace XTMF2
                         }
                         break;
                     case "Links":
-                        if(!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                        if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
                         {
                             return FailWith(ref error, "Unexpected token when starting to read Links for a boundary.");
                         }
-                        while(reader.Read() && reader.TokenType != JsonToken.EndArray)
+                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
                         {
-                            if(reader.TokenType != JsonToken.Comment)
+                            if (reader.TokenType != JsonToken.Comment)
                             {
-                                if(!Link.Create(session, structures, reader, out var link, ref error))
+                                if (!Link.Create(session, structures, reader, out var link, ref error))
                                 {
                                     return false;
                                 }

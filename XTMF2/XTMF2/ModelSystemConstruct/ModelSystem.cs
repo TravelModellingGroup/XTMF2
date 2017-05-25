@@ -100,6 +100,17 @@ namespace XTMF2
             return false;
         }
 
+        /// <summary>
+        /// Generate the concrete model system for execution.
+        /// </summary>
+        /// <param name="error">An error message if it can not be constructed.</param>
+        /// <returns>True if it was created, false with message otherwise.</returns>
+        internal bool Construct(ref string error)
+        {
+            return GlobalBoundary.ConstructModules(ref error)
+                && GlobalBoundary.ConstructLinks(ref error);
+        }
+
         internal bool Save(ref string error, Stream saveTo)
         {
             return Save(ref error, saveTo, true);

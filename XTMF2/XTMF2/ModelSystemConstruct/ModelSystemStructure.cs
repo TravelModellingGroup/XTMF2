@@ -110,6 +110,17 @@ namespace XTMF2
         public string Description { get; protected set; }
 
         /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        internal bool ConstructModule(ref string error)
+        {
+            error = "Unable to construct modules right now!";
+            return false;
+        }
+
+        /// <summary>
         /// Change the name of the model system structure
         /// </summary>
         /// <param name="description">The description to change to</param>

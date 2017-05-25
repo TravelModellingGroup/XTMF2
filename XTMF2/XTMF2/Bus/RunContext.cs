@@ -26,19 +26,18 @@ namespace XTMF2.Bus
     public sealed class RunContext
     {
 
-        private string ModelSystem;
+        private string ModelSystemAsString;
         private readonly object CurrentWorkingDirectory;
-
         public bool HasExecuted { get; private set; }
-
         public string ID { get; private set; }
-
         public string StartToExecute { get; private set; }
+
+        private ModelSystem ModelSystem;
 
         public RunContext(string id, string modelSystem, string cwd, string start)
         {
             ID = id;
-            ModelSystem = modelSystem;
+            ModelSystemAsString = modelSystem;
             CurrentWorkingDirectory = cwd;
             HasExecuted = false;
             StartToExecute = start;
@@ -63,7 +62,8 @@ namespace XTMF2.Bus
 
         internal bool ValidateModelSystem(ref string error)
         {
-            if(!XTMF2.ModelSystem.Load(ModelSystem, out ModelSystem ms, ref error))
+            if(!XTMF2.ModelSystem.Load(ModelSystemAsString, out ModelSystem, ref error)
+                || !ModelSystem.Construct(ref error))
             {
                 return false;
             }
