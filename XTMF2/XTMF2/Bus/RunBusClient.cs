@@ -105,7 +105,7 @@ namespace XTMF2.Bus
             {
                 writer.Write((int)Out.ClientErrorValidatingModelSystem);
                 writer.Write(context.ID);
-                writer.Write(error);
+                writer.Write(error ?? "No error message!");
             });
         }
 
@@ -115,8 +115,8 @@ namespace XTMF2.Bus
             {
                 writer.Write((int)(Out.ClientErrorWhenRunningModelSystem));
                 writer.Write(context.ID);
-                writer.Write(message);
-                writer.Write(stackTrace);
+                writer.Write(message ?? String.Empty);
+                writer.Write(stackTrace ?? String.Empty);
             });
         }
 

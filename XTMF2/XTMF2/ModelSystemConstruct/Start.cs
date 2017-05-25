@@ -124,5 +124,44 @@ namespace XTMF2.ModelSystemConstruct
         {
             return (Start)MemberwiseClone();
         }
+
+        /// <summary>
+        /// Gets a start path from string
+        /// </summary>
+        /// <param name="startToExecute">The string containing the start path</param>
+        /// <returns>A list of boundaries and the final element being the start</returns>
+        internal static List<string> ParseStartString(string startToExecute)
+        {
+            var ret = new List<string>(4);
+            StringBuilder builder = new StringBuilder();
+            bool escaped = false;
+            foreach (var c in startToExecute)
+            {
+                if (c == '\\')
+                {
+                    if (escaped == true)
+                    {
+                        builder.Append(c);
+                    }
+                    escaped = !escaped;
+                    continue;
+                }
+                else if (escaped || c != '.')
+                {
+                    builder.Append(c);
+                    escaped = false;
+                }
+                else
+                {
+                    ret.Add(builder.ToString());
+                    builder.Clear();
+                }
+            }
+            if (builder.Length > 0)
+            {
+                ret.Add(builder.ToString());
+            }
+            return ret;
+        }
     }
 }

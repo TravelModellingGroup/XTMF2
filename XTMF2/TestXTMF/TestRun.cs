@@ -63,6 +63,10 @@ namespace TestXTMF
         {
             TestHelper.RunInModelSystemContext("RunModelSystemToComplete", (user, pSession, msSession) =>
             {
+                string error2 = null;
+                var ms = msSession.ModelSystem;
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
+
                 TestHelper.CreateRunClient(true, (runBus) =>
                 {
                     string error = null;
@@ -76,7 +80,7 @@ namespace TestXTMF
                         };
                         runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
                         {
-                            error = e;
+                            error = e + "\r\n" + stack;
                             sim.Release();
                         };
                         Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), "Start", out var id, ref error), error);

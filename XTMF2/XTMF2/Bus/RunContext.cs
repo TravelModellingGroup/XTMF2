@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.Bus
 {
@@ -62,12 +63,65 @@ namespace XTMF2.Bus
 
         internal bool ValidateModelSystem(ref string error)
         {
-            if(!XTMF2.ModelSystem.Load(ModelSystemAsString, out ModelSystem, ref error)
-                || !ModelSystem.Construct(ref error))
+            ModelSystem ms;
+            // Construct the model system
+            if (!XTMF2.ModelSystem.Load(ModelSystemAsString, out ms, ref error)
+                || !ms.Construct(ref error))
             {
                 return false;
             }
+            // Ensure that the starting point exists
+            ModelSystem = ms;
+           
+            if(!GetStart(Start.ParseStartString(StartToExecute),
+                out var s, ref error))
+            {
+                ModelSystem = null;
+                return false;
+            }
+            // if everything is fine store the constructed model system
+            
             return true;
+        }
+
+        private bool GetStart(List<string> startPath, out Start start, ref string error)
+        {
+            start = null;
+            if (startPath.Count == 0)
+            {
+                error = "No start path was defined!";
+                return false;
+            }
+            // get the boundary the start should be contained within.
+            Boundary current = ModelSystem.GlobalBoundary;
+            for (int i = 0; i < startPath.Count - 1; i++)
+            {
+                bool found = false;
+                foreach(var child in current.Boundaries)
+                {
+                    if(child.Name.Equals(startPath[i], StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = true;
+                        current = child;
+                    }
+                }
+                if(!found)
+                {
+                    error = $"Unable to find a child boundary named {startPath[i]} in parent boundary {current.Name}!";
+                    return false;
+                }
+            }
+            var startName = startPath[startPath.Count - 1];
+            foreach(var s in current.Starts)
+            {
+                if(startName.Equals(s.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    start = s;
+                    return true;
+                }
+            }
+            error = $"Unable to find {startName} within boundary = {current.FullPath}.";
+            return false;
         }
 
         internal bool Run(ref string error, ref string stackTrace)
