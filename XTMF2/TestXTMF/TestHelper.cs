@@ -131,7 +131,7 @@ namespace TestXTMF
             var id = startClientProcess ? Guid.NewGuid().ToString() : "123";
             string error = null;
             var xtmfRunFileName = typeof(XTMF2.Run.CreateStreams).GetTypeInfo().Assembly.Location;
-            var testFileName = typeof(TestHelper).GetTypeInfo().Assembly.Location;
+            var testFileName = Path.GetFullPath(typeof(TestHelper).GetTypeInfo().Assembly.Location);
             Process client = null;
             try
             {

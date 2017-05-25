@@ -2,7 +2,7 @@
   "profiles": {
     "XTMF.Run": {
       "commandName": "Project",
-      "commandLineArgs": "-namedPipe 123"
+      "commandLineArgs": "-loadDLL \"..\\TestXTMF\\bin\\Release\\netcoreapp1.1\\TestXTMF.dll\" -namedPipe 123"
     }
   }
 }

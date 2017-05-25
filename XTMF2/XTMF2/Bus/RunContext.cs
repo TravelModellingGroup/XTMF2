@@ -132,6 +132,7 @@ namespace XTMF2.Bus
             {
                 return false;
             }
+            var originalDir = Directory.GetCurrentDirectory();
             try
             {
                 Directory.CreateDirectory(CurrentWorkingDirectory);
@@ -143,6 +144,10 @@ namespace XTMF2.Bus
                 error = e.Message;
                 stackTrace = e.StackTrace;
                 return false;
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDir);
             }
             // success for now
             return true;
