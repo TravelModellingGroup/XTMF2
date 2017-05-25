@@ -34,9 +34,11 @@ namespace XTMF2.Bus
         public string StartToExecute { get; private set; }
 
         private ModelSystem ModelSystem;
+        private XTMFRuntime Runtime;
 
-        public RunContext(string id, string modelSystem, string cwd, string start)
+        public RunContext(XTMFRuntime runtime, string id, string modelSystem, string cwd, string start)
         {
+            Runtime = runtime;
             ID = id;
             ModelSystemAsString = modelSystem;
             CurrentWorkingDirectory = cwd;
@@ -44,14 +46,15 @@ namespace XTMF2.Bus
             StartToExecute = start;
         }
 
-        public static bool CreateRunContext(string id, byte[] modelSystem, string cwd, string start, out RunContext context)
+        public static bool CreateRunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd, 
+            string start, out RunContext context)
         {
             if(!Convert(modelSystem, out string modelSystemAsString))
             {
                 context = null;
                 return false;
             }
-            context = new RunContext(id, modelSystemAsString, cwd, start);
+            context = new RunContext(runtime, id, modelSystemAsString, cwd, start);
             return true;
         }
 
@@ -63,9 +66,8 @@ namespace XTMF2.Bus
 
         internal bool ValidateModelSystem(ref string error)
         {
-            ModelSystem ms;
             // Construct the model system
-            if (!XTMF2.ModelSystem.Load(ModelSystemAsString, out ms, ref error)
+            if (!XTMF2.ModelSystem.Load(ModelSystemAsString, Runtime, out ModelSystem ms, ref error)
                 || !ms.Construct(ref error))
             {
                 return false;

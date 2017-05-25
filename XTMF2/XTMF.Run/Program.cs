@@ -17,11 +17,13 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using XTMF2.Bus;
+using XTMF2.Configuration;
 using XTMF2.Run;
 
 namespace XTMF2.Run
@@ -33,14 +35,28 @@ namespace XTMF2.Run
         {
             if(args.Length == 0)
             {
-                Console.WriteLine("Usage: XTMF.Run [-remote SERVER_ADDRESS] [-namedPipe PIPE_NAME]");
+                Console.WriteLine("Usage: XTMF.Run [-loadDLL dllPath] [-config CONFIGURATION] [-remote SERVER_ADDRESS] [-namedPipe PIPE_NAME]");
                 return;
             }
+            List<string> dllsToLoad = new List<string>();
             string error = null;
             for(int i = 0; i < args.Length; i++)
             {
                 switch(args[i].ToLowerInvariant())
                 {
+                    case "-loaddll":
+                        if (i + 1 < args.Length)
+                        {
+                            dllsToLoad.Add(args[++i]);
+                        }
+                        else
+                        {
+                            Console.WriteLine("No second argument for a dll to load!");
+                        }
+                        break;
+                    case "-config":
+                        Console.WriteLine("Custom configurations are not supported yet.");
+                        return;
                     case "-remote":
                         Console.WriteLine("Remote connections are not supported yet.");
                         return;
@@ -55,7 +71,7 @@ namespace XTMF2.Run
                             Console.WriteLine("Error creating run client\r\n" + error);
                             return;
                         }
-                        RunClient(serverStream);
+                        RunClient(serverStream, dllsToLoad);
                         break;
                     default:
                         Console.WriteLine($"Unknown argument '{args[i]}'!");
@@ -64,9 +80,15 @@ namespace XTMF2.Run
             }
         }
 
-        private static void RunClient(Stream serverStream)
+        private static void RunClient(Stream serverStream, List<string> extraDlls, SystemConfiguration config = null)
         {
-            using (var clientBus = new RunBusClient(serverStream, true))
+            var runtime = XTMFRuntime.CreateRuntime(config);
+            var loadedConfig = runtime.SystemConfiguration;
+            foreach(var dll in extraDlls)
+            {
+                loadedConfig.LoadAssembly(dll);
+            }
+            using (var clientBus = new RunBusClient(serverStream, true, runtime))
             {
                 clientBus.ProcessRequests();
             }

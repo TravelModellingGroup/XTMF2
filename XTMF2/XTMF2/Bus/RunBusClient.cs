@@ -35,9 +35,11 @@ namespace XTMF2.Bus
         private volatile bool Exit = false;
 
         private Scheduler Runs;
+        public XTMFRuntime Runtime { get; private set; }
 
-        public RunBusClient(Stream serverStream, bool owner)
+        public RunBusClient(Stream serverStream, bool owner, XTMFRuntime runtime)
         {
+            Runtime = runtime;
             Runs = new Scheduler(this);
             ClientHost = serverStream;
             Owner = owner;
@@ -161,7 +163,7 @@ namespace XTMF2.Bus
                                 var msSize = (int)reader.ReadInt64();
                                 using (var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize))
                                 {
-                                    if (RunContext.CreateRunContext(id, mem.ToArray(), cwd, start, out var context))
+                                    if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, out var context))
                                     {
                                         Runs.Run(context);
                                     }

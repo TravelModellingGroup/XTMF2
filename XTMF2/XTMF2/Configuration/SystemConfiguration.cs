@@ -24,6 +24,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using XTMF2.Editing;
 using XTMF2.Repository;
+using System.Runtime.Loader;
 
 namespace XTMF2.Configuration
 {
@@ -48,13 +49,19 @@ namespace XTMF2.Configuration
             }
         }
 
+        public void LoadAssembly(string path)
+        {
+            var fullPath = Path.GetFullPath(path);
+            LoadAssembly(AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath));
+        }
+
         private void LoadTypes()
         {
             Modules = new ModuleRepository();
             Types = new TypeRepository();
             // Load the entry assembly for types
             LoadAssembly(Assembly.GetEntryAssembly());
-            // Load the
+            // Load the baked in XTMF2 modules
             LoadAssembly(typeof(SystemConfiguration).GetTypeInfo().Assembly);
         }
 

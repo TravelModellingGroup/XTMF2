@@ -22,6 +22,7 @@ using System.Collections.Generic;
 using XTMF2.Editing;
 using Newtonsoft.Json;
 using System.Collections.ObjectModel;
+using System.Reflection;
 
 namespace XTMF2
 {
@@ -63,6 +64,8 @@ namespace XTMF2
         public string Name { get; protected set; }
 
         public Point Location { get; protected set; }
+
+        public IModule Module { get; private set; }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -109,6 +112,8 @@ namespace XTMF2
         /// </summary>
         public string Description { get; protected set; }
 
+        private static Type[] EmptyConstructor = new Type[] { };
+
         /// <summary>
         /// 
         /// </summary>
@@ -116,8 +121,9 @@ namespace XTMF2
         /// <returns></returns>
         internal bool ConstructModule(ref string error)
         {
-            error = "Unable to construct modules right now!";
-            return false;
+            var constructor = Type.GetTypeInfo().GetConstructor(EmptyConstructor);
+            Module = (IModule)constructor.Invoke(EmptyConstructor);
+            return true;
         }
 
         /// <summary>

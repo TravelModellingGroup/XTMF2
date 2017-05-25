@@ -185,11 +185,12 @@ namespace XTMF2
             }
         }
 
-        internal static bool Load(string modelSystem, out ModelSystem ms, ref string error)
+        internal static bool Load(string modelSystem, XTMFRuntime runtime, out ModelSystem ms, ref string error)
         {
             using (MemoryStream stream = new MemoryStream(Encoding.Unicode.GetBytes(modelSystem)))
             {
-                ms = Load(stream, null, new ModelSystemHeader(null, null, null), ref error);
+                var header = ModelSystemHeader.CreateRunHeader(runtime);
+                ms = Load(stream, ModelSystemSession.CreateRunSession(ProjectSession.CreateRunSession(runtime), header), header, ref error);
                 return ms != null;
             }
         }

@@ -107,5 +107,13 @@ namespace XTMF2
             }
             return new ModelSystemHeader(project, name, description);
         }
+
+        internal static ModelSystemHeader CreateRunHeader(XTMFRuntime runtime)
+        {
+            return new ModelSystemHeader(null, "Run")
+            {
+                
+            };
+        }
     }
 }

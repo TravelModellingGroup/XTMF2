@@ -216,6 +216,11 @@ namespace XTMF2.Editing
             }
         }
 
+        internal static ProjectSession CreateRunSession(XTMFRuntime runtime)
+        {
+            return new ProjectSession(runtime, null);
+        }
+
         /// <summary>
         /// Give ownership of a project to a different user
         /// </summary>

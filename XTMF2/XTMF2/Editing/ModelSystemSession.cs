@@ -209,5 +209,15 @@ namespace XTMF2.Editing
                 return success;
             }
         }
+
+        /// <summary>
+        /// Create a model system session to use for a run
+        /// </summary>
+        /// <param name="runtime">The XTMF runtime the run will occur in</param>
+        /// <returns></returns>
+        internal static ModelSystemSession CreateRunSession(ProjectSession session, ModelSystemHeader header)
+        {
+            return new ModelSystemSession(session, header);
+        }
     }
 }

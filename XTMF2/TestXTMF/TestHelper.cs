@@ -131,6 +131,7 @@ namespace TestXTMF
             var id = startClientProcess ? Guid.NewGuid().ToString() : "123";
             string error = null;
             var xtmfRunFileName = typeof(XTMF2.Run.CreateStreams).GetTypeInfo().Assembly.Location;
+            var testFileName = typeof(TestHelper).GetTypeInfo().Assembly.Location;
             Process client = null;
             try
             {
@@ -145,7 +146,7 @@ namespace TestXTMF
                             var startInfo = new ProcessStartInfo()
                             {
                                 FileName = "dotnet",
-                                Arguments = $"\"{xtmfRunFileName}\" -namedPipe \"{id}\"",
+                                Arguments = $"\"{xtmfRunFileName}\" -loadDLL \"{testFileName}\" -namedPipe \"{id}\"",
                                 CreateNoWindow = false
                             };
                             client = new Process()
