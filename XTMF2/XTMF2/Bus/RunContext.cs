@@ -28,7 +28,7 @@ namespace XTMF2.Bus
     {
 
         private string ModelSystemAsString;
-        private readonly object CurrentWorkingDirectory;
+        private readonly string CurrentWorkingDirectory;
         public bool HasExecuted { get; private set; }
         public string ID { get; private set; }
         public string StartToExecute { get; private set; }
@@ -128,6 +128,22 @@ namespace XTMF2.Bus
 
         internal bool Run(ref string error, ref string stackTrace)
         {
+            if(!GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error))
+            {
+                return false;
+            }
+            try
+            {
+                Directory.CreateDirectory(CurrentWorkingDirectory);
+                Directory.SetCurrentDirectory(CurrentWorkingDirectory);
+                ((IAction)startingMss.Module).Invoke();
+            }
+            catch(Exception e)
+            {
+                error = e.Message;
+                stackTrace = e.StackTrace;
+                return false;
+            }
             // success for now
             return true;
         }

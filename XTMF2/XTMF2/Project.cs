@@ -45,6 +45,9 @@ namespace XTMF2
         ObservableCollection<User> _AdditionalUsers = new ObservableCollection<User>();
         ObservableCollection<ModelSystemHeader> _ModelSystems = new ObservableCollection<ModelSystemHeader>();
         public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => new ReadOnlyObservableCollection<ModelSystemHeader>(_ModelSystems);
+
+        public string RunsDirectory => Path.Combine(ProjectDirectory, "Runs");
+
         private object ProjectLock = new object();
 
         public event PropertyChangedEventHandler PropertyChanged;

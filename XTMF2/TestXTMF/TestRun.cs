@@ -86,7 +86,7 @@ namespace TestXTMF
                             error = e + "\r\n" + stack;
                             sim.Release();
                         };
-                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), "Start", out var id, ref error), error);
+                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "Start", out var id, ref error), error);
                         // give the models system some time to complete
                         if (!sim.Wait(200000))
                         {

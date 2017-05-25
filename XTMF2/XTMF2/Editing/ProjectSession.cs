@@ -43,6 +43,8 @@ namespace XTMF2.Editing
 
         public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => Project.ModelSystems;
 
+        public string RunsDirectory => Project.RunsDirectory;
+
         internal ProjectSession AddReference()
         {
             Interlocked.Increment(ref _References);
