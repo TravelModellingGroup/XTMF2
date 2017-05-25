@@ -157,10 +157,11 @@ namespace XTMF2.Bus
                             {
                                 var id = reader.ReadString();
                                 var cwd = reader.ReadString();
+                                var start = reader.ReadString();
                                 var msSize = (int)reader.ReadInt64();
                                 using (var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize))
                                 {
-                                    if (RunContext.CreateRunContext(id, mem.ToArray(), cwd, out var context))
+                                    if (RunContext.CreateRunContext(id, mem.ToArray(), cwd, start, out var context))
                                     {
                                         Runs.Run(context);
                                     }

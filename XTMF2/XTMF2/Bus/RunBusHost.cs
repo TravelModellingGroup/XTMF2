@@ -189,9 +189,11 @@ namespace XTMF2.Bus
         /// </summary>
         /// <param name="modelSystem">The model system to execute</param>
         /// <param name="cwd">The directory to run in.</param>
+        /// <param name="startToExecute">The starting point for the model system run</param>
+        /// <param name="id">The ID given to this model run.</param>
         /// <param name="error">An error message if there is an issue creating the model system.</param>
         /// <returns>True if the model system was sent</returns>
-        public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, out string id, ref string error)
+        public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, out string id, ref string error)
         {
             id = null;
             lock (OutLock)
@@ -211,6 +213,7 @@ namespace XTMF2.Bus
                         writer.Write((int)Out.RunModelSystem);
                         writer.Write(id);
                         writer.Write(cwd);
+                        writer.Write(startToExecute);
                         writer.Write(memStream.Length);
                         memStream.WriteTo(HostStream);
                         return true;

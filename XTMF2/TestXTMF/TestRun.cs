@@ -53,7 +53,7 @@ namespace TestXTMF
                 TestHelper.CreateRunClient(true, (runBus) =>
                 {
                     string error = null;
-                    Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), out var id, ref error), error);
+                    Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), "Start", out var id, ref error), error);
                 });
             });
         }
@@ -79,9 +79,9 @@ namespace TestXTMF
                             error = e;
                             sim.Release();
                         };
-                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), out var id, ref error), error);
+                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), "Start", out var id, ref error), error);
                         // give the models system some time to complete
-                        if (!sim.Wait(60000))
+                        if (!sim.Wait(2000))
                         {
                             Assert.Fail("The model system failed to execute in time!");
                         }

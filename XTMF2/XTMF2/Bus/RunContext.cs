@@ -33,22 +33,25 @@ namespace XTMF2.Bus
 
         public string ID { get; private set; }
 
-        public RunContext(string id, string modelSystem, string cwd)
+        public string StartToExecute { get; private set; }
+
+        public RunContext(string id, string modelSystem, string cwd, string start)
         {
             ID = id;
             ModelSystem = modelSystem;
             CurrentWorkingDirectory = cwd;
             HasExecuted = false;
+            StartToExecute = start;
         }
 
-        public static bool CreateRunContext(string id, byte[] modelSystem, string cwd, out RunContext context)
+        public static bool CreateRunContext(string id, byte[] modelSystem, string cwd, string start, out RunContext context)
         {
             if(!Convert(modelSystem, out string modelSystemAsString))
             {
                 context = null;
                 return false;
             }
-            context = new RunContext(id, modelSystemAsString, cwd);
+            context = new RunContext(id, modelSystemAsString, cwd, start);
             return true;
         }
 
