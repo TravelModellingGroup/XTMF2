@@ -207,7 +207,7 @@ namespace XTMF2
             writer.WriteEndObject();
         }
 
-        internal static bool Load(Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
+        internal static bool Load(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
             Boundary boundary, JsonTextReader reader, out ModelSystemStructure mss, ref string error)
         {
             if (reader.TokenType != JsonToken.StartObject)
@@ -270,14 +270,21 @@ namespace XTMF2
                 Location = point,
                 ContainedWithin = boundary,
             };
+            if (!mss.SetType(session, type, ref error))
+            {
+                return false;
+            }
             structures.Add(index, mss);
             return true;
         }
 
-        internal static ModelSystemStructure Create(ModelSystemSession session, string name, Type type)
+        internal static ModelSystemStructure Create(ModelSystemSession session, string name, Type type, Boundary boundary)
         {
             string error = null;
-            var ret = new ModelSystemStructure(name);
+            var ret = new ModelSystemStructure(name)
+            {
+                ContainedWithin = boundary
+            };
             if(!ret.SetType(session, type, ref error))
             {
                 return null;

@@ -40,6 +40,10 @@ namespace XTMF2
 
         protected static HookCardinality GetCardinality(Type type, bool required)
         {
+            if(typeof(IModule).GetTypeInfo().IsAssignableFrom(type))
+            {
+                return HookCardinality.Single;
+            }
             if (type.IsArray)
             {
                 return required ? HookCardinality.AtLeastOne : HookCardinality.AnyNumber;
@@ -51,6 +55,13 @@ namespace XTMF2
             }
             return HookCardinality.Single;
         }
+
+        /// <summary>
+        /// Both origin and destination must be already created!
+        /// </summary>
+        /// <param name="origin"></param>
+        /// <param name="destination"></param>
+        internal abstract void Install(ModelSystemStructure origin, ModelSystemStructure destination);
     }
 
     // Cardinality 
@@ -68,7 +79,7 @@ namespace XTMF2
     {
         readonly PropertyInfo Property;
         public PropertyHook(string name, PropertyInfo property, bool required)
-            :base(name, GetCardinality(property, required))
+            : base(name, GetCardinality(property, required))
         {
             Property = property;
         }
@@ -76,6 +87,20 @@ namespace XTMF2
         private static HookCardinality GetCardinality(PropertyInfo property, bool required)
         {
             return ModelSystemStructureHook.GetCardinality(property.PropertyType, required);
+        }
+
+        internal override void Install(ModelSystemStructure origin, ModelSystemStructure destination)
+        {
+            switch (Cardinality)
+            {
+                case HookCardinality.Single:
+                    {
+                        Property.SetValue(origin.Module, destination.Module);
+                    }
+                    break;
+                default:
+                    throw new NotImplementedException("List cardinalities not implemented");
+            }
         }
     }
 
@@ -94,6 +119,20 @@ namespace XTMF2
         private static HookCardinality GetCardinality(FieldInfo field, bool required)
         {
             return ModelSystemStructureHook.GetCardinality(field.FieldType, required);
+        }
+
+        internal override void Install(ModelSystemStructure origin, ModelSystemStructure destination)
+        {
+            switch (Cardinality)
+            {
+                case HookCardinality.Single:
+                    {
+                        Field.SetValue(origin.Module, destination.Module);
+                    }
+                    break;
+                default:
+                    throw new NotImplementedException("List cardinalities not implemented");
+            }
         }
     }
 }

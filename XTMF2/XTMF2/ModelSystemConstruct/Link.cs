@@ -149,5 +149,10 @@ namespace XTMF2
             };
             return true;
         }
+
+        internal void Construct()
+        {
+            OriginHook.Install(Origin, Destination);
+        }
     }
 }

@@ -27,7 +27,8 @@ namespace XTMF2.Repository
 {
     public sealed class ModuleRepository
     {
-        private ConcurrentDictionary<Type, (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)> Data = new ConcurrentDictionary<Type, (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)>();
+        private ConcurrentDictionary<Type, (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)> Data
+            = new ConcurrentDictionary<Type, (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)>();
         private static TypeInfo IModuleTypeInfo = typeof(IModule).GetTypeInfo();
 
         public void Add(Type type)
@@ -165,7 +166,11 @@ namespace XTMF2.Repository
         {
             get
             {
-                Data.TryGetValue(type, out var ret);
+                if (!Data.TryGetValue(type, out var ret))
+                {
+                    Add(type);
+                    Data.TryGetValue(type, out ret);
+                }
                 return ret;
             }
         }

@@ -66,7 +66,10 @@ namespace TestXTMF
                 string error2 = null;
                 var ms = msSession.ModelSystem;
                 Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
-
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(Ignore<string>), out var ignoreMSS, ref error2), error2);
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyFunction", typeof(SimpleTestModule), out var stm, ref error2), error2);
+                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, ref error2), error2);
+                Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], stm, out var ignoreLink2, ref error2), error2);
                 TestHelper.CreateRunClient(true, (runBus) =>
                 {
                     string error = null;
@@ -85,7 +88,7 @@ namespace TestXTMF
                         };
                         Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), "Start", out var id, ref error), error);
                         // give the models system some time to complete
-                        if (!sim.Wait(2000))
+                        if (!sim.Wait(200000))
                         {
                             Assert.Fail("The model system failed to execute in time!");
                         }

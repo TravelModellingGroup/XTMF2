@@ -151,6 +151,10 @@ namespace XTMF2
         {
             lock(WriteLock)
             {
+                foreach(var link in _Links)
+                {
+                    link.Construct();
+                }
                 // now construct all of the children
                 foreach (var child in Boundaries)
                 {
@@ -285,7 +289,7 @@ namespace XTMF2
                         {
                             if (reader.TokenType != JsonToken.Comment)
                             {
-                                if (!ModelSystemStructure.Load(typeLookup, structures, this, reader, out ModelSystemStructure mss, ref error))
+                                if (!ModelSystemStructure.Load(session, typeLookup, structures, this, reader, out ModelSystemStructure mss, ref error))
                                 {
                                     return false;
                                 }
@@ -411,7 +415,7 @@ namespace XTMF2
 
         internal bool AddModelSystemStructure(ModelSystemSession session, string name, Type type, out ModelSystemStructure mss, ref string error)
         {
-            mss = ModelSystemStructure.Create(session, name, type);
+            mss = ModelSystemStructure.Create(session, name, type, this);
             _Modules.Add(mss);
             return true;
         }
