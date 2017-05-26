@@ -79,6 +79,11 @@ namespace XTMF2.Repository
             foreach (var field in typeInfo.DeclaredFields)
             {
                 var mType = field.FieldType;
+                var isArray = mType.IsArray;
+                if(isArray)
+                {
+                    mType = mType.GetElementType();
+                }
                 var mInfo = mType.GetTypeInfo();
                 if (IModuleTypeInfo.IsAssignableFrom(mType))
                 {
@@ -121,6 +126,11 @@ namespace XTMF2.Repository
             foreach (var property in typeInfo.DeclaredProperties)
             {
                 var mType = property.PropertyType;
+                var isArray = mType.IsArray;
+                if (isArray)
+                {
+                    mType = mType.GetElementType();
+                }
                 var mInfo = mType.GetTypeInfo();
                 if (IModuleTypeInfo.IsAssignableFrom(mType))
                 {

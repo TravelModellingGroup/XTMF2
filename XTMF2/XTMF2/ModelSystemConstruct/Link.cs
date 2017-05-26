@@ -23,13 +23,14 @@ using System.Text;
 using Newtonsoft.Json;
 using XTMF2.Editing;
 using System.Linq;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2
 {
     /// <summary>
     /// Defines a directional connection between two model system structures
     /// </summary>
-    public sealed class Link : INotifyPropertyChanged
+    public abstract class Link : INotifyPropertyChanged
     {
         public ModelSystemStructure Origin { get; internal set; }
         public ModelSystemStructure Destination { get; internal set; }
@@ -53,27 +54,10 @@ namespace XTMF2
             return true;
         }
 
-        public Link Clone()
-        {
-            return new Link()
-            {
-                Origin = Origin,
-                Destination = Destination
-            };
-        }
+        public abstract Link Clone();
 
-        internal void Save(Dictionary<ModelSystemStructure, int> moduleDictionary, JsonTextWriter writer)
-        {
-            writer.WriteStartObject();
-            writer.WritePropertyName("Origin");
-            writer.WriteValue(moduleDictionary[Origin]);
-            writer.WritePropertyName("Hook");
-            writer.WriteValue(OriginHook.Name);
-            writer.WritePropertyName("Destination");
-            writer.WriteValue(moduleDictionary[Destination]);
-            writer.WriteEndObject();
-        }
-
+        internal abstract void Save(Dictionary<ModelSystemStructure, int> moduleDictionary, JsonTextWriter writer);
+        
         private static bool FailWith(out Link link, ref string error, string message)
         {
             link = null;
@@ -89,6 +73,7 @@ namespace XTMF2
             }
             ModelSystemStructure origin = null, destination = null;
             string hookName = null;
+            int listIndex = 0;
             // read in the values
             while(reader.Read() && reader.TokenType != JsonToken.EndObject)
             {
@@ -119,6 +104,11 @@ namespace XTMF2
                             destination = structures[index];
                         }
                         break;
+                    case "Index":
+                        {
+                            listIndex = (int)reader.ReadAsInt32();
+                        }
+                        break;
                     default:
                         return FailWith(out link, ref error, "Unknown parameter type when loading link " + reader.Value);
                 }
@@ -141,7 +131,7 @@ namespace XTMF2
             {
                 return FailWith(out link, ref error, "Unable to find a hook with the name " + hookName);
             }
-            link = new Link()
+            link = new SingleLink()
             {
                 Origin = origin,
                 OriginHook = hook,
@@ -150,9 +140,7 @@ namespace XTMF2
             return true;
         }
 
-        internal void Construct()
-        {
-            OriginHook.Install(Origin, Destination);
-        }
+        internal abstract void Construct();
+        
     }
 }

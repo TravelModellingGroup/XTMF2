@@ -340,13 +340,45 @@ namespace XTMF2
 
         internal bool AddLink(ModelSystemStructure origin, ModelSystemStructureHook originHook, ModelSystemStructure destination, out Link link, ref string error)
         {
-            link = new Link()
+            switch(originHook.Cardinality)
             {
-                Origin = origin,
-                OriginHook = originHook,
-                Destination = destination
-            };
-            _Links.Add(link);
+                case HookCardinality.Single:
+                    link = new SingleLink()
+                    {
+                        Origin = origin,
+                        OriginHook = originHook,
+                        Destination = destination
+                    };
+                    _Links.Add(link);
+                    break;
+                default:
+                    {
+                        var previous = _Links.FirstOrDefault(l => l.Origin == origin && l.OriginHook == originHook);
+                        if (previous != null)
+                        {
+                            link = previous;
+                        }
+                        else
+                        {
+                            link = new MultiLink()
+                            {
+                                Origin = origin,
+                                OriginHook = originHook
+                            };
+                        }
+                        if (!((MultiLink)link).AddDestination(destination, ref error))
+                        {
+                            link = null;
+                            return false;
+                        }
+                        // if we are successful and it didn't already exist add it to our list
+                        if(previous == null)
+                        {
+                            _Links.Add(link);
+                        }
+                    }
+                    break;
+            }
             return true;
         }
 

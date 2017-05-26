@@ -40,18 +40,13 @@ namespace XTMF2
 
         protected static HookCardinality GetCardinality(Type type, bool required)
         {
-            if(typeof(IModule).GetTypeInfo().IsAssignableFrom(type))
-            {
-                return HookCardinality.Single;
-            }
             if (type.IsArray)
             {
                 return required ? HookCardinality.AtLeastOne : HookCardinality.AnyNumber;
             }
-            var genericArguments = type.GenericTypeArguments;
-            if (genericArguments.Length > 0)
+            if (typeof(IModule).GetTypeInfo().IsAssignableFrom(type))
             {
-                return required ? HookCardinality.AtLeastOne : HookCardinality.AnyNumber;
+                return HookCardinality.Single;
             }
             return HookCardinality.Single;
         }
@@ -61,7 +56,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="origin"></param>
         /// <param name="destination"></param>
-        internal abstract void Install(ModelSystemStructure origin, ModelSystemStructure destination);
+        internal abstract void Install(ModelSystemStructure origin, ModelSystemStructure destination, int index);
     }
 
     // Cardinality 
@@ -89,13 +84,21 @@ namespace XTMF2
             return ModelSystemStructureHook.GetCardinality(property.PropertyType, required);
         }
 
-        internal override void Install(ModelSystemStructure origin, ModelSystemStructure destination)
+        internal override void Install(ModelSystemStructure origin, ModelSystemStructure destination, int index)
         {
             switch (Cardinality)
             {
                 case HookCardinality.Single:
                     {
                         Property.SetValue(origin.Module, destination.Module);
+                    }
+                    break;
+                case HookCardinality.AnyNumber:
+                case HookCardinality.AtLeastOne:
+                    {
+                        // the type is an array
+                        var data = (Array)Property.GetValue(origin.Module);
+                        data.SetValue(destination.Module, index);
                     }
                     break;
                 default:
@@ -121,7 +124,7 @@ namespace XTMF2
             return ModelSystemStructureHook.GetCardinality(field.FieldType, required);
         }
 
-        internal override void Install(ModelSystemStructure origin, ModelSystemStructure destination)
+        internal override void Install(ModelSystemStructure origin, ModelSystemStructure destination, int index)
         {
             switch (Cardinality)
             {
