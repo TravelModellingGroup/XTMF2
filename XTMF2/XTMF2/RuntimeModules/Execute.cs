@@ -49,7 +49,7 @@ namespace XTMF2.RuntimeModules
             {
                 foreach (var module in ToInvoke)
                 {
-                    module.Invoke();
+                    module?.Invoke();
                 }
             }
         }
@@ -86,7 +86,7 @@ namespace XTMF2.RuntimeModules
                 {
                     foreach (var module in ToInvoke)
                     {
-                        module.Invoke(context);
+                        module?.Invoke(context);
                     }
                 }
             }
