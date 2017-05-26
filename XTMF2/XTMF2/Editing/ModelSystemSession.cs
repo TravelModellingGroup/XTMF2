@@ -142,6 +142,22 @@ namespace XTMF2.Editing
             }
         }
 
+        public bool SetParameterValue(User user, ModelSystemStructure basicParameter, string value, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (basicParameter == null)
+            {
+                throw new ArgumentNullException(nameof(basicParameter));
+            }
+            lock (SessionLock)
+            {
+                return basicParameter.SetParameterValue(this, value, ref error);
+            }
+        }
+
         /// <summary>
         /// Save the model system
         /// </summary>

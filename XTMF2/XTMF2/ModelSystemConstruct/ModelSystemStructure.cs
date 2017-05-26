@@ -23,6 +23,8 @@ using XTMF2.Editing;
 using Newtonsoft.Json;
 using System.Collections.ObjectModel;
 using System.Reflection;
+using XTMF2.RuntimeModules;
+using System.Collections.Concurrent;
 
 namespace XTMF2
 {
@@ -46,6 +48,11 @@ namespace XTMF2
         /// The type that this will represent
         /// </summary>
         public Type Type => _Type;
+
+        /// <summary>
+        /// A parameter value to use if this is a parameter type
+        /// </summary>
+        public string ParameterValue { get; private set; }
 
         /// <summary>
         /// Create the hooks for the model system structure
@@ -107,12 +114,23 @@ namespace XTMF2
             return true;
         }
 
+        public bool SetParameterValue(ModelSystemSession sesson, string value, ref string error)
+        {
+            ParameterValue = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ParameterValue)));
+            return true;
+        }
+
         /// <summary>
         /// An optional description for this model system structure
         /// </summary>
         public string Description { get; protected set; }
 
         private static Type[] EmptyConstructor = new Type[] { };
+
+        private static Type GenericParameter = typeof(BasicParameter<>);
+
+        private static ConcurrentDictionary<Type,FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
 
         /// <summary>
         /// 
@@ -123,6 +141,21 @@ namespace XTMF2
         {
             var constructor = Type.GetTypeInfo().GetConstructor(EmptyConstructor);
             Module = (IModule)constructor.Invoke(EmptyConstructor);
+            if(Type.IsConstructedGenericType && Type.GetGenericTypeDefinition() == GenericParameter)
+            {
+                var paramType = Type.GenericTypeArguments[0];
+                var vals = ArbitraryParameterParser.ArbitraryParameterParse(paramType, ParameterValue, ref error);
+                if(!vals.Sucess)
+                {
+                    return false;
+                }
+                if (!GenericValue.TryGetValue(_Type, out var info))
+                {
+                    info = _Type.GetRuntimeField("Value");
+                    GenericValue[paramType] = info;
+                }
+                info.SetValue(Module, vals.Value);
+            }
             return true;
         }
 
@@ -204,6 +237,11 @@ namespace XTMF2
             writer.WriteValue(Location.Y);
             writer.WritePropertyName("Index");
             writer.WriteValue(index++);
+            if(!String.IsNullOrEmpty(ParameterValue))
+            {
+                writer.WritePropertyName("Parameter");
+                writer.WriteValue(ParameterValue);
+            }
             writer.WriteEndObject();
         }
 
@@ -219,6 +257,7 @@ namespace XTMF2
             int index = -1;
             Point point = new Point();
             string description = null;
+            string parameter = null;
             while (reader.Read() && reader.TokenType != JsonToken.EndObject)
             {
                 if (reader.TokenType == JsonToken.Comment) continue;
@@ -252,6 +291,11 @@ namespace XTMF2
                             }
                         }
                         break;
+                    case "Parameter":
+                        {
+                            parameter = reader.ReadAsString();   
+                        }
+                        break;
                     default:
                         return FailWith(out mss, ref error, $"Undefined parameter type {reader.Value} when loading a start!");
                 }
@@ -269,6 +313,7 @@ namespace XTMF2
                 Description = description,
                 Location = point,
                 ContainedWithin = boundary,
+                ParameterValue = parameter
             };
             if (!mss.SetType(session, type, ref error))
             {
