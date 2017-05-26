@@ -28,7 +28,7 @@ namespace XTMF2.RuntimeModules
 
         private T CachedValue;
         private bool Initialized = false;
-        private bool Registered = false;
+
 
         [SubModule(Required = true, Name = "Source", Description = "Get the cached data")]
         public IFunction<T> Source;
@@ -42,22 +42,23 @@ namespace XTMF2.RuntimeModules
             {
                 if(!Initialized)
                 {
-                    if (!Registered)
-                    {
-                        ForceUpdate?.Register(() =>
-                        {
-                            lock (Lock)
-                            {
-                                Initialized = false;
-                            }
-                        });
-                        Registered = true;
-                    }
                     CachedValue = Source.Invoke();
                     Initialized = true;
                 }
                 return CachedValue;
             }
+        }
+
+        public override bool RuntimeValidation(ref string error)
+        {
+            ForceUpdate?.Register(() =>
+            {
+                lock (Lock)
+                {
+                    Initialized = false;
+                }
+            });
+            return true;
         }
     }
 }
