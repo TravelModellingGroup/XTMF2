@@ -23,13 +23,11 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    public sealed class BasicEvent : IEvent
+    public sealed class BasicEvent : BaseEvent
     {
-        public string Name { get; set; }
-
         private List<Action> ToInvoke = new List<Action>();
 
-        public void Invoke()
+        public override void Invoke()
         {
             // make a copy in case the invocation causes an additional registration
             List<Action> copy;
@@ -43,7 +41,7 @@ namespace XTMF2.RuntimeModules
             }
         }
 
-        public void Register(Action module)
+        public override void Register(Action module)
         {
             lock(ToInvoke)
             {
@@ -52,13 +50,11 @@ namespace XTMF2.RuntimeModules
         }
     }
 
-    public sealed class BasicEvent<Context> : IEvent<Context>
+    public sealed class BasicEvent<Context> : BaseEvent<Context>
     {
-        public string Name { get; set; }
-
         private List<Action<Context>> ToInvoke = new List<Action<Context>>();
 
-        public void Invoke(Context context)
+        public override void Invoke(Context context)
         {
             // make a copy in case the invocation causes an additional registration
             List<Action<Context>> copy;
@@ -72,7 +68,7 @@ namespace XTMF2.RuntimeModules
             }
         }
 
-        public void Register(Action<Context> module)
+        public override void Register(Action<Context> module)
         {
             lock (ToInvoke)
             {

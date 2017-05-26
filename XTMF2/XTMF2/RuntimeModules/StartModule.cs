@@ -25,14 +25,12 @@ namespace XTMF2.RuntimeModules
     /// <summary>
     /// The type used for a model system structure start
     /// </summary>
-    public sealed class StartModule : IAction
+    public sealed class StartModule : BaseAction
     {
-        public string Name { get; set; }
-
         [SubModule(Name = "ToExecute", Description = "The module to invoke when executing this start.")]
         public IAction ToExecute;
 
-        public void Invoke()
+        public override void Invoke()
         {
             ToExecute?.Invoke();
         }

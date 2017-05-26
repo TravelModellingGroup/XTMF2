@@ -22,10 +22,8 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    public class Cache<T> : IFunction<T>
+    public class Cache<T> : BaseFunction<T>
     {
-        public string Name { get; set; }
-
         object Lock = new object();
 
         private T CachedValue;
@@ -38,7 +36,7 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "ForceUpdate", Description = "Invoke to force an update")]
         public IEvent ForceUpdate;
 
-        public T Invoke()
+        public override T Invoke()
         {
             lock (Lock)
             {

@@ -22,13 +22,11 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    public sealed class BasicParameter<T> : IFunction<T>
+    public sealed class BasicParameter<T> : BaseFunction<T>
     {
         public T Value;
 
-        public string Name { get; set; }
-
-        public T Invoke()
+        public override T Invoke()
         {
             return Value;
         }

@@ -28,9 +28,33 @@ namespace XTMF2
         Result Invoke();
     }
 
+    public abstract class BaseFunction<Result> : IFunction<Result>
+    {
+        public string Name { get; set; }
+
+        public abstract Result Invoke();
+
+        public virtual bool RuntimeValidation(ref string error)
+        {
+            return true;
+        }
+    }
+
     public interface IFunction<Context,Result> : IModule
     {   
         Result Invoke(Context context);
+    }
+
+    public abstract class BaseFunction<Context, Result> : IFunction<Context, Result>
+    {
+        public string Name { get; set; }
+
+        public abstract Result Invoke(Context context);
+
+        public virtual bool RuntimeValidation(ref string error)
+        {
+            return true;
+        }
     }
 
     public interface IAction : IModule
@@ -38,9 +62,33 @@ namespace XTMF2
         void Invoke();
     }
 
+    public abstract class BaseAction : IAction
+    {
+        public string Name { get; set; }
+
+        public abstract void Invoke();
+
+        public virtual bool RuntimeValidation(ref string error)
+        {
+            return true;
+        }
+    }
+
     public interface IAction<Context> : IModule
     {
         void Invoke(Context context);
+    }
+
+    public abstract class BaseAction<Context> : IAction<Context>
+    {
+        public string Name { get; set; }
+
+        public abstract void Invoke(Context context);
+
+        public virtual bool RuntimeValidation(ref string error)
+        {
+            return true;
+        }
     }
 
     public interface IEvent : IAction
@@ -48,8 +96,36 @@ namespace XTMF2
         void Register(Action module);
     }
 
+    public abstract class BaseEvent : IEvent
+    {
+        public string Name { get; set; }
+
+        public abstract void Invoke();
+
+        public abstract void Register(Action module);
+
+        public virtual bool RuntimeValidation(ref string error)
+        {
+            return true;
+        }
+    }
+
     public interface IEvent<Context> : IAction<Context>
     {
         void Register(Action<Context> module);
+    }
+
+    public abstract class BaseEvent<Context> : IEvent<Context>
+    {
+        public string Name { get; set; }
+
+        public abstract void Invoke(Context context);
+
+        public abstract void Register(Action<Context> module);
+
+        public virtual bool RuntimeValidation(ref string error)
+        {
+            return true;
+        }
     }
 }

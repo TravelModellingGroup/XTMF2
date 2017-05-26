@@ -23,11 +23,9 @@ using XTMF2;
 
 namespace TestXTMF.Modules
 {
-    public class SimpleTestModule : IFunction<string>
+    public class SimpleTestModule : BaseFunction<string>
     {
-        public string Name { get; set; }
-
-        public string Invoke()
+        public override string Invoke()
         {
             return "Hello World";
         }

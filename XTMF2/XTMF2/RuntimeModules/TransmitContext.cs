@@ -23,22 +23,18 @@ using Newtonsoft.Json;
 
 namespace XTMF2.RuntimeModules
 {
-    public sealed class TransmitContext<Context, Result> : IFunction<Context, Result>
+    public sealed class TransmitContext<Context, Result> : BaseFunction<Context, Result>
     {
-        public string Name { get; set; }
-
-        public Result Invoke(Context context)
+        public override Result Invoke(Context context)
         {
             var toSend = JsonConvert.SerializeObject(context);
             throw new XTMFRuntimeException("Further Implementation Required.");
         }
     }
 
-    public sealed class TransmitContext<Context> : IAction<Context>
+    public sealed class TransmitContext<Context> : BaseAction<Context>
     {
-        public string Name { get; set; }
-
-        public void Invoke(Context context)
+        public override void Invoke(Context context)
         {
             var toSend = JsonConvert.SerializeObject(context);
             throw new XTMFRuntimeException("Further Implementation Required.");

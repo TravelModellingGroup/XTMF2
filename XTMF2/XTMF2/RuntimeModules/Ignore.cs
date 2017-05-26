@@ -23,27 +23,23 @@ using XTMF2;
 
 namespace TestXTMF.Modules
 {
-    public class Ignore<FuncReturn> : IAction
+    public class Ignore<FuncReturn> : BaseAction
     {
-        public string Name { get; set; }
-
         [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true)]
         public IFunction<FuncReturn> ToExecute;
 
-        public void Invoke()
+        public override void Invoke()
         {
             ToExecute.Invoke();
         }
     }
 
-    public class Ignore<Context, FuncReturn> : IAction<Context>
+    public class Ignore<Context, FuncReturn> : BaseAction<Context>
     {
-        public string Name { get; set; }
-
         [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true)]
         public IFunction<Context, FuncReturn> ToExecute;
 
-        public void Invoke(Context context)
+        public override void Invoke(Context context)
         {
             ToExecute.Invoke(context);
         }

@@ -23,14 +23,12 @@ using XTMF2;
 
 namespace TestXTMF.Modules
 {
-    public class SimpleParameterModule : IFunction<string>
+    public class SimpleParameterModule : BaseFunction<string>
     {
-        public string Name { get; set; }
-
         [SubModule(Name = "Real Function", Description = "Will be called", Required = true)]
         public IFunction<string> RealValue;
 
-        public string Invoke()
+        public override string Invoke()
         {
             return RealValue.Invoke();
         }

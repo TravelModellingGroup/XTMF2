@@ -22,43 +22,37 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    public sealed class StepReturnUp<Original, ConvertTo> : IFunction<ConvertTo> 
+    public sealed class StepReturnUp<Original, ConvertTo> : BaseFunction<ConvertTo> 
         where Original : ConvertTo
     {
-        public string Name { get; set; }
-
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context")]
         public IFunction<Original> ToInvoke;
 
-        public ConvertTo Invoke()
+        public override ConvertTo Invoke()
         {
             return (ConvertTo)ToInvoke.Invoke();
         }
     }
 
-    public sealed class StepReturnUp<Original, ConvertTo, Context> : IFunction<Context, ConvertTo> 
+    public sealed class StepReturnUp<Original, ConvertTo, Context> : BaseFunction<Context, ConvertTo> 
         where Original : ConvertTo
     {
-        public string Name { get; set; }
-
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context" )]
         public IFunction<Context, Original> ToInvoke;
 
-        public ConvertTo Invoke(Context context)
+        public override ConvertTo Invoke(Context context)
         {
             return (ConvertTo)ToInvoke.Invoke(context);
         }
     }
 
-    public sealed class StepActionUp<Original, ConvertTo> : IAction<Original>
+    public sealed class StepActionUp<Original, ConvertTo> : BaseAction<Original>
         where Original : ConvertTo
     {
-        public string Name { get; set; }
-
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context")]
         public IAction<ConvertTo> ToInvoke;
 
-        public void Invoke(Original context)
+        public override void Invoke(Original context)
         {
             ToInvoke.Invoke((ConvertTo)context);
         }

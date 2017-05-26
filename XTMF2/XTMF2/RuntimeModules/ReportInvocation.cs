@@ -22,53 +22,45 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    public sealed class ReportFunctionInvocation<Return> : IFunction<Return> 
+    public sealed class ReportFunctionInvocation<Return> : BaseFunction<Return> 
     {
-        public string Name { get; set; }
-
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
         public IFunction<Return> ToInvoke;
 
-        public Return Invoke()
+        public override Return Invoke()
         {
             return ToInvoke.Invoke();
         }
     }
 
-    public sealed class ReportFunctionInvocation<Context, Return> : IFunction<Context, Return>
+    public sealed class ReportFunctionInvocation<Context, Return> : BaseFunction<Context, Return>
     {
-        public string Name { get; set; }
-
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
         public IFunction<Context, Return> ToInvoke;
 
-        public Return Invoke(Context context)
+        public override Return Invoke(Context context)
         {
             return ToInvoke.Invoke(context);
         }
     }
 
-    public sealed class ReportActionInvocation : IAction
+    public sealed class ReportActionInvocation : BaseAction
     {
-        public string Name { get; set; }
-
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
         public IAction ToInvoke;
 
-        public void Invoke()
+        public override void Invoke()
         {
             ToInvoke.Invoke();
         }
     }
 
-    public sealed class ReportActionInvocation<Context> : IAction<Context>
+    public sealed class ReportActionInvocation<Context> : BaseAction<Context>
     {
-        public string Name { get; set; }
-
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
         public IAction<Context> ToInvoke;
 
-        public void Invoke(Context context)
+        public override void Invoke(Context context)
         {
             ToInvoke.Invoke(context);
         }

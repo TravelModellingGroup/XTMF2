@@ -22,21 +22,17 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    public class RecieveContext<Context, Result> : IFunction<Context, Result>
+    public class RecieveContext<Context, Result> : BaseFunction<Context, Result>
     {
-        public string Name { get; set; }
-
-        public Result Invoke(Context context)
+        public override Result Invoke(Context context)
         {
             throw new NotImplementedException();
         }
     }
 
-    public class RecieveContext<Context> : IAction<Context>
+    public class RecieveContext<Context> : BaseAction<Context>
     {
-        public string Name { get; set; }
-
-        public void Invoke(Context context)
+        public override void Invoke(Context context)
         {
             throw new NotImplementedException();
         }
