@@ -171,7 +171,7 @@ namespace TestXTMF
                 Assert.IsTrue(msSession.AddLink(user, ignore1, GetHook(ignore1.Hooks, "To Ignore"), hello, out var toSame1, ref error), error);
                 Assert.IsTrue(msSession.AddLink(user, ignore2, GetHook(ignore2.Hooks, "To Ignore"), hello, out var toSame2, ref error), error);
                 Assert.IsTrue(msSession.AddLink(user, ignore3, GetHook(ignore3.Hooks, "To Ignore"), hello, out var toSame3, ref error), error);
-                CreateRunClient(false, (runBus) =>
+                CreateRunClient(true, (runBus) =>
                 {
                     string error2 = null;
                     bool success = false;
@@ -189,7 +189,7 @@ namespace TestXTMF
                         };
                         Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "FirstStart", out var id, ref error2), error2);
                         // give the models system some time to complete
-                        if (!sim.Wait(200000))
+                        if (!sim.Wait(2000))
                         {
                             Assert.Fail("The model system failed to execute in time!");
                         }
