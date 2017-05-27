@@ -28,6 +28,7 @@ using TestXTMF.Modules;
 using System.IO;
 using System.Threading;
 using XTMF2.RuntimeModules;
+using static TestXTMF.TestHelper;
 
 namespace TestXTMF
 {
@@ -37,7 +38,7 @@ namespace TestXTMF
         [TestMethod]
         public void CreatingClient()
         {
-            TestHelper.RunInModelSystemContext("CreatingClient", (user, pSession, msSession) =>
+            RunInModelSystemContext("CreatingClient", (user, pSession, msSession) =>
             {
                 TestHelper.CreateRunClient(true, (runBus) =>
                 {
@@ -49,9 +50,9 @@ namespace TestXTMF
         [TestMethod]
         public void SendModelSystem()
         {
-            TestHelper.RunInModelSystemContext("CreatingClient", (user, pSession, msSession) =>
+            RunInModelSystemContext("CreatingClient", (user, pSession, msSession) =>
             {
-                TestHelper.CreateRunClient(true, (runBus) =>
+                CreateRunClient(true, (runBus) =>
                 {
                     string error = null;
                     Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(Directory.GetCurrentDirectory(), "CreatingClient"), "Start", out var id, ref error), error);
@@ -62,7 +63,7 @@ namespace TestXTMF
         [TestMethod]
         public void RunModelSystemToComplete()
         {
-            TestHelper.RunInModelSystemContext("RunModelSystemToComplete", (user, pSession, msSession) =>
+            RunInModelSystemContext("RunModelSystemToComplete", (user, pSession, msSession) =>
             {
                 string error2 = null;
                 var ms = msSession.ModelSystem;
@@ -71,7 +72,7 @@ namespace TestXTMF
                 Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyFunction", typeof(SimpleTestModule), out var stm, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], stm, out var ignoreLink2, ref error2), error2);
-                TestHelper.CreateRunClient(true, (runBus) =>
+                CreateRunClient(true, (runBus) =>
                 {
                     string error = null;
                     bool success = false;
@@ -102,7 +103,7 @@ namespace TestXTMF
         [TestMethod]
         public void ParameterModules()
         {
-            TestHelper.RunInModelSystemContext("ParameterModules", (user, pSession, msSession) =>
+            RunInModelSystemContext("ParameterModules", (user, pSession, msSession) =>
             {
                 string error2 = null;
                 var ms = msSession.ModelSystem;
@@ -114,7 +115,7 @@ namespace TestXTMF
                 Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], spm, out var ignoreLink2, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, spm, spm.Hooks[0], basicParameter, out var ignoreLink3, ref error2), error2);
-                TestHelper.CreateRunClient(true, (runBus) =>
+                CreateRunClient(true, (runBus) =>
                 {
                     string error = null;
                     bool success = false;
@@ -137,6 +138,62 @@ namespace TestXTMF
                             Assert.Fail("The model system failed to execute in time!");
                         }
                         Assert.IsTrue(success, "The model system failed to execute to success! " + error);
+                    }
+                });
+            });
+        }
+
+        [TestMethod]
+        public void RunWithMultiLink()
+        {
+            RunInModelSystemContext("ParameterModules", (user, pSession, msSession) =>
+            {
+                string error = null;
+                var ms = msSession.ModelSystem;
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
+
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Execute", typeof(Execute), out var mss, ref error));
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore1", typeof(Ignore<string>), out var ignore1, ref error));
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore2", typeof(Ignore<string>), out var ignore2, ref error));
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore3", typeof(Ignore<string>), out var ignore3, ref error));
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Hello World", typeof(SimpleTestModule), out var hello, ref error));
+
+
+                Assert.IsTrue(msSession.AddLink(user, start, GetHook(start.Hooks, "ToExecute"), mss, out var link, ref error), error);
+                Assert.IsTrue(msSession.AddLink(user, mss, GetHook(mss.Hooks, "To Execute"), ignore1, out var link1, ref error), error);
+                Assert.IsTrue(msSession.AddLink(user, mss, GetHook(mss.Hooks, "To Execute"), ignore2, out var link2, ref error), error);
+                Assert.IsTrue(msSession.AddLink(user, mss, GetHook(mss.Hooks, "To Execute"), ignore3, out var link3, ref error), error);
+
+                Assert.AreNotSame(link, link1);
+                Assert.AreSame(link1, link2);
+                Assert.AreSame(link1, link3);
+
+                Assert.IsTrue(msSession.AddLink(user, ignore1, GetHook(ignore1.Hooks, "To Ignore"), hello, out var toSame1, ref error), error);
+                Assert.IsTrue(msSession.AddLink(user, ignore2, GetHook(ignore2.Hooks, "To Ignore"), hello, out var toSame2, ref error), error);
+                Assert.IsTrue(msSession.AddLink(user, ignore3, GetHook(ignore3.Hooks, "To Ignore"), hello, out var toSame3, ref error), error);
+                CreateRunClient(false, (runBus) =>
+                {
+                    string error2 = null;
+                    bool success = false;
+                    using (SemaphoreSlim sim = new SemaphoreSlim(0))
+                    {
+                        runBus.ClientFinishedModelSystem += (sender, e) =>
+                        {
+                            success = true;
+                            sim.Release();
+                        };
+                        runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                        {
+                            error2 = e + "\r\n" + stack;
+                            sim.Release();
+                        };
+                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "FirstStart", out var id, ref error2), error2);
+                        // give the models system some time to complete
+                        if (!sim.Wait(200000))
+                        {
+                            Assert.Fail("The model system failed to execute in time!");
+                        }
+                        Assert.IsTrue(success, "The model system failed to execute to success! " + error2);
                     }
                 });
             });

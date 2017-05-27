@@ -57,6 +57,12 @@ namespace XTMF2
         /// <param name="origin"></param>
         /// <param name="destination"></param>
         internal abstract void Install(ModelSystemStructure origin, ModelSystemStructure destination, int index);
+
+        /// <summary>
+        /// Create the array of data with the given size
+        /// </summary>
+        /// <param name="length">The number of modules that will be installed</param>
+        internal abstract void CreateArray(IModule origin, int length);
     }
 
     // Cardinality 
@@ -84,6 +90,11 @@ namespace XTMF2
             return ModelSystemStructureHook.GetCardinality(property.PropertyType, required);
         }
 
+        internal override void CreateArray(IModule origin, int length)
+        {
+            Property.SetValue(origin, Array.CreateInstance(Property.PropertyType.GetElementType(), length));
+        }
+
         internal override void Install(ModelSystemStructure origin, ModelSystemStructure destination, int index)
         {
             switch (Cardinality)
@@ -102,7 +113,7 @@ namespace XTMF2
                     }
                     break;
                 default:
-                    throw new NotImplementedException("List cardinalities not implemented");
+                    throw new NotImplementedException("Unknown Cardinality!");
             }
         }
     }
@@ -124,6 +135,11 @@ namespace XTMF2
             return ModelSystemStructureHook.GetCardinality(field.FieldType, required);
         }
 
+        internal override void CreateArray(IModule origin, int length)
+        {
+            Field.SetValue(origin, Array.CreateInstance(Field.FieldType.GetElementType(), length));
+        }
+
         internal override void Install(ModelSystemStructure origin, ModelSystemStructure destination, int index)
         {
             switch (Cardinality)
@@ -133,8 +149,16 @@ namespace XTMF2
                         Field.SetValue(origin.Module, destination.Module);
                     }
                     break;
+                case HookCardinality.AnyNumber:
+                case HookCardinality.AtLeastOne:
+                    {
+                        // the type is an array
+                        var data = (Array)Field.GetValue(origin.Module);
+                        data.SetValue(destination.Module, index);
+                    }
+                    break;
                 default:
-                    throw new NotImplementedException("List cardinalities not implemented");
+                    throw new NotImplementedException("Unknown Cardinality!");
             }
         }
     }

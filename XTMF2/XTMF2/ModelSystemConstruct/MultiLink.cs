@@ -66,7 +66,11 @@ namespace XTMF2.ModelSystemConstruct
 
         internal override void Construct()
         {
-            throw new NotImplementedException();
+            OriginHook.CreateArray(Origin.Module, _Destinations.Count);
+            for (int i = 0; i < _Destinations.Count; i++)
+            {
+                OriginHook.Install(Origin, _Destinations[i], i);
+            }
         }
     }
 }
