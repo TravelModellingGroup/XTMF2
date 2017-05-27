@@ -25,6 +25,8 @@ using System.Linq;
 using XTMF2.ModelSystemConstruct;
 using static XTMF2.Helper;
 using TestXTMF.Modules;
+using XTMF2.RuntimeModules;
+using static TestXTMF.TestHelper;
 
 namespace TestXTMF
 {
@@ -232,6 +234,53 @@ namespace TestXTMF
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
+            });
+        }
+
+        [TestMethod]
+        public void ModelSystemWithMultiLink()
+        {
+            TestHelper.RunInModelSystemContext("ModelSystemWithLink", (user, pSession, mSession) =>
+            {
+                // initialization
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
+
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Execute", typeof(Execute), out var mss, ref error));
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore1", typeof(Ignore<string>), out var ignore1, ref error));
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore2", typeof(Ignore<string>), out var ignore2, ref error));
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore3", typeof(Ignore<string>), out var ignore3, ref error));
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Hello World", typeof(SimpleTestModule), out var hello, ref error));
+
+
+                Assert.IsTrue(mSession.AddLink(user, start, GetHook(start.Hooks, "ToExecute"), mss, out var link, ref error), error);
+                Assert.IsTrue(mSession.AddLink(user, mss, GetHook(mss.Hooks, "To Execute"), ignore1, out var link1, ref error), error);
+                Assert.IsTrue(mSession.AddLink(user, mss, GetHook(mss.Hooks, "To Execute"), ignore2, out var link2, ref error), error);
+                Assert.IsTrue(mSession.AddLink(user, mss, GetHook(mss.Hooks, "To Execute"), ignore3, out var link3, ref error), error);
+
+                Assert.AreNotSame(link, link1);
+                Assert.AreSame(link1, link2);
+                Assert.AreSame(link1, link3);
+
+                Assert.IsTrue(mSession.AddLink(user, ignore1, GetHook(ignore1.Hooks, "To Ignore"), hello, out var toSame1, ref error), error);
+                Assert.IsTrue(mSession.AddLink(user, ignore2, GetHook(ignore2.Hooks, "To Ignore"), hello, out var toSame2, ref error), error);
+                Assert.IsTrue(mSession.AddLink(user, ignore3, GetHook(ignore3.Hooks, "To Ignore"), hello, out var toSame3, ref error), error);
+
+                Assert.AreNotSame(toSame1, toSame2);
+                Assert.AreNotSame(toSame1, toSame3);
+                Assert.AreNotSame(toSame2, toSame3);
+
+                Assert.AreEqual("Execute", mss.Name);
+            }, (user, pSession, mSession) =>
+            {
+                // after shutdown
+                string error = null;
+                var ms = mSession.ModelSystem;
+                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.AreEqual(5, ms.GlobalBoundary.Modules.Count);
+                Assert.AreEqual(5, ms.GlobalBoundary.Links.Count);
                 Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
             });
         }

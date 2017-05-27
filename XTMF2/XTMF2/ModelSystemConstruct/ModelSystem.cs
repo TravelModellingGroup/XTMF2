@@ -46,14 +46,6 @@ namespace XTMF2
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        public ModelSystem Clone()
-        {
-            return new ModelSystem(Header)
-            {
-                GlobalBoundary = GlobalBoundary.Clone()
-            };
-        }
-
         internal bool Save(ref string error)
         {
             lock (ModelSystemLock)

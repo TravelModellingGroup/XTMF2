@@ -406,23 +406,6 @@ namespace XTMF2
             return true;
         }
 
-        public Boundary Clone()
-        {
-            lock (WriteLock)
-            {
-                var ret = new Boundary(Name)
-                {
-                    _Starts = new ObservableCollection<Start>(from start in _Starts
-                                                              select (Start)start.Clone()),
-                    _Modules = new ObservableCollection<ModelSystemStructure>(from mod in _Modules
-                                                                              select mod.Clone()),
-                    _Boundaries = new ObservableCollection<Boundary>(from bound in _Boundaries
-                                                                     select bound.Clone())
-                };
-                return ret;
-            }
-        }
-
         internal bool RemoveStart(Start start, ref string error)
         {
             throw new NotImplementedException();

@@ -21,6 +21,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using XTMF2;
@@ -185,7 +186,17 @@ namespace TestXTMF
                     }
                 }
             }
+        }
 
+        /// <summary>
+        /// Get a model systems structure with the given name.
+        /// </summary>
+        /// <param name="hooks">The stet of hooks available</param>
+        /// <param name="name">The name of the hook to access</param>
+        /// <returns>The hook with the given name, or null if it isn't found.</returns>
+        public static ModelSystemStructureHook GetHook(IReadOnlyList<ModelSystemStructureHook> hooks, string name)
+        {
+            return hooks.FirstOrDefault(hook => hook.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

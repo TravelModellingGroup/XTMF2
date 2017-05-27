@@ -26,9 +26,17 @@ namespace XTMF2.ModelSystemConstruct
 {
     internal sealed class MultiLink : Link
     {
-        public int Index { get; private set; }
+        private ObservableCollection<ModelSystemStructure> _Destinations;
 
-        private ObservableCollection<ModelSystemStructure> _Destinations = new ObservableCollection<ModelSystemStructure>();
+        public MultiLink(List<ModelSystemStructure> destinations)
+        {
+            _Destinations = new ObservableCollection<ModelSystemStructure>(destinations);
+        }
+
+        public MultiLink()
+        {
+            _Destinations = new ObservableCollection<ModelSystemStructure>();
+        }
 
         public ReadOnlyObservableCollection<ModelSystemStructure> Destinations =>
             new ReadOnlyObservableCollection<ModelSystemStructure>(_Destinations);
@@ -39,14 +47,21 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        public override Link Clone()
-        {
-            throw new NotImplementedException();
-        }
-
         internal override void Save(Dictionary<ModelSystemStructure, int> moduleDictionary, JsonTextWriter writer)
         {
-            throw new NotImplementedException();
+            writer.WriteStartObject();
+            writer.WritePropertyName("Origin");
+            writer.WriteValue(moduleDictionary[Origin]);
+            writer.WritePropertyName("Hook");
+            writer.WriteValue(OriginHook.Name);
+            writer.WritePropertyName("Destination");
+            writer.WriteStartArray();
+            foreach (var dest in _Destinations)
+            {
+                writer.WriteValue(moduleDictionary[dest]);
+            }
+            writer.WriteEndArray();
+            writer.WriteEndObject();
         }
 
         internal override void Construct()

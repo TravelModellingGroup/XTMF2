@@ -91,11 +91,6 @@ namespace XTMF2
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Location)));
         }
 
-        internal virtual ModelSystemStructure Clone()
-        {
-            return (ModelSystemStructure)MemberwiseClone();
-        }
-
         /// <summary>
         /// Change the name of the model system structure
         /// </summary>

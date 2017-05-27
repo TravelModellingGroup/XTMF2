@@ -20,11 +20,21 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Newtonsoft.Json;
+using XTMF2.Editing;
+using System.ComponentModel;
 
 namespace XTMF2.ModelSystemConstruct
 {
     internal sealed class SingleLink : Link
     {
+        public ModelSystemStructure Destination { get; internal set; }
+        public bool SetDestination(ModelSystemSession session, ModelSystemStructure destination, ref string error)
+        {
+            Destination = destination;
+            Notify(nameof(Destination));
+            return true;
+        }
+
         internal override void Save(Dictionary<ModelSystemStructure, int> moduleDictionary, JsonTextWriter writer)
         {
             writer.WriteStartObject();
@@ -35,16 +45,6 @@ namespace XTMF2.ModelSystemConstruct
             writer.WritePropertyName("Destination");
             writer.WriteValue(moduleDictionary[Destination]);
             writer.WriteEndObject();
-        }
-
-        public override Link Clone()
-        {
-            return new SingleLink()
-            {
-                Origin = Origin,
-                OriginHook = OriginHook,
-                Destination = Destination
-            };
         }
 
         internal override void Construct()

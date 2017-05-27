@@ -33,7 +33,6 @@ namespace XTMF2
     public abstract class Link : INotifyPropertyChanged
     {
         public ModelSystemStructure Origin { get; internal set; }
-        public ModelSystemStructure Destination { get; internal set; }
         public ModelSystemStructureHook OriginHook { get; internal set; }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -42,19 +41,19 @@ namespace XTMF2
         {
             Origin = origin;
             OriginHook = originHook;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Origin)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OriginHook)));
+            Notify(nameof(Origin));
+            Notify(nameof(OriginHook));
             return true;
         }
 
-        public bool SetDestination(ModelSystemSession session, ModelSystemStructure destination, ref string error)
+        /// <summary>
+        /// Invoke this when a property is changed
+        /// </summary>
+        /// <param name="propertyName">The name of the property that was changed</param>
+        protected void Notify(string propertyName)
         {
-            Destination = destination;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Destination)));
-            return true;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-
-        public abstract Link Clone();
 
         internal abstract void Save(Dictionary<ModelSystemStructure, int> moduleDictionary, JsonTextWriter writer);
         
@@ -72,6 +71,7 @@ namespace XTMF2
                 return FailWith(out link, ref error, "Expected a start object when loading a link.");
             }
             ModelSystemStructure origin = null, destination = null;
+            List<ModelSystemStructure> destinations = null;
             string hookName = null;
             int listIndex = 0;
             // read in the values
@@ -100,8 +100,28 @@ namespace XTMF2
                         break;
                     case "Destination":
                         {
-                            var index = (int)reader.ReadAsInt32();
-                            destination = structures[index];
+                            if (!reader.Read())
+                            {
+                                return FailWith(out link, ref error, "No destination specified when loading a link!");
+                            }
+                            switch (reader.TokenType)
+                            {
+                                case JsonToken.Integer:
+                                    {
+                                        var index = (int)(long)reader.Value;
+                                        destination = structures[index];
+                                    }
+                                    break;
+                                case JsonToken.StartArray:
+                                    {
+                                        destinations = new List<ModelSystemStructure>();
+                                        while(reader.Read() && reader.TokenType != JsonToken.EndArray)
+                                        {
+                                            destinations.Add(structures[(int)(long)reader.Value]);
+                                        }
+                                    }
+                                    break;
+                            }
                         }
                         break;
                     case "Index":
@@ -122,7 +142,7 @@ namespace XTMF2
             {
                 return FailWith(out link, ref error, "No origin hook specified on link!");
             }
-            if (destination == null)
+            if (destination == null && destinations == null)
             {
                 return FailWith(out link, ref error, "No destination specified on link!");
             }
@@ -131,12 +151,23 @@ namespace XTMF2
             {
                 return FailWith(out link, ref error, "Unable to find a hook with the name " + hookName);
             }
-            link = new SingleLink()
+            if (destination != null)
             {
-                Origin = origin,
-                OriginHook = hook,
-                Destination = destination
-            };
+                link = new SingleLink()
+                {
+                    Origin = origin,
+                    OriginHook = hook,
+                    Destination = destination
+                };
+            }
+            else
+            {
+                link = new MultiLink(destinations)
+                {
+                    Origin = origin,
+                    OriginHook = hook
+                };
+            }
             return true;
         }
 

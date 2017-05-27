@@ -78,16 +78,16 @@ namespace XTMF2.Repository
         {
             foreach (var field in typeInfo.DeclaredFields)
             {
-                var mType = field.FieldType;
-                var isArray = mType.IsArray;
-                if(isArray)
+                if (field.IsPublic)
                 {
-                    mType = mType.GetElementType();
-                }
-                var mInfo = mType.GetTypeInfo();
-                if (IModuleTypeInfo.IsAssignableFrom(mType))
-                {
-                    if (mInfo.IsPublic)
+                    var mType = field.FieldType;
+                    var isArray = mType.IsArray;
+                    if (isArray)
+                    {
+                        mType = mType.GetElementType();
+                    }
+                    var mInfo = mType.GetTypeInfo();
+                    if (IModuleTypeInfo.IsAssignableFrom(mType))
                     {
                         // Get the attributes attached the property
                         var attributes = from at in field.GetCustomAttributes(true)
@@ -125,16 +125,16 @@ namespace XTMF2.Repository
         {
             foreach (var property in typeInfo.DeclaredProperties)
             {
-                var mType = property.PropertyType;
-                var isArray = mType.IsArray;
-                if (isArray)
+                if ((property.GetMethod?.IsPublic ?? false) && (property.SetMethod?.IsPublic ?? false))
                 {
-                    mType = mType.GetElementType();
-                }
-                var mInfo = mType.GetTypeInfo();
-                if (IModuleTypeInfo.IsAssignableFrom(mType))
-                {
-                    if (mInfo.IsPublic)
+                    var mType = property.PropertyType;
+                    var isArray = mType.IsArray;
+                    if (isArray)
+                    {
+                        mType = mType.GetElementType();
+                    }
+                    var mInfo = mType.GetTypeInfo();
+                    if (IModuleTypeInfo.IsAssignableFrom(mType))
                     {
                         // Get the attributes attached the property
                         var attributes = from at in property.GetCustomAttributes(true)

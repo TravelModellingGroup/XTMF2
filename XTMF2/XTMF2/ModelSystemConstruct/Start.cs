@@ -120,11 +120,6 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal override ModelSystemStructure Clone()
-        {
-            return (Start)MemberwiseClone();
-        }
-
         /// <summary>
         /// Gets a start path from string
         /// </summary>
