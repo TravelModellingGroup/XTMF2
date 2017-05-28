@@ -22,7 +22,7 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    public class Cache<T> : BaseFunction<T>
+    public class Cache<T> : BaseFunction<T>, IDisposable
     {
         object Lock = new object();
 
@@ -40,7 +40,7 @@ namespace XTMF2.RuntimeModules
         {
             lock (Lock)
             {
-                if(!Initialized)
+                if (!Initialized)
                 {
                     CachedValue = Source.Invoke();
                     Initialized = true;
@@ -56,9 +56,22 @@ namespace XTMF2.RuntimeModules
                 lock (Lock)
                 {
                     Initialized = false;
+                    Dispose();
                 }
             });
             return true;
+        }
+
+        public void Dispose()
+        {
+            lock (Lock)
+            {
+                if (Initialized && CachedValue is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                    CachedValue = default(T);
+                }
+            }
         }
     }
 }
