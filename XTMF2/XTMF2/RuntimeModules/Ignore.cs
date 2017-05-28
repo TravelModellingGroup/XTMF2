@@ -44,4 +44,26 @@ namespace TestXTMF.Modules
             ToExecute.Invoke(context);
         }
     }
+
+    public class IgnoreContext<Context> : BaseAction<Context>
+    {
+        [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true)]
+        public IAction ToInvoke;
+
+        public override void Invoke(Context context)
+        {
+            ToInvoke.Invoke();
+        }
+    }
+
+    public class IgnoreContext<Context,Return> : BaseFunction<Context,Return>
+    {
+        [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true)]
+        public IFunction<Return> ToInvoke;
+
+        public override Return Invoke(Context context)
+        {
+            return ToInvoke.Invoke();
+        }
+    }
 }
