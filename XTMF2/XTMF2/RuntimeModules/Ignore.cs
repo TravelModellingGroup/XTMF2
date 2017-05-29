@@ -23,7 +23,9 @@ using XTMF2;
 
 namespace TestXTMF.Modules
 {
-    public class Ignore<FuncReturn> : BaseAction
+    [Module(Name = "Ignore Result", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Ignore the result of a function call.  This allows you to call functions from an action.")]
+    public class IgnoreResult<FuncReturn> : BaseAction
     {
         [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true)]
         public IFunction<FuncReturn> ToExecute;
@@ -34,7 +36,9 @@ namespace TestXTMF.Modules
         }
     }
 
-    public class Ignore<Context, FuncReturn> : BaseAction<Context>
+    [Module(Name = "Ignore Result", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Ignore the result of a function call.  This allows you to call functions from an action.")]
+    public class IgnoreResult<Context, FuncReturn> : BaseAction<Context>
     {
         [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true)]
         public IFunction<Context, FuncReturn> ToExecute;
@@ -45,6 +49,8 @@ namespace TestXTMF.Modules
         }
     }
 
+    [Module(Name = "Ignore Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Ignore the context of a function call.  This allows you to call functions that don't require a context.")]
     public class IgnoreContext<Context> : BaseAction<Context>
     {
         [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true)]
@@ -56,6 +62,8 @@ namespace TestXTMF.Modules
         }
     }
 
+    [Module(Name = "Ignore Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Ignore the context of a function call.  This allows you to call functions that don't require a context.")]
     public class IgnoreContext<Context,Return> : BaseFunction<Context,Return>
     {
         [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true)]

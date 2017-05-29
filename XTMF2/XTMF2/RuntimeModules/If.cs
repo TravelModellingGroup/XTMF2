@@ -22,6 +22,8 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
+    [Module(Name = "If", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
     public sealed class IfF<Return> : BaseFunction<Return>
     {
         [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]
@@ -45,6 +47,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "If", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
     public sealed class IfF<Context,Return> : BaseFunction<Context,Return>
     {
         [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]
@@ -68,6 +72,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "If", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
     public sealed class IfWithContextF<Context, Return> : BaseFunction<Context, Return>
     {
         [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]
@@ -91,6 +97,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "If", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
     public sealed class IfA : BaseAction
     {
         [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]
@@ -114,6 +122,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "If", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
     public sealed class IfA<Context> : BaseAction<Context>
     {
         [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]
@@ -137,6 +147,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "If", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
     public sealed class IfWithContextA<Context> : BaseAction<Context>
     {
         [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]

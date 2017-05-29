@@ -22,19 +22,23 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    public class RecieveContext<Context, Result> : BaseFunction<Context, Result>
+    [Module(Name = "Directory Path", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Provides the ability to specify a directory path recursively.")]
+    public sealed class DirectoryPath : BaseFunction<string>
     {
-        public override Result Invoke(Context context)
-        {
-            throw new NotImplementedException();
-        }
-    }
+        [SubModule(Required = false, Name = "Parent", Description = "Optional parent directory")]
+        public DirectoryPath Parent;
 
-    public class RecieveContext<Context> : BaseAction<Context>
-    {
-        public override void Invoke(Context context)
+        [Parameter(Name = "Name", DefaultValue = "directoryName", Description = "The path to add to the Parent path")]
+        public IFunction<string> Path;
+
+        public override string Invoke()
         {
-            throw new NotImplementedException();
+            if(Parent != null)
+            {
+                return System.IO.Path.Combine(Parent.Invoke(), Path.Invoke());
+            }
+            return Path.Invoke();
         }
     }
 }

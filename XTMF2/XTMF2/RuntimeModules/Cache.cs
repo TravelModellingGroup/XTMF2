@@ -22,6 +22,8 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
+    [Module(Name = "Cache", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    Description = "Provides a way to keep the result of a function unless unloaded by an event.")]
     public class Cache<T> : BaseFunction<T>, IDisposable
     {
         object Lock = new object();
@@ -33,7 +35,7 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "Source", Description = "Get the cached data")]
         public IFunction<T> Source;
 
-        [SubModule(Required = true, Name = "ForceUpdate", Description = "Invoke to force an update")]
+        [SubModule(Required = true, Name = "Force Update", Description = "Invoke to force an update")]
         public IEvent ForceUpdate;
 
         public override T Invoke()

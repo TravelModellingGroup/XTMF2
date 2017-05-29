@@ -25,6 +25,8 @@ namespace XTMF2.RuntimeModules
     /// <summary>
     /// The type used for a model system structure start
     /// </summary>
+    [Module(Name = "Start", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "A starting point for a model system.")]
     public sealed class StartModule : BaseAction
     {
         [SubModule(Name = "ToExecute", Description = "The module to invoke when executing this start.")]

@@ -22,6 +22,8 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
+    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogF<Return> : BaseFunction<Return>
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
@@ -40,6 +42,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogF<Context, Return> : BaseFunction<Context, Return>
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
@@ -58,6 +62,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogBasedOnContextF<Context, Return> : BaseFunction<Context, Return>
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
@@ -76,7 +82,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
-
+    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogA : BaseAction
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
@@ -95,6 +102,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogA<Context> : BaseAction<Context>
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
@@ -113,6 +122,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogBasedOnContextA<Context> : BaseAction<Context>
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]

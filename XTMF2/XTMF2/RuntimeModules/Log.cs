@@ -23,6 +23,8 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
+    [Module(Name = "Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Provides functionality for synchronizing the writing of events to a log and providing time stamps.")]
     public sealed class Log : BaseAction<string>, IDisposable
     {
         [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.")]

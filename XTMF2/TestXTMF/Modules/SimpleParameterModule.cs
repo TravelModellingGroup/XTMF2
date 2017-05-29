@@ -23,6 +23,8 @@ using XTMF2;
 
 namespace TestXTMF.Modules
 {
+    [Module(Name = "Simple Parameter Module", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+        Description = "A test module to invoke a function that returns a string.")]
     public class SimpleParameterModule : BaseFunction<string>
     {
         [SubModule(Name = "Real Function", Description = "Will be called", Required = true)]

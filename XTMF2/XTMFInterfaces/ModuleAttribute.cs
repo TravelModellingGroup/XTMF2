@@ -20,23 +20,25 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.ModelSystemConstruct
+namespace XTMF2
 {
-    public sealed class DirectoryPath : BaseFunction<string>
+    [System.AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
+    public sealed class ModuleAttribute : Attribute
     {
-        [SubModule(Required = false, Name = "Parent", Description = "Optional parent directory")]
-        public DirectoryPath Parent;
+        /// <summary>
+        /// The name to use when adding a new module of this type
+        /// </summary>
+        public string Name { get; set; }
 
-        [Parameter(Name = "Name", DefaultValue = "directoryName", Description = "The path to add to the Parent path")]
-        public IFunction<string> Path;
+        /// <summary>
+        /// The web link to use to access the documentation for this
+        /// module.
+        /// </summary>
+        public string DocumentationLink { get; set; }
 
-        public override string Invoke()
-        {
-            if(Parent != null)
-            {
-                return System.IO.Path.Combine(Parent.Invoke(), Path.Invoke());
-            }
-            return Path.Invoke();
-        }
+        /// <summary>
+        /// A small description of the module
+        /// </summary>
+        public string Description { get; set; }
     }
 }

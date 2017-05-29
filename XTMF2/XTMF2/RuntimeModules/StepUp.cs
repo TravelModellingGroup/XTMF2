@@ -22,6 +22,8 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
+    [Module(Name = "Step Return Up", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Converts the result of a function to the expected type from the calling module.")]
     public sealed class StepReturnUp<Original, ConvertTo> : BaseFunction<ConvertTo> 
         where Original : ConvertTo
     {
@@ -34,6 +36,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "Step Return Up", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Converts the result of a function to the expected type from the calling module.")]
     public sealed class StepReturnUp<Original, ConvertTo, Context> : BaseFunction<Context, ConvertTo> 
         where Original : ConvertTo
     {
@@ -46,6 +50,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "Step Return Up", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Converts the result of a function to the expected type from the calling module.")]
     public sealed class StepActionUp<Original, ConvertTo> : BaseAction<Original>
         where Original : ConvertTo
     {

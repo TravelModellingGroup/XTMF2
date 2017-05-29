@@ -22,6 +22,8 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
+    [Module(Name = "Report Invocation", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Reports to XTMF that the model system has run through this point.")]
     public sealed class ReportFunctionInvocation<Return> : BaseFunction<Return> 
     {
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
@@ -33,6 +35,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "Report Invocation", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Reports to XTMF that the model system has run through this point.")]
     public sealed class ReportFunctionInvocation<Context, Return> : BaseFunction<Context, Return>
     {
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
@@ -44,6 +48,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "Report Invocation", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Reports to XTMF that the model system has run through this point.")]
     public sealed class ReportActionInvocation : BaseAction
     {
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]
@@ -55,6 +61,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "Report Invocation", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Reports to XTMF that the model system has run through this point.")]
     public sealed class ReportActionInvocation<Context> : BaseAction<Context>
     {
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke after signaling context")]

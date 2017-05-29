@@ -249,9 +249,9 @@ namespace TestXTMF
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
 
                 Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Execute", typeof(Execute), out var mss, ref error));
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore1", typeof(Ignore<string>), out var ignore1, ref error));
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore2", typeof(Ignore<string>), out var ignore2, ref error));
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore3", typeof(Ignore<string>), out var ignore3, ref error));
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore1", typeof(IgnoreResult<string>), out var ignore1, ref error));
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore2", typeof(IgnoreResult<string>), out var ignore2, ref error));
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore3", typeof(IgnoreResult<string>), out var ignore3, ref error));
                 Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Hello World", typeof(SimpleTestModule), out var hello, ref error));
 
 

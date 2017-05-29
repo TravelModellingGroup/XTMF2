@@ -23,6 +23,8 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
+    [Module(Name = "Write File", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+Description = "Provides a WriteStream to the given file name from context.")]
     public class WriteFile : BaseFunction<string, WriteStream>
     {
         public override WriteStream Invoke(string context)

@@ -27,8 +27,8 @@ namespace XTMF2.Repository
 {
     public sealed class ModuleRepository
     {
-        private ConcurrentDictionary<Type, (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)> Data
-            = new ConcurrentDictionary<Type, (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)>();
+        private ConcurrentDictionary<Type, (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)> Data
+            = new ConcurrentDictionary<Type, (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)>();
         private static TypeInfo IModuleTypeInfo = typeof(IModule).GetTypeInfo();
 
         public void Add(Type type)
@@ -56,11 +56,12 @@ namespace XTMF2.Repository
             }
         }
 
-        private (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) GetTypeData(Type type)
+        private (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) GetTypeData(Type type)
         {
             var typeInfo = type.GetTypeInfo();
             var hooks = new List<ModelSystemStructureHook>();
             // Load properties and fields
+            ModuleAttribute description = LoadModuleDescription(type);
             LoadFields(type, typeInfo, hooks);
             LoadProperties(type, typeInfo, hooks);
             // ensure there are no duplicates
@@ -71,7 +72,29 @@ namespace XTMF2.Repository
             {
                 throw new XTMFCodeStyleError(type, $"Duplicate properties with the name {duplicates.First().Name}!");
             }
-            return (typeInfo, hooks.ToArray());
+            return (description, typeInfo, hooks.ToArray());
+        }
+
+        private ModuleAttribute LoadModuleDescription(Type type)
+        {
+            var description = (ModuleAttribute)type.GetTypeInfo().GetCustomAttribute(typeof(ModuleAttribute));
+            if(description == null)
+            {
+                throw new XTMFCodeStyleError(type, "There was no module meta-data stored for this type!");
+            }
+            if(String.IsNullOrWhiteSpace(description.Name))
+            {
+                throw new XTMFCodeStyleError(type, "The module meta-data's Name field was left blank!");
+            }
+            if(String.IsNullOrWhiteSpace(description.DocumentationLink))
+            {
+                throw new XTMFCodeStyleError(type, "The module meta-data's Documentation Link field was left blank!");
+            }
+            if (String.IsNullOrWhiteSpace(description.Description))
+            {
+                throw new XTMFCodeStyleError(type, "The module meta-data's Description field was left blank!");
+            }
+            return description;
         }
 
         private static void LoadFields(Type type, TypeInfo typeInfo, List<ModelSystemStructureHook> hooks)
@@ -172,7 +195,7 @@ namespace XTMF2.Repository
             }
         }
 
-        public (TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) this[Type type]
+        public (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) this[Type type]
         {
             get
             {

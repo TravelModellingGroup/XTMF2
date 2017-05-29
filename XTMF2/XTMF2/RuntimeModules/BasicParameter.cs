@@ -22,6 +22,8 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
+    [Module(Name = "Basic Parameter", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    Description = "Provides the ability to have a value in a model system.")]
     public sealed class BasicParameter<T> : BaseFunction<T>
     {
         public T Value;

@@ -23,6 +23,8 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
+    [Module(Name = "Basic Event", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    Description = "Provides the ability for modules to invoke a set of other modules that are waiting for something to occur.")]
     public sealed class BasicEvent : BaseEvent
     {
         private List<Action> ToInvoke = new List<Action>();
@@ -50,6 +52,8 @@ namespace XTMF2.RuntimeModules
         }
     }
 
+    [Module(Name = "Basic Event", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    Description = "Provides the ability for modules to invoke a set of other modules that are waiting for something to occur.")]
     public sealed class BasicEvent<Context> : BaseEvent<Context>
     {
         private List<Action<Context>> ToInvoke = new List<Action<Context>>();
