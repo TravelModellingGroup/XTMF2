@@ -27,7 +27,7 @@ namespace XTMF2.RuntimeModules
 Description = "Provides functionality for synchronizing the writing of events to a log and providing time stamps.")]
     public sealed class Log : BaseAction<string>, IDisposable
     {
-        [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.")]
+        [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.", Index = 0)]
         public IFunction<WriteStream> LogStream;
 
         private object WriteLock = new object();

@@ -27,14 +27,14 @@ namespace XTMF2.RuntimeModules
 Description = "Provides a way to execute a series of actions in order, optionally in parallel or with multiple iterations.")]
     public class Execute : BaseAction
     {
-        [SubModule(Name = "To Execute", Description = "The modules in order to execute")]
-        public IAction[] ToInvoke;
-
-        [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false)]
+        [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false, Index = 0)]
         public IFunction<bool> ParallelExecution;
 
-        [Parameter(DefaultValue = "1", Name = "Iterations", Required = false)]
+        [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
         public IFunction<int> Iterations;
+
+        [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 2)]
+        public IAction[] ToInvoke;
 
         public override void Invoke()
         {
@@ -61,14 +61,14 @@ Description = "Provides a way to execute a series of actions in order, optionall
 Description = "Provides a way to execute a series of actions in order, optionally in parallel or with multiple iterations.")]
     public class Execute<Context> : BaseAction<Context>
     {
-        [SubModule(Name = "To Execute", Description = "The modules in order to execute")]
-        public IAction<Context>[] ToInvoke;
-
-        [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false)]
+        [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false, Index = 0)]
         public IFunction<bool> ParallelExecution;
 
-        [Parameter(DefaultValue = "1", Name = "Iterations", Required = false)]
+        [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
         public IFunction<int> Iterations;
+
+        [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 2)]
+        public IAction<Context>[] ToInvoke;
 
         public override void Invoke(Context context)
         {

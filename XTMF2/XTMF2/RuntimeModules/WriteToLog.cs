@@ -26,13 +26,13 @@ namespace XTMF2.RuntimeModules
 Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogF<Return> : BaseFunction<Return>
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
+        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IAction<string> Log;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.")]
+        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
         public IFunction<Return> ToInvoke;
 
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "")]
+        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
         public IFunction<string> Message;
 
         public override Return Invoke()
@@ -46,13 +46,13 @@ Description = "Writes the provided mess to the log and then invokes the next ste
 Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogF<Context, Return> : BaseFunction<Context, Return>
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
+        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IAction<string> Log;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.")]
+        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
         public IFunction<Context, Return> ToInvoke;
 
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "")]
+        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
         public IFunction<string> Message;
 
         public override Return Invoke(Context context)
@@ -66,13 +66,13 @@ Description = "Writes the provided mess to the log and then invokes the next ste
 Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogBasedOnContextF<Context, Return> : BaseFunction<Context, Return>
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
+        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IAction<string> Log;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.")]
+        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
         public IFunction<Context, Return> ToInvoke;
 
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "")]
+        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
         public IFunction<Context, string> Message;
 
         public override Return Invoke(Context context)
@@ -86,13 +86,13 @@ Description = "Writes the provided mess to the log and then invokes the next ste
 Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogA : BaseAction
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
+        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IAction<string> Log;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.")]
+        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
         public IAction ToInvoke;
 
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "")]
+        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
         public IFunction<string> Message;
 
         public override void Invoke()
@@ -106,13 +106,13 @@ Description = "Writes the provided mess to the log and then invokes the next ste
 Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogA<Context> : BaseAction<Context>
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
+        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IAction<string> Log;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.")]
+        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
         public IAction<Context> ToInvoke;
 
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "")]
+        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
         public IFunction<string> Message;
 
         public override void Invoke(Context context)
@@ -126,13 +126,13 @@ Description = "Writes the provided mess to the log and then invokes the next ste
 Description = "Writes the provided mess to the log and then invokes the next step.")]
     public class WriteToLogBasedOnContextA<Context> : BaseAction<Context>
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.")]
+        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IAction<string> Log;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.")]
+        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
         public IAction<Context> ToInvoke;
 
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "")]
+        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
         public IFunction<Context, string> Message;
 
         public override void Invoke(Context context)

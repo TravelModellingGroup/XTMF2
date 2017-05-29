@@ -25,10 +25,18 @@ namespace XTMF2
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
     public class SubModuleAttribute : Attribute
     {
+        public SubModuleAttribute()
+        {
+            // Set the index to -1 to ensure it is defined
+            Index = -1;
+        }
+
         public string Name { get; set; }
 
         public string Description { get; set; }
 
         public bool Required { get; set; }
+
+        public int Index { get; set; }
     }
 }

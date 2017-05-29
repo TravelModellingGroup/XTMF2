@@ -66,12 +66,24 @@ namespace XTMF2.Repository
             LoadProperties(type, typeInfo, hooks);
             // ensure there are no duplicates
             var duplicates = from h in hooks
-                             where hooks.Any(other => h != other && h.Name.Equals(other.Name, StringComparison.OrdinalIgnoreCase))
+                             let name = h.Name
+                             where hooks.Any(other => h != other && name.Equals(other.Name, StringComparison.OrdinalIgnoreCase))
                              select h;
             if (duplicates.Any())
             {
                 throw new XTMFCodeStyleError(type, $"Duplicate properties with the name {duplicates.First().Name}!");
             }
+            duplicates = from h in hooks
+                         let index = h.Index
+                         where hooks.Any(other => other.Index == index && h != other)
+                         select h;
+            if(duplicates.Any())
+            {
+                var first = duplicates.First();
+                throw new XTMFCodeStyleError(type, $"Duplicate properties with same index {first.Index}!");
+            }
+            // sort the hooks so this can be relied upon
+            hooks.Sort((first, second) => first.Index - second.Index);
             return (description, typeInfo, hooks.ToArray());
         }
 
@@ -128,12 +140,20 @@ namespace XTMF2.Repository
                         }
                         if (attributes.First() is ParameterAttribute parameter)
                         {
+                            if(parameter.Index < 0)
+                            {
+                                throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {field.Name}!");
+                            }
                             // all parameters are required
-                            hooks.Add(new FieldHook(parameter.Name, field, true));
+                            hooks.Add(new FieldHook(parameter.Name, field, true, parameter.Index));
                         }
                         else if (attributes.First() is SubModuleAttribute subModule)
                         {
-                            hooks.Add(new FieldHook(subModule.Name, field, subModule.Required));
+                            if (subModule.Index < 0)
+                            {
+                                throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {field.Name}!");
+                            }
+                            hooks.Add(new FieldHook(subModule.Name, field, subModule.Required, subModule.Index));
                         }
                         else
                         {
@@ -179,12 +199,20 @@ namespace XTMF2.Repository
                         }
                         if (attributes.First() is ParameterAttribute parameter)
                         {
+                            if (parameter.Index < 0)
+                            {
+                                throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {property.Name}!");
+                            }
                             // all parameters are required
-                            hooks.Add(new PropertyHook(parameter.Name, property, true));
+                            hooks.Add(new PropertyHook(parameter.Name, property, true, parameter.Index));
                         }
                         else if (attributes.First() is SubModuleAttribute subModule)
                         {
-                            hooks.Add(new PropertyHook(subModule.Name, property, subModule.Required));
+                            if (subModule.Index < 0)
+                            {
+                                throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {property.Name}!");
+                            }
+                            hooks.Add(new PropertyHook(subModule.Name, property, subModule.Required, subModule.Index));
                         }
                         else
                         {

@@ -27,7 +27,7 @@ Description = "Converts the result of a function to the expected type from the c
     public sealed class StepReturnUp<Original, ConvertTo> : BaseFunction<ConvertTo> 
         where Original : ConvertTo
     {
-        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context")]
+        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
         public IFunction<Original> ToInvoke;
 
         public override ConvertTo Invoke()
@@ -41,7 +41,7 @@ Description = "Converts the result of a function to the expected type from the c
     public sealed class StepReturnUp<Original, ConvertTo, Context> : BaseFunction<Context, ConvertTo> 
         where Original : ConvertTo
     {
-        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context" )]
+        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
         public IFunction<Context, Original> ToInvoke;
 
         public override ConvertTo Invoke(Context context)
@@ -55,7 +55,7 @@ Description = "Converts the result of a function to the expected type from the c
     public sealed class StepActionUp<Original, ConvertTo> : BaseAction<Original>
         where Original : ConvertTo
     {
-        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context")]
+        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
         public IAction<ConvertTo> ToInvoke;
 
         public override void Invoke(Original context)

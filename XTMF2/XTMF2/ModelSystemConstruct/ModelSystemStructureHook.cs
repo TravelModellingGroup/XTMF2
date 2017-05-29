@@ -32,10 +32,13 @@ namespace XTMF2
 
         public HookCardinality Cardinality { get; private set; }
 
-        public ModelSystemStructureHook(string name, HookCardinality cardinality)
+        public int Index { get; private set; }
+
+        public ModelSystemStructureHook(string name, HookCardinality cardinality, int index)
         {
             Name = name;
             Cardinality = cardinality;
+            Index = index;
         }
 
         protected static HookCardinality GetCardinality(Type type, bool required)
@@ -79,8 +82,8 @@ namespace XTMF2
     sealed class PropertyHook : ModelSystemStructureHook
     {
         readonly PropertyInfo Property;
-        public PropertyHook(string name, PropertyInfo property, bool required)
-            : base(name, GetCardinality(property, required))
+        public PropertyHook(string name, PropertyInfo property, bool required, int index)
+            : base(name, GetCardinality(property, required), index)
         {
             Property = property;
         }
@@ -124,8 +127,8 @@ namespace XTMF2
     sealed class FieldHook : ModelSystemStructureHook
     {
         readonly FieldInfo Field;
-        public FieldHook(string name, FieldInfo field, bool required)
-            : base(name, GetCardinality(field, required))
+        public FieldHook(string name, FieldInfo field, bool required, int index)
+            : base(name, GetCardinality(field, required), index)
         {
             Field = field;
         }

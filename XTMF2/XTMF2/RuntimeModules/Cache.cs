@@ -32,10 +32,10 @@ namespace XTMF2.RuntimeModules
         private bool Initialized = false;
 
 
-        [SubModule(Required = true, Name = "Source", Description = "Get the cached data")]
+        [SubModule(Required = true, Name = "Source", Description = "Get the cached data", Index = 0)]
         public IFunction<T> Source;
 
-        [SubModule(Required = true, Name = "Force Update", Description = "Invoke to force an update")]
+        [SubModule(Required = true, Name = "Force Update", Description = "Invoke to force an update", Index = 1)]
         public IEvent ForceUpdate;
 
         public override T Invoke()

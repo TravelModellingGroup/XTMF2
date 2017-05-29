@@ -27,7 +27,7 @@ namespace TestXTMF.Modules
         Description = "A test module to invoke a function that returns a string.")]
     public class SimpleParameterModule : BaseFunction<string>
     {
-        [SubModule(Name = "Real Function", Description = "Will be called", Required = true)]
+        [SubModule(Name = "Real Function", Description = "Will be called", Required = true, Index = 0)]
         public IFunction<string> RealValue;
 
         public override string Invoke()

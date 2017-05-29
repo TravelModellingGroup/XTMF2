@@ -27,7 +27,7 @@ namespace TestXTMF.Modules
 Description = "Ignore the result of a function call.  This allows you to call functions from an action.")]
     public class IgnoreResult<FuncReturn> : BaseAction
     {
-        [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true)]
+        [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true, Index = 0)]
         public IFunction<FuncReturn> ToExecute;
 
         public override void Invoke()
@@ -40,7 +40,7 @@ Description = "Ignore the result of a function call.  This allows you to call fu
 Description = "Ignore the result of a function call.  This allows you to call functions from an action.")]
     public class IgnoreResult<Context, FuncReturn> : BaseAction<Context>
     {
-        [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true)]
+        [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true, Index = 0)]
         public IFunction<Context, FuncReturn> ToExecute;
 
         public override void Invoke(Context context)
@@ -53,7 +53,7 @@ Description = "Ignore the result of a function call.  This allows you to call fu
 Description = "Ignore the context of a function call.  This allows you to call functions that don't require a context.")]
     public class IgnoreContext<Context> : BaseAction<Context>
     {
-        [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true)]
+        [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true, Index = 0)]
         public IAction ToInvoke;
 
         public override void Invoke(Context context)
@@ -66,7 +66,7 @@ Description = "Ignore the context of a function call.  This allows you to call f
 Description = "Ignore the context of a function call.  This allows you to call functions that don't require a context.")]
     public class IgnoreContext<Context,Return> : BaseFunction<Context,Return>
     {
-        [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true)]
+        [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true, Index = 0)]
         public IFunction<Return> ToInvoke;
 
         public override Return Invoke(Context context)
