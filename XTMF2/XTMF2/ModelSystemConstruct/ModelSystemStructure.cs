@@ -123,6 +123,8 @@ namespace XTMF2
 
         private static Type[] EmptyConstructor = new Type[] { };
 
+        private static Type[] RuntimeConstructor = new Type[] { typeof(XTMFRuntime) };
+
         private static Type GenericParameter = typeof(BasicParameter<>);
 
         private static ConcurrentDictionary<Type,FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
@@ -132,10 +134,11 @@ namespace XTMF2
         /// </summary>
         /// <param name="error"></param>
         /// <returns></returns>
-        internal bool ConstructModule(ref string error)
+        internal bool ConstructModule(XTMFRuntime runtime, ref string error)
         {
-            var constructor = Type.GetTypeInfo().GetConstructor(EmptyConstructor);
-            Module = (IModule)constructor.Invoke(EmptyConstructor);
+            Module = (IModule)(
+                Type.GetTypeInfo().GetConstructor(RuntimeConstructor)?.Invoke(new[] { runtime })
+                ?? Type.GetTypeInfo().GetConstructor(EmptyConstructor).Invoke(EmptyConstructor));
             if(Type.IsConstructedGenericType && Type.GetGenericTypeDefinition() == GenericParameter)
             {
                 var paramType = Type.GenericTypeArguments[0];

@@ -198,5 +198,57 @@ namespace TestXTMF
                 });
             });
         }
+
+        [TestMethod]
+        public void ReportRunProgress()
+        {
+            RunInModelSystemContext("RunModelSystemToComplete", (user, pSession, msSession) =>
+            {
+                string error2 = null;
+                var ms = msSession.ModelSystem;
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(ReportFunctionInvocation<string>), out var report, ref error2), error2);
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Message", typeof(BasicParameter<string>), out var message, ref error2), error2);
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyFunction", typeof(SimpleTestModule), out var stm, ref error2), error2);
+                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, ref error2), error2);
+                Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], report, out var ignoreLink2, ref error2), error2);
+                Assert.IsTrue(msSession.AddLink(user, report, GetHook(report.Hooks, "To Invoke"), stm, out var ignoreLink3, ref error2), error2);
+                Assert.IsTrue(msSession.AddLink(user, report, GetHook(report.Hooks, "Message"), message, out var ignoreLink4, ref error2), error2);
+                Assert.IsTrue(msSession.SetParameterValue(user, message, "Reporting through XTMF", ref error2), error2);
+                CreateRunClient(true, (runBus) =>
+                {
+                    string error = null;
+                    bool success = false;
+                    string reportedStatus = null;
+                    using (SemaphoreSlim sim = new SemaphoreSlim(0))
+                    {
+                        runBus.ClientFinishedModelSystem += (sender, e) =>
+                        {
+                            success = true;
+                            sim.Release();
+                        };
+                        runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                        {
+                            error = e + "\r\n" + stack;
+                            sim.Release();
+                        };
+                        runBus.ClientReportedStatus += (sender, runId, status) =>
+                        {
+                            reportedStatus = status;
+                        };
+                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "Start", out var id, ref error), error);
+                        // give the models system some time to complete
+                        if (!sim.Wait(2000))
+                        {
+                            Assert.Fail("The model system failed to execute in time!");
+                        }
+                        Assert.IsNotNull(reportedStatus);
+                        Assert.AreEqual("Reporting through XTMF", reportedStatus);
+                        Assert.IsTrue(success, "The model system failed to execute to success! " + error);
+                    }
+                });
+            });
+        }
     }
 }

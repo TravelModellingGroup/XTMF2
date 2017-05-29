@@ -26,5 +26,10 @@ namespace XTMF2
     public class ParameterAttribute : SubModuleAttribute
     {
         public string DefaultValue { get; set; }
+
+        public ParameterAttribute()
+        {
+            Required = true;
+        }
     }
 }

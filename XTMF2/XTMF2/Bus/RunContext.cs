@@ -68,7 +68,7 @@ namespace XTMF2.Bus
         {
             // Construct the model system
             if (!XTMF2.ModelSystem.Load(ModelSystemAsString, Runtime, out ModelSystem ms, ref error)
-                || !ms.Construct(ref error))
+                || !ms.Construct(Runtime, ref error))
             {
                 return false;
             }

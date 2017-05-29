@@ -84,14 +84,19 @@ namespace XTMF2.Bus
             ClientErrorWhenRunningModelSystem = 4,
             ClientErrorValidatingModelSystem = 5,
             ProgressUpdate = 6,
-            SendModelSystemResult = 7
+            SendModelSystemResult = 7,
+            ClientReportedStatus = 8
         }
 
         public event EventHandler ClientFinishedModelSystem;
 
         public delegate void RunError(object sender, string runID, string errorMessage, string stack);
 
+        public delegate void ClientStatusUpdate(object sender, string runID, string status);
+
         public event RunError ClientErrorWhenRunningModelSystem;
+
+        public event ClientStatusUpdate ClientReportedStatus;
 
         public void StartListenner()
         {
@@ -139,6 +144,16 @@ namespace XTMF2.Bus
                                     try
                                     {
                                         ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), reader.ReadString());
+                                    }
+                                    catch
+                                    {
+
+                                    }
+                                    break;
+                                case In.ClientReportedStatus:
+                                    try
+                                    {
+                                        ClientReportedStatus?.Invoke(this, reader.ReadString(), reader.ReadString());
                                     }
                                     catch
                                     {

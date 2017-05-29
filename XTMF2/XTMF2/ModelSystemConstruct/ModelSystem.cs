@@ -97,9 +97,9 @@ namespace XTMF2
         /// </summary>
         /// <param name="error">An error message if it can not be constructed.</param>
         /// <returns>True if it was created, false with message otherwise.</returns>
-        internal bool Construct(ref string error)
+        internal bool Construct(XTMFRuntime runtime, ref string error)
         {
-            return GlobalBoundary.ConstructModules(ref error)
+            return GlobalBoundary.ConstructModules(runtime, ref error)
                 && GlobalBoundary.ConstructLinks(ref error);
         }
 

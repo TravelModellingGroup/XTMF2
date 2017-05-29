@@ -34,6 +34,8 @@ namespace XTMF2.Bus
         private CancellationTokenSource CancelExecutionEngine;
         private SemaphoreSlim RunsToGo = new SemaphoreSlim(0);
 
+        public RunContext Current { get; private set; }
+
         public Scheduler(RunBusClient bus)
         {
             Bus = bus;
@@ -43,6 +45,7 @@ namespace XTMF2.Bus
             {
                 while(!token.IsCancellationRequested)
                 {
+                    Current = null;
                     RunsToGo.Wait(token);
                     if(token.IsCancellationRequested)
                     {
@@ -54,6 +57,7 @@ namespace XTMF2.Bus
                         {
                             string error = null;
                             string stackTrace = null;
+                            Current = context;
                             if (context.ValidateModelSystem(ref error))
                             {
                                 if(!context.Run(ref error, ref stackTrace))

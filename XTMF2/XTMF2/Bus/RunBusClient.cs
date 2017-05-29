@@ -43,6 +43,7 @@ namespace XTMF2.Bus
             Runs = new Scheduler(this);
             ClientHost = serverStream;
             Owner = owner;
+            Runtime.ClientBus = this;
         }
 
         private void Dispose(bool managed)
@@ -85,7 +86,8 @@ namespace XTMF2.Bus
             ClientErrorWhenRunningModelSystem = 4,
             ClientErrorValidatingModelSystem = 5,
             ProgressUpdate = 6,
-            SendModelSystemResult = 7
+            SendModelSystemResult = 7,
+            ClientReportedStatus = 8
         }
 
         private object WriteLock = new object();
@@ -119,6 +121,16 @@ namespace XTMF2.Bus
                 writer.Write(context.ID);
                 writer.Write(message ?? String.Empty);
                 writer.Write(stackTrace ?? String.Empty);
+            });
+        }
+
+        internal void SendStatusMessage(string message)
+        {
+            Write((writer) =>
+            {
+                writer.Write((int)(Out.ClientReportedStatus));
+                writer.Write(Runs.Current.ID);
+                writer.Write(message ?? String.Empty);
             });
         }
 

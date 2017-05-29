@@ -117,20 +117,20 @@ namespace XTMF2
             return included;
         }
 
-        internal bool ConstructModules(ref string error)
+        internal bool ConstructModules(XTMFRuntime runtime, ref string error)
         {
             lock (WriteLock)
             {
                 foreach(var start in _Starts)
                 {
-                    if (!start.ConstructModule(ref error))
+                    if (!start.ConstructModule(runtime, ref error))
                     {
                         return false;
                     }
                 }
                 foreach (var module in _Modules)
                 {
-                    if(!module.ConstructModule(ref error))
+                    if(!module.ConstructModule(runtime, ref error))
                     {
                         return false;
                     }
@@ -138,7 +138,7 @@ namespace XTMF2
                 // now construct all of the children
                 foreach (var child in Boundaries)
                 {
-                    if (!child.ConstructModules(ref error))
+                    if (!child.ConstructModules(runtime, ref error))
                     {
                         return false;
                     }

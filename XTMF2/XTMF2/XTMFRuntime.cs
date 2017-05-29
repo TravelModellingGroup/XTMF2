@@ -19,6 +19,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using XTMF2.Bus;
 using XTMF2.Configuration;
 using XTMF2.Controller;
 using XTMF2.Editing;
@@ -45,6 +46,11 @@ namespace XTMF2
         /// The modules available for model systems to this instance of XTMF
         /// </summary>
         public ModuleRepository Modules => SystemConfiguration.Modules;
+
+        /// <summary>
+        /// The currently executing ClientBus
+        /// </summary>
+        public RunBusClient ClientBus { get; internal set; }
 
         /// <summary>
         /// The users in the system.  Ensure you dereference the
@@ -79,7 +85,6 @@ namespace XTMF2
             UserController = new UserController(this);
             // Projects need to be loaded after users are available.
             ProjectController = new ProjectController(this);
-
         }
 
         /// <summary>
