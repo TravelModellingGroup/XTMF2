@@ -44,4 +44,119 @@ namespace XTMF2.RuntimeModules
             }
         }
     }
+
+    public sealed class IfF<Context,Return> : BaseFunction<Context,Return>
+    {
+        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]
+        public IFunction<Context, Return> ToInvokeIfTrue;
+        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false")]
+        public IFunction<Context, Return> ToInvokeIfFalse;
+        [Parameter(Required = true, Name = "Condition",
+            Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true")]
+        public IFunction<bool> Condition;
+
+        public override Return Invoke(Context context)
+        {
+            if (Condition.Invoke())
+            {
+                return ToInvokeIfTrue.Invoke(context);
+            }
+            else
+            {
+                return ToInvokeIfFalse.Invoke(context);
+            }
+        }
+    }
+
+    public sealed class IfWithContextF<Context, Return> : BaseFunction<Context, Return>
+    {
+        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]
+        public IFunction<Context, Return> ToInvokeIfTrue;
+        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false")]
+        public IFunction<Context, Return> ToInvokeIfFalse;
+        [Parameter(Required = true, Name = "Condition",
+            Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true")]
+        public IFunction<Context, bool> Condition;
+
+        public override Return Invoke(Context context)
+        {
+            if (Condition.Invoke(context))
+            {
+                return ToInvokeIfTrue.Invoke(context);
+            }
+            else
+            {
+                return ToInvokeIfFalse.Invoke(context);
+            }
+        }
+    }
+
+    public sealed class IfA : BaseAction
+    {
+        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]
+        public IAction ToInvokeIfTrue;
+        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false")]
+        public IAction ToInvokeIfFalse;
+        [Parameter(Required = true, Name = "Condition",
+            Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true")]
+        public IFunction<bool> Condition;
+
+        public override void Invoke()
+        {
+            if (Condition.Invoke())
+            {
+                ToInvokeIfTrue.Invoke();
+            }
+            else
+            {
+                ToInvokeIfFalse.Invoke();
+            }
+        }
+    }
+
+    public sealed class IfA<Context> : BaseAction<Context>
+    {
+        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]
+        public IAction<Context> ToInvokeIfTrue;
+        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false")]
+        public IAction<Context> ToInvokeIfFalse;
+        [Parameter(Required = true, Name = "Condition",
+            Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true")]
+        public IFunction<bool> Condition;
+
+        public override void Invoke(Context context)
+        {
+            if (Condition.Invoke())
+            {
+                ToInvokeIfTrue.Invoke(context);
+            }
+            else
+            {
+                ToInvokeIfFalse.Invoke(context);
+            }
+        }
+    }
+
+    public sealed class IfWithContextA<Context> : BaseAction<Context>
+    {
+        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true")]
+        public IAction<Context> ToInvokeIfTrue;
+        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false")]
+        public IAction<Context> ToInvokeIfFalse;
+        [Parameter(Required = true, Name = "Condition",
+            Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true")]
+        public IFunction<Context, bool> Condition;
+
+        public override void Invoke(Context context)
+        {
+            if (Condition.Invoke(context))
+            {
+                ToInvokeIfTrue.Invoke(context);
+            }
+            else
+            {
+                ToInvokeIfFalse.Invoke(context);
+            }
+        }
+    }
 }
