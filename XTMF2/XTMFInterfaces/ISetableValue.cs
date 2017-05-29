@@ -20,17 +20,10 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
+namespace XTMF2
 {
-    [Module(Name = "Basic Parameter", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
-    Description = "Provides the ability to have a value in a model system.")]
-    public class BasicParameter<T> : BaseFunction<T>
+    public interface ISetableValue<T> : IModule
     {
-        public T Value;
-
-        public override T Invoke()
-        {
-            return Value;
-        }
+        void Set(T value);
     }
 }

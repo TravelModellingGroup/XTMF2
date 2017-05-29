@@ -22,15 +22,13 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Basic Parameter", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
-    Description = "Provides the ability to have a value in a model system.")]
-    public class BasicParameter<T> : BaseFunction<T>
+    [Module(Name = "Setable Parameter", Description = "A basic data store of variable type that can be set.",
+        DocumentationLink = "http://tmg.utoronto.ca/doc/2.0")]
+    public sealed class SetableParameter<T> : BasicParameter<T>, ISetableValue<T>
     {
-        public T Value;
-
-        public override T Invoke()
+        public void Set(T value)
         {
-            return Value;
+            Value = value;
         }
     }
 }
