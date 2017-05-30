@@ -105,7 +105,7 @@ namespace XTMF2.Editing
                     }, () =>
                     {
                         string e = null;
-                        return (boundary.AddStart(this, startName, out _start, ref e), e);
+                        return (boundary.AddStart(this, startName, _start, ref e), e);
                     }));
                 }
                 return success;
@@ -135,7 +135,7 @@ namespace XTMF2.Editing
                     }, () =>
                     {
                         string e = null;
-                        return (boundary.AddModelSystemStructure(this, name, type, out _mss, ref e), e);
+                        return (boundary.AddModelSystemStructure(this, name, type, _mss, ref e), e);
                     }));
                 }
                 return success;
@@ -219,7 +219,7 @@ namespace XTMF2.Editing
                     }, () =>
                     {
                         string e = null;
-                        return (origin.ContainedWithin.AddLink(origin, originHook, destination, out _link, ref e), e);
+                        return (origin.ContainedWithin.AddLink(origin, originHook, destination, _link, ref e), e);
                     }));
                 }
                 return success;
@@ -234,6 +234,16 @@ namespace XTMF2.Editing
         internal static ModelSystemSession CreateRunSession(ProjectSession session, ModelSystemHeader header)
         {
             return new ModelSystemSession(session, header);
+        }
+
+        public bool Undo(ref string error)
+        {
+            return Buffer.UndoCommands(ref error);
+        }
+
+        public bool Redo(ref string error)
+        {
+            return Buffer.RedoCommands(ref error);
         }
     }
 }

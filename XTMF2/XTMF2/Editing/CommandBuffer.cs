@@ -35,12 +35,15 @@ namespace XTMF2.Editing
             {
                 if (Undo.TryPop(out var batch))
                 {
-                    var ret = batch.Undo(ref error);
-                    if (ret)
+                    if (batch.Undo(ref error))
                     {
                         Redo.Add(batch);
+                        return true;
                     }
-                    return ret;
+                }
+                else
+                {
+                    error = "No command to undo";
                 }
                 return false;
             }
@@ -50,14 +53,17 @@ namespace XTMF2.Editing
         {
             lock (ExecutionLock)
             {
-                if (Undo.TryPop(out var batch))
+                if (Redo.TryPop(out var batch))
                 {
-                    var ret = batch.Redo(ref error);
-                    if (ret)
+                    if (batch.Redo(ref error))
                     {
                         Undo.Add(batch);
+                        return true;
                     }
-                    return ret;
+                }
+                else
+                {
+                    error = "No command to redo";
                 }
                 return false;
             }

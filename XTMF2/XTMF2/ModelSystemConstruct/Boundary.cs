@@ -234,9 +234,14 @@ namespace XTMF2
             writer.WriteEndObject();
         }
 
-        internal bool RemoveModelSystemStructure(ModelSystemStructure mss, ref string e)
+        internal bool RemoveModelSystemStructure(ModelSystemStructure mss, ref string error)
         {
-            throw new NotImplementedException();
+            if(!_Modules.Remove(mss))
+            {
+                error = "Unable to find model system structure in the boundary!";
+                return false;
+            }
+            return true;
         }
 
         private static bool FailWith(ref string error, string message)
@@ -382,9 +387,43 @@ namespace XTMF2
             return true;
         }
 
+        internal bool AddLink(ModelSystemStructure origin, ModelSystemStructureHook originHook, ModelSystemStructure destination, Link link, ref string error)
+        {
+            switch (originHook.Cardinality)
+            {
+                case HookCardinality.Single:
+                    _Links.Add(link);
+                    break;
+                default:
+                    {
+                        var previous = _Links.FirstOrDefault(l => l.Origin == origin && l.OriginHook == originHook);
+                        if (previous != null)
+                        {
+                            link = previous;
+                        }
+                        if (!((MultiLink)link).AddDestination(destination, ref error))
+                        {
+                            return false;
+                        }
+                        // if we are successful and it didn't already exist add it to our list
+                        if (previous == null)
+                        {
+                            _Links.Add(link);
+                        }
+                    }
+                    break;
+            }
+            return true;
+        }
+
         internal bool RemoveLink(Link link, ref string e)
         {
-            throw new NotImplementedException();
+            if(!_Links.Remove(link))
+            {
+                e = "Unable to find the link to remove from the boundary!";
+                return false;
+            }
+            return true;
         }
 
         public bool SetName(ModelSystemSession session, string name, ref string error)
@@ -408,7 +447,12 @@ namespace XTMF2
 
         internal bool RemoveStart(Start start, ref string error)
         {
-            throw new NotImplementedException();
+            if(!_Starts.Remove(start))
+            {
+                error = "Unable to find a the given start!";
+                return false;
+            }
+            return true;
         }
 
         internal bool AddStart(ModelSystemSession session, string startName, out Start start, ref string error)
@@ -428,9 +472,38 @@ namespace XTMF2
             return true;
         }
 
+        /// <summary>
+        /// Add the given start to the boundary
+        /// </summary>
+        /// <param name="session"></param>
+        /// <param name="startName"></param>
+        /// <param name="start"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        internal bool AddStart(ModelSystemSession session, string startName, Start start, ref string error)
+        {
+            // ensure the name is unique between starting points
+            foreach (var ms in _Starts)
+            {
+                if (ms.Name.Equals(startName, StringComparison.OrdinalIgnoreCase))
+                {
+                    error = "There already exists a start with the same name!";
+                    return false;
+                }
+            }
+            _Starts.Add(start);
+            return true;
+        }
+
         internal bool AddModelSystemStructure(ModelSystemSession session, string name, Type type, out ModelSystemStructure mss, ref string error)
         {
             mss = ModelSystemStructure.Create(session, name, type, this);
+            _Modules.Add(mss);
+            return true;
+        }
+
+        internal bool AddModelSystemStructure(ModelSystemSession session, string name, Type type, ModelSystemStructure mss, ref string error)
+        {
             _Modules.Add(mss);
             return true;
         }

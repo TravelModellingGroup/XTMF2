@@ -284,5 +284,66 @@ namespace TestXTMF
                 Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
             });
         }
+
+        [TestMethod]
+        public void UndoAddStart()
+        {
+            TestHelper.RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
+            });
+        }
+
+        [TestMethod]
+        public void UndoAddModelSystemStructure()
+        {
+            TestHelper.RunInModelSystemContext("UndoAddModelSystemStructure", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
+                    out var mss, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
+            });
+        }
+
+        [TestMethod]
+        public void UndoAddLink()
+        {
+            TestHelper.RunInModelSystemContext("UndoAddLink", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<string>),
+                    out var parameter, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(SimpleParameterModule),
+                    out var module, ref error), error);
+                Assert.AreEqual(2, ms.GlobalBoundary.Modules.Count);
+                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsTrue(mSession.AddLink(user, module, module.Hooks[0], parameter, out var link, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
+            });
+        }
     }
 }
