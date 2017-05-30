@@ -25,6 +25,7 @@ using System.Collections.ObjectModel;
 using System.Reflection;
 using XTMF2.RuntimeModules;
 using System.Collections.Concurrent;
+using System.Linq;
 
 namespace XTMF2
 {
@@ -127,7 +128,7 @@ namespace XTMF2
 
         private static Type GenericParameter = typeof(BasicParameter<>);
 
-        private static ConcurrentDictionary<Type,FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
+        private static ConcurrentDictionary<Type, FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
 
         /// <summary>
         /// 
@@ -139,11 +140,11 @@ namespace XTMF2
             Module = (IModule)(
                 Type.GetTypeInfo().GetConstructor(RuntimeConstructor)?.Invoke(new[] { runtime })
                 ?? Type.GetTypeInfo().GetConstructor(EmptyConstructor).Invoke(EmptyConstructor));
-            if(Type.IsConstructedGenericType && Type.GetGenericTypeDefinition() == GenericParameter)
+            if (Type.IsConstructedGenericType && Type.GetGenericTypeDefinition() == GenericParameter)
             {
                 var paramType = Type.GenericTypeArguments[0];
                 var vals = ArbitraryParameterParser.ArbitraryParameterParse(paramType, ParameterValue, ref error);
-                if(!vals.Sucess)
+                if (!vals.Sucess)
                 {
                     return false;
                 }
@@ -178,7 +179,7 @@ namespace XTMF2
         /// <param name="error"></param>
         internal bool SetType(ModelSystemSession session, Type type, ref string error)
         {
-            if(type == null)
+            if (type == null)
             {
                 error = "The given type was null!";
                 return false;
@@ -219,6 +220,20 @@ namespace XTMF2
             return false;
         }
 
+        internal bool GetLink(ModelSystemStructureHook hook, out Link link)
+        {
+            var results = from l in ContainedWithin.Links
+                          where l.Origin == this && l.OriginHook == hook
+                          select l;
+            if (results.Any())
+            {
+                link = results.First();
+                return true;
+            }
+            link = null;
+            return false;
+        }
+
         internal virtual void Save(ref int index, Dictionary<ModelSystemStructure, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
             moduleDictionary.Add(this, index);
@@ -235,7 +250,7 @@ namespace XTMF2
             writer.WriteValue(Location.Y);
             writer.WritePropertyName("Index");
             writer.WriteValue(index++);
-            if(!String.IsNullOrEmpty(ParameterValue))
+            if (!String.IsNullOrEmpty(ParameterValue))
             {
                 writer.WritePropertyName("Parameter");
                 writer.WriteValue(ParameterValue);
@@ -291,7 +306,7 @@ namespace XTMF2
                         break;
                     case "Parameter":
                         {
-                            parameter = reader.ReadAsString();   
+                            parameter = reader.ReadAsString();
                         }
                         break;
                     default:
@@ -328,7 +343,7 @@ namespace XTMF2
             {
                 ContainedWithin = boundary
             };
-            if(!ret.SetType(session, type, ref error))
+            if (!ret.SetType(session, type, ref error))
             {
                 return null;
             }
