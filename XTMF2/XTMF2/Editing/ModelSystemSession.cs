@@ -206,21 +206,75 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(originHook));
             }
+            if(destination == null)
+            {
+                throw new ArgumentNullException(nameof(destination));
+            }
+            link = null;
             lock(SessionLock)
             {
-                var success = origin.ContainedWithin.AddLink(origin, originHook, destination, out link, ref error);
-                if(success)
+                bool success = false;
+                if (originHook.Cardinality == HookCardinality.Single)
                 {
-                    Link _link = link;
-                    Buffer.AddUndo(new Command(() =>
+                    if(origin.GetLink(originHook, out Link _link))
                     {
-                        string e = null;
-                        return (origin.ContainedWithin.RemoveLink(_link, ref e), e);
-                    }, () =>
+                        if(_link is SingleLink sl)
+                        {
+                            var originalDestination = sl.Destination;
+                            success = sl.SetDestination(this, destination, ref error);
+                            if (success)
+                            {
+                                Buffer.AddUndo(new Command(() =>
+                                {
+                                    string e = null;
+                                    return (sl.SetDestination(this, originalDestination, ref e), e);
+                                }, () =>
+                                {
+                                    string e = null;
+                                    return (sl.SetDestination(this, destination, ref e), e);
+                                }
+                                ));
+                            }
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException("A single cardinality link was not a SingleLink!");
+                        }
+                    }
+                    else
                     {
-                        string e = null;
-                        return (origin.ContainedWithin.AddLink(origin, originHook, destination, _link, ref e), e);
-                    }));
+                        success = origin.ContainedWithin.AddLink(origin, originHook, destination, out link, ref error);
+                        if (success)
+                        {
+                            _link = link;
+                            Buffer.AddUndo(new Command(() =>
+                            {
+                                string e = null;
+                                return (origin.ContainedWithin.RemoveLink(_link, ref e), e);
+                            }, () =>
+                            {
+                                string e = null;
+                                return (origin.ContainedWithin.AddLink(origin, originHook, destination, _link, ref e), e);
+                            }));
+                        }
+                    }
+                }
+                else
+                {
+                    success = origin.ContainedWithin.AddLink(origin, originHook, destination, out link, ref error);
+                    if (success)
+                    {
+                        Link _link = link;
+                        Buffer.AddUndo(new Command(() =>
+                        {
+                            string e = null;
+                            return (origin.ContainedWithin.RemoveLink(_link, ref e), e);
+                        }, () =>
+                        {
+                            string e = null;
+                            return (origin.ContainedWithin.AddLink(origin, originHook, destination, _link, ref e), e);
+                        }));
+                    }
                 }
                 return success;
             }

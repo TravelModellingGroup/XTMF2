@@ -345,5 +345,28 @@ namespace TestXTMF
                 Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
             });
         }
+
+        [TestMethod]
+        public void AddSingleLinkToDifferentModule()
+        {
+            /*
+             * This test will try to assign a link between from a single hook to different modules.
+             * This operation should remove the first link and then add the second
+             */
+            TestHelper.RunInModelSystemContext("AddSingleLinkToDifferentModule", (user, pSession, mSession) =>
+            {
+                // initialization
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss1, ref error));
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss2, ref error));
+                Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], mss1, out var link1, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                // This should not create a new link but move the previous one
+                Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], mss2, out var link2, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+            });
+        }
     }
 }
