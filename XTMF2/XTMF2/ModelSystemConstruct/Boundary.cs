@@ -196,6 +196,17 @@ namespace XTMF2
             }
         }
 
+        internal bool AddModelSystemStructure(ModelSystemStructure mss, ref string e)
+        {
+            if(_Modules.Contains(mss))
+            {
+                e = "The model system structure already exists in the boundary!";
+                return false;
+            }
+            _Modules.Add(mss);
+            return true;
+        }
+
         internal void Save(ref int index, Dictionary<ModelSystemStructure, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
             writer.WriteStartObject();

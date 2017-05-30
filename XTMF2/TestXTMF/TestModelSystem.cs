@@ -323,6 +323,32 @@ namespace TestXTMF
         }
 
         [TestMethod]
+        public void UndoRemoveModelSystemStructure()
+        {
+            TestHelper.RunInModelSystemContext("UndoRemoveModelSystemStructure", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
+                    out var mss, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
+
+                // now remove model system structure explicitly
+                Assert.IsTrue(mSession.RemoveModelSystemStructure(user, mss, ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+            });
+        }
+
+        [TestMethod]
         public void UndoAddLink()
         {
             TestHelper.RunInModelSystemContext("UndoAddLink", (user, pSession, mSession) =>
