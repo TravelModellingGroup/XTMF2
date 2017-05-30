@@ -244,6 +244,29 @@ namespace XTMF2
             return true;
         }
 
+        /// <summary>
+        /// This invocation should only occur with a link that was generated
+        /// by this boundary previously!
+        /// </summary>
+        /// <param name="link">The returning link</param>
+        /// <param name="e">An error message if one occurs</param>
+        /// <returns>True if it was added again, false otherwise with message.</returns>
+        internal bool AddLink(Link link, ref string e)
+        {
+            if(link.Origin.ContainedWithin != this)
+            {
+                e = "This link is was not contained within this boundary!";
+                return false;
+            }
+            if(_Links.Contains(link))
+            {
+                e = "This link is already contained within this boundary!";
+                return false;
+            }
+            _Links.Add(link);
+            return true;
+        }
+
         private static bool FailWith(ref string error, string message)
         {
             error = message;

@@ -95,7 +95,7 @@ namespace XTMF2.Editing
                     return false;
                 }
                 var success = boundary.AddStart(this, startName, out start, ref error);
-                if(success)
+                if (success)
                 {
                     Start _start = start;
                     Buffer.AddUndo(new Command(() =>
@@ -185,6 +185,39 @@ namespace XTMF2.Editing
             }
         }
 
+        public bool RemoveLink(User user, Link link, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (link == null)
+            {
+                throw new ArgumentNullException(nameof(link));
+            }
+            lock (SessionLock)
+            {
+                var boundary = link.Origin.ContainedWithin;
+                if (boundary.RemoveLink(link, ref error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                   {
+                       string e = null;
+                       return (boundary.AddLink(link, ref e), e);
+                   }, () =>
+                   {
+                       string e = null;
+                       return (boundary.RemoveLink(link, ref e), e);
+                   }));
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        }
+
         /// <summary>
         /// Add a new link originating at a hook and going to the destination model system structure
         /// </summary>
@@ -198,27 +231,27 @@ namespace XTMF2.Editing
         public bool AddLink(User user, ModelSystemStructure origin, ModelSystemStructureHook originHook,
             ModelSystemStructure destination, out Link link, ref string error)
         {
-            if(user == null)
+            if (user == null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if(originHook == null)
+            if (originHook == null)
             {
                 throw new ArgumentNullException(nameof(originHook));
             }
-            if(destination == null)
+            if (destination == null)
             {
                 throw new ArgumentNullException(nameof(destination));
             }
             link = null;
-            lock(SessionLock)
+            lock (SessionLock)
             {
                 bool success = false;
                 if (originHook.Cardinality == HookCardinality.Single)
                 {
-                    if(origin.GetLink(originHook, out Link _link))
+                    if (origin.GetLink(originHook, out Link _link))
                     {
-                        if(_link is SingleLink sl)
+                        if (_link is SingleLink sl)
                         {
                             var originalDestination = sl.Destination;
                             success = sl.SetDestination(this, destination, ref error);

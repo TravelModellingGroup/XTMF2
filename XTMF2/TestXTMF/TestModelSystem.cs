@@ -347,6 +347,39 @@ namespace TestXTMF
         }
 
         [TestMethod]
+        public void UndoRemoveLink()
+        {
+            TestHelper.RunInModelSystemContext("UndoRemoveLink", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<string>),
+                    out var parameter, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(SimpleParameterModule),
+                    out var module, ref error), error);
+                Assert.AreEqual(2, ms.GlobalBoundary.Modules.Count);
+                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsTrue(mSession.AddLink(user, module, module.Hooks[0], parameter, out var link, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
+
+                // now remove the link explicitly
+                Assert.IsTrue(mSession.RemoveLink(user, link, ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+            });
+        }
+
+        [TestMethod]
         public void AddSingleLinkToDifferentModule()
         {
             /*
