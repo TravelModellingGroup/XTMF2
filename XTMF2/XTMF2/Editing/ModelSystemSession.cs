@@ -112,6 +112,36 @@ namespace XTMF2.Editing
             }
         }
 
+        public bool RemoveStart(User user, Start start, ref string error)
+        {
+            if(user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if(start == null)
+            {
+                throw new ArgumentNullException(nameof(start));
+            }
+            lock (SessionLock)
+            {
+                var boundary = start.ContainedWithin;
+                if(boundary.RemoveStart(start, ref error))
+                {
+                    Buffer.AddUndo(new Command(()=>
+                    {
+                        string e = null;
+                        return (boundary.AddStart(start, ref e), e);
+                    }, ()=>
+                    {
+                        string e = null;
+                        return (boundary.RemoveStart(start, ref e), e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
         public bool AddModelSystemStructure(User user, Boundary boundary, string name, Type type, out ModelSystemStructure mss, ref string error)
         {
             if (user == null)

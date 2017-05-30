@@ -304,6 +304,32 @@ namespace TestXTMF
         }
 
         [TestMethod]
+        public void UndoRemoveStart()
+        {
+            TestHelper.RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
+
+                //now test explicitly removing the start
+                Assert.IsTrue(mSession.RemoveStart(user, Start, ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+            });
+        }
+
+        [TestMethod]
         public void UndoAddModelSystemStructure()
         {
             TestHelper.RunInModelSystemContext("UndoAddModelSystemStructure", (user, pSession, mSession) =>

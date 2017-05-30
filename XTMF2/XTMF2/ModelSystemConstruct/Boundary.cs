@@ -147,6 +147,17 @@ namespace XTMF2
             }
         }
 
+        internal bool AddStart(Start start, ref string e)
+        {
+            if(_Starts.Contains(start))
+            {
+                e = "The start already exists in the boundary!";
+                return false;
+            }
+            _Starts.Add(start);
+            return true;
+        }
+
         internal bool ConstructLinks(ref string error)
         {
             lock(WriteLock)
