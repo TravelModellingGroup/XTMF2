@@ -473,5 +473,34 @@ namespace TestXTMF
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail2, ref error), "Created a second boundary with the same name after redo!");
             });
         }
+
+        [TestMethod]
+        public void RemoveBoundary()
+        {
+            TestHelper.RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, ref error), error);
+                Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail1, ref error), "Created a second boundary with the same name!");
+                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.AreSame(subB, ms.GlobalBoundary.Boundaries[0]);
+                Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail2, ref error), "Created a second boundary with the same name after redo!");
+
+                // Now test removing the boundary explicitly
+                Assert.IsTrue(mSession.RemoveBoundary(user, ms.GlobalBoundary, subB, ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.AreSame(subB, ms.GlobalBoundary.Boundaries[0]);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+            });
+        }
     }
 }

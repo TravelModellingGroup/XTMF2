@@ -107,6 +107,39 @@ namespace XTMF2.Editing
             }
         }
 
+        public bool RemoveBoundary(User user, Boundary parentBoundary, Boundary boundary, ref string error)
+        {
+            if(user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (parentBoundary == null)
+            {
+                throw new ArgumentNullException(nameof(parentBoundary));
+            }
+            if (boundary == null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+            lock (SessionLock)
+            {
+                if(parentBoundary.RemoveBoundary(boundary, ref error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (parentBoundary.AddBoundary(boundary, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (parentBoundary.RemoveBoundary(boundary, ref e), e);
+                    }));
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /// <summary>
         /// Adds a new model system start element.
         /// </summary>
