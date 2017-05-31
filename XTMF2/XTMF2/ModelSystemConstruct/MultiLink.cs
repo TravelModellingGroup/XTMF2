@@ -24,7 +24,7 @@ using System.Collections.ObjectModel;
 
 namespace XTMF2.ModelSystemConstruct
 {
-    internal sealed class MultiLink : Link
+    public sealed class MultiLink : Link
     {
         private ObservableCollection<ModelSystemStructure> _Destinations;
 
@@ -44,6 +44,12 @@ namespace XTMF2.ModelSystemConstruct
         internal bool AddDestination(ModelSystemStructure destination, ref string error)
         {
             _Destinations.Add(destination);
+            return true;
+        }
+
+        internal bool AddDestination(ModelSystemStructure destination, int index)
+        {
+            _Destinations.Insert(index, destination);
             return true;
         }
 
@@ -71,6 +77,11 @@ namespace XTMF2.ModelSystemConstruct
             {
                 OriginHook.Install(Origin, _Destinations[i], i);
             }
+        }
+
+        internal void RemoveDestination(int i)
+        {
+            _Destinations.RemoveAt(i);
         }
     }
 }

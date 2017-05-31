@@ -502,5 +502,65 @@ namespace TestXTMF
                 Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
             });
         }
+
+        [TestMethod]
+        public void RemoveLinkToBoundariesThatWereRemoved()
+        {
+            TestHelper.RunInModelSystemContext("RemoveLinkToBoundariesThatWereRemoved", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                var global = ms.GlobalBoundary;
+                // Setup the delete
+                Assert.IsTrue(mSession.AddBoundary(user, global, "ToRemove", out var toRemove, ref error ), error);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, global, "Start", out var start, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, toRemove, "Tricky", typeof(IgnoreResult<string>),
+                    out var tricky, ref error), error);
+                Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], tricky, out var link, ref error), error);
+                Assert.AreEqual(1, global.Starts.Count);
+                Assert.AreEqual(1, global.Links.Count);
+                Assert.AreEqual(1, toRemove.Modules.Count);
+
+                // Now remove the boundary and check to make sure the number of links is cleaned up
+                Assert.IsTrue(mSession.RemoveBoundary(user, global, toRemove, ref error), error);
+                Assert.AreEqual(0, global.Links.Count, "We did not remove the link during the remove boundary!");
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(1, global.Links.Count, "The link was not restored after the undo on the remove boundary!");
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(0, global.Links.Count, "We did not remove the link again doing the redo of the remove boundary!");
+            });
+        }
+
+        [TestMethod]
+        public void RemoveMultiLinkToBoundariesThatWereRemoved()
+        {
+            TestHelper.RunInModelSystemContext("RemoveMultiLinkToBoundariesThatWereRemoved", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                var global = ms.GlobalBoundary;
+                // Setup the delete
+                Assert.IsTrue(mSession.AddBoundary(user, global, "ToRemove", out var toRemove, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, global, "Start", out var start, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, global, "Execute", typeof(Execute),
+                    out var execute, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, toRemove, "Tricky", typeof(IgnoreResult<string>),
+                    out var tricky, ref error), error);
+                Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], execute, out var link, ref error), error);
+                Assert.IsTrue(mSession.AddLink(user, execute, GetHook(execute.Hooks, "To Execute"), tricky, out var link2, ref error), error);
+                Assert.AreEqual(1, global.Starts.Count);
+                Assert.AreEqual(1, global.Modules.Count);
+                Assert.AreEqual(2, global.Links.Count);
+                Assert.AreEqual(1, toRemove.Modules.Count);
+
+                // Now remove the boundary and check to make sure the number of links is cleaned up
+                Assert.IsTrue(mSession.RemoveBoundary(user, global, toRemove, ref error), error);
+                Assert.AreEqual(0, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(1, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(0, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
+            });
+        }
     }
 }

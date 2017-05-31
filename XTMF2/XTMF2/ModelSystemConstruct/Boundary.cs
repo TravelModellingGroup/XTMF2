@@ -159,6 +159,47 @@ namespace XTMF2
             return true;
         }
 
+        internal List<Link> GetLinksGoingToBoundary(Boundary boundary)
+        {
+            var ret = new List<Link>();
+            var stack = new Stack<Boundary>();
+            stack.Push(this);
+            while(stack.Count > 0)
+            {
+                var current = stack.Pop();
+                foreach(var child in current._Boundaries)
+                {
+                    stack.Push(child);
+                }
+                // don't bother analyzing the boundary being removed
+                if(current != boundary)
+                {
+                    foreach(var link in current._Links)
+                    {
+                        if(link is SingleLink sl)
+                        {
+                            if(sl.Destination.ContainedWithin == boundary)
+                            {
+                                ret.Add(link);
+                            }
+                        }
+                        else if(link is MultiLink ml)
+                        {
+                            foreach(var dest in ml.Destinations)
+                            {
+                                if(dest.ContainedWithin == boundary)
+                                {
+                                    ret.Add(link);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return ret;
+        }
+
         internal bool AddBoundary(Boundary boundary, ref string error)
         {
             if (_Boundaries.Contains(boundary))

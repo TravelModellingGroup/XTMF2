@@ -94,12 +94,12 @@ namespace XTMF2.Editing
                     var _b = boundary;
                     Buffer.AddUndo(new Command(() =>
                     {
-                       string e = null;
-                       return (parentBoundary.RemoveBoundary(_b, ref e), e);
+                        string e = null;
+                        return (parentBoundary.RemoveBoundary(_b, ref e), e);
                     }, () =>
                     {
-                       string e = null;
-                       return (parentBoundary.AddBoundary(_b, ref e), e);
+                        string e = null;
+                        return (parentBoundary.AddBoundary(_b, ref e), e);
                     }));
                     return true;
                 }
@@ -117,7 +117,7 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
         public bool RemoveBoundary(User user, Boundary parentBoundary, Boundary boundary, ref string error)
         {
-            if(user == null)
+            if (user == null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
@@ -131,15 +131,86 @@ namespace XTMF2.Editing
             }
             lock (SessionLock)
             {
-                if(parentBoundary.RemoveBoundary(boundary, ref error))
+                var linksGoingToRemovedBoundary = ModelSystem.GlobalBoundary.GetLinksGoingToBoundary(boundary);
+                if (parentBoundary.RemoveBoundary(boundary, ref error))
                 {
+                    var multiLinkHelper = new Dictionary<MultiLink, List<(int Index, ModelSystemStructure MSS)>>();
+                    foreach (var link in linksGoingToRemovedBoundary)
+                    {
+                        if(link is MultiLink ml)
+                        {
+                            var list = new List<(int Index, ModelSystemStructure MSS)>();
+                            var dests = ml.Destinations;
+                            for (int i = 0; i < dests.Count; i++)
+                            {
+                                if(dests[i].ContainedWithin == boundary)
+                                {
+                                    list.Add((i, dests[i]));
+                                }
+                            }
+                            multiLinkHelper[ml] = list;
+                        }
+                    }
+                    bool RemoveLinks(ref string error2)
+                    {
+                        foreach (var link in linksGoingToRemovedBoundary)
+                        {
+                            if (link is SingleLink sl)
+                            {
+                                if (!link.Origin.ContainedWithin.RemoveLink(link, ref error2))
+                                {
+                                    return false;
+                                }
+                            }
+                            else if (link is MultiLink ml)
+                            {
+                                var dests = ml.Destinations;
+                                for (int i = 0; i < dests.Count; i++)
+                                {
+                                    if(dests[i].ContainedWithin == boundary)
+                                    {
+                                        ml.RemoveDestination(i);
+                                        i--;
+                                    }
+                                }
+                            }
+                        }
+                        return true;
+                    }
+                    if (!RemoveLinks(ref error))
+                    {
+                        return false;
+                    }
                     Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
-                        return (parentBoundary.AddBoundary(boundary, ref e), e);
+                        if (parentBoundary.AddBoundary(boundary, ref e))
+                        {
+                            foreach (var link in linksGoingToRemovedBoundary)
+                            {
+                                if (link is SingleLink sl)
+                                {
+                                    link.Origin.ContainedWithin.AddLink(link, ref e);
+                                }
+                                else if (link is MultiLink ml)
+                                {
+                                    var list = multiLinkHelper[ml];
+                                    foreach(var element in list)
+                                    {
+                                        ml.AddDestination(element.MSS, element.Index);
+                                    }
+                                }
+                            }
+                            return (true, null);
+                        }
+                        return (false, e);
                     }, () =>
                     {
                         string e = null;
+                        if (!RemoveLinks(ref e))
+                        {
+                            return (false, e);
+                        }
                         return (parentBoundary.RemoveBoundary(boundary, ref e), e);
                     }));
                     return true;
