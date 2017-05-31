@@ -107,6 +107,14 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Remove a boundary from a model system
+        /// </summary>
+        /// <param name="user">The user that removed the boundary</param>
+        /// <param name="parentBoundary">The parent boundary of this one to remove</param>
+        /// <param name="boundary">The boundary to remove</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
         public bool RemoveBoundary(User user, Boundary parentBoundary, Boundary boundary, ref string error)
         {
             if(user == null)
