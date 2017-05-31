@@ -147,6 +147,39 @@ namespace XTMF2
             }
         }
 
+        internal bool AddBoundary(string name, out Boundary boundary, ref string error)
+        {
+            if(_Boundaries.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            {
+                boundary = null;
+                error = "The name already exists in this boundary!";
+                return false;
+            }
+            _Boundaries.Add((boundary = new Boundary(name, this)));
+            return true;
+        }
+
+        internal bool AddBoundary(Boundary boundary, ref string error)
+        {
+            if (_Boundaries.Contains(boundary))
+            {
+                error = "The name already exists in this boundary!";
+                return false;
+            }
+            _Boundaries.Add(boundary);
+            return true;
+        }
+
+        internal bool RemoveBoundary(Boundary boundary, ref string error)
+        {
+            if(!_Boundaries.Remove(boundary))
+            {
+                error = "Unable to find boundary to remove it!";
+                return false;
+            }
+            return true;
+        }
+
         internal bool AddStart(Start start, ref string e)
         {
             if(_Starts.Contains(start))

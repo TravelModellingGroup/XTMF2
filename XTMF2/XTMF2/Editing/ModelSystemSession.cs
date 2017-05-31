@@ -63,6 +63,51 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Add a new boundary to a parent boundary
+        /// </summary>
+        /// <param name="user">The user requesting the action</param>
+        /// <param name="parentBoundary">The boundary that will gain the child</param>
+        /// <param name="name">The name of the new boundary</param>
+        /// <param name="boundary">The resulting boundary</param>
+        /// <param name="error">An error message if the operation fails</param>
+        /// <returns>True if the operation works, false otherwise with an error message.</returns>
+        public bool AddBoundary(User user, Boundary parentBoundary, string name, out Boundary boundary, ref string error)
+        {
+            boundary = null;
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (parentBoundary == null)
+            {
+                throw new ArgumentNullException(nameof(parentBoundary));
+            }
+            if (String.IsNullOrWhiteSpace(name))
+            {
+                error = "A boundary requires a unique name";
+                return false;
+            }
+            lock (SessionLock)
+            {
+                if (parentBoundary.AddBoundary(name, out boundary, ref error))
+                {
+                    var _b = boundary;
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                       string e = null;
+                       return (parentBoundary.RemoveBoundary(_b, ref e), e);
+                    }, () =>
+                    {
+                       string e = null;
+                       return (parentBoundary.AddBoundary(_b, ref e), e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Adds a new model system start element.
         /// </summary>
         /// <param name="user">The user requesting to add the new structure.</param>
@@ -114,24 +159,24 @@ namespace XTMF2.Editing
 
         public bool RemoveStart(User user, Start start, ref string error)
         {
-            if(user == null)
+            if (user == null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if(start == null)
+            if (start == null)
             {
                 throw new ArgumentNullException(nameof(start));
             }
             lock (SessionLock)
             {
                 var boundary = start.ContainedWithin;
-                if(boundary.RemoveStart(start, ref error))
+                if (boundary.RemoveStart(start, ref error))
                 {
-                    Buffer.AddUndo(new Command(()=>
+                    Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
                         return (boundary.AddStart(start, ref e), e);
-                    }, ()=>
+                    }, () =>
                     {
                         string e = null;
                         return (boundary.RemoveStart(start, ref e), e);
@@ -182,16 +227,16 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(mss));
             }
-            lock(SessionLock)
+            lock (SessionLock)
             {
                 var boundary = mss.ContainedWithin;
-                if(boundary.RemoveModelSystemStructure(mss, ref error))
+                if (boundary.RemoveModelSystemStructure(mss, ref error))
                 {
-                    Buffer.AddUndo(new Command(()=>
+                    Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
                         return (boundary.AddModelSystemStructure(mss, ref e), e);
-                    }, ()=>
+                    }, () =>
                     {
                         string e = null;
                         return (boundary.RemoveModelSystemStructure(mss, ref e), e);
