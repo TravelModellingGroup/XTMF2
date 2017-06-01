@@ -549,5 +549,53 @@ namespace XTMF2.Editing
         {
             return Buffer.RedoCommands(ref error);
         }
+
+        /// <summary>
+        /// Remove a single destination of a MultiLink
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="multiLink">The multi link to operate on</param>
+        /// <param name="index">The index to remove</param>
+        /// <param name="error">The error message if the operation fails.</param>
+        /// <returns>True if successful, false otherwise with error message.</returns>
+        public bool RemoveLinkDestination(User user, Link multiLink, int index, ref string error)
+        {
+            if(user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if(multiLink == null)
+            {
+                throw new ArgumentNullException(nameof(multiLink));
+            }
+            if(multiLink is MultiLink ml)
+            {
+                lock (SessionLock)
+                {
+                    var dests = ml.Destinations;
+                    if(index >= dests.Count || index < 0)
+                    {
+                        error = "The index is out of bounds!";
+                        return false;
+                    }
+                    var toRemove = dests[index];
+                    ml.RemoveDestination(index);
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (ml.AddDestination(toRemove, index), null);
+                    }, () =>
+                    {
+                        ml.RemoveDestination(index);
+                        return (true, null);
+                    }));
+                    return true;
+                }
+            }
+            else
+            {
+                error = "The link was not a multi-link!";
+                return false;
+            }
+        }
     }
 }

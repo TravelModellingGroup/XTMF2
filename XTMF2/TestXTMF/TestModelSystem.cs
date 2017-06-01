@@ -512,7 +512,7 @@ namespace TestXTMF
                 string error = null;
                 var global = ms.GlobalBoundary;
                 // Setup the delete
-                Assert.IsTrue(mSession.AddBoundary(user, global, "ToRemove", out var toRemove, ref error ), error);
+                Assert.IsTrue(mSession.AddBoundary(user, global, "ToRemove", out var toRemove, ref error), error);
                 Assert.IsTrue(mSession.AddModelSystemStart(user, global, "Start", out var start, ref error), error);
                 Assert.IsTrue(mSession.AddModelSystemStructure(user, toRemove, "Tricky", typeof(IgnoreResult<string>),
                     out var tricky, ref error), error);
@@ -560,6 +560,38 @@ namespace TestXTMF
                 Assert.AreEqual(1, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
                 Assert.IsTrue(mSession.Redo(ref error), error);
                 Assert.AreEqual(0, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
+            });
+        }
+
+        [TestMethod]
+        public void RemoveSingleDestinationInMultiLink()
+        {
+            TestHelper.RunInModelSystemContext("RemoveMultiLinkToBoundariesThatWereRemoved", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                var global = ms.GlobalBoundary;
+                Assert.IsTrue(mSession.AddModelSystemStart(user, global, "Start", out var start, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, global, "Execute", typeof(Execute),
+                    out var execute, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStructure(user, global, "Tricky", typeof(IgnoreResult<string>),
+                    out var ignore, ref error), error);
+
+                Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], execute, out var link, ref error), error);
+                // Create 2 links from the execute into the ignore
+                Assert.IsTrue(mSession.AddLink(user, execute, GetHook(execute.Hooks, "To Execute"),
+                    execute, out var linkI1, ref error), error);
+                Assert.IsTrue(mSession.AddLink(user, execute, GetHook(execute.Hooks, "To Execute"),
+                    execute, out var _, ref error), error);
+
+
+                Assert.AreEqual(2, ((MultiLink)linkI1).Destinations.Count);
+                Assert.IsTrue(mSession.RemoveLinkDestination(user, linkI1, 0, ref error), error);
+                Assert.AreEqual(1, ((MultiLink)linkI1).Destinations.Count);
+                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.AreEqual(2, ((MultiLink)linkI1).Destinations.Count);
+                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.AreEqual(1, ((MultiLink)linkI1).Destinations.Count);
             });
         }
     }
