@@ -17,12 +17,71 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Text;
 
 namespace XTMF2.Repository
 {
-    public abstract class Repository
+    public abstract class Repository<T>
     {
+        protected ObservableCollection<T> _Store;
+
+        protected object StoreLock = new object();
+
+        public ReadOnlyObservableCollection<T> Store
+        {
+            get
+            {
+                lock (StoreLock)
+                {
+                    return new ReadOnlyObservableCollection<T>(_Store);
+                }
+            }
+        }
+
+        public Repository()
+        {
+            lock (StoreLock)
+            {
+                _Store = new ObservableCollection<T>();
+            }
+        }
+
+        public bool Add(T toAdd, ref string error)
+        {
+            if (!ValidateInput(toAdd, ref error))
+            {
+                return false;
+            }
+            lock (StoreLock)
+            {
+                _Store.Add(toAdd);
+                return true;
+            }
+        }
+
+        protected virtual bool ValidateInput(T data, ref string error)
+        {
+            return true;
+        }
+
+        public bool Remove(T toRemove)
+        {
+            lock (StoreLock)
+            {
+                _Store.Add(toRemove);
+                return true;
+            }
+        }
+
+        public bool Contains(T toCheck)
+        {
+            lock (StoreLock)
+            {
+                return _Store.Contains(toCheck);
+            }
+        }
     }
 }
