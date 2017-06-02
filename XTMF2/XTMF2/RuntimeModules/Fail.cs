@@ -31,7 +31,7 @@ namespace XTMF2.RuntimeModules
 
         public override void Invoke()
         {
-            throw new XTMFRuntimeException(Message?.Invoke());
+            throw new XTMFRuntimeException(this, Message?.Invoke());
         }
     }
 
@@ -44,7 +44,7 @@ namespace XTMF2.RuntimeModules
 
         public override void Invoke(Context context)
         {
-            throw new XTMFRuntimeException(Message?.Invoke());
+            throw new XTMFRuntimeException(this, Message?.Invoke());
         }
     }
 
@@ -57,7 +57,7 @@ namespace XTMF2.RuntimeModules
 
         public override void Invoke(Context context)
         {
-            throw new XTMFRuntimeException(Message?.Invoke(context));
+            throw new XTMFRuntimeException(this, Message?.Invoke(context));
         }
     }
 
@@ -70,7 +70,7 @@ namespace XTMF2.RuntimeModules
 
         public override Return Invoke()
         {
-            throw new XTMFRuntimeException(Message?.Invoke());
+            throw new XTMFRuntimeException(this, Message?.Invoke());
         }
     }
 
@@ -83,7 +83,7 @@ namespace XTMF2.RuntimeModules
 
         public override Return Invoke(Context context)
         {
-            throw new XTMFRuntimeException(Message?.Invoke());
+            throw new XTMFRuntimeException(this, Message?.Invoke());
         }
     }
 
@@ -96,7 +96,7 @@ namespace XTMF2.RuntimeModules
 
         public override Return Invoke(Context context)
         {
-            throw new XTMFRuntimeException(Message?.Invoke(context));
+            throw new XTMFRuntimeException(this, Message?.Invoke(context));
         }
     }
 }
