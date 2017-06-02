@@ -22,16 +22,17 @@ namespace XTMF2
 {
     public class XTMFRuntimeException : Exception
     {
-        public XTMFRuntimeException()
+
+        public IModule FailingModule { get; private set; }
+
+        public XTMFRuntimeException(IModule module, string message)
         {
+            FailingModule = module;
         }
 
-        public XTMFRuntimeException(string message) : base(message)
+        public XTMFRuntimeException(IModule module, string message, Exception innerException) : base(message)
         {
-        }
-
-        public XTMFRuntimeException(string message, Exception innerException) : base(message, innerException)
-        {
+            FailingModule = module;
         }
     }
 }
