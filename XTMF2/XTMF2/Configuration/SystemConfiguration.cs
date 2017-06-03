@@ -65,8 +65,16 @@ namespace XTMF2.Configuration
             LoadAssembly(typeof(SystemConfiguration).GetTypeInfo().Assembly);
         }
 
-        private void LoadAssembly(Assembly assembly)
+        /// <summary>
+        /// Load the types of the given assembly
+        /// </summary>
+        /// <param name="assembly">The assembly to load</param>
+        public void LoadAssembly(Assembly assembly)
         {
+            if(assembly == null)
+            {
+                throw new ArgumentNullException(nameof(assembly));
+            }
             Parallel.ForEach(assembly.ExportedTypes, (Type t) =>
             {
                 string error = null;
