@@ -57,8 +57,7 @@ namespace XTMF2
                 }
                 return (true, Enum.Parse(type, input));
             }
-            KeyValuePair<int, MethodInfo> info;
-            if (!ParserLookup.TryGetValue(type, out info))
+            if (!ParserLookup.TryGetValue(type, out KeyValuePair<int, MethodInfo> info))
             {
                 // If we are not a string to try find a try parse with an error first
                 string typeParse = "TryParse";
@@ -126,6 +125,7 @@ namespace XTMF2
                 {
                     // a fail appears
                     output = parameters[2];
+                    return (true, output);
                 }
                 else
                 {
@@ -142,9 +142,8 @@ namespace XTMF2
                 {
                     error = e.Message;
                 }
-                return (false, null);
             }
-            return (true, output);
+            return (false, null);
         }
 
         private static (bool, object) RegularParse(string input, ref string error, MethodInfo regularParse)
@@ -154,6 +153,7 @@ namespace XTMF2
             try
             {
                 output = regularParse.Invoke(null, parameters);
+                return (true, output);
             }
             catch (Exception e)
             {
@@ -167,7 +167,6 @@ namespace XTMF2
                 }
                 return (false, null);
             }
-            return (true, output);
         }
 
         private static (bool, object) TryParse(string input, ref string error, MethodInfo errorTryParse)
@@ -181,6 +180,7 @@ namespace XTMF2
                 {
                     // a fail appears
                     output = parameters[1];
+                    return (true, output);
                 }
                 else
                 {
@@ -197,9 +197,8 @@ namespace XTMF2
                 {
                     error = e.Message;
                 }
-                return (false, null);
             }
-            return (true, output);
+            return (false, null);
         }
     }
 }
