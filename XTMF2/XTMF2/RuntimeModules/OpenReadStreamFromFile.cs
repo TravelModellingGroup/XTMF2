@@ -22,9 +22,9 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Read File", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Open Read Stream From File", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
 Description = "Provides the ability to read a file from the path given to it via the context.")]
-    public class ReadFile : BaseFunction<string, ReadStream>
+    public class OpenReadStreamFromFile : BaseFunction<string, ReadStream>
     {
         public override ReadStream Invoke(string context)
         {
