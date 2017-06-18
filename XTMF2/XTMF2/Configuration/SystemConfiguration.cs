@@ -53,7 +53,6 @@ namespace XTMF2.Configuration
 
         private void CreateDirectory(string directoryName)
         {
-            Console.WriteLine(directoryName);
             DirectoryInfo dir = new DirectoryInfo(directoryName);
             if (!dir.Exists)
             {
