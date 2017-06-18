@@ -45,9 +45,8 @@ namespace XTMF2.Configuration
             }
             else
             {
-                var homePath = Environment.GetEnvironmentVariable("HOME");
                 CreateDirectory(DefaultUserDirectory =
-                    Path.Combine(homePath, ".XTMF", "Users"));
+                    Path.Combine(Environment.GetEnvironmentVariable("HOME"), ".XTMF", "Users"));
             }
             LoadTypes();
         }
