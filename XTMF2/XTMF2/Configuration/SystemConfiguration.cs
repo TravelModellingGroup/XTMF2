@@ -17,10 +17,12 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using XTMF2.Editing;
 using XTMF2.Repository;
@@ -36,12 +38,23 @@ namespace XTMF2.Configuration
 
         public SystemConfiguration(XTMFRuntime runtime, string fullPath = null)
         {
-            CreateDirectory(DefaultUserDirectory = Path.Combine(Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%"), "XTMF", "Users"));
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                CreateDirectory(DefaultUserDirectory =
+                    Path.Combine(Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%"), "XTMF", "Users"));
+            }
+            else
+            {
+                var homePath = Environment.GetEnvironmentVariable("HOME");
+                CreateDirectory(DefaultUserDirectory =
+                    Path.Combine(homePath, ".XTMF", "Users"));
+            }
             LoadTypes();
         }
 
         private void CreateDirectory(string directoryName)
         {
+            Console.WriteLine(directoryName);
             DirectoryInfo dir = new DirectoryInfo(directoryName);
             if (!dir.Exists)
             {
