@@ -68,5 +68,11 @@ namespace XTMF2
         {
             throw new InvalidOperationException("Unable to write to a ReadStream");
         }
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            BaseStream.Dispose();
+        }
     }
 }

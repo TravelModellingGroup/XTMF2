@@ -68,5 +68,11 @@ namespace XTMF2
         {
             BaseStream.Write(buffer, offset, count);
         }
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            BaseStream.Dispose();
+        }
     }
 }
