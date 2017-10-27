@@ -129,6 +129,14 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Create a model system session allowing for the editing of a model system.
+        /// </summary>
+        /// <param name="user">The user that is requesting access.</param>
+        /// <param name="modelSystemHeader">The model system reference to load.</param>
+        /// <param name="session">The resulting session.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, out ModelSystemSession session, ref string error)
         {
             if(user == null)
@@ -165,6 +173,14 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Retrieve the header for a model system with a given name.
+        /// </summary>
+        /// <param name="user">The user executing the action.</param>
+        /// <param name="modelSystemName">The name of the model system.</param>
+        /// <param name="modelSystemHeader">The resulting model system header.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool GetModelSystemHeader(User user, string modelSystemName, out ModelSystemHeader modelSystemHeader, ref string error)
         {
             if(user == null)
@@ -193,7 +209,7 @@ namespace XTMF2.Editing
         /// <param name="doingShare">The user that is issuing the share command</param>
         /// <param name="toSharWith">The person to share with</param>
         /// <param name="error">An error message if appropriate</param>
-        /// <returns>True if the share was completed successfully.</returns>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool ShareWith(User doingShare, User toSharWith, ref string error)
         {
             // test our arguments
@@ -209,7 +225,6 @@ namespace XTMF2.Editing
             {
                 if (!(doingShare.Admin || doingShare == Project.Owner))
                 {
-
                     error = "The user sharing the project must either be the owner or an administrator!";
                     return false;
                 }
@@ -218,6 +233,11 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Create a project session for handling the information to do a run.
+        /// </summary>
+        /// <param name="runtime">The runtime to work within.</param>
+        /// <returns></returns>
         internal static ProjectSession CreateRunSession(XTMFRuntime runtime)
         {
             return new ProjectSession(runtime, null);
@@ -229,7 +249,7 @@ namespace XTMF2.Editing
         /// <param name="owner"></param>
         /// <param name="newOwner"></param>
         /// <param name="error"></param>
-        /// <returns></returns>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool SwitchOwner(User owner, User newOwner, ref string error)
         {
             if(owner == null)
@@ -251,6 +271,13 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Remove access for a user to access a project.
+        /// </summary>
+        /// <param name="owner">The owner of the project.</param>
+        /// <param name="toRestrict">The user to remove access to.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RestrictAccess(User owner, User toRestrict, ref string error)
         {
             if (owner == null)
