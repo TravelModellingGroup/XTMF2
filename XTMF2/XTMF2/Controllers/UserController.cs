@@ -24,7 +24,7 @@ using System.Linq;
 using System.Text;
 using XTMF2.Configuration;
 
-namespace XTMF2.Controller
+namespace XTMF2.Controllers
 {
     public sealed class UserController
     {

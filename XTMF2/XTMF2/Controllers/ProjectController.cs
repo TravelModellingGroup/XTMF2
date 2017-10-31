@@ -25,7 +25,7 @@ using XTMF2.Repository;
 using System.Linq;
 using XTMF2.Editing;
 
-namespace XTMF2.Controller
+namespace XTMF2.Controllers
 {
     public sealed class ProjectController
     {

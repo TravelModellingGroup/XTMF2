@@ -32,36 +32,43 @@ namespace XTMF2.Editing
         public EditingStack(int capacity)
         {
             Capacity = capacity;
-            Data = new CommandBatch[capacity];
+            _Data = new CommandBatch[capacity];
             IsReadOnly = false;
         }
-        /// <summary>
-        /// The backing data for the stack
-        /// </summary>
-        private CommandBatch[] Data;
-
+        
         public int Capacity { get; private set; }
 
         public int Count { get; private set; }
 
         public bool IsReadOnly { get; private set; }
 
-        private int Head = -1;
+        /// <summary>
+        /// The backing data for the stack
+        /// </summary>
+        private CommandBatch[] _Data;
 
-        private object DataLock = new object();
+        private int _Head = -1;
+
+        private object _DataLock = new object();
 
         /// <summary>
         /// Add a new command onto the stack
         /// </summary>
         /// <param name="item"></param>
+        /// <exception cref="ArgumentNullException">The item may not be null.</exception>
         public void Add(CommandBatch item)
         {
-            lock (DataLock)
+            if (item == null)
+            {
+                throw new ArgumentNullException(nameof(item));
+            }
+
+            lock (_DataLock)
             {
                 // since this is a circle, there is no issue
-                Head = (Head + 1) % Capacity;
+                _Head = (_Head + 1) % Capacity;
                 Count++;
-                Data[Head] = item;
+                _Data[_Head] = item;
                 if(Count > Capacity)
                 {
                     Count = Capacity;
@@ -72,7 +79,7 @@ namespace XTMF2.Editing
         /// <summary>
         /// Get the top element off of the stack
         /// </summary>
-        /// <returns>The top element</returns>
+        /// <returns>The top element, null if there is nothing.</returns>
         public CommandBatch Pop()
         {
             if (TryPop(out CommandBatch result))
@@ -89,13 +96,13 @@ namespace XTMF2.Editing
         /// <returns>If the pop was successful</returns>
         public bool TryPop(out CommandBatch command)
         {
-            lock (DataLock)
+            lock (_DataLock)
             {
                 if(Count > 0)
                 {
                     Count--;
-                    command = Data[Head];
-                    Head = (Head - 1) % Capacity;
+                    command = _Data[_Head];
+                    _Head = (_Head - 1) % Capacity;
                     return true;
                 }
                 command = null;
@@ -103,24 +110,38 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Clear the data from the stack
+        /// </summary>
         public void Clear()
         {
-            lock (DataLock)
+            lock (_DataLock)
             {
-                Array.Clear(Data, 0, Data.Length);
+                Array.Clear(_Data, 0, _Data.Length);
                 Count = 0;
             }
         }
 
+        /// <summary>
+        /// Tests to see if the item is contained in the stack
+        /// </summary>
+        /// <param name="item">The item to check for.</param>
+        /// <returns>True if the item is contained, false otherwise.</returns>
+        /// <exception cref="ArgumentNullException">The item may not be null.</exception>
         public bool Contains(CommandBatch item)
         {
-            lock (DataLock)
+            if (item == null)
+            {
+                throw new ArgumentNullException(nameof(item));
+            }
+
+            lock (_DataLock)
             {
                 for(int i = 0; i < Count; i++)
                 {
-                    var headoffset = (Head - i);
+                    var headoffset = (_Head - i);
                     int index = headoffset < 0 ? Capacity + headoffset : headoffset;
-                    if (Data[index] == item)
+                    if (_Data[index] == item)
                     {
                         return true;
                     }
@@ -129,13 +150,20 @@ namespace XTMF2.Editing
             return false;
         }
 
+        /// <summary>
+        /// Copy the command batches to an array
+        /// </summary>
+        /// <param name="array">The array to store them into.</param>
+        /// <param name="arrayIndex">The starting position to copy them to.</param>
+        /// <exception cref="ArgumentNullException">The array may not be null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The array must be able to store all elements otherwise this error will be thrown.</exception>
         public void CopyTo(CommandBatch[] array, int arrayIndex)
         {
             if(array == null)
             {
                 throw new ArgumentNullException(nameof(array));
             }
-            lock (DataLock)
+            lock (_DataLock)
             {
                 if(array.Length - arrayIndex < Count)
                 {
@@ -143,22 +171,22 @@ namespace XTMF2.Editing
                 }
                 for(int i = 0; i < Count; i++)
                 {
-                    var headoffset = (Head - i);
+                    var headoffset = (_Head - i);
                     int index = headoffset < 0 ? Capacity + headoffset : headoffset;
-                    array[arrayIndex++] = Data[index];
+                    array[arrayIndex++] = _Data[index];
                 }
             }
         }
 
         public IEnumerator<CommandBatch> GetEnumerator()
         {
-            lock (DataLock)
+            lock (_DataLock)
             {
                 for(int i = 0; i < Count; i++)
                 {
-                    var headoffset = (Head - i);
+                    var headoffset = (_Head - i);
                     int index = headoffset < 0 ? Capacity + headoffset : headoffset;
-                    yield return Data[index];
+                    yield return _Data[index];
                 }
             }
         }

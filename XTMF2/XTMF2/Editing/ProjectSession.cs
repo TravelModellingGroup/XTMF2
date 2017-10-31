@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Threading;
+using XTMF2.Controllers;
 using XTMF2.Editing;
 using XTMF2.Repository;
 
@@ -167,7 +168,7 @@ namespace XTMF2.Editing
         public bool CreateNewModelSystem(string modelSystemName, out ModelSystemHeader modelSystem, ref string error)
         {
             modelSystem = null;
-            if(!Controller.ProjectController.ValidateProjectName(modelSystemName, ref error))
+            if(!ProjectController.ValidateProjectName(modelSystemName, ref error))
             {
                 return false;
             }

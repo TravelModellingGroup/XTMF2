@@ -20,7 +20,7 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2;
 using XTMF2.Editing;
-using XTMF2.Controller;
+using XTMF2.Controllers;
 using System.Linq;
 
 namespace TestXTMF
