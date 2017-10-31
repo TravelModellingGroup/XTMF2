@@ -24,28 +24,66 @@ using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.Bus
 {
+    /// <summary>
+    /// Used to represent all of the information required to run a model system.
+    /// </summary>
     public sealed class RunContext
     {
+        /// <summary>
+        /// A string representation of the model system.
+        /// </summary>
+        private string _ModelSystemAsString;
 
-        private string ModelSystemAsString;
-        private readonly string CurrentWorkingDirectory;
+        /// <summary>
+        /// The directory that this run will be executed in.
+        /// </summary>
+        private readonly string _CurrentWorkingDirectory;
+
+        /// <summary>
+        /// The processed representation of the model system.
+        /// </summary>
+        private ModelSystem _ModelSystem;
+
+        /// <summary>
+        /// A reference to the XTMFRuntime that will execute the model system.
+        /// </summary>
+        private XTMFRuntime _Runtime;
+
+        /// <summary>
+        /// Set tot true if the model system has finished executing.
+        /// </summary>
         public bool HasExecuted { get; private set; }
+
+        /// <summary>
+        /// The unique identifier for this run.
+        /// </summary>
         public string ID { get; private set; }
+
+        /// <summary>
+        /// The name of the module to use as a starting point.
+        /// </summary>
         public string StartToExecute { get; private set; }
 
-        private ModelSystem ModelSystem;
-        private XTMFRuntime Runtime;
-
-        public RunContext(XTMFRuntime runtime, string id, string modelSystem, string cwd, string start)
+        private RunContext(XTMFRuntime runtime, string id, string modelSystem, string cwd, string start)
         {
-            Runtime = runtime;
+            _Runtime = runtime;
             ID = id;
-            ModelSystemAsString = modelSystem;
-            CurrentWorkingDirectory = cwd;
+            _ModelSystemAsString = modelSystem;
+            _CurrentWorkingDirectory = cwd;
             HasExecuted = false;
             StartToExecute = start;
         }
 
+        /// <summary>
+        /// Create a model system run context in the given XTMF runtime.
+        /// </summary>
+        /// <param name="runtime">The runtime to work within.</param>
+        /// <param name="id">The unique ID for this run.</param>
+        /// <param name="modelSystem">The model system stored as bytes.</param>
+        /// <param name="cwd">The directory to execute the model system in.</param>
+        /// <param name="start">The starting point to run in.</param>
+        /// <param name="context">The resulting context.</param>
+        /// <returns>True if the model system was able to be processed, false otherwise.</returns>
         public static bool CreateRunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd, 
             string start, out RunContext context)
         {
@@ -64,25 +102,27 @@ namespace XTMF2.Bus
             return !String.IsNullOrWhiteSpace(modelSystemAsString);
         }
 
+        /// <summary>
+        /// Validate the model system contained within this run context.
+        /// </summary>
+        /// <param name="error">An error message if the model system is invalid.</param>
+        /// <returns>True if the model system is valid, false otherwise with an error message.</returns>
         internal bool ValidateModelSystem(ref string error)
         {
             // Construct the model system
-            if (!XTMF2.ModelSystem.Load(ModelSystemAsString, Runtime, out ModelSystem ms, ref error)
-                || !ms.Construct(Runtime, ref error))
+            if (!XTMF2.ModelSystem.Load(_ModelSystemAsString, _Runtime, out ModelSystem ms, ref error)
+                || !ms.Construct(_Runtime, ref error))
             {
                 return false;
             }
+            _ModelSystem = ms;
             // Ensure that the starting point exists
-            ModelSystem = ms;
-           
-            if(!GetStart(Start.ParseStartString(StartToExecute),
+            if (!GetStart(Start.ParseStartString(StartToExecute),
                 out var s, ref error))
             {
-                ModelSystem = null;
+                _ModelSystem = null;
                 return false;
             }
-            // if everything is fine store the constructed model system
-            
             return true;
         }
 
@@ -95,7 +135,7 @@ namespace XTMF2.Bus
                 return false;
             }
             // get the boundary the start should be contained within.
-            Boundary current = ModelSystem.GlobalBoundary;
+            Boundary current = _ModelSystem.GlobalBoundary;
             for (int i = 0; i < startPath.Count - 1; i++)
             {
                 bool found = false;
@@ -126,6 +166,12 @@ namespace XTMF2.Bus
             return false;
         }
 
+        /// <summary>
+        /// Execute the run context.
+        /// </summary>
+        /// <param name="error">The error message if the run fails.</param>
+        /// <param name="stackTrace">The stack trace at the point of the error if the run fails.</param>
+        /// <returns>True if the run succeeds, false otherwise with an error message and a stack trace.</returns>
         internal bool Run(ref string error, ref string stackTrace)
         {
             if(!GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error))
@@ -135,8 +181,8 @@ namespace XTMF2.Bus
             var originalDir = Directory.GetCurrentDirectory();
             try
             {
-                Directory.CreateDirectory(CurrentWorkingDirectory);
-                Directory.SetCurrentDirectory(CurrentWorkingDirectory);
+                Directory.CreateDirectory(_CurrentWorkingDirectory);
+                Directory.SetCurrentDirectory(_CurrentWorkingDirectory);
                 ((IAction)startingMss.Module).Invoke();
             }
             catch(Exception e)

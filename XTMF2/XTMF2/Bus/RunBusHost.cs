@@ -31,10 +31,10 @@ namespace XTMF2.Bus
     /// </summary>
     public sealed class RunBusHost : IDisposable
     {
-        private Stream HostStream;
-        private bool Owner;
-        private volatile bool Exit = false;
-        private volatile bool Exited = false;
+        private Stream _HostStream;
+        private bool _Owner;
+        private volatile bool _Exit = false;
+        private volatile bool _Exited = false;
 
         /// <summary>
         /// Create a host on a given stream.
@@ -43,8 +43,8 @@ namespace XTMF2.Bus
         /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
         public RunBusHost(Stream hostStream, bool streamOwner)
         {
-            Owner = streamOwner;
-            HostStream = hostStream ?? throw new ArgumentNullException(nameof(hostStream));
+            _Owner = streamOwner;
+            _HostStream = hostStream ?? throw new ArgumentNullException(nameof(hostStream));
             StartListenner();
         }
 
@@ -59,19 +59,19 @@ namespace XTMF2.Bus
             {
                 GC.SuppressFinalize(this);
             }
-            Exit = true;
-            while (!Exited)
+            _Exit = true;
+            while (!_Exited)
             {
                 Interlocked.MemoryBarrier();
-                if (!Exited)
+                if (!_Exited)
                 {
                     Task.WaitAll(Task.Delay(50));
                 }
                 Interlocked.MemoryBarrier();
             }
-            if (Owner)
+            if (_Owner)
             {
-                HostStream.Dispose();
+                _HostStream.Dispose();
             }
         }
 
@@ -137,8 +137,8 @@ namespace XTMF2.Bus
             {
                 try
                 {
-                    BinaryReader reader = new BinaryReader(HostStream, Encoding.Unicode, true);
-                    while (!Exit)
+                    BinaryReader reader = new BinaryReader(_HostStream, Encoding.Unicode, true);
+                    while (!_Exit)
                     {
                         try
                         {
@@ -151,7 +151,7 @@ namespace XTMF2.Bus
                                 case In.ClientReady:
                                     break;
                                 case In.ClientExiting:
-                                    Exit = true;
+                                    _Exit = true;
                                     break;
                                 case In.ClientErrorValidatingModelSystem:
                                     try
@@ -208,7 +208,7 @@ namespace XTMF2.Bus
                 }
                 finally
                 {
-                    Exited = true;
+                    _Exited = true;
                 }
             }, TaskCreationOptions.LongRunning);
         }
@@ -227,7 +227,7 @@ namespace XTMF2.Bus
         {
             lock (OutLock)
             {
-                var writer = new BinaryWriter(HostStream, Encoding.Unicode, true);
+                var writer = new BinaryWriter(_HostStream, Encoding.Unicode, true);
                 writer.Write((int)Out.Heartbeat);
             }
         }
@@ -257,13 +257,13 @@ namespace XTMF2.Bus
                         }
                         id = Guid.NewGuid().ToString();
                         // int64
-                        var writer = new BinaryWriter(HostStream, Encoding.Unicode, true);
+                        var writer = new BinaryWriter(_HostStream, Encoding.Unicode, true);
                         writer.Write((int)Out.RunModelSystem);
                         writer.Write(id);
                         writer.Write(cwd);
                         writer.Write(startToExecute);
                         writer.Write(memStream.Length);
-                        memStream.WriteTo(HostStream);
+                        memStream.WriteTo(_HostStream);
                         return true;
                     }
                 }

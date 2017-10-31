@@ -30,11 +30,11 @@ namespace XTMF2.Bus
     /// </summary>
     public sealed class RunBusClient : IDisposable
     {
-        private Stream ClientHost;
-        private bool Owner;
-        private volatile bool Exit = false;
+        private Stream _ClientHost;
+        private bool _Owner;
+        private volatile bool _Exit = false;
 
-        private Scheduler Runs;
+        private Scheduler _RunScheduler;
 
         /// <summary>
         /// The link to the XTMFRuntime
@@ -50,9 +50,9 @@ namespace XTMF2.Bus
         public RunBusClient(Stream serverStream, bool streamOwner, XTMFRuntime runtime)
         {
             Runtime = runtime;
-            Runs = new Scheduler(this);
-            ClientHost = serverStream;
-            Owner = streamOwner;
+            _RunScheduler = new Scheduler(this);
+            _ClientHost = serverStream;
+            _Owner = streamOwner;
             Runtime.ClientBus = this;
         }
 
@@ -61,11 +61,11 @@ namespace XTMF2.Bus
             if (managed)
             {
                 GC.SuppressFinalize(this);
-                Runs.Dispose();
+                _RunScheduler.Dispose();
             }
-            if (Owner)
+            if (_Owner)
             {
-                ClientHost.Dispose();
+                _ClientHost.Dispose();
             }
         }
 
@@ -112,7 +112,7 @@ namespace XTMF2.Bus
         {
             lock (WriteLock)
             {
-                using (var writer = new BinaryWriter(ClientHost, Encoding.Unicode, true))
+                using (var writer = new BinaryWriter(_ClientHost, Encoding.Unicode, true))
                 {
                     writeWith(writer);
                 }
@@ -160,7 +160,7 @@ namespace XTMF2.Bus
             Write((writer) =>
             {
                 writer.Write((int)(Out.ClientReportedStatus));
-                writer.Write(Runs.Current.ID);
+                writer.Write(_RunScheduler.Current.ID);
                 writer.Write(message ?? String.Empty);
             });
         }
@@ -197,8 +197,8 @@ namespace XTMF2.Bus
             try
             {
                 // the writer will clear things up
-                BinaryReader reader = new BinaryReader(ClientHost, Encoding.Unicode, false);
-                while (!Exit)
+                BinaryReader reader = new BinaryReader(_ClientHost, Encoding.Unicode, false);
+                while (!_Exit)
                 {
                     switch ((In)reader.ReadInt32())
                     {
@@ -212,7 +212,7 @@ namespace XTMF2.Bus
                                 {
                                     if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, out var context))
                                     {
-                                        Runs.Run(context);
+                                        _RunScheduler.Run(context);
                                     }
                                 }
                             }
