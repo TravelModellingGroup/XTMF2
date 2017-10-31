@@ -26,31 +26,65 @@ using XTMF2.Repository;
 
 namespace XTMF2.Editing
 {
+    /// <summary>
+    /// The editing session for a project.
+    /// </summary>
     public sealed class ProjectSession : IDisposable
     {
+        /// <summary>
+        /// The project that is being edited.
+        /// </summary>
         public Project Project { get; private set; }
 
+        /// <summary>
+        /// The link to the XTMFRuntime
+        /// </summary>
         private XTMFRuntime Runtime;
 
+        /// <summary>
+        /// The lock that must be acquired before editing any member variables.
+        /// </summary>
         private object SessionLock = new object();
 
         // This is 0 instead of 1 intensionally so that the controller adds a reference
         private int _References = 0;
 
+        /// <summary>
+        /// The number of references to this project session.
+        /// </summary>
         public int References => _References;
 
-        private Dictionary<ModelSystemHeader, ModelSystemSession> ActiveSessions = new Dictionary<ModelSystemHeader, ModelSystemSession>();
+        /// <summary>
+        /// The active editing sessions for the model systems contained
+        /// within this project.
+        /// </summary>
+        private readonly Dictionary<ModelSystemHeader, ModelSystemSession> ActiveSessions = new Dictionary<ModelSystemHeader, ModelSystemSession>();
 
+        /// <summary>
+        /// The model systems that are contained in this project
+        /// </summary>
         public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => Project.ModelSystems;
 
+        /// <summary>
+        /// The directory that is storing the results of model runs.
+        /// </summary>
         public string RunsDirectory => Project.RunsDirectory;
 
+        /// <summary>
+        /// Increment the number of references to this project session.
+        /// </summary>
+        /// <returns>A reference to this project session</returns>
         internal ProjectSession AddReference()
         {
             Interlocked.Increment(ref _References);
             return this;
         }
 
+        /// <summary>
+        /// Unload a model system session and reduce the number of references
+        /// to this project session.
+        /// </summary>
+        /// <param name="modelSystemSession">The model system session to remove.</param>
         internal void UnloadSession(ModelSystemSession modelSystemSession)
         {
             lock (SessionLock)
@@ -61,17 +95,32 @@ namespace XTMF2.Editing
             Dispose();
         }
 
+        /// <summary>
+        /// Get a reference to the module repository available from
+        /// the XTMF runtime.
+        /// </summary>
+        /// <returns>The module repository</returns>
         internal ModuleRepository GetModuleRepository()
         {
             return Runtime.Modules;
         }
 
+        /// <summary>
+        /// Create a project session allowing for the interaction with
+        /// and editing of a project.
+        /// </summary>
+        /// <param name="runtime">The XTMF runtime that this project is in.</param>
+        /// <param name="project">The project that will be edited.</param>
         public ProjectSession(XTMFRuntime runtime, Project project)
         {
             Project = project;
             Runtime = runtime;
         }
 
+        /// <summary>
+        /// Remove a reference and if no references exist
+        /// cleanup the project session.
+        /// </summary>
         public void Dispose()
         {
             var left = Interlocked.Decrement(ref _References);
@@ -95,6 +144,11 @@ namespace XTMF2.Editing
             Dispose(false);
         }
 
+        /// <summary>
+        /// Save the project files.
+        /// </summary>
+        /// <param name="error">An error message if the save fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool Save(ref string error)
         {
             lock(SessionLock)
