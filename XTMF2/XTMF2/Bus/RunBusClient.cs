@@ -35,14 +35,24 @@ namespace XTMF2.Bus
         private volatile bool Exit = false;
 
         private Scheduler Runs;
+
+        /// <summary>
+        /// The link to the XTMFRuntime
+        /// </summary>
         public XTMFRuntime Runtime { get; private set; }
 
-        public RunBusClient(Stream serverStream, bool owner, XTMFRuntime runtime)
+        /// <summary>
+        /// Create the bus to interact with the host.
+        /// </summary>
+        /// <param name="serverStream">A stream that connects to the host.</param>
+        /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
+        /// <param name="runtime">The XTMFRuntime to work within.</param>
+        public RunBusClient(Stream serverStream, bool streamOwner, XTMFRuntime runtime)
         {
             Runtime = runtime;
             Runs = new Scheduler(this);
             ClientHost = serverStream;
-            Owner = owner;
+            Owner = streamOwner;
             Runtime.ClientBus = this;
         }
 
@@ -59,6 +69,9 @@ namespace XTMF2.Bus
             }
         }
 
+        /// <summary>
+        /// Shutdown the connection to the host.
+        /// </summary>
         public void Dispose()
         {
             Dispose(true);
@@ -90,6 +103,9 @@ namespace XTMF2.Bus
             ClientReportedStatus = 8
         }
 
+        /// <summary>
+        /// This must be obtained before sending any data to the host
+        /// </summary>
         private object WriteLock = new object();
 
         private void Write(Action<BinaryWriter> writeWith)
@@ -103,6 +119,11 @@ namespace XTMF2.Bus
             }
         }
 
+        /// <summary>
+        /// Signal to the host that the run failed in the validation step.
+        /// </summary>
+        /// <param name="context">The run that failed.</param>
+        /// <param name="error">The error message.</param>
         internal void ModelRunFailedValidation(RunContext context, string error)
         {
             Write((writer) =>
@@ -113,6 +134,12 @@ namespace XTMF2.Bus
             });
         }
 
+        /// <summary>
+        /// Signal to the host that the run failed during runtime.
+        /// </summary>
+        /// <param name="context">The run that failed.</param>
+        /// <param name="message">The message containing the error.</param>
+        /// <param name="stackTrace">The stack trace from the time of the error.</param>
         internal void ModelRunFailed(RunContext context, string message, string stackTrace)
         {
             Write((writer) =>
@@ -124,6 +151,10 @@ namespace XTMF2.Bus
             });
         }
 
+        /// <summary>
+        /// Report to the host the current status message.
+        /// </summary>
+        /// <param name="message">The current status message.</param>
         internal void SendStatusMessage(string message)
         {
             Write((writer) =>
@@ -134,6 +165,10 @@ namespace XTMF2.Bus
             });
         }
 
+        /// <summary>
+        /// Signal to the host that the run has completed.
+        /// </summary>
+        /// <param name="context">The run that has completed.</param>
         internal void ModelRunComplete(RunContext context)
         {
             Write((writer) =>
