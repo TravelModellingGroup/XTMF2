@@ -26,13 +26,25 @@ using Newtonsoft.Json;
 
 namespace XTMF2
 {
+    /// <summary>
+    /// Provides the interactions for a user of XTMF.
+    /// </summary>
     public sealed class User
     {
+        /// <summary>
+        /// The unique name for the user
+        /// </summary>
         public string UserName { get; }
 
+        /// <summary>
+        /// Does this user have administrative rights?
+        /// </summary>
         public bool Admin { get; private set; }
 
-        private object ProjectLock = new object();
+        /// <summary>
+        /// Lock this before editing a user's available projects
+        /// </summary>
+        private object _ProjectLock = new object();
 
         public ReadOnlyObservableCollection<Project> AvailableProjects
         {
@@ -42,11 +54,23 @@ namespace XTMF2
             }
         }
 
+        /// <summary>
+        /// The path to the user's storage.
+        /// </summary>
         public string UserPath { get; internal set; }
 
+        /// <summary>
+        /// The projects available for this user.
+        /// </summary>
         private ObservableCollection<Project> _AvailableProjects = new ObservableCollection<Project>();
 
-        public User(string userPath, string userName, bool admin = false)
+        /// <summary>
+        /// Create a new user
+        /// </summary>
+        /// <param name="userPath">The default storage location for this user</param>
+        /// <param name="userName">A unique name for this user</param>
+        /// <param name="admin">Does this user have administrative privileges?</param>
+        internal User(string userPath, string userName, bool admin = false)
         {
             UserName = userName;
             Admin = admin;
@@ -63,7 +87,7 @@ namespace XTMF2
             {
                 throw new ArgumentNullException(nameof(project));
             }
-            lock (ProjectLock)
+            lock (_ProjectLock)
             {
                 _AvailableProjects.Add(project);
             }
@@ -76,20 +100,32 @@ namespace XTMF2
         /// <returns>True if there is already a project defined with the name and is the owner.</returns>
         internal bool HasProjectWithName(string name)
         {
-            lock (ProjectLock)
+            lock (_ProjectLock)
             {
                 return _AvailableProjects.Any(p => p.Owner == this && p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
             }
         }
 
+        /// <summary>
+        /// Remove the given project from the list of projects that the user
+        /// is allowed to access.
+        /// </summary>
+        /// <param name="project">The project to remove access from.</param>
         internal void RemovedUserForProject(Project project)
         {
-            lock (ProjectLock)
+            lock (_ProjectLock)
             {
                 _AvailableProjects.Remove(project);
             }
         }
 
+        /// <summary>
+        /// Load a user from file.
+        /// </summary>
+        /// <param name="userFile">The file location to load.</param>
+        /// <param name="user">The resulting user</param>
+        /// <param name="error">An error message in case of failure.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
         internal static bool Load(string userFile, out User user, ref string error)
         {
             string userName = null;
@@ -142,6 +178,11 @@ namespace XTMF2
             return true;
         }
 
+        /// <summary>
+        /// Save the user information.
+        /// </summary>
+        /// <param name="error">The error message in case of failure.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
         internal bool Save(ref string error)
         {
             var temp = Path.GetTempFileName();

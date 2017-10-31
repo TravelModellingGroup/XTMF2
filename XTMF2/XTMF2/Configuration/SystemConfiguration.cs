@@ -30,24 +30,37 @@ using System.Runtime.Loader;
 
 namespace XTMF2.Configuration
 {
+    /// <summary>
+    /// This class contains the configuration data
+    /// for the full XTMF runtime. It does not contain any
+    /// user level configuration.
+    /// </summary>
     public class SystemConfiguration
     {
+        /// <summary>
+        /// The repository of modules available to this XTMF runtime
+        /// </summary>
         public ModuleRepository Modules { get; private set; }
+
+        /// <summary>
+        /// The repository of all different available types available to this XTMF runtime
+        /// </summary>
         public TypeRepository Types { get; private set; }
+
+        /// <summary>
+        /// The path to the default user directory
+        /// </summary>
         public string DefaultUserDirectory { get; private set; }
 
+        /// <summary>
+        /// Create a new system configuration for the given XTMF Runtime.
+        /// </summary>
+        /// <param name="runtime">The runtime to bind to.</param>
+        /// <param name="fullPath">Optional, the path to the system configuration.</param>
         public SystemConfiguration(XTMFRuntime runtime, string fullPath = null)
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                CreateDirectory(DefaultUserDirectory =
-                    Path.Combine(Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%"), "XTMF", "Users"));
-            }
-            else
-            {
-                CreateDirectory(DefaultUserDirectory =
-                    Path.Combine(Environment.GetEnvironmentVariable("HOME"), ".XTMF", "Users"));
-            }
+            CreateDirectory(DefaultUserDirectory =
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "XTMF2", "Users"));
             LoadTypes();
         }
 
@@ -60,6 +73,10 @@ namespace XTMF2.Configuration
             }
         }
 
+        /// <summary>
+        /// Load an assembly from the given path into the system's configuration.
+        /// </summary>
+        /// <param name="path">The path to the assembly to load.</param>
         public void LoadAssembly(string path)
         {
             var fullPath = Path.GetFullPath(path);
@@ -82,7 +99,7 @@ namespace XTMF2.Configuration
         /// <param name="assembly">The assembly to load</param>
         public void LoadAssembly(Assembly assembly)
         {
-            if(assembly == null)
+            if (assembly == null)
             {
                 throw new ArgumentNullException(nameof(assembly));
             }
