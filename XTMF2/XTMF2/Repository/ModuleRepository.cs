@@ -25,12 +25,19 @@ using System.Linq;
 
 namespace XTMF2.Repository
 {
+    /// <summary>
+    /// Provides access to detailed information for modules.
+    /// </summary>
     public sealed class ModuleRepository
     {
-        private ConcurrentDictionary<Type, (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)> Data
+        private ConcurrentDictionary<Type, (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)> _Data
             = new ConcurrentDictionary<Type, (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)>();
         private static TypeInfo IModuleTypeInfo = typeof(IModule).GetTypeInfo();
 
+        /// <summary>
+        /// Add the given type to the module repository.
+        /// </summary>
+        /// <param name="type">The type to add to the repository.</param>
         public void Add(Type type)
         {
             if (type == null)
@@ -41,9 +48,14 @@ namespace XTMF2.Repository
             {
                 throw new ArgumentException(nameof(type), "The type is not of a module!");
             }
-            Data[type] = GetTypeData(type);
+            _Data[type] = GetTypeData(type);
         }
 
+        /// <summary>
+        /// Add the given type to the module repository if it it comes implements
+        /// the IModule interface.
+        /// </summary>
+        /// <param name="type">The type to add.</param>
         public void AddIfModuleType(Type type)
         {
             if (type == null)
@@ -52,12 +64,39 @@ namespace XTMF2.Repository
             }
             if (IModuleTypeInfo.IsAssignableFrom(type))
             {
-                Data[type] = GetTypeData(type);
+                _Data[type] = GetTypeData(type);
+            }
+        }
+
+        /// <summary>
+        /// Get the XTMF information and type information for a given type.
+        /// </summary>
+        /// <param name="type">The type to get the information from.</param>
+        /// <returns>The description, typeinfo, and hooks for the type.</returns>
+        public (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) this[Type type]
+        {
+            get
+            {
+                if (type == null)
+                {
+                    throw new ArgumentNullException(nameof(type));
+                }
+                if (!_Data.TryGetValue(type, out var ret))
+                {
+                    Add(type);
+                    _Data.TryGetValue(type, out ret);
+                }
+                return ret;
             }
         }
 
         private (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) GetTypeData(Type type)
         {
+            if (type == null)
+            {
+                throw new ArgumentNullException(nameof(type));
+            }
+
             var typeInfo = type.GetTypeInfo();
             var hooks = new List<ModelSystemStructureHook>();
             // Load properties and fields
@@ -89,6 +128,11 @@ namespace XTMF2.Repository
 
         private ModuleAttribute LoadModuleDescription(Type type)
         {
+            if (type == null)
+            {
+                throw new ArgumentNullException(nameof(type));
+            }
+
             var description = (ModuleAttribute)type.GetTypeInfo().GetCustomAttribute(typeof(ModuleAttribute));
             if(description == null)
             {
@@ -111,6 +155,15 @@ namespace XTMF2.Repository
 
         private static void LoadFields(Type type, TypeInfo typeInfo, List<ModelSystemStructureHook> hooks)
         {
+            if (typeInfo == null)
+            {
+                throw new ArgumentNullException(nameof(typeInfo));
+            }
+            if (hooks == null)
+            {
+                throw new ArgumentNullException(nameof(hooks));
+            }
+
             foreach (var field in typeInfo.DeclaredFields)
             {
                 if (field.IsPublic)
@@ -166,6 +219,16 @@ namespace XTMF2.Repository
 
         private static void LoadProperties(Type type, TypeInfo typeInfo, List<ModelSystemStructureHook> hooks)
         {
+            if (typeInfo == null)
+            {
+                throw new ArgumentNullException(nameof(typeInfo));
+            }
+
+            if (hooks == null)
+            {
+                throw new ArgumentNullException(nameof(hooks));
+            }
+
             foreach (var property in typeInfo.DeclaredProperties)
             {
                 if ((property.GetMethod?.IsPublic ?? false) && (property.SetMethod?.IsPublic ?? false))
@@ -220,19 +283,6 @@ namespace XTMF2.Repository
                         }
                     }
                 }
-            }
-        }
-
-        public (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) this[Type type]
-        {
-            get
-            {
-                if (!Data.TryGetValue(type, out var ret))
-                {
-                    Add(type);
-                    Data.TryGetValue(type, out ret);
-                }
-                return ret;
             }
         }
     }

@@ -24,12 +24,25 @@ using System.Text;
 
 namespace XTMF2.Repository
 {
+    /// <summary>
+    /// A generalized data storage
+    /// </summary>
+    /// <typeparam name="T">The type that is being stored</typeparam>
     public abstract class Repository<T>
     {
+        /// <summary>
+        /// The backing of Store
+        /// </summary>
         protected ObservableCollection<T> _Store;
 
+        /// <summary>
+        /// This lock must be obtained before editing _Store
+        /// </summary>
         protected object StoreLock = new object();
 
+        /// <summary>
+        /// Get a read-only reference to the stored data
+        /// </summary>
         public ReadOnlyObservableCollection<T> Store
         {
             get
@@ -41,6 +54,9 @@ namespace XTMF2.Repository
             }
         }
 
+        /// <summary>
+        /// Create a new repository
+        /// </summary>
         public Repository()
         {
             lock (StoreLock)
@@ -49,8 +65,20 @@ namespace XTMF2.Repository
             }
         }
 
+        /// <summary>
+        /// Add the data to the repository
+        /// </summary>
+        /// <param name="toAdd">The data to add.</param>
+        /// <param name="error">An error message if the operation fails</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
         public bool Add(T toAdd, ref string error)
         {
+            // Ensure the data is not null
+            if (toAdd is object o && o == null)
+            {
+                throw new ArgumentNullException(nameof(toAdd));
+            }
+
             if (!ValidateInput(toAdd, ref error))
             {
                 return false;
@@ -62,20 +90,35 @@ namespace XTMF2.Repository
             }
         }
 
+        /// <summary>
+        /// Validate the gtiven input data.
+        /// </summary>
+        /// <param name="data">The data to validate</param>
+        /// <param name="error">An error message explaining why the data is invalid.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
         protected virtual bool ValidateInput(T data, ref string error)
         {
             return true;
         }
 
+        /// <summary>
+        /// Remove the given item from the repository
+        /// </summary>
+        /// <param name="toRemove">The item to remove</param>
+        /// <returns>True if successful</returns>
         public bool Remove(T toRemove)
         {
             lock (StoreLock)
             {
-                _Store.Add(toRemove);
-                return true;
+                return _Store.Remove(toRemove);
             }
         }
 
+        /// <summary>
+        /// Check to see if the data is contained in the repository
+        /// </summary>
+        /// <param name="toCheck">The item to check</param>
+        /// <returns>True if the item is in the repository</returns>
         public bool Contains(T toCheck)
         {
             lock (StoreLock)

@@ -24,10 +24,24 @@ using System.Linq;
 
 namespace XTMF2.Repository
 {
+    /// <summary>
+    /// Provides access to the projects contained within the instance of
+    /// XTMF.
+    /// </summary>
     public sealed class ProjectRepository : Repository<Project>
     {
+        /// <summary>
+        /// Get a list of projects that the user is allowed to access.
+        /// </summary>
+        /// <param name="user">The user to get access for.</param>
+        /// <returns>A list of accessable projects.</returns>
         internal List<Project> GetAvailableForUser(User user)
         {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
             lock (StoreLock)
             {
                 return (from project in _Store
@@ -43,7 +57,7 @@ namespace XTMF2.Repository
         /// <param name="owner">The owner of the project</param>
         /// <param name="error">A message containing a description of the error</param>
         /// <param name="ret">The returned project</param>
-        /// <returns>The created project, null if there is an error.</returns>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
         internal bool CreateNew(string path, string name, User owner, out Project ret, ref string error)
         {
             if (!Project.New(owner, name, null, out ret, ref error))
@@ -53,8 +67,21 @@ namespace XTMF2.Repository
             return Add(ret, ref error);
         }
 
+        /// <summary>
+        /// Get the project for the given user.
+        /// </summary>
+        /// <param name="user">The user trying to access the project.</param>
+        /// <param name="projectName">The name of the project.</param>
+        /// <param name="project">The resulting project.</param>
+        /// <param name="error">An error message if the undo fails.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
         internal bool GetProject(User user, string projectName, out Project project, ref string error)
         {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
             project = _Store.FirstOrDefault(p => p.CanAccess(user) && p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase));
             if(project == null)
             {
