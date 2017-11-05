@@ -22,6 +22,9 @@ using System.Text;
 
 namespace XTMF2.Repository
 {
+    /// <summary>
+    /// A repository of the types available.
+    /// </summary>
     public sealed class TypeRepository : Repository<Type>
     {
     }

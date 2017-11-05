@@ -23,35 +23,43 @@ using System.Threading.Tasks;
 
 namespace XTMF2.Bus
 {
+    /// <summary>
+    /// This class is used to accept model system run requests and execute them in series.
+    /// </summary>
     internal sealed class Scheduler : IDisposable
     {
+        private ConcurrentQueue<RunContext> _ToRun = new ConcurrentQueue<RunContext>();
+        private RunBusClient _Bus;
+        private Task _ExecutionTask;
+        private CancellationTokenSource _CancelExecutionEngine;
+        private SemaphoreSlim _RunsToGo = new SemaphoreSlim(0);
 
-        private ConcurrentQueue<RunContext> toRun = new ConcurrentQueue<RunContext>();
-
-        private RunBusClient Bus;
-
-        private Task ExecutionTask;
-        private CancellationTokenSource CancelExecutionEngine;
-        private SemaphoreSlim RunsToGo = new SemaphoreSlim(0);
-
+        /// <summary>
+        /// The currently executing RunContext.
+        /// This property is null if there is nothing running.
+        /// </summary>
         public RunContext Current { get; private set; }
 
+        /// <summary>
+        /// Create a new Scheduler to process the given client bus.
+        /// </summary>
+        /// <param name="bus">The bus to listen to.</param>
         public Scheduler(RunBusClient bus)
         {
-            Bus = bus;
-            CancelExecutionEngine = new CancellationTokenSource();
-            var token = CancelExecutionEngine.Token;
-            ExecutionTask = Task.Factory.StartNew(()=>
+            _Bus = bus;
+            _CancelExecutionEngine = new CancellationTokenSource();
+            var token = _CancelExecutionEngine.Token;
+            _ExecutionTask = Task.Factory.StartNew(()=>
             {
                 while(!token.IsCancellationRequested)
                 {
                     Current = null;
-                    RunsToGo.Wait(token);
+                    _RunsToGo.Wait(token);
                     if(token.IsCancellationRequested)
                     {
                         return;
                     }
-                    if (toRun.TryDequeue(out var context))
+                    if (_ToRun.TryDequeue(out var context))
                     {
                         try
                         {
@@ -62,18 +70,18 @@ namespace XTMF2.Bus
                             {
                                 if(!context.Run(ref error, ref stackTrace))
                                 {
-                                    Bus.ModelRunFailed(context, error, stackTrace);
+                                    _Bus.ModelRunFailed(context, error, stackTrace);
                                 }
-                                Bus.ModelRunComplete(context);
+                                _Bus.ModelRunComplete(context);
                             }
                             else
                             {
-                                Bus.ModelRunFailedValidation(context, error);
+                                _Bus.ModelRunFailedValidation(context, error);
                             }
                         }
                         catch (Exception e)
                         {
-                            Bus.ModelRunFailed(context, e.Message, e.StackTrace);
+                            _Bus.ModelRunFailed(context, e.Message, e.StackTrace);
                         }
                     }
                     Interlocked.MemoryBarrier();
@@ -87,9 +95,9 @@ namespace XTMF2.Bus
             {
                 GC.SuppressFinalize(this);
             }
-            CancelExecutionEngine.Cancel();
-            CancelExecutionEngine.Dispose();
-            RunsToGo.Dispose();
+            _CancelExecutionEngine.Cancel();
+            _CancelExecutionEngine.Dispose();
+            _RunsToGo.Dispose();
         }
 
         ~Scheduler()
@@ -97,15 +105,26 @@ namespace XTMF2.Bus
             Dispose(false);
         }
 
+        /// <summary>
+        /// Shutdown the scheduler
+        /// </summary>
         public void Dispose()
         {
             Dispose(true);
         }
 
+        /// <summary>
+        /// Add the given run context to the end of the queue
+        /// </summary>
+        /// <param name="context">The context to execute.</param>
         internal void Run(RunContext context)
         {
-            toRun.Enqueue(context);
-            RunsToGo.Release();
+            if (context == null)
+            {
+                throw new ArgumentNullException(nameof(context));
+            }
+            _ToRun.Enqueue(context);
+            _RunsToGo.Release();
         }
     }
 }

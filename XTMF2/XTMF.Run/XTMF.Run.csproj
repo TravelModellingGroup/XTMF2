@@ -2,11 +2,11 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp1.1</TargetFramework>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
     <RootNamespace>XTMF2.Run</RootNamespace>
     <ApplicationIcon />
     <OutputTypeEx>exe</OutputTypeEx>
-    <StartupObject />
+    <StartupObject>XTMF2.Run.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>

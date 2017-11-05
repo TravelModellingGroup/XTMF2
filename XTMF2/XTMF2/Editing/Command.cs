@@ -22,10 +22,18 @@ using System.Text;
 
 namespace XTMF2.Editing
 {
+    /// <summary>
+    /// Represents a command to the XTMF execution engine.
+    /// </summary>
     public sealed class Command
     {
         internal Func<(bool Success, string Message)> Undo;
         internal Func<(bool Success, string Message)> Redo;
+        /// <summary>
+        /// Create a new command with the given delegates
+        /// </summary>
+        /// <param name="Undo">The logic to undo the command.</param>
+        /// <param name="Redo">The logic to redo the command.</param>
         public Command(
             Func<(bool Success, string Message)> Undo,
             Func<(bool Success, string Message)> Redo
@@ -39,9 +47,9 @@ namespace XTMF2.Editing
             this.Redo = Redo;
         }
 
-        public bool CanUndo()
-        {
-            return Undo != null;
-        }
+        /// <summary>
+        /// Tests if the command can be undone.
+        /// </summary>
+        public bool CanUndo => Undo != null;
     }
 }

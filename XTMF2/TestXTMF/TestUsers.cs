@@ -20,7 +20,7 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2;
 using XTMF2.Editing;
-using XTMF2.Controller;
+using XTMF2.Controllers;
 using System.Linq;
 
 namespace TestXTMF
@@ -108,6 +108,44 @@ namespace TestXTMF
         }
 
         [TestMethod]
+        public void AddUserToProjectTwice()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            string error = null;
+            const string userName1 = "FirstUser";
+            const string userName2 = "SecondtUser";
+            const string projectName1 = "TestShareBetweenUsers1";
+            // ensure the user doesn't exist before we start and then create our users
+            userController.Delete(userName1);
+            userController.Delete(userName2);
+            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, ref error), error);
+            // now we need to create a project for both users
+
+            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, ref error), error);
+            
+            // make sure we only have 1 project
+            Assert.AreEqual(1, user1.AvailableProjects.Count);
+            Assert.AreEqual(0, user2.AvailableProjects.Count);
+
+            Assert.IsTrue(session1.ShareWith(user1, user2, ref error));
+            Assert.AreEqual(1, user2.AvailableProjects.Count);
+
+            // Ensure that the command fails to be added the second time
+            Assert.IsFalse(session1.ShareWith(user1, user2, ref error));
+            Assert.AreEqual(1, user2.AvailableProjects.Count);
+
+            // Delete user1 and make sure that user2 loses reference to project1
+            Assert.IsTrue(userController.Delete(user1));
+            Assert.AreEqual(0, user2.AvailableProjects.Count);
+
+            // finish cleaning up
+            Assert.IsTrue(userController.Delete(user2));
+        }
+
+        [TestMethod]
         public void RemoveUserFromProject()
         {
             var runtime = XTMFRuntime.CreateRuntime();
@@ -143,6 +181,56 @@ namespace TestXTMF
             Assert.IsFalse(session1.RestrictAccess(user1, user1, ref error));
             Assert.IsFalse(session1.RestrictAccess(user2, user1, ref error));
             Assert.IsTrue(session1.RestrictAccess(user1, user2, ref error), error);
+
+            Assert.AreEqual(1, user1.AvailableProjects.Count);
+            Assert.AreEqual(1, user2.AvailableProjects.Count);
+
+            // Delete user1 and make sure that user2 loses reference to project1
+            Assert.IsTrue(userController.Delete(user1));
+            Assert.AreEqual(1, user2.AvailableProjects.Count);
+
+            // finish cleaning up
+            Assert.IsTrue(userController.Delete(user2));
+        }
+
+        [TestMethod]
+        public void RemoveUserFromProjectTwice()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            string error = null;
+            const string userName1 = "FirstUser";
+            const string userName2 = "SecondtUser";
+            const string projectName1 = "TestShareBetweenUsers1";
+            const string projectName2 = "TestShareBetweenUsers2";
+            // ensure the user doesn't exist before we start and then create our users
+            userController.Delete(userName1);
+            userController.Delete(userName2);
+            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, ref error), error);
+            // now we need to create a project for both users
+
+            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, ref error), error);
+            Assert.IsTrue(projectController.CreateNewProject(user2, projectName2, out var session2, ref error), error);
+
+            // make sure we only have 1 project
+            Assert.AreEqual(1, user1.AvailableProjects.Count);
+            Assert.AreEqual(1, user2.AvailableProjects.Count);
+
+            // Share project1 with user1
+            Assert.IsTrue(session1.ShareWith(user1, user2, ref error), error);
+            Assert.AreEqual(1, user1.AvailableProjects.Count);
+            Assert.AreEqual(2, user2.AvailableProjects.Count);
+
+            Assert.IsFalse(session1.ShareWith(user1, user2, ref error), error);
+            Assert.IsFalse(session1.ShareWith(user2, user2, ref error), error);
+
+            Assert.IsFalse(session1.RestrictAccess(user1, user1, ref error));
+            Assert.IsFalse(session1.RestrictAccess(user2, user1, ref error));
+            Assert.IsTrue(session1.RestrictAccess(user1, user2, ref error), error);
+            // Ensure that we can't do it again
+            Assert.IsFalse(session1.RestrictAccess(user1, user2, ref error), error);
 
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(1, user2.AvailableProjects.Count);

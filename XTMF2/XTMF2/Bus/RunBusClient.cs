@@ -30,19 +30,29 @@ namespace XTMF2.Bus
     /// </summary>
     public sealed class RunBusClient : IDisposable
     {
-        private Stream ClientHost;
-        private bool Owner;
-        private volatile bool Exit = false;
+        private Stream _ClientHost;
+        private bool _Owner;
+        private volatile bool _Exit = false;
 
-        private Scheduler Runs;
+        private Scheduler _RunScheduler;
+
+        /// <summary>
+        /// The link to the XTMFRuntime
+        /// </summary>
         public XTMFRuntime Runtime { get; private set; }
 
-        public RunBusClient(Stream serverStream, bool owner, XTMFRuntime runtime)
+        /// <summary>
+        /// Create the bus to interact with the host.
+        /// </summary>
+        /// <param name="serverStream">A stream that connects to the host.</param>
+        /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
+        /// <param name="runtime">The XTMFRuntime to work within.</param>
+        public RunBusClient(Stream serverStream, bool streamOwner, XTMFRuntime runtime)
         {
             Runtime = runtime;
-            Runs = new Scheduler(this);
-            ClientHost = serverStream;
-            Owner = owner;
+            _RunScheduler = new Scheduler(this);
+            _ClientHost = serverStream;
+            _Owner = streamOwner;
             Runtime.ClientBus = this;
         }
 
@@ -51,14 +61,17 @@ namespace XTMF2.Bus
             if (managed)
             {
                 GC.SuppressFinalize(this);
-                Runs.Dispose();
+                _RunScheduler.Dispose();
             }
-            if (Owner)
+            if (_Owner)
             {
-                ClientHost.Dispose();
+                _ClientHost.Dispose();
             }
         }
 
+        /// <summary>
+        /// Shutdown the connection to the host.
+        /// </summary>
         public void Dispose()
         {
             Dispose(true);
@@ -90,19 +103,27 @@ namespace XTMF2.Bus
             ClientReportedStatus = 8
         }
 
+        /// <summary>
+        /// This must be obtained before sending any data to the host
+        /// </summary>
         private object WriteLock = new object();
 
         private void Write(Action<BinaryWriter> writeWith)
         {
             lock (WriteLock)
             {
-                using (var writer = new BinaryWriter(ClientHost, Encoding.Unicode, true))
+                using (var writer = new BinaryWriter(_ClientHost, Encoding.Unicode, true))
                 {
                     writeWith(writer);
                 }
             }
         }
 
+        /// <summary>
+        /// Signal to the host that the run failed in the validation step.
+        /// </summary>
+        /// <param name="context">The run that failed.</param>
+        /// <param name="error">The error message.</param>
         internal void ModelRunFailedValidation(RunContext context, string error)
         {
             Write((writer) =>
@@ -113,6 +134,12 @@ namespace XTMF2.Bus
             });
         }
 
+        /// <summary>
+        /// Signal to the host that the run failed during runtime.
+        /// </summary>
+        /// <param name="context">The run that failed.</param>
+        /// <param name="message">The message containing the error.</param>
+        /// <param name="stackTrace">The stack trace from the time of the error.</param>
         internal void ModelRunFailed(RunContext context, string message, string stackTrace)
         {
             Write((writer) =>
@@ -124,16 +151,24 @@ namespace XTMF2.Bus
             });
         }
 
+        /// <summary>
+        /// Report to the host the current status message.
+        /// </summary>
+        /// <param name="message">The current status message.</param>
         internal void SendStatusMessage(string message)
         {
             Write((writer) =>
             {
                 writer.Write((int)(Out.ClientReportedStatus));
-                writer.Write(Runs.Current.ID);
+                writer.Write(_RunScheduler.Current.ID);
                 writer.Write(message ?? String.Empty);
             });
         }
 
+        /// <summary>
+        /// Signal to the host that the run has completed.
+        /// </summary>
+        /// <param name="context">The run that has completed.</param>
         internal void ModelRunComplete(RunContext context)
         {
             Write((writer) =>
@@ -162,8 +197,8 @@ namespace XTMF2.Bus
             try
             {
                 // the writer will clear things up
-                BinaryReader reader = new BinaryReader(ClientHost, Encoding.Unicode, false);
-                while (!Exit)
+                BinaryReader reader = new BinaryReader(_ClientHost, Encoding.Unicode, false);
+                while (!_Exit)
                 {
                     switch ((In)reader.ReadInt32())
                     {
@@ -177,7 +212,7 @@ namespace XTMF2.Bus
                                 {
                                     if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, out var context))
                                     {
-                                        Runs.Run(context);
+                                        _RunScheduler.Run(context);
                                     }
                                 }
                             }

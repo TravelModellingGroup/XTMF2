@@ -21,36 +21,71 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Threading;
+using XTMF2.Controllers;
 using XTMF2.Editing;
 using XTMF2.Repository;
 
 namespace XTMF2.Editing
 {
+    /// <summary>
+    /// The editing session for a project.
+    /// </summary>
     public sealed class ProjectSession : IDisposable
     {
+        /// <summary>
+        /// The project that is being edited.
+        /// </summary>
         public Project Project { get; private set; }
 
+        /// <summary>
+        /// The link to the XTMFRuntime
+        /// </summary>
         private XTMFRuntime Runtime;
 
+        /// <summary>
+        /// The lock that must be acquired before editing any member variables.
+        /// </summary>
         private object SessionLock = new object();
 
         // This is 0 instead of 1 intensionally so that the controller adds a reference
         private int _References = 0;
 
+        /// <summary>
+        /// The number of references to this project session.
+        /// </summary>
         public int References => _References;
 
-        private Dictionary<ModelSystemHeader, ModelSystemSession> ActiveSessions = new Dictionary<ModelSystemHeader, ModelSystemSession>();
+        /// <summary>
+        /// The active editing sessions for the model systems contained
+        /// within this project.
+        /// </summary>
+        private readonly Dictionary<ModelSystemHeader, ModelSystemSession> ActiveSessions = new Dictionary<ModelSystemHeader, ModelSystemSession>();
 
+        /// <summary>
+        /// The model systems that are contained in this project
+        /// </summary>
         public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => Project.ModelSystems;
 
+        /// <summary>
+        /// The directory that is storing the results of model runs.
+        /// </summary>
         public string RunsDirectory => Project.RunsDirectory;
 
+        /// <summary>
+        /// Increment the number of references to this project session.
+        /// </summary>
+        /// <returns>A reference to this project session</returns>
         internal ProjectSession AddReference()
         {
             Interlocked.Increment(ref _References);
             return this;
         }
 
+        /// <summary>
+        /// Unload a model system session and reduce the number of references
+        /// to this project session.
+        /// </summary>
+        /// <param name="modelSystemSession">The model system session to remove.</param>
         internal void UnloadSession(ModelSystemSession modelSystemSession)
         {
             lock (SessionLock)
@@ -61,17 +96,32 @@ namespace XTMF2.Editing
             Dispose();
         }
 
+        /// <summary>
+        /// Get a reference to the module repository available from
+        /// the XTMF runtime.
+        /// </summary>
+        /// <returns>The module repository</returns>
         internal ModuleRepository GetModuleRepository()
         {
             return Runtime.Modules;
         }
 
+        /// <summary>
+        /// Create a project session allowing for the interaction with
+        /// and editing of a project.
+        /// </summary>
+        /// <param name="runtime">The XTMF runtime that this project is in.</param>
+        /// <param name="project">The project that will be edited.</param>
         public ProjectSession(XTMFRuntime runtime, Project project)
         {
             Project = project;
             Runtime = runtime;
         }
 
+        /// <summary>
+        /// Remove a reference and if no references exist
+        /// cleanup the project session.
+        /// </summary>
         public void Dispose()
         {
             var left = Interlocked.Decrement(ref _References);
@@ -95,6 +145,11 @@ namespace XTMF2.Editing
             Dispose(false);
         }
 
+        /// <summary>
+        /// Save the project files.
+        /// </summary>
+        /// <param name="error">An error message if the save fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool Save(ref string error)
         {
             lock(SessionLock)
@@ -113,7 +168,7 @@ namespace XTMF2.Editing
         public bool CreateNewModelSystem(string modelSystemName, out ModelSystemHeader modelSystem, ref string error)
         {
             modelSystem = null;
-            if(!Controller.ProjectController.ValidateProjectName(modelSystemName, ref error))
+            if(!ProjectController.ValidateProjectName(modelSystemName, ref error))
             {
                 return false;
             }
@@ -129,6 +184,14 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Create a model system session allowing for the editing of a model system.
+        /// </summary>
+        /// <param name="user">The user that is requesting access.</param>
+        /// <param name="modelSystemHeader">The model system reference to load.</param>
+        /// <param name="session">The resulting session.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, out ModelSystemSession session, ref string error)
         {
             if(user == null)
@@ -165,6 +228,14 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Retrieve the header for a model system with a given name.
+        /// </summary>
+        /// <param name="user">The user executing the action.</param>
+        /// <param name="modelSystemName">The name of the model system.</param>
+        /// <param name="modelSystemHeader">The resulting model system header.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool GetModelSystemHeader(User user, string modelSystemName, out ModelSystemHeader modelSystemHeader, ref string error)
         {
             if(user == null)
@@ -193,7 +264,7 @@ namespace XTMF2.Editing
         /// <param name="doingShare">The user that is issuing the share command</param>
         /// <param name="toSharWith">The person to share with</param>
         /// <param name="error">An error message if appropriate</param>
-        /// <returns>True if the share was completed successfully.</returns>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool ShareWith(User doingShare, User toSharWith, ref string error)
         {
             // test our arguments
@@ -209,7 +280,6 @@ namespace XTMF2.Editing
             {
                 if (!(doingShare.Admin || doingShare == Project.Owner))
                 {
-
                     error = "The user sharing the project must either be the owner or an administrator!";
                     return false;
                 }
@@ -218,6 +288,11 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Create a project session for handling the information to do a run.
+        /// </summary>
+        /// <param name="runtime">The runtime to work within.</param>
+        /// <returns></returns>
         internal static ProjectSession CreateRunSession(XTMFRuntime runtime)
         {
             return new ProjectSession(runtime, null);
@@ -229,7 +304,7 @@ namespace XTMF2.Editing
         /// <param name="owner"></param>
         /// <param name="newOwner"></param>
         /// <param name="error"></param>
-        /// <returns></returns>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool SwitchOwner(User owner, User newOwner, ref string error)
         {
             if(owner == null)
@@ -251,6 +326,13 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Remove access for a user to access a project.
+        /// </summary>
+        /// <param name="owner">The owner of the project.</param>
+        /// <param name="toRestrict">The user to remove access to.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RestrictAccess(User owner, User toRestrict, ref string error)
         {
             if (owner == null)

@@ -28,20 +28,44 @@ using Newtonsoft.Json;
 
 namespace XTMF2
 {
+    /// <summary>
+    /// Provides detailed access to the model system and control it.
+    /// </summary>
     public sealed class ModelSystem : INotifyPropertyChanged
     {
+        /// <summary>
+        /// Create a new model system with the given header information.
+        /// </summary>
+        /// <param name="header">The header to create a new model system for.</param>
         public ModelSystem(ModelSystemHeader header)
         {
             Header = header;
             GlobalBoundary = new Boundary("global");
         }
 
+        /// <summary>
+        /// The name of the model system
+        /// </summary>
         public string Name => Header.Name;
+
+        /// <summary>
+        /// A description of the model system
+        /// </summary>
         public string Description => Header.Description;
 
+        /// <summary>
+        /// A reference to the top level boundary of the model system.
+        /// </summary>
         public Boundary GlobalBoundary { get; private set; }
+
+        /// <summary>
+        /// A reference to the information stored at the project level.
+        /// </summary>
         internal ModelSystemHeader Header { get; private set; }
 
+        /// <summary>
+        /// The lock that must be acquired before editing the model system's attributes.
+        /// </summary>
         private object ModelSystemLock = new object();
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -103,6 +127,13 @@ namespace XTMF2
                 && GlobalBoundary.ConstructLinks(ref error);
         }
 
+        /// <summary>
+        /// Save the data to the given stream.
+        /// This will not close the stream.
+        /// </summary>
+        /// <param name="error">An error message if the save fails.</param>
+        /// <param name="saveTo">The stream to save the data to.</param>
+        /// <returns></returns>
         internal bool Save(ref string error, Stream saveTo)
         {
             return Save(ref error, saveTo, true);

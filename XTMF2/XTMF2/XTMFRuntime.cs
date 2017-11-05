@@ -21,7 +21,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using XTMF2.Bus;
 using XTMF2.Configuration;
-using XTMF2.Controller;
+using XTMF2.Controllers;
 using XTMF2.Editing;
 using XTMF2.Repository;
 

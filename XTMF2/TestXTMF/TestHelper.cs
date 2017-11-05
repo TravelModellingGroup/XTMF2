@@ -129,8 +129,8 @@ namespace TestXTMF
         /// <param name="runLogic"></param>
         public static void CreateRunClient(bool startClientProcess, Action<RunBusHost> runLogic)
         {
-            var id = startClientProcess ? Guid.NewGuid().ToString() : "123";
             string error = null;
+            var id = startClientProcess ? Guid.NewGuid().ToString() : "123";
             var xtmfRunFileName = typeof(XTMF2.Run.CreateStreams).GetTypeInfo().Assembly.Location;
             var testFileName = Path.GetFullPath(typeof(TestHelper).GetTypeInfo().Assembly.Location);
             Process client = null;
@@ -143,7 +143,6 @@ namespace TestXTMF
                     {
                         try
                         {
-
                             var startInfo = new ProcessStartInfo()
                             {
                                 FileName = "dotnet",

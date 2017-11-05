@@ -20,8 +20,11 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.Editing
+namespace XTMF2.Controllers
 {
+    /// <summary>
+    /// This class provides access to control model systems
+    /// </summary>
     public sealed class ModelSystemController
     {
     }

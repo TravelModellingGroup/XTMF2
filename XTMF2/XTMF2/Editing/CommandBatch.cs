@@ -22,28 +22,43 @@ using System.Text;
 
 namespace XTMF2.Editing
 {
+    /// <summary>
+    /// Represents a series of commands to be executed
+    /// </summary>
     public sealed class CommandBatch
     {
-        private List<Command> Commands = new List<Command>();
+        /// <summary>
+        /// The commands in order
+        /// </summary>
+        private List<Command> _Commands = new List<Command>();
         
+        /// <summary>
+        /// Create a command batch from a single command.
+        /// </summary>
+        /// <param name="command">The command to set in a batch</param>
         public CommandBatch(Command command)
         {
             Add(command);
         }
 
-        public CommandBatch()
-        {
 
-        }
-
+        /// <summary>
+        /// Add a command into a command batch.
+        /// </summary>
+        /// <param name="command">The command to add to the batch</param>
         public void Add(Command command)
         {
-            Commands.Add(command);
+            _Commands.Add(command ?? throw new ArgumentNullException(nameof(command)));
         }
 
+        /// <summary>
+        /// Undo the batch of commands.
+        /// </summary>
+        /// <param name="error">An error message if the undo fails.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
         public bool Undo(ref string error)
         {
-            foreach (var command in Commands)
+            foreach (var command in _Commands)
             {
                 var result = command.Undo();
                 if (!result.Success)
@@ -55,9 +70,14 @@ namespace XTMF2.Editing
             return true;
         }
 
+        /// <summary>
+        /// Redo the batch of commands.
+        /// </summary>
+        /// <param name="error">An error message if the redo fails.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
         public bool Redo(ref string error)
         {
-            foreach (var command in Commands)
+            foreach (var command in _Commands)
             {
                 var result = command.Redo();
                 if (!result.Success)

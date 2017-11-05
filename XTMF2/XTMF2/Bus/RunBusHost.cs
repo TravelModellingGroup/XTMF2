@@ -31,15 +31,20 @@ namespace XTMF2.Bus
     /// </summary>
     public sealed class RunBusHost : IDisposable
     {
-        private Stream HostStream;
-        private bool Owner;
-        private volatile bool Exit = false;
-        private volatile bool Exited = false;
+        private Stream _HostStream;
+        private bool _Owner;
+        private volatile bool _Exit = false;
+        private volatile bool _Exited = false;
 
+        /// <summary>
+        /// Create a host on a given stream.
+        /// </summary>
+        /// <param name="hostStream">The stream to host.</param>
+        /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
         public RunBusHost(Stream hostStream, bool streamOwner)
         {
-            Owner = streamOwner;
-            HostStream = hostStream ?? throw new ArgumentNullException(nameof(hostStream));
+            _Owner = streamOwner;
+            _HostStream = hostStream ?? throw new ArgumentNullException(nameof(hostStream));
             StartListenner();
         }
 
@@ -54,22 +59,25 @@ namespace XTMF2.Bus
             {
                 GC.SuppressFinalize(this);
             }
-            Exit = true;
-            while (!Exited)
+            _Exit = true;
+            while (!_Exited)
             {
                 Interlocked.MemoryBarrier();
-                if (!Exited)
+                if (!_Exited)
                 {
                     Task.WaitAll(Task.Delay(50));
                 }
                 Interlocked.MemoryBarrier();
             }
-            if (Owner)
+            if (_Owner)
             {
-                HostStream.Dispose();
+                _HostStream.Dispose();
             }
         }
 
+        /// <summary>
+        /// Disconnect from the client.
+        /// </summary>
         public void Dispose()
         {
             Dispose(true);
@@ -88,24 +96,49 @@ namespace XTMF2.Bus
             ClientReportedStatus = 8
         }
 
+        /// <summary>
+        /// This event is signaled when a client finishes running a model system.
+        /// </summary>
         public event EventHandler ClientFinishedModelSystem;
 
+        /// <summary>
+        /// Used to report that a model system has had a run error.
+        /// </summary>
+        /// <param name="sender">The object reporting the event.</param>
+        /// <param name="runID">The ID of the run that failed.</param>
+        /// <param name="errorMessage">The error message from the error.</param>
+        /// <param name="stack">The stack trace at the point of the error.</param>
         public delegate void RunError(object sender, string runID, string errorMessage, string stack);
 
+        /// <summary>
+        /// Used to trigger a status update from a model system.
+        /// </summary>
+        /// <param name="sender">The object reporting the event.</param>
+        /// <param name="runID">The ID of the run that is sending the update.</param>
+        /// <param name="status">The status message from the model system.</param>
         public delegate void ClientStatusUpdate(object sender, string runID, string status);
 
+        /// <summary>
+        /// This event is signaled when a client runs into an error.
+        /// </summary>
         public event RunError ClientErrorWhenRunningModelSystem;
 
+        /// <summary>
+        /// This event is triggered when the client has sent an update for the run's status message.
+        /// </summary>
         public event ClientStatusUpdate ClientReportedStatus;
 
+        /// <summary>
+        /// Invoke this to start listening on a separate thread.
+        /// </summary>
         public void StartListenner()
         {
             Task.Factory.StartNew((token) =>
             {
                 try
                 {
-                    BinaryReader reader = new BinaryReader(HostStream, Encoding.Unicode, true);
-                    while (!Exit)
+                    BinaryReader reader = new BinaryReader(_HostStream, Encoding.Unicode, true);
+                    while (!_Exit)
                     {
                         try
                         {
@@ -118,7 +151,7 @@ namespace XTMF2.Bus
                                 case In.ClientReady:
                                     break;
                                 case In.ClientExiting:
-                                    Exit = true;
+                                    _Exit = true;
                                     break;
                                 case In.ClientErrorValidatingModelSystem:
                                     try
@@ -175,7 +208,7 @@ namespace XTMF2.Bus
                 }
                 finally
                 {
-                    Exited = true;
+                    _Exited = true;
                 }
             }, TaskCreationOptions.LongRunning);
         }
@@ -194,7 +227,7 @@ namespace XTMF2.Bus
         {
             lock (OutLock)
             {
-                var writer = new BinaryWriter(HostStream, Encoding.Unicode, true);
+                var writer = new BinaryWriter(_HostStream, Encoding.Unicode, true);
                 writer.Write((int)Out.Heartbeat);
             }
         }
@@ -224,13 +257,13 @@ namespace XTMF2.Bus
                         }
                         id = Guid.NewGuid().ToString();
                         // int64
-                        var writer = new BinaryWriter(HostStream, Encoding.Unicode, true);
+                        var writer = new BinaryWriter(_HostStream, Encoding.Unicode, true);
                         writer.Write((int)Out.RunModelSystem);
                         writer.Write(id);
                         writer.Write(cwd);
                         writer.Write(startToExecute);
                         writer.Write(memStream.Length);
-                        memStream.WriteTo(HostStream);
+                        memStream.WriteTo(_HostStream);
                         return true;
                     }
                 }
