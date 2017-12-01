@@ -64,15 +64,25 @@ namespace XTMF2
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Hooks)));
         }
 
-        public IReadOnlyList<ModelSystemStructureHook> Hooks;
+        /// <summary>
+        /// Get a readonly list of possible hooks to use to interface with other model system structures.
+        /// </summary>
+        public IReadOnlyList<ModelSystemStructureHook> Hooks { get; private set; }
 
         /// <summary>
         /// The name of the model system structure
         /// </summary>
         public string Name { get; protected set; }
 
+        /// <summary>
+        /// The location to graphically place this structure within a boundary
+        /// </summary>
         public Point Location { get; protected set; }
 
+        /// <summary>
+        /// The link to the executing object.
+        /// This is only set during a run.
+        /// </summary>
         public IModule Module { get; private set; }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -102,16 +112,31 @@ namespace XTMF2
         {
             if (String.IsNullOrWhiteSpace(name))
             {
-                error = "A name cannot be whitespace.";
-                return false;
+                return FailWith(ref error, "A name cannot be whitespace.");
             }
             Name = name;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
             return true;
         }
 
+        /// <summary>
+        /// Set the value of a parameter
+        /// </summary>
+        /// <param name="sesson">The session that this will be edited with</param>
+        /// <param name="value">The value to change the parameter to.</param>
+        /// <param name="error">A description of the error if one occurs</param>
+        /// <returns>True if the operation was successful, false otherwise</returns>
         public bool SetParameterValue(ModelSystemSession sesson, string value, ref string error)
         {
+            // ensure that the value is allowed
+            if (Type == null)
+            {
+                return FailWith(ref error, "Unable to set the parameter value of a model system structure that lacks a type!");
+            }
+            if (!ArbitraryParameterParser.Check(Type.GenericTypeArguments[0], value, ref error))
+            {
+                return FailWith(ref error, $"Unable to create a parse the value {value} for type {Type.GenericTypeArguments[0].FullName}!");
+            }
             ParameterValue = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ParameterValue)));
             return true;
@@ -131,10 +156,10 @@ namespace XTMF2
         private static ConcurrentDictionary<Type, FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
 
         /// <summary>
-        /// 
+        /// Setup the module as defind in this model system structure.
         /// </summary>
-        /// <param name="error"></param>
-        /// <returns></returns>
+        /// <param name="error">A description of the error if one occurs</param>
+        /// <returns>True if the operation was successful, false otherwise</returns>
         internal bool ConstructModule(XTMFRuntime runtime, ref string error)
         {
             Module = (IModule)(
@@ -146,7 +171,7 @@ namespace XTMF2
                 var vals = ArbitraryParameterParser.ArbitraryParameterParse(paramType, ParameterValue, ref error);
                 if (!vals.Sucess)
                 {
-                    return false;
+                    return FailWith(ref error, $"Unable to assign the value of {ParameterValue} to type {paramType.FullName}!");
                 }
                 if (!GenericValue.TryGetValue(_Type, out var info))
                 {
@@ -181,8 +206,7 @@ namespace XTMF2
         {
             if (type == null)
             {
-                error = "The given type was null!";
-                return false;
+                return FailWith(ref error, "The given type was null!");
             }
             if (_Type != type)
             {
@@ -193,6 +217,11 @@ namespace XTMF2
             return true;
         }
 
+        /// <summary>
+        /// Create a new model system struture with name only.
+        /// Only invoke this if you are going to set the type explicitly right after.
+        /// </summary>
+        /// <param name="name">The name of the model system structure</param>
         protected ModelSystemStructure(string name)
         {
             Name = name;
@@ -205,14 +234,28 @@ namespace XTMF2
         /// <returns>True if the operation was successful, false otherwise</returns>
         private static string GetName(Type type)
         {
-            if (type == null)
-            {
-                throw new ArgumentNullException(nameof(type));
-            }
-            return type.Name;
+            return type?.Name ?? throw new ArgumentNullException(nameof(type));
         }
 
+        /// <summary>
+        /// Fail with the given message.
+        /// </summary>
+        /// <param name="error">The place to store the message</param>
+        /// <param name="message">The message to fail with.</param>
+        /// <returns>Always false</returns>
+        private static bool FailWith(ref string error, string message)
+        {
+            error = message;
+            return false;
+        }
 
+        /// <summary>
+        /// Fail with the given message.
+        /// </summary>
+        /// <param name="mss">The module system structure to null out.</param>
+        /// <param name="error">The place to store the message</param>
+        /// <param name="message">The message to fail with.</param>
+        /// <returns>Always false</returns>
         private static bool FailWith(out ModelSystemStructure mss, ref string error, string message)
         {
             mss = null;
@@ -222,16 +265,9 @@ namespace XTMF2
 
         internal bool GetLink(ModelSystemStructureHook hook, out Link link)
         {
-            var results = from l in ContainedWithin.Links
-                          where l.Origin == this && l.OriginHook == hook
-                          select l;
-            if (results.Any())
-            {
-                link = results.First();
-                return true;
-            }
-            link = null;
-            return false;
+            return (link = (from l in ContainedWithin.Links
+                            where l.Origin == this && l.OriginHook == hook
+                            select l).FirstOrDefault()) != null;
         }
 
         internal virtual void Save(ref int index, Dictionary<ModelSystemStructure, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
@@ -287,13 +323,13 @@ namespace XTMF2
                         description = reader.ReadAsString();
                         break;
                     case "X":
-                        point.X = (float)reader.ReadAsDouble();
+                        point.X = (float)(reader.ReadAsDouble() ?? 0.0f);
                         break;
                     case "Y":
-                        point.Y = (float)reader.ReadAsDouble();
+                        point.Y = (float)(reader.ReadAsDouble() ?? 0.0f);
                         break;
                     case "Index":
-                        index = (int)reader.ReadAsInt32();
+                        index = (int)(reader.ReadAsInt32() ?? -1);
                         break;
                     case "Type":
                         {
@@ -316,6 +352,10 @@ namespace XTMF2
             if (name == null)
             {
                 return FailWith(out mss, ref error, "Undefined name for a start in boundary " + boundary.FullPath);
+            }
+            if(index < 0)
+            {
+                return FailWith(out mss, ref error, $"While loading {boundary.FullPath}.{name} we were unable to parse a valid index!");
             }
             if (structures.ContainsKey(index))
             {
