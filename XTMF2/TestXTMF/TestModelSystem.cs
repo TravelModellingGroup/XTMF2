@@ -475,6 +475,36 @@ namespace TestXTMF
         }
 
         [TestMethod]
+        public void AddBoundaryNullParent()
+        {
+            RunInModelSystemContext("AddBoundaryNullParent", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.ThrowsException<ArgumentNullException>(() =>
+                {
+                    mSession.AddBoundary(user, null, "UniqueName", out Boundary subB, ref error);
+                });
+            });
+        }
+
+        [TestMethod]
+        public void AddBoundaryNulUser()
+        {
+            RunInModelSystemContext("AddBoundaryNullUser", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.ThrowsException<ArgumentNullException>(() =>
+                {
+                    mSession.AddBoundary(null, ms.GlobalBoundary, "UniqueName", out Boundary subB, ref error);
+                });
+            });
+        }
+
+        [TestMethod]
         public void RemoveBoundary()
         {
             RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
@@ -500,6 +530,81 @@ namespace TestXTMF
                 Assert.AreSame(subB, ms.GlobalBoundary.Boundaries[0]);
                 Assert.IsTrue(mSession.Redo(ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+            });
+        }
+
+        [TestMethod]
+        public void RemoveBoundaryNullBoundary()
+        {
+            RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+
+                // Now test removing the boundary explicitly
+                Assert.ThrowsException<ArgumentNullException>(() =>
+                {
+                    mSession.RemoveBoundary(user, ms.GlobalBoundary, null, ref error);
+                });
+            });
+        }
+
+        [TestMethod]
+        public void RemoveBoundaryNullParent()
+        {
+            RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+
+                // Now test removing the boundary explicitly
+                Assert.ThrowsException<ArgumentNullException>(() =>
+                {
+                    mSession.RemoveBoundary(user, null, subB, ref error);
+                });
+            });
+        }
+
+        [TestMethod]
+        public void RemoveBoundaryNullUser()
+        {
+            RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, ref error), error);
+                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+
+                // Now test removing the boundary explicitly
+                Assert.ThrowsException<ArgumentNullException>(() =>
+                {
+                    mSession.RemoveBoundary(null, ms.GlobalBoundary, subB, ref error);
+                });
+            });
+        }
+
+        [TestMethod]
+        public void RemoveBoundaryNotInBoundary()
+        {
+            RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "SubB", out Boundary subB, ref error), error);
+                Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "SubC", out Boundary subC, ref error), error);
+                Assert.IsTrue(mSession.AddBoundary(user, subC, "SubCA", out Boundary subCA, ref error), error);
+                Assert.AreEqual(2, ms.GlobalBoundary.Boundaries.Count);
+                Assert.AreEqual(1, subC.Boundaries.Count);
+
+                Assert.IsFalse(mSession.RemoveBoundary(user, ms.GlobalBoundary, subCA, ref error), "Successfully removed a boundary from a grandparent isntead of failing!");
             });
         }
 
