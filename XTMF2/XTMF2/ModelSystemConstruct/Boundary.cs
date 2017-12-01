@@ -28,18 +28,40 @@ using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2
 {
+    /// <summary>
+    /// Provides a grouping of modules, link origins, and sub boundaries
+    /// </summary>
     public sealed class Boundary : INotifyPropertyChanged
     {
+        /// <summary>
+        /// The name of the boundary
+        /// </summary>
         public string Name { get; private set; }
+
+        /// <summary>
+        /// A description of the boundary's purpose
+        /// </summary>
         public string Description { get; private set; }
-        private object WriteLock = new object();
+
+        /// <summary>
+        /// This lock must be obtained before changing any local settings.
+        /// </summary>
+        private object _WriteLock = new object();
         private ObservableCollection<ModelSystemStructure> _Modules = new ObservableCollection<ModelSystemStructure>();
         private ObservableCollection<Start> _Starts = new ObservableCollection<Start>();
         private ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
         private ObservableCollection<Link> _Links = new ObservableCollection<Link>();
 
+        /// <summary>
+        /// Get readonly access to the links contained in this boundary.
+        /// </summary>
         public ReadOnlyObservableCollection<Link> Links => new ReadOnlyObservableCollection<Link>(_Links);
 
+        /// <summary>
+        /// Create a new boundary, optionally with a parent
+        /// </summary>
+        /// <param name="name">The unique name of the boundary</param>
+        /// <param name="parent">The parent of the boundary</param>
         public Boundary(string name, Boundary parent = null)
         {
             Name = name;
@@ -54,72 +76,88 @@ namespace XTMF2
             Parent = parent;
         }
 
+        /// <summary>
+        /// Check to see if a given boundary exists is, or is in this boundary.
+        /// </summary>
+        /// <param name="boundary">The boundary to check for.</param>
+        /// <returns>True if the boundary is this boundary, or is contained within.</returns>
         internal bool Contains(Boundary boundary)
         {
-            foreach (var b in _Boundaries)
+            if (boundary == null)
             {
-                if (b == boundary || b.Contains(boundary))
-                {
-                    return true;
-                }
+                throw new ArgumentNullException(nameof(boundary));
             }
-            return false;
+            return _Boundaries.Any(b => b == boundary || b.Contains(boundary));
         }
-
 
         public event PropertyChangedEventHandler PropertyChanged;
 
+        /// <summary>
+        /// Provides a readonly view of the locally contained modules.
+        /// </summary>
         public ReadOnlyObservableCollection<ModelSystemStructure> Modules
         {
             get
             {
-                lock (WriteLock)
+                lock (_WriteLock)
                 {
                     return new ReadOnlyObservableCollection<ModelSystemStructure>(_Modules);
                 }
             }
         }
 
+        /// <summary>
+        /// Provides a readonly view of the locally contained Starts.
+        /// </summary>
         public ReadOnlyObservableCollection<Start> Starts
         {
             get
             {
-                lock (WriteLock)
+                lock (_WriteLock)
                 {
                     return new ReadOnlyObservableCollection<Start>(_Starts);
                 }
             }
         }
 
+        /// <summary>
+        /// Creates a dictionary of type to index number for types contained in the model system.
+        /// </summary>
+        /// <returns>A dictionary mapping type to index.</returns>
         internal Dictionary<Type, int> GetUsedTypes()
         {
-            return GetUsedTypes(new List<Type>()).Select((type, index) => (type: type, index: index))
+            List<Type> GetUsedTypes(Boundary current, List<Type> included)
+            {
+                foreach (var module in current._Modules)
+                {
+                    var t = module.Type;
+                    if (t != null)
+                    {
+                        if (!included.Contains(t))
+                        {
+                            included.Add(t);
+                        }
+                    }
+                }
+                foreach (var child in current._Boundaries)
+                {
+                    GetUsedTypes(child, included);
+                }
+                return included;
+            }
+            return GetUsedTypes(this, new List<Type>()).Select((type, index) => (type: type, index: index))
                 .ToDictionary(e => e.type, e => e.index);
         }
 
-        private List<Type> GetUsedTypes(List<Type> included)
-        {
-            foreach (var module in _Modules)
-            {
-                var t = module.Type;
-                if (t != null)
-                {
-                    if (!included.Contains(t))
-                    {
-                        included.Add(t);
-                    }
-                }
-            }
-            foreach (var child in _Boundaries)
-            {
-                child.GetUsedTypes(included);
-            }
-            return included;
-        }
-
+        /// <summary>
+        /// Constructs the model system's modules
+        /// </summary>
+        /// <param name="runtime">The XTMF runtime to run from.</param>
+        /// <param name="error">An error message if the construction fails.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
         internal bool ConstructModules(XTMFRuntime runtime, ref string error)
         {
-            lock (WriteLock)
+            lock (_WriteLock)
             {
                 foreach(var start in _Starts)
                 {
@@ -147,9 +185,23 @@ namespace XTMF2
             }
         }
 
+        /// <summary>
+        /// Add a new child boundary
+        /// </summary>
+        /// <param name="name">The unique name for the boundary.</param>
+        /// <param name="boundary">The resulting boundary.</param>
+        /// <param name="error">An erorr message if the operation fails.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
         internal bool AddBoundary(string name, out Boundary boundary, ref string error)
         {
-            if(_Boundaries.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                boundary = null;
+                error = "The name of a boundary must be set.";
+                return false;
+            }
+
+            if (_Boundaries.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
             {
                 boundary = null;
                 error = "The name already exists in this boundary!";
@@ -159,6 +211,11 @@ namespace XTMF2
             return true;
         }
 
+        /// <summary>
+        /// Collect all links going to a given boundary.
+        /// </summary>
+        /// <param name="boundary">The boundary to get links to.</param>
+        /// <returns>A list of all links going to the given boundary.</returns>
         internal List<Link> GetLinksGoingToBoundary(Boundary boundary)
         {
             var ret = new List<Link>();
@@ -200,6 +257,12 @@ namespace XTMF2
             return ret;
         }
 
+        /// <summary>
+        /// Add a boundary 
+        /// </summary>
+        /// <param name="boundary"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
         internal bool AddBoundary(Boundary boundary, ref string error)
         {
             if (_Boundaries.Contains(boundary))
@@ -234,7 +297,7 @@ namespace XTMF2
 
         internal bool ConstructLinks(ref string error)
         {
-            lock(WriteLock)
+            lock(_WriteLock)
             {
                 foreach(var link in _Links)
                 {
@@ -256,7 +319,7 @@ namespace XTMF2
         {
             get
             {
-                lock (WriteLock)
+                lock (_WriteLock)
                 {
                     return new ReadOnlyObservableCollection<Boundary>(_Boundaries);
                 }
@@ -349,7 +412,11 @@ namespace XTMF2
         /// <returns>True if it was added again, false otherwise with message.</returns>
         internal bool AddLink(Link link, ref string e)
         {
-            if(link.Origin.ContainedWithin != this)
+            if (link == null)
+            {
+                throw new ArgumentNullException(nameof(link));
+            }
+            if (link.Origin.ContainedWithin != this)
             {
                 e = "This link is was not contained within this boundary!";
                 return false;
