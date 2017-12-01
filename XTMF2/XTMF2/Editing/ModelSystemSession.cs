@@ -269,6 +269,13 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Remove the given start from the given boundary.
+        /// </summary>
+        /// <param name="user"></param>
+        /// <param name="start"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
         public bool RemoveStart(User user, Start start, ref string error)
         {
             if (user == null)

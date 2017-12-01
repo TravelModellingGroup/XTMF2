@@ -69,7 +69,7 @@ namespace TestXTMF
         [TestMethod]
         public void GetModelSystemSession()
         {
-            TestHelper.RunInModelSystemContext("GetModelSystemSession", (user, pSession, mSession) =>
+            RunInModelSystemContext("GetModelSystemSession", (user, pSession, mSession) =>
             {
                 string error = null;
                 var globalBoundary = mSession.ModelSystem.GlobalBoundary;
@@ -156,7 +156,7 @@ namespace TestXTMF
         [TestMethod]
         public void ModelSystemSavedWithStartOnly()
         {
-            TestHelper.RunInModelSystemContext("ModelSystemSavedWithStartOnly", (user, pSession, mSession) =>
+            RunInModelSystemContext("ModelSystemSavedWithStartOnly", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
@@ -177,7 +177,7 @@ namespace TestXTMF
         [TestMethod]
         public void ModelSystemSavedWithModelSystemStructureOnly()
         {
-            TestHelper.RunInModelSystemContext("ModelSystemSavedWithModelSystemStructureOnly", (user, pSession, mSession) =>
+            RunInModelSystemContext("ModelSystemSavedWithModelSystemStructureOnly", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
@@ -195,7 +195,7 @@ namespace TestXTMF
         [TestMethod]
         public void ModelSystemSavedWithStartAndModelSystemStructure()
         {
-            TestHelper.RunInModelSystemContext("ModelSystemSavedWithStartAndModelSystemStructure", (user, pSession, mSession) =>
+            RunInModelSystemContext("ModelSystemSavedWithStartAndModelSystemStructure", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
@@ -217,7 +217,7 @@ namespace TestXTMF
         [TestMethod]
         public void ModelSystemWithLink()
         {
-            TestHelper.RunInModelSystemContext("ModelSystemWithLink", (user, pSession, mSession) =>
+            RunInModelSystemContext("ModelSystemWithLink", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
@@ -241,7 +241,7 @@ namespace TestXTMF
         [TestMethod]
         public void ModelSystemWithMultiLink()
         {
-            TestHelper.RunInModelSystemContext("ModelSystemWithLink", (user, pSession, mSession) =>
+            RunInModelSystemContext("ModelSystemWithLink", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
@@ -288,7 +288,7 @@ namespace TestXTMF
         [TestMethod]
         public void UndoAddStart()
         {
-            TestHelper.RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
+            RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
@@ -306,7 +306,7 @@ namespace TestXTMF
         [TestMethod]
         public void UndoRemoveStart()
         {
-            TestHelper.RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
+            RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
@@ -332,7 +332,7 @@ namespace TestXTMF
         [TestMethod]
         public void UndoAddModelSystemStructure()
         {
-            TestHelper.RunInModelSystemContext("UndoAddModelSystemStructure", (user, pSession, mSession) =>
+            RunInModelSystemContext("UndoAddModelSystemStructure", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
@@ -351,7 +351,7 @@ namespace TestXTMF
         [TestMethod]
         public void UndoRemoveModelSystemStructure()
         {
-            TestHelper.RunInModelSystemContext("UndoRemoveModelSystemStructure", (user, pSession, mSession) =>
+            RunInModelSystemContext("UndoRemoveModelSystemStructure", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
@@ -377,7 +377,7 @@ namespace TestXTMF
         [TestMethod]
         public void UndoAddLink()
         {
-            TestHelper.RunInModelSystemContext("UndoAddLink", (user, pSession, mSession) =>
+            RunInModelSystemContext("UndoAddLink", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
@@ -401,7 +401,7 @@ namespace TestXTMF
         [TestMethod]
         public void UndoRemoveLink()
         {
-            TestHelper.RunInModelSystemContext("UndoRemoveLink", (user, pSession, mSession) =>
+            RunInModelSystemContext("UndoRemoveLink", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
@@ -438,7 +438,7 @@ namespace TestXTMF
              * This test will try to assign a link between from a single hook to different modules.
              * This operation should remove the first link and then add the second
              */
-            TestHelper.RunInModelSystemContext("AddSingleLinkToDifferentModule", (user, pSession, mSession) =>
+            RunInModelSystemContext("AddSingleLinkToDifferentModule", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
@@ -457,7 +457,7 @@ namespace TestXTMF
         [TestMethod]
         public void AddBoundary()
         {
-            TestHelper.RunInModelSystemContext("AddBoundary", (user, pSession, mSession) =>
+            RunInModelSystemContext("AddBoundary", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
@@ -477,7 +477,7 @@ namespace TestXTMF
         [TestMethod]
         public void RemoveBoundary()
         {
-            TestHelper.RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
+            RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
@@ -506,7 +506,7 @@ namespace TestXTMF
         [TestMethod]
         public void RemoveLinkToBoundariesThatWereRemoved()
         {
-            TestHelper.RunInModelSystemContext("RemoveLinkToBoundariesThatWereRemoved", (user, pSession, mSession) =>
+            RunInModelSystemContext("RemoveLinkToBoundariesThatWereRemoved", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
@@ -534,7 +534,7 @@ namespace TestXTMF
         [TestMethod]
         public void RemoveMultiLinkToBoundariesThatWereRemoved()
         {
-            TestHelper.RunInModelSystemContext("RemoveMultiLinkToBoundariesThatWereRemoved", (user, pSession, mSession) =>
+            RunInModelSystemContext("RemoveMultiLinkToBoundariesThatWereRemoved", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
@@ -566,7 +566,7 @@ namespace TestXTMF
         [TestMethod]
         public void RemoveSingleDestinationInMultiLink()
         {
-            TestHelper.RunInModelSystemContext("RemoveMultiLinkToBoundariesThatWereRemoved", (user, pSession, mSession) =>
+            RunInModelSystemContext("RemoveMultiLinkToBoundariesThatWereRemoved", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
