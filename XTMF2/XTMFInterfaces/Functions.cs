@@ -23,6 +23,16 @@ using System.Text;
 namespace XTMF2
 {
 
+    public abstract class BaseModule : IModule
+    {
+        public string Name { get; set; }
+
+        public virtual bool RuntimeValidation(ref string error)
+        {
+            return true;
+        }
+    }
+
     public interface IFunction<Result> : IModule
     {   
         Result Invoke();
