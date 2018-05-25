@@ -147,7 +147,8 @@ namespace TestXTMF
                             {
                                 FileName = "dotnet",
                                 Arguments = $"\"{xtmfRunFileName}\" -loadDLL \"{testFileName}\" -namedPipe \"{id}\"",
-                                CreateNoWindow = false
+                                CreateNoWindow = false,
+                                WorkingDirectory = Path.GetDirectoryName(typeof(TestHelper).GetTypeInfo().Assembly.Location)
                             };
                             client = new Process()
                             {
