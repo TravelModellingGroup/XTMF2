@@ -180,6 +180,10 @@ namespace TestXTMF
                     {
                         client?.Kill();
                     }
+                    catch (System.ComponentModel.Win32Exception)
+                    {
+
+                    }
                     catch (InvalidOperationException)
                     {
                         // This will cover the case that the client has already exited
