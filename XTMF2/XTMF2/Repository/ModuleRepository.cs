@@ -62,9 +62,12 @@ namespace XTMF2.Repository
             {
                 throw new ArgumentNullException(nameof(type));
             }
-            if (IModuleTypeInfo.IsAssignableFrom(type))
+            if(!(type.IsAbstract || type.IsInterface))
             {
-                _Data[type] = GetTypeData(type);
+                if (IModuleTypeInfo.IsAssignableFrom(type))
+                {
+                    _Data[type] = GetTypeData(type);
+                }
             }
         }
 
