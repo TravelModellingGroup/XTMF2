@@ -47,11 +47,12 @@ namespace XTMF2
             {
                 return required ? HookCardinality.AtLeastOne : HookCardinality.AnyNumber;
             }
+            // If it is a single link
             if (typeof(IModule).GetTypeInfo().IsAssignableFrom(type))
             {
-                return HookCardinality.Single;
+                return required ? HookCardinality.Single : HookCardinality.SingleOptional;
             }
-            return HookCardinality.Single;
+            return required ? HookCardinality.Single : HookCardinality.SingleOptional;
         }
 
         /// <summary>
@@ -72,6 +73,7 @@ namespace XTMF2
     public enum HookCardinality
     {
         Single,
+        SingleOptional,
         AtLeastOne,
         AnyNumber
     }
@@ -103,6 +105,7 @@ namespace XTMF2
             switch (Cardinality)
             {
                 case HookCardinality.Single:
+                case HookCardinality.SingleOptional:
                     {
                         Property.SetValue(origin.Module, destination.Module);
                     }
@@ -148,6 +151,7 @@ namespace XTMF2
             switch (Cardinality)
             {
                 case HookCardinality.Single:
+                case HookCardinality.SingleOptional:
                     {
                         Field.SetValue(origin.Module, destination.Module);
                     }

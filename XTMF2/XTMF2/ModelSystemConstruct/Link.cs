@@ -171,7 +171,7 @@ namespace XTMF2
             return true;
         }
 
-        internal abstract void Construct();
+        internal abstract bool Construct(ref string error);
         
     }
 }

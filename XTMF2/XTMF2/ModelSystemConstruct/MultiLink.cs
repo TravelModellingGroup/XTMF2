@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Text;
 using Newtonsoft.Json;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -70,13 +71,24 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteEndObject();
         }
 
-        internal override void Construct()
+        internal override bool Construct(ref string error)
         {
-            OriginHook.CreateArray(Origin.Module, _Destinations.Count);
+            var moduleCount = _Destinations.Count(d => !d.IsDisabled);
+            if(moduleCount <= 0 && OriginHook.Cardinality == HookCardinality.AtLeastOne)
+            {
+                error = "At least one module is required as a destination.";
+                return false;
+            }
+            OriginHook.CreateArray(Origin.Module, moduleCount);
+            int index = 0;
             for (int i = 0; i < _Destinations.Count; i++)
             {
-                OriginHook.Install(Origin, _Destinations[i], i);
+                if (!_Destinations[i].IsDisabled)
+                {
+                    OriginHook.Install(Origin, _Destinations[i], index++);
+                }
             }
+            return true;
         }
 
         internal void RemoveDestination(int i)

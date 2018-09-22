@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2018 University of Toronto
 
     This file is part of XTMF2.
 
@@ -223,6 +223,19 @@ namespace XTMF2
         }
 
         /// <summary>
+        /// Set the module to the given disabled state.
+        /// </summary>
+        /// <param name="modelSystemSession">The model system session</param>
+        /// <param name="disabled"></param>
+        /// <returns></returns>
+        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled)
+        {
+            IsDisabled = disabled;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
+            return true;
+        }
+
+        /// <summary>
         /// Create a new model system struture with name only.
         /// Only invoke this if you are going to set the type explicitly right after.
         /// </summary>
@@ -296,6 +309,11 @@ namespace XTMF2
                 writer.WritePropertyName("Parameter");
                 writer.WriteValue(ParameterValue);
             }
+            if(IsDisabled)
+            {
+                writer.WritePropertyName("Disabled");
+                writer.WriteValue(true);
+            }
             writer.WriteEndObject();
         }
 
@@ -309,6 +327,7 @@ namespace XTMF2
             Type type = null;
             string name = null;
             int index = -1;
+            bool disabled = false;
             Point point = new Point();
             string description = null;
             string parameter = null;
@@ -350,6 +369,15 @@ namespace XTMF2
                             parameter = reader.ReadAsString();
                         }
                         break;
+                    case "Disabled":
+                        {
+                            // Assume the disabled parameter is false if a bad boolean is passed
+                            if(reader.ReadAsBoolean() == true)
+                            {
+                                disabled = true;
+                            }
+                        }
+                        break;
                     default:
                         return FailWith(out mss, ref error, $"Undefined parameter type {reader.Value} when loading a start!");
                 }
@@ -371,7 +399,8 @@ namespace XTMF2
                 Description = description,
                 Location = point,
                 ContainedWithin = boundary,
-                ParameterValue = parameter
+                ParameterValue = parameter,
+                IsDisabled = disabled
             };
             if (!mss.SetType(session, type, ref error))
             {
@@ -393,19 +422,6 @@ namespace XTMF2
                 return null;
             }
             return ret;
-        }
-
-        /// <summary>
-        /// Set the module to the given disabled state.
-        /// </summary>
-        /// <param name="modelSystemSession">The model system session</param>
-        /// <param name="disabled"></param>
-        /// <returns></returns>
-        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled)
-        {
-            IsDisabled = disabled;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
-            return true;
         }
     }
 }

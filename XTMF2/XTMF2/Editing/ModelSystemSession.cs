@@ -195,9 +195,9 @@ namespace XTMF2.Editing
                                 else if (link is MultiLink ml)
                                 {
                                     var list = multiLinkHelper[ml];
-                                    foreach(var element in list)
+                                    foreach(var (Index, MSS) in list)
                                     {
-                                        ml.AddDestination(element.MSS, element.Index);
+                                        ml.AddDestination(MSS, Index);
                                     }
                                 }
                             }
@@ -520,7 +520,8 @@ namespace XTMF2.Editing
             lock (SessionLock)
             {
                 bool success = false;
-                if (originHook.Cardinality == HookCardinality.Single)
+                if (   originHook.Cardinality == HookCardinality.Single 
+                    || originHook.Cardinality == HookCardinality.SingleOptional)
                 {
                     if (origin.GetLink(originHook, out Link _link))
                     {

@@ -47,10 +47,20 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteEndObject();
         }
 
-        internal override void Construct()
+        internal override bool Construct(ref string error)
         {
+            if(Destination.IsDisabled)
+            {
+                // if not optional
+                if(OriginHook.Cardinality == HookCardinality.Single)
+                {
+                    error = "A link destined for a disabled module was not optional.";
+                    return false;
+                }
+            }
             // The index doesn't matter for this type
             OriginHook.Install(Origin, Destination, 0);
+            return true;
         }
     }
 }
