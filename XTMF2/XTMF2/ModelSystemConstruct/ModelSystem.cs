@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2018 University of Toronto
 
     This file is part of XTMF2.
 
@@ -66,13 +66,13 @@ namespace XTMF2
         /// <summary>
         /// The lock that must be acquired before editing the model system's attributes.
         /// </summary>
-        private object ModelSystemLock = new object();
+        private readonly object _modelSystemLock = new object();
 
         public event PropertyChangedEventHandler PropertyChanged;
 
         internal bool Save(ref string error)
         {
-            lock (ModelSystemLock)
+            lock (_modelSystemLock)
             {
                 try
                 {
@@ -172,7 +172,7 @@ namespace XTMF2
         /// <returns></returns>
         internal bool Contains(Boundary boundary)
         {
-            lock (ModelSystemLock)
+            lock (_modelSystemLock)
             {
                 if (GlobalBoundary == boundary)
                 {

@@ -378,7 +378,56 @@ namespace XTMF2.Editing
             }
             lock (SessionLock)
             {
-                return basicParameter.SetParameterValue(this, value, ref error);
+                var previousValue = basicParameter.ParameterValue;
+                if(basicParameter.SetParameterValue(this, value, ref error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (basicParameter.SetParameterValue(this, previousValue, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (basicParameter.SetParameterValue(this, value, ref e), e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Set the model system structure to the disabled state.
+        /// </summary>
+        /// <param name="user">The user issuing the command</param>
+        /// <param name="mss">The model system structure</param>
+        /// <param name="disabled">If it should be disabled (true) or not (false).</param>
+        /// <param name="error">An error message explaining why the operation failed.</param>
+        /// <returns>True if the operation completed successfully, false otherwise.</returns>
+        public bool SetModelSystemStructureDisabled(User user, ModelSystemStructure mss, bool disabled, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (mss == null)
+            {
+                throw new ArgumentNullException(nameof(mss));
+            }
+            lock (SessionLock)
+            {
+                if(mss.SetDisabled(this, disabled))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (mss.SetDisabled(this, !disabled), String.Empty);
+                    }, () =>
+                    {
+                        return (mss.SetDisabled(this, disabled), String.Empty);
+                    }));
+                    return true;
+                }
+                return false;
             }
         }
 

@@ -147,16 +147,21 @@ namespace XTMF2
         /// </summary>
         public string Description { get; protected set; }
 
-        private static Type[] EmptyConstructor = new Type[] { };
+        /// <summary>
+        /// Holds the state if this module should be disabled for a model run.
+        /// </summary>
+        public bool IsDisabled { get; private set; }
 
-        private static Type[] RuntimeConstructor = new Type[] { typeof(XTMFRuntime) };
+        private static readonly Type[] EmptyConstructor = new Type[] { };
 
-        private static Type GenericParameter = typeof(BasicParameter<>);
+        private static readonly Type[] RuntimeConstructor = new Type[] { typeof(XTMFRuntime) };
 
-        private static ConcurrentDictionary<Type, FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
+        private static readonly Type GenericParameter = typeof(BasicParameter<>);
+
+        private static readonly ConcurrentDictionary<Type, FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
 
         /// <summary>
-        /// Setup the module as defind in this model system structure.
+        /// Setup the module as defined in this model system structure.
         /// </summary>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
@@ -168,8 +173,8 @@ namespace XTMF2
             if (Type.IsConstructedGenericType && Type.GetGenericTypeDefinition() == GenericParameter)
             {
                 var paramType = Type.GenericTypeArguments[0];
-                var vals = ArbitraryParameterParser.ArbitraryParameterParse(paramType, ParameterValue, ref error);
-                if (!vals.Sucess)
+                var (Sucess, Value) = ArbitraryParameterParser.ArbitraryParameterParse(paramType, ParameterValue, ref error);
+                if (!Sucess)
                 {
                     return FailWith(ref error, $"Unable to assign the value of {ParameterValue} to type {paramType.FullName}!");
                 }
@@ -178,7 +183,7 @@ namespace XTMF2
                     info = _Type.GetRuntimeField("Value");
                     GenericValue[paramType] = info;
                 }
-                info.SetValue(Module, vals.Value);
+                info.SetValue(Module, Value);
             }
             return true;
         }
@@ -388,6 +393,19 @@ namespace XTMF2
                 return null;
             }
             return ret;
+        }
+
+        /// <summary>
+        /// Set the module to the given disabled state.
+        /// </summary>
+        /// <param name="modelSystemSession">The model system session</param>
+        /// <param name="disabled"></param>
+        /// <returns></returns>
+        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled)
+        {
+            IsDisabled = disabled;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
+            return true;
         }
     }
 }
