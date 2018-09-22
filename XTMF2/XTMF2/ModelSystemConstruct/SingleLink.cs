@@ -68,8 +68,11 @@ namespace XTMF2.ModelSystemConstruct
                     return false;
                 }
             }
-            // The index doesn't matter for this type
-            OriginHook.Install(Origin, Destination, 0);
+            if (!IsDisabled)
+            {
+                // The index doesn't matter for this type
+                OriginHook.Install(Origin, Destination, 0);
+            }
             return true;
         }
     }
