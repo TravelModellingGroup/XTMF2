@@ -104,6 +104,10 @@ namespace XTMF2.ModelSystemConstruct
                     }
                 }
             }
+            else
+            {
+                OriginHook.CreateArray(Origin.Module, 0);
+            }
             return true;
         }
 
