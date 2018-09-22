@@ -35,6 +35,8 @@ namespace XTMF2
         public ModelSystemStructure Origin { get; internal set; }
         public ModelSystemStructureHook OriginHook { get; internal set; }
 
+        public bool IsDisabled { get; private set; }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         public bool SetOrigin(ModelSystemSession session, ModelSystemStructure origin, ModelSystemStructureHook originHook, ref string error)
@@ -73,6 +75,7 @@ namespace XTMF2
             ModelSystemStructure origin = null, destination = null;
             List<ModelSystemStructure> destinations = null;
             string hookName = null;
+            bool disabled = false;
             int listIndex = 0;
             // read in the values
             while(reader.Read() && reader.TokenType != JsonToken.EndObject)
@@ -129,6 +132,12 @@ namespace XTMF2
                             listIndex = (int)reader.ReadAsInt32();
                         }
                         break;
+                    case "Disabled":
+                        if(reader.ReadAsBoolean() == true)
+                        {
+                            disabled = true;
+                        }
+                        break;
                     default:
                         return FailWith(out link, ref error, "Unknown parameter type when loading link " + reader.Value);
                 }
@@ -157,7 +166,8 @@ namespace XTMF2
                 {
                     Origin = origin,
                     OriginHook = hook,
-                    Destination = destination
+                    Destination = destination,
+                    IsDisabled = disabled
                 };
             }
             else
@@ -165,13 +175,20 @@ namespace XTMF2
                 link = new MultiLink(destinations)
                 {
                     Origin = origin,
-                    OriginHook = hook
+                    OriginHook = hook,
+                    IsDisabled = disabled
                 };
             }
             return true;
         }
 
         internal abstract bool Construct(ref string error);
-        
+
+        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled)
+        {
+            IsDisabled = disabled;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
+            return true;
+        }
     }
 }

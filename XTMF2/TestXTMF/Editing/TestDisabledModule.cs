@@ -56,7 +56,9 @@ namespace TestXTMF.Editing
             {
                 // after shutdown
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                var modules = ms.GlobalBoundary.Modules;
+                Assert.AreEqual(1, modules.Count);
+                Assert.IsTrue(modules[0].IsDisabled, "The module was not disabled after reloading the model system!");
             });
         }
 
@@ -101,6 +103,39 @@ namespace TestXTMF.Editing
                         Assert.IsFalse(success, "The model system finished running instead of having a validation error!");
                     }
                 });
+            });
+        }
+
+        [TestMethod]
+        public void TestDisableLink()
+        {
+            RunInModelSystemContext("ModelSystemSavedWithModelSystemStructureOnly", (user, pSession, msSession) =>
+            {
+                // initialization
+                var ms = msSession.ModelSystem;
+                string error = null;
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error), error);
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error), error);
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error), error);
+                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error), error);
+                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var startLink, ref error), error);
+
+                Assert.IsFalse(startLink.IsDisabled, "The link initialized as disabled!");
+                Assert.IsTrue(msSession.SetLinkDisabled(user, startLink, true, ref error), error);
+                Assert.IsTrue(startLink.IsDisabled, "The link initialized as disabled!");
+                Assert.IsTrue(msSession.Undo(ref error), error);
+                Assert.IsFalse(startLink.IsDisabled);
+                Assert.IsTrue(msSession.Redo(ref error), error);
+                Assert.IsTrue(startLink.IsDisabled);
+            }, (user, pSession, mSession) =>
+            {
+                // after shutdown
+                var ms = mSession.ModelSystem;
+                var modules = ms.GlobalBoundary.Modules;
+                var links = ms.GlobalBoundary.Links;
+                Assert.AreEqual(3, modules.Count);
+                Assert.AreEqual(1, links.Count);
+                Assert.IsTrue(links[0].IsDisabled, "The link was not disabled on reload.");
             });
         }
     }

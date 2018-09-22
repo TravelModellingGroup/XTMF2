@@ -432,6 +432,42 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="user"></param>
+        /// <param name="link"></param>
+        /// <param name="disabled"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        public bool SetLinkDisabled(User user, Link link, bool disabled, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (link == null)
+            {
+                throw new ArgumentNullException(nameof(link));
+            }
+            lock (SessionLock)
+            {
+                if(link.SetDisabled(this, disabled))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (link.SetDisabled(this, !disabled), String.Empty);
+                    }, () =>
+                    {
+                        return (link.SetDisabled(this, disabled), String.Empty);
+                    }));
+                    return true;
+                }
+                return true;
+            }
+        }
+
+
+        /// <summary>
         /// Save the model system
         /// </summary>
         /// <param name="error">An error message in case the save fails.</param>

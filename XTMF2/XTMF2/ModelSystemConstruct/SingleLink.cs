@@ -44,6 +44,11 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteValue(OriginHook.Name);
             writer.WritePropertyName("Destination");
             writer.WriteValue(moduleDictionary[Destination]);
+            if(IsDisabled)
+            {
+                writer.WritePropertyName("Disabled");
+                writer.WriteValue(true);
+            }
             writer.WriteEndObject();
         }
 

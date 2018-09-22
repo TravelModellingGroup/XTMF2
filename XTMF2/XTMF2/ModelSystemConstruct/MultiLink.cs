@@ -68,6 +68,11 @@ namespace XTMF2.ModelSystemConstruct
                 writer.WriteValue(moduleDictionary[dest]);
             }
             writer.WriteEndArray();
+            if (IsDisabled)
+            {
+                writer.WritePropertyName("Disabled");
+                writer.WriteValue(true);
+            }
             writer.WriteEndObject();
         }
 
