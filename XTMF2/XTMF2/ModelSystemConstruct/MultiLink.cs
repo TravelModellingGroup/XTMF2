@@ -79,10 +79,18 @@ namespace XTMF2.ModelSystemConstruct
         internal override bool Construct(ref string error)
         {
             var moduleCount = _Destinations.Count(d => !d.IsDisabled);
-            if(moduleCount <= 0 && OriginHook.Cardinality == HookCardinality.AtLeastOne)
+            if(OriginHook.Cardinality == HookCardinality.AtLeastOne)
             {
-                error = "At least one module is required as a destination.";
-                return false;
+                if (moduleCount <= 0)
+                {
+                    error = "At least one module is required as a destination.";
+                    return false;
+                }
+                if(IsDisabled)
+                {
+                    error = "A required MultiLink is disabled!";
+                    return false;
+                }
             }
             OriginHook.CreateArray(Origin.Module, moduleCount);
             int index = 0;

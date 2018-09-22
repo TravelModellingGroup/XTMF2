@@ -44,7 +44,7 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteValue(OriginHook.Name);
             writer.WritePropertyName("Destination");
             writer.WriteValue(moduleDictionary[Destination]);
-            if(IsDisabled)
+            if (IsDisabled)
             {
                 writer.WritePropertyName("Disabled");
                 writer.WriteValue(true);
@@ -54,12 +54,17 @@ namespace XTMF2.ModelSystemConstruct
 
         internal override bool Construct(ref string error)
         {
-            if(Destination.IsDisabled)
+            // if not optional
+            if (OriginHook.Cardinality == HookCardinality.Single)
             {
-                // if not optional
-                if(OriginHook.Cardinality == HookCardinality.Single)
+                if (Destination.IsDisabled)
                 {
                     error = "A link destined for a disabled module was not optional.";
+                    return false;
+                }
+                if (IsDisabled)
+                {
+                    error = "A non optional link is disabled!";
                     return false;
                 }
             }
