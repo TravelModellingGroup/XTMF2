@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2018 University of Toronto
 
     This file is part of XTMF2.
 
@@ -147,16 +147,21 @@ namespace XTMF2
         /// </summary>
         public string Description { get; protected set; }
 
-        private static Type[] EmptyConstructor = new Type[] { };
+        /// <summary>
+        /// Holds the state if this module should be disabled for a model run.
+        /// </summary>
+        public bool IsDisabled { get; private set; }
 
-        private static Type[] RuntimeConstructor = new Type[] { typeof(XTMFRuntime) };
+        private static readonly Type[] EmptyConstructor = new Type[] { };
 
-        private static Type GenericParameter = typeof(BasicParameter<>);
+        private static readonly Type[] RuntimeConstructor = new Type[] { typeof(XTMFRuntime) };
 
-        private static ConcurrentDictionary<Type, FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
+        private static readonly Type GenericParameter = typeof(BasicParameter<>);
+
+        private static readonly ConcurrentDictionary<Type, FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
 
         /// <summary>
-        /// Setup the module as defind in this model system structure.
+        /// Setup the module as defined in this model system structure.
         /// </summary>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
@@ -168,8 +173,8 @@ namespace XTMF2
             if (Type.IsConstructedGenericType && Type.GetGenericTypeDefinition() == GenericParameter)
             {
                 var paramType = Type.GenericTypeArguments[0];
-                var vals = ArbitraryParameterParser.ArbitraryParameterParse(paramType, ParameterValue, ref error);
-                if (!vals.Sucess)
+                var (Sucess, Value) = ArbitraryParameterParser.ArbitraryParameterParse(paramType, ParameterValue, ref error);
+                if (!Sucess)
                 {
                     return FailWith(ref error, $"Unable to assign the value of {ParameterValue} to type {paramType.FullName}!");
                 }
@@ -178,7 +183,7 @@ namespace XTMF2
                     info = _Type.GetRuntimeField("Value");
                     GenericValue[paramType] = info;
                 }
-                info.SetValue(Module, vals.Value);
+                info.SetValue(Module, Value);
             }
             return true;
         }
@@ -214,6 +219,19 @@ namespace XTMF2
                 CreateModelSystemStructureHooks(session);
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Type)));
             }
+            return true;
+        }
+
+        /// <summary>
+        /// Set the module to the given disabled state.
+        /// </summary>
+        /// <param name="modelSystemSession">The model system session</param>
+        /// <param name="disabled"></param>
+        /// <returns></returns>
+        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled)
+        {
+            IsDisabled = disabled;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
             return true;
         }
 
@@ -291,6 +309,11 @@ namespace XTMF2
                 writer.WritePropertyName("Parameter");
                 writer.WriteValue(ParameterValue);
             }
+            if(IsDisabled)
+            {
+                writer.WritePropertyName("Disabled");
+                writer.WriteValue(true);
+            }
             writer.WriteEndObject();
         }
 
@@ -304,6 +327,7 @@ namespace XTMF2
             Type type = null;
             string name = null;
             int index = -1;
+            bool disabled = false;
             Point point = new Point();
             string description = null;
             string parameter = null;
@@ -345,6 +369,15 @@ namespace XTMF2
                             parameter = reader.ReadAsString();
                         }
                         break;
+                    case "Disabled":
+                        {
+                            // Assume the disabled parameter is false if a bad boolean is passed
+                            if(reader.ReadAsBoolean() == true)
+                            {
+                                disabled = true;
+                            }
+                        }
+                        break;
                     default:
                         return FailWith(out mss, ref error, $"Undefined parameter type {reader.Value} when loading a start!");
                 }
@@ -366,7 +399,8 @@ namespace XTMF2
                 Description = description,
                 Location = point,
                 ContainedWithin = boundary,
-                ParameterValue = parameter
+                ParameterValue = parameter,
+                IsDisabled = disabled
             };
             if (!mss.SetType(session, type, ref error))
             {

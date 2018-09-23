@@ -106,7 +106,7 @@ namespace XTMF2.Bus
         /// <summary>
         /// This must be obtained before sending any data to the host
         /// </summary>
-        private object WriteLock = new object();
+        private readonly object WriteLock = new object();
 
         private void Write(Action<BinaryWriter> writeWith)
         {

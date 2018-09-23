@@ -46,11 +46,11 @@ namespace XTMF2
         /// <summary>
         /// This lock must be obtained before changing any local settings.
         /// </summary>
-        private object _WriteLock = new object();
-        private ObservableCollection<ModelSystemStructure> _Modules = new ObservableCollection<ModelSystemStructure>();
-        private ObservableCollection<Start> _Starts = new ObservableCollection<Start>();
-        private ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
-        private ObservableCollection<Link> _Links = new ObservableCollection<Link>();
+        private readonly object _WriteLock = new object();
+        private readonly ObservableCollection<ModelSystemStructure> _Modules = new ObservableCollection<ModelSystemStructure>();
+        private readonly ObservableCollection<Start> _Starts = new ObservableCollection<Start>();
+        private readonly ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
+        private readonly ObservableCollection<Link> _Links = new ObservableCollection<Link>();
 
         /// <summary>
         /// Get readonly access to the links contained in this boundary.
@@ -190,7 +190,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="name">The unique name for the boundary.</param>
         /// <param name="boundary">The resulting boundary.</param>
-        /// <param name="error">An erorr message if the operation fails.</param>
+        /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
         internal bool AddBoundary(string name, out Boundary boundary, ref string error)
         {
@@ -301,7 +301,10 @@ namespace XTMF2
             {
                 foreach(var link in _Links)
                 {
-                    link.Construct();
+                    if(!link.Construct(ref error))
+                    {
+                        return false;
+                    }
                 }
                 // now construct all of the children
                 foreach (var child in Boundaries)
@@ -534,6 +537,7 @@ namespace XTMF2
             switch(originHook.Cardinality)
             {
                 case HookCardinality.Single:
+                case HookCardinality.SingleOptional:
                     link = new SingleLink()
                     {
                         Origin = origin,
@@ -578,6 +582,7 @@ namespace XTMF2
             switch (originHook.Cardinality)
             {
                 case HookCardinality.Single:
+                case HookCardinality.SingleOptional:
                     _Links.Add(link);
                     break;
                 default:

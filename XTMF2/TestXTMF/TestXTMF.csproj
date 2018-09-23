@@ -23,10 +23,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Editing\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\XTMF.Run\XTMF.Run.csproj">
       <ReferenceOutputAssembly></ReferenceOutputAssembly>
       <CopyLocalSatelliteAssemblies></CopyLocalSatelliteAssemblies>

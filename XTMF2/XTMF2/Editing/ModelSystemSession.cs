@@ -35,9 +35,9 @@ namespace XTMF2.Editing
 
         public ModelSystem ModelSystem { get; internal set; }
 
-        private ProjectSession Session;
+        private ProjectSession _session;
 
-        private object SessionLock = new object();
+        private readonly object _sessionLock = new object();
 
         public ModelSystemHeader ModelSystemHeader { get; private set; }
 
@@ -46,20 +46,20 @@ namespace XTMF2.Editing
         public ModelSystemSession(ProjectSession session, ModelSystemHeader header)
         {
             ModelSystemHeader = header;
-            Session = session.AddReference();
+            _session = session.AddReference();
         }
 
         public void Dispose()
         {
             if (Interlocked.Decrement(ref _References) <= 0)
             {
-                Session.UnloadSession(this);
+                _session.UnloadSession(this);
             }
         }
 
         internal ModuleRepository GetModuleRepository()
         {
-            return Session.GetModuleRepository();
+            return _session.GetModuleRepository();
         }
 
         /// <summary>
@@ -87,7 +87,7 @@ namespace XTMF2.Editing
                 error = "A boundary requires a unique name";
                 return false;
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 if (parentBoundary.AddBoundary(name, out boundary, ref error))
                 {
@@ -129,7 +129,7 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(boundary));
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 var linksGoingToRemovedBoundary = ModelSystem.GlobalBoundary.GetLinksGoingToBoundary(boundary);
                 if (parentBoundary.RemoveBoundary(boundary, ref error))
@@ -195,9 +195,9 @@ namespace XTMF2.Editing
                                 else if (link is MultiLink ml)
                                 {
                                     var list = multiLinkHelper[ml];
-                                    foreach(var element in list)
+                                    foreach(var (Index, MSS) in list)
                                     {
-                                        ml.AddDestination(element.MSS, element.Index);
+                                        ml.AddDestination(MSS, Index);
                                     }
                                 }
                             }
@@ -244,7 +244,7 @@ namespace XTMF2.Editing
                 error = badStartName;
                 return false;
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 if (!ModelSystem.Contains(boundary))
                 {
@@ -286,7 +286,7 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(start));
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 var boundary = start.ContainedWithin;
                 if (boundary.RemoveStart(start, ref error))
@@ -316,7 +316,7 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(boundary));
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 bool success = boundary.AddModelSystemStructure(this, name, type, out mss, ref error);
                 if (success)
@@ -346,7 +346,7 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(mss));
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 var boundary = mss.ContainedWithin;
                 if (boundary.RemoveModelSystemStructure(mss, ref error))
@@ -376,11 +376,96 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(basicParameter));
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
-                return basicParameter.SetParameterValue(this, value, ref error);
+                var previousValue = basicParameter.ParameterValue;
+                if(basicParameter.SetParameterValue(this, value, ref error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (basicParameter.SetParameterValue(this, previousValue, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (basicParameter.SetParameterValue(this, value, ref e), e);
+                    }));
+                    return true;
+                }
+                return false;
             }
         }
+
+        /// <summary>
+        /// Set the model system structure to the disabled state.
+        /// </summary>
+        /// <param name="user">The user issuing the command</param>
+        /// <param name="mss">The model system structure</param>
+        /// <param name="disabled">If it should be disabled (true) or not (false).</param>
+        /// <param name="error">An error message explaining why the operation failed.</param>
+        /// <returns>True if the operation completed successfully, false otherwise.</returns>
+        public bool SetModelSystemStructureDisabled(User user, ModelSystemStructure mss, bool disabled, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (mss == null)
+            {
+                throw new ArgumentNullException(nameof(mss));
+            }
+            lock (_sessionLock)
+            {
+                if(mss.SetDisabled(this, disabled))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (mss.SetDisabled(this, !disabled), String.Empty);
+                    }, () =>
+                    {
+                        return (mss.SetDisabled(this, disabled), String.Empty);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="user"></param>
+        /// <param name="link"></param>
+        /// <param name="disabled"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        public bool SetLinkDisabled(User user, Link link, bool disabled, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (link == null)
+            {
+                throw new ArgumentNullException(nameof(link));
+            }
+            lock (_sessionLock)
+            {
+                if(link.SetDisabled(this, disabled))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (link.SetDisabled(this, !disabled), String.Empty);
+                    }, () =>
+                    {
+                        return (link.SetDisabled(this, disabled), String.Empty);
+                    }));
+                    return true;
+                }
+                return true;
+            }
+        }
+
 
         /// <summary>
         /// Save the model system
@@ -389,7 +474,7 @@ namespace XTMF2.Editing
         /// <returns>True if it succeeds, false with an error message otherwise.</returns>
         public bool Save(ref string error)
         {
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 return ModelSystem.Save(ref error);
             }
@@ -403,7 +488,7 @@ namespace XTMF2.Editing
         /// <returns>True if the model system was saved successfully.</returns>
         public bool Save(ref string error, Stream saveTo)
         {
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 return ModelSystem.Save(ref error, saveTo);
             }
@@ -419,7 +504,7 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(link));
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 var boundary = link.Origin.ContainedWithin;
                 if (boundary.RemoveLink(link, ref error))
@@ -468,10 +553,11 @@ namespace XTMF2.Editing
                 throw new ArgumentNullException(nameof(destination));
             }
             link = null;
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 bool success = false;
-                if (originHook.Cardinality == HookCardinality.Single)
+                if (   originHook.Cardinality == HookCardinality.Single 
+                    || originHook.Cardinality == HookCardinality.SingleOptional)
                 {
                     if (origin.GetLink(originHook, out Link _link))
                     {
@@ -577,7 +663,7 @@ namespace XTMF2.Editing
             }
             if(multiLink is MultiLink ml)
             {
-                lock (SessionLock)
+                lock (_sessionLock)
                 {
                     var dests = ml.Destinations;
                     if(index >= dests.Count || index < 0)

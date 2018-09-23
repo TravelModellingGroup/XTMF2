@@ -44,13 +44,36 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteValue(OriginHook.Name);
             writer.WritePropertyName("Destination");
             writer.WriteValue(moduleDictionary[Destination]);
+            if (IsDisabled)
+            {
+                writer.WritePropertyName("Disabled");
+                writer.WriteValue(true);
+            }
             writer.WriteEndObject();
         }
 
-        internal override void Construct()
+        internal override bool Construct(ref string error)
         {
-            // The index doesn't matter for this type
-            OriginHook.Install(Origin, Destination, 0);
+            // if not optional
+            if (OriginHook.Cardinality == HookCardinality.Single)
+            {
+                if (Destination.IsDisabled)
+                {
+                    error = "A link destined for a disabled module was not optional.";
+                    return false;
+                }
+                if (IsDisabled)
+                {
+                    error = "A non optional link is disabled!";
+                    return false;
+                }
+            }
+            if (!IsDisabled)
+            {
+                // The index doesn't matter for this type
+                OriginHook.Install(Origin, Destination, 0);
+            }
+            return true;
         }
     }
 }

@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Text;
 using Newtonsoft.Json;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -67,16 +68,47 @@ namespace XTMF2.ModelSystemConstruct
                 writer.WriteValue(moduleDictionary[dest]);
             }
             writer.WriteEndArray();
+            if (IsDisabled)
+            {
+                writer.WritePropertyName("Disabled");
+                writer.WriteValue(true);
+            }
             writer.WriteEndObject();
         }
 
-        internal override void Construct()
+        internal override bool Construct(ref string error)
         {
-            OriginHook.CreateArray(Origin.Module, _Destinations.Count);
-            for (int i = 0; i < _Destinations.Count; i++)
+            var moduleCount = _Destinations.Count(d => !d.IsDisabled);
+            if(OriginHook.Cardinality == HookCardinality.AtLeastOne)
             {
-                OriginHook.Install(Origin, _Destinations[i], i);
+                if (moduleCount <= 0)
+                {
+                    error = "At least one module is required as a destination.";
+                    return false;
+                }
+                if(IsDisabled)
+                {
+                    error = "A required MultiLink is disabled!";
+                    return false;
+                }
             }
+            if(!IsDisabled)
+            {
+                OriginHook.CreateArray(Origin.Module, moduleCount);
+                int index = 0;
+                for (int i = 0; i < _Destinations.Count; i++)
+                {
+                    if (!_Destinations[i].IsDisabled)
+                    {
+                        OriginHook.Install(Origin, _Destinations[i], index++);
+                    }
+                }
+            }
+            else
+            {
+                OriginHook.CreateArray(Origin.Module, 0);
+            }
+            return true;
         }
 
         internal void RemoveDestination(int i)
