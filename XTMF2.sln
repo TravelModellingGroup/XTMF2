@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26430.12
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.28407.52
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFiles", "SolutionFiles", "{2C9F1CF3-4FF1-4601-80EB-996F7D771178}"
 	ProjectSection(SolutionItems) = preProject
@@ -13,11 +13,15 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFiles", "SolutionFi
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{9040CC77-712E-414D-8453-391F9F348218}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XTMF2", "src\XTMF2\XTMF2.csproj", "{57F8ED33-2002-472E-8F77-37D2C27C0ED0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XTMF2", "src\XTMF2\XTMF2.csproj", "{57F8ED33-2002-472E-8F77-37D2C27C0ED0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XTMF2.Interfaces", "src\XTMF2.Interfaces\XTMF2.Interfaces.csproj", "{5E0E170B-5A98-41C0-A9AB-4A0ED28C5CF1}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XTMF2.Interfaces", "src\XTMF2.Interfaces\XTMF2.Interfaces.csproj", "{5E0E170B-5A98-41C0-A9AB-4A0ED28C5CF1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XTMF2.Run", "src\XTMF2.Run\XTMF2.Run.csproj", "{A4FC5ADC-58CA-429A-9626-EF07907AFB28}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XTMF2.Run", "src\XTMF2.Run\XTMF2.Run.csproj", "{A4FC5ADC-58CA-429A-9626-EF07907AFB28}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{77789778-93F5-46A6-9114-CCE855E5919C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XTMF2.UnitTests", "tests\XTMF2.UnitTests\XTMF2.UnitTests.csproj", "{627244F8-E275-4001-937C-F2D496E72B91}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -37,6 +41,10 @@ Global
 		{A4FC5ADC-58CA-429A-9626-EF07907AFB28}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A4FC5ADC-58CA-429A-9626-EF07907AFB28}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A4FC5ADC-58CA-429A-9626-EF07907AFB28}.Release|Any CPU.Build.0 = Release|Any CPU
+		{627244F8-E275-4001-937C-F2D496E72B91}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{627244F8-E275-4001-937C-F2D496E72B91}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{627244F8-E275-4001-937C-F2D496E72B91}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{627244F8-E275-4001-937C-F2D496E72B91}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -45,5 +53,9 @@ Global
 		{57F8ED33-2002-472E-8F77-37D2C27C0ED0} = {9040CC77-712E-414D-8453-391F9F348218}
 		{5E0E170B-5A98-41C0-A9AB-4A0ED28C5CF1} = {9040CC77-712E-414D-8453-391F9F348218}
 		{A4FC5ADC-58CA-429A-9626-EF07907AFB28} = {9040CC77-712E-414D-8453-391F9F348218}
+		{627244F8-E275-4001-937C-F2D496E72B91} = {77789778-93F5-46A6-9114-CCE855E5919C}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {15025AE3-C5AA-4CD4-BC38-D1C1BA8904AF}
 	EndGlobalSection
 EndGlobal
