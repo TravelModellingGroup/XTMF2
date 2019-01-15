@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\XTMFInterfaces\XTMFInterfaces.csproj" />
+    <ProjectReference Include="..\XTMF2.Interfaces\XTMF2.Interfaces.csproj" />
   </ItemGroup>
 
 </Project>

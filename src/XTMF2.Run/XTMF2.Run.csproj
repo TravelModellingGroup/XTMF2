@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TargetFramework>netcoreapp2.2</TargetFramework>
     <RootNamespace>XTMF2.Run</RootNamespace>
     <ApplicationIcon />
     <OutputTypeEx>exe</OutputTypeEx>
@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\XTMF2\XTMF2.csproj" />
-    <ProjectReference Include="..\XTMFInterfaces\XTMFInterfaces.csproj" />
+    <ProjectReference Include="..\XTMF2.Interfaces\XTMF2.Interfaces.csproj" />
   </ItemGroup>
 
 </Project>
