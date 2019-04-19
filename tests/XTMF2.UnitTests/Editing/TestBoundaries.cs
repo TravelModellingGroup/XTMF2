@@ -60,5 +60,31 @@ namespace TestXTMF.Editing
 
             }), "Unable to create project");
         }
+
+        [TestMethod]
+        public void TestSettingBoundaryDescription()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var controller = runtime.ProjectController;
+            string error = null;
+            var localUser = runtime.UserController.Users[0];
+            controller.DeleteProject(localUser, "Test", ref error);
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
+            {
+                var project = session.Project;
+                Assert.IsTrue(session.CreateNewModelSystem("TestMS", out var modelSystem, ref error), error);
+                Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error), error);
+                var ms = msSession.ModelSystem;
+                var newBoundaryDescription = "NewBoundaryDescription";
+                var oldName = ms.GlobalBoundary.Description;
+                Assert.IsTrue(msSession.SetBoundaryDescription(localUser, ms.GlobalBoundary, newBoundaryDescription, ref error), error);
+                Assert.AreEqual(newBoundaryDescription, ms.GlobalBoundary.Description);
+                Assert.IsTrue(msSession.Undo(ref error), error);
+                Assert.AreEqual(oldName, ms.GlobalBoundary.Description);
+                Assert.IsTrue(msSession.Redo(ref error), error);
+                Assert.AreEqual(newBoundaryDescription, ms.GlobalBoundary.Description);
+
+            }), "Unable to create project");
+        }
     }
 }

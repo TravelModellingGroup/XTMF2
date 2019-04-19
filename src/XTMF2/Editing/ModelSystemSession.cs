@@ -105,6 +105,36 @@ namespace XTMF2.Editing
             }
         }
 
+        public bool SetBoundaryDescription(User user, Boundary boundary, string description, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (boundary == null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+            lock (_sessionLock)
+            {
+                var oldDescription = boundary.Description;
+                if (boundary.SetDescription(description, ref error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (boundary.SetDescription(oldDescription, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (boundary.SetDescription(description, ref e), e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
         /// <summary>
         /// Add a new boundary to a parent boundary
         /// </summary>
