@@ -185,6 +185,11 @@ namespace XTMF2
             }
         }
 
+        internal bool HasChildWithName(string name)
+        {
+            return _Boundaries.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        }
+
         /// <summary>
         /// Add a new child boundary
         /// </summary>
@@ -201,7 +206,7 @@ namespace XTMF2
                 return false;
             }
 
-            if (_Boundaries.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            if (HasChildWithName(name))
             {
                 boundary = null;
                 error = "The name already exists in this boundary!";
@@ -617,11 +622,17 @@ namespace XTMF2
             return true;
         }
 
-        public bool SetName(ModelSystemSession session, string name, ref string error)
+        public bool SetName(string name, ref string error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
                 error = "A name cannot be whitespace.";
+                return false;
+            }
+            var withName = Parent?.HasChildWithName(name);
+            if(withName == true)
+            {
+                error = $"There already exists another boundary with the name {name} in the parent boundary!";
                 return false;
             }
             Name = name;
@@ -629,7 +640,7 @@ namespace XTMF2
             return true;
         }
 
-        public bool SetDescription(ModelSystemSession session, string description, ref string error)
+        public bool SetDescription(string description, ref string error)
         {
             Description = description;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));

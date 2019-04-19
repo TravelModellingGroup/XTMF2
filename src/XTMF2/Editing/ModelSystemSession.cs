@@ -35,13 +35,13 @@ namespace XTMF2.Editing
 
         public ModelSystem ModelSystem { get; internal set; }
 
-        private ProjectSession _session;
+        private readonly ProjectSession _session;
 
         private readonly object _sessionLock = new object();
 
         public ModelSystemHeader ModelSystemHeader { get; private set; }
 
-        private CommandBuffer Buffer = new CommandBuffer();
+        private readonly CommandBuffer Buffer = new CommandBuffer();
 
         public ModelSystemSession(ProjectSession session, ModelSystemHeader header)
         {
@@ -60,6 +60,49 @@ namespace XTMF2.Editing
         internal ModuleRepository GetModuleRepository()
         {
             return _session.GetModuleRepository();
+        }
+
+        /// <summary>
+        /// Set the name of a given boundary.
+        /// </summary>
+        /// <param name="user">The user issuing the action.</param>
+        /// <param name="boundary">The boundary to change.</param>
+        /// <param name="name">The new name to assign to the boundary, must be unique.</param>
+        /// <param name="error">An error message if the operation fails with the reason why.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
+        public bool SetBoundaryName(User user, Boundary boundary, string name, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (boundary == null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+            if (String.IsNullOrWhiteSpace(name))
+            {
+                error = "A boundary requires a unique name";
+                return false;
+            }
+            lock (_sessionLock)
+            {
+                var oldName = boundary.Name;
+                if(boundary.SetName(name, ref error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                   {
+                       string e = null;
+                       return (boundary.SetName(oldName, ref e), e);
+                   }, ()=>
+                   {
+                       string e = null;
+                       return (boundary.SetName(name, ref e), e);
+                   }));
+                   return true;
+                }
+                return false;
+            }
         }
 
         /// <summary>
@@ -137,13 +180,13 @@ namespace XTMF2.Editing
                     var multiLinkHelper = new Dictionary<MultiLink, List<(int Index, ModelSystemStructure MSS)>>();
                     foreach (var link in linksGoingToRemovedBoundary)
                     {
-                        if(link is MultiLink ml)
+                        if (link is MultiLink ml)
                         {
                             var list = new List<(int Index, ModelSystemStructure MSS)>();
                             var dests = ml.Destinations;
                             for (int i = 0; i < dests.Count; i++)
                             {
-                                if(dests[i].ContainedWithin == boundary)
+                                if (dests[i].ContainedWithin == boundary)
                                 {
                                     list.Add((i, dests[i]));
                                 }
@@ -167,7 +210,7 @@ namespace XTMF2.Editing
                                 var dests = ml.Destinations;
                                 for (int i = 0; i < dests.Count; i++)
                                 {
-                                    if(dests[i].ContainedWithin == boundary)
+                                    if (dests[i].ContainedWithin == boundary)
                                     {
                                         ml.RemoveDestination(i);
                                         i--;
@@ -195,7 +238,7 @@ namespace XTMF2.Editing
                                 else if (link is MultiLink ml)
                                 {
                                     var list = multiLinkHelper[ml];
-                                    foreach(var (Index, MSS) in list)
+                                    foreach (var (Index, MSS) in list)
                                     {
                                         ml.AddDestination(MSS, Index);
                                     }
@@ -379,7 +422,7 @@ namespace XTMF2.Editing
             lock (_sessionLock)
             {
                 var previousValue = basicParameter.ParameterValue;
-                if(basicParameter.SetParameterValue(this, value, ref error))
+                if (basicParameter.SetParameterValue(this, value, ref error))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
@@ -416,7 +459,7 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
-                if(mss.SetDisabled(this, disabled))
+                if (mss.SetDisabled(this, disabled))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
@@ -451,7 +494,7 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
-                if(link.SetDisabled(this, disabled))
+                if (link.SetDisabled(this, disabled))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
@@ -556,7 +599,7 @@ namespace XTMF2.Editing
             lock (_sessionLock)
             {
                 bool success = false;
-                if (   originHook.Cardinality == HookCardinality.Single 
+                if (originHook.Cardinality == HookCardinality.Single
                     || originHook.Cardinality == HookCardinality.SingleOptional)
                 {
                     if (origin.GetLink(originHook, out Link _link))
@@ -653,20 +696,20 @@ namespace XTMF2.Editing
         /// <returns>True if successful, false otherwise with error message.</returns>
         public bool RemoveLinkDestination(User user, Link multiLink, int index, ref string error)
         {
-            if(user == null)
+            if (user == null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if(multiLink == null)
+            if (multiLink == null)
             {
                 throw new ArgumentNullException(nameof(multiLink));
             }
-            if(multiLink is MultiLink ml)
+            if (multiLink is MultiLink ml)
             {
                 lock (_sessionLock)
                 {
                     var dests = ml.Destinations;
-                    if(index >= dests.Count || index < 0)
+                    if (index >= dests.Count || index < 0)
                     {
                         error = "The index is out of bounds!";
                         return false;
