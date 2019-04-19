@@ -47,17 +47,18 @@ namespace TestXTMF.Editing
             {
                 var project = session.Project;
                 Assert.IsTrue(session.CreateNewModelSystem("TestMS", out var modelSystem, ref error), error);
-                Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error), error);
-                var ms = msSession.ModelSystem;
-                var newBoundaryName = "NewBoundaryName";
-                var oldName = ms.GlobalBoundary.Name;
-                Assert.IsTrue(msSession.SetBoundaryName(localUser, ms.GlobalBoundary, newBoundaryName, ref error), error);
-                Assert.AreEqual(newBoundaryName, ms.GlobalBoundary.Name);
-                Assert.IsTrue(msSession.Undo(ref error), error);
-                Assert.AreEqual(oldName, ms.GlobalBoundary.Name);
-                Assert.IsTrue(msSession.Redo(ref error), error);
-                Assert.AreEqual(newBoundaryName, ms.GlobalBoundary.Name);
-
+                Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
+                {
+                    var ms = msSession.ModelSystem;
+                    var newBoundaryName = "NewBoundaryName";
+                    var oldName = ms.GlobalBoundary.Name;
+                    Assert.IsTrue(msSession.SetBoundaryName(localUser, ms.GlobalBoundary, newBoundaryName, ref error), error);
+                    Assert.AreEqual(newBoundaryName, ms.GlobalBoundary.Name);
+                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.AreEqual(oldName, ms.GlobalBoundary.Name);
+                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.AreEqual(newBoundaryName, ms.GlobalBoundary.Name);
+                }), "Unable to get a model system editing session!");
             }), "Unable to create project");
         }
 
@@ -73,18 +74,64 @@ namespace TestXTMF.Editing
             {
                 var project = session.Project;
                 Assert.IsTrue(session.CreateNewModelSystem("TestMS", out var modelSystem, ref error), error);
-                Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error), error);
-                var ms = msSession.ModelSystem;
-                var newBoundaryDescription = "NewBoundaryDescription";
-                var oldName = ms.GlobalBoundary.Description;
-                Assert.IsTrue(msSession.SetBoundaryDescription(localUser, ms.GlobalBoundary, newBoundaryDescription, ref error), error);
-                Assert.AreEqual(newBoundaryDescription, ms.GlobalBoundary.Description);
-                Assert.IsTrue(msSession.Undo(ref error), error);
-                Assert.AreEqual(oldName, ms.GlobalBoundary.Description);
-                Assert.IsTrue(msSession.Redo(ref error), error);
-                Assert.AreEqual(newBoundaryDescription, ms.GlobalBoundary.Description);
-
+                Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
+                {
+                    var ms = msSession.ModelSystem;
+                    var newBoundaryDescription = "NewBoundaryDescription";
+                    var oldName = ms.GlobalBoundary.Description;
+                    Assert.IsTrue(msSession.SetBoundaryDescription(localUser, ms.GlobalBoundary, newBoundaryDescription, ref error), error);
+                    Assert.AreEqual(newBoundaryDescription, ms.GlobalBoundary.Description);
+                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.AreEqual(oldName, ms.GlobalBoundary.Description);
+                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.AreEqual(newBoundaryDescription, ms.GlobalBoundary.Description);
+                }), "Unable to get a model system editing session");
             }), "Unable to create project");
+        }
+
+        [TestMethod]
+        public void TestSettingBoundaryPersistence()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var controller = runtime.ProjectController;
+            string error = null;
+            var localUser = runtime.UserController.Users[0];
+            const string projectName = "Test";
+            const string modelSystemName = "TestMS";
+            controller.DeleteProject(localUser, projectName, ref error);
+            var newBoundaryDescription = "NewBoundaryDescription";
+            var newBoundaryName = "NewBoundaryName";
+            // first pass
+            {
+                Assert.IsTrue(controller.CreateNewProject(localUser, projectName, out ProjectSession session, ref error).UsingIf(session, () =>
+                {
+                    var project = session.Project;
+                    Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystem, ref error), error);
+                    Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
+                        {
+                            var ms = msSession.ModelSystem;
+                            Assert.IsTrue(msSession.SetBoundaryName(localUser, ms.GlobalBoundary, newBoundaryName, ref error), error);
+                            Assert.IsTrue(msSession.SetBoundaryDescription(localUser, ms.GlobalBoundary, newBoundaryDescription, ref error), error);
+                            Assert.IsTrue(msSession.Save(ref error), error);
+                            Assert.IsTrue(session.Save(ref error), error);
+                        }), error);
+
+                }), "Unable to create project");
+            }
+            // second pass
+            {
+                Assert.IsTrue(controller.GetProject(localUser, projectName, out var project, ref error));
+                Assert.IsTrue(controller.GetProjectSession(localUser, project, out var session, ref error).UsingIf(session, () =>
+                {
+                    Assert.IsTrue(session.GetModelSystemHeader(localUser, modelSystemName, out var modelSystem, ref error), error);
+                    Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
+                    {
+                        var ms = msSession.ModelSystem;
+                        Assert.AreEqual(newBoundaryName, ms.GlobalBoundary.Name);
+                        Assert.AreEqual(newBoundaryDescription, ms.GlobalBoundary.Description);
+                    }), "Unable to get a model system editing session.");
+                }), "Unable to get a project editing session.");
+            }
         }
     }
 }
