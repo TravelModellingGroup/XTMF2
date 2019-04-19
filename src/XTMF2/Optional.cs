@@ -22,7 +22,7 @@ using System.Text;
 
 namespace XTMF2
 {
-    public class Optional<T> where T : class
+    public sealed class Optional<T> where T : class
     {
         public bool HasReference => _HasReference;
         private bool _HasReference;
