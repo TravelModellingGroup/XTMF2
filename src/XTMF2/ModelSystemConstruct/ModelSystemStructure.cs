@@ -94,11 +94,7 @@ namespace XTMF2
         /// <param name="y">The vertical offset</param>
         internal void SetLocation(float x, float y)
         {
-            Location = new Point()
-            {
-                X = x,
-                Y = y
-            };
+            Location = new Point(x, y);
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Location)));
         }
 
@@ -347,10 +343,10 @@ namespace XTMF2
                         description = reader.ReadAsString();
                         break;
                     case "X":
-                        point.X = (float)(reader.ReadAsDouble() ?? 0.0f);
+                        point = new Point((float)(reader.ReadAsDouble() ?? 0.0f), point.Y);
                         break;
                     case "Y":
-                        point.Y = (float)(reader.ReadAsDouble() ?? 0.0f);
+                        point = new Point(point.X, (float)(reader.ReadAsDouble() ?? 0.0f));
                         break;
                     case "Index":
                         index = (int)(reader.ReadAsInt32() ?? -1);

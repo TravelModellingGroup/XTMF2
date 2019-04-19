@@ -145,7 +145,7 @@ namespace XTMF2
                 }
                 return included;
             }
-            return GetUsedTypes(this, new List<Type>()).Select((type, index) => (type: type, index: index))
+            return GetUsedTypes(this, new List<Type>()).Select((type, index) => (type, index))
                 .ToDictionary(e => e.type, e => e.index);
         }
 
@@ -658,7 +658,7 @@ namespace XTMF2
                     return false;
                 }
             }
-            start = new Start(session, startName, this, null, new Point() { X = 0, Y = 0 });
+            start = new Start(session, startName, this, null, new Point(0, 0));
             _Starts.Add(start);
             return true;
         }

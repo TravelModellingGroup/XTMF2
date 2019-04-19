@@ -92,10 +92,10 @@ namespace XTMF2.ModelSystemConstruct
                         description = reader.ReadAsString();
                         break;
                     case "X":
-                        point.X = (float)reader.ReadAsDouble();
+                        point = new Point((float)reader.ReadAsDouble(), point.Y);
                         break;
                     case "Y":
-                        point.Y = (float)reader.ReadAsDouble();
+                        point = new Point(point.X, (float)reader.ReadAsDouble());
                         break;
                     case "Index":
                         index = (int)reader.ReadAsInt32();
