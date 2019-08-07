@@ -47,7 +47,7 @@ namespace XTMF2
         /// This lock must be obtained before changing any local settings.
         /// </summary>
         private readonly object _WriteLock = new object();
-        private readonly ObservableCollection<ModelSystemStructure> _Modules = new ObservableCollection<ModelSystemStructure>();
+        private readonly ObservableCollection<Node> _Modules = new ObservableCollection<Node>();
         private readonly ObservableCollection<Start> _Starts = new ObservableCollection<Start>();
         private readonly ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
         private readonly ObservableCollection<Link> _Links = new ObservableCollection<Link>();
@@ -95,13 +95,13 @@ namespace XTMF2
         /// <summary>
         /// Provides a readonly view of the locally contained modules.
         /// </summary>
-        public ReadOnlyObservableCollection<ModelSystemStructure> Modules
+        public ReadOnlyObservableCollection<Node> Modules
         {
             get
             {
                 lock (_WriteLock)
                 {
-                    return new ReadOnlyObservableCollection<ModelSystemStructure>(_Modules);
+                    return new ReadOnlyObservableCollection<Node>(_Modules);
                 }
             }
         }
@@ -352,18 +352,18 @@ namespace XTMF2
             }
         }
 
-        internal bool AddModelSystemStructure(ModelSystemStructure mss, ref string e)
+        internal bool AddNode(Node node, ref string e)
         {
-            if(_Modules.Contains(mss))
+            if(_Modules.Contains(node))
             {
-                e = "The model system structure already exists in the boundary!";
+                e = "The node already exists in the boundary!";
                 return false;
             }
-            _Modules.Add(mss);
+            _Modules.Add(node);
             return true;
         }
 
-        internal void Save(ref int index, Dictionary<ModelSystemStructure, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        internal void Save(ref int index, Dictionary<Node, int> nodeDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
             writer.WriteStartObject();
             writer.WritePropertyName("Name");
@@ -374,38 +374,38 @@ namespace XTMF2
             writer.WriteStartArray();
             foreach (var start in _Starts)
             {
-                start.Save(ref index, moduleDictionary, typeDictionary, writer);
+                start.Save(ref index, nodeDictionary, typeDictionary, writer);
             }
             writer.WriteEndArray();
-            writer.WritePropertyName("Modules");
+            writer.WritePropertyName("Nodes");
             writer.WriteStartArray();
             foreach (var module in _Modules)
             {
-                module.Save(ref index, moduleDictionary, typeDictionary, writer);
+                module.Save(ref index, nodeDictionary, typeDictionary, writer);
             }
             writer.WriteEndArray();
             writer.WritePropertyName("Boundaries");
             writer.WriteStartArray();
             foreach (var child in _Boundaries)
             {
-                child.Save(ref index, moduleDictionary, typeDictionary, writer);
+                child.Save(ref index, nodeDictionary, typeDictionary, writer);
             }
             writer.WriteEndArray();
             writer.WritePropertyName("Links");
             writer.WriteStartArray();
             foreach (var link in _Links)
             {
-                link.Save(moduleDictionary, writer);
+                link.Save(nodeDictionary, writer);
             }
             writer.WriteEndArray();
             writer.WriteEndObject();
         }
 
-        internal bool RemoveModelSystemStructure(ModelSystemStructure mss, ref string error)
+        internal bool RemoveNode(Node node, ref string error)
         {
-            if(!_Modules.Remove(mss))
+            if(!_Modules.Remove(node))
             {
-                error = "Unable to find model system structure in the boundary!";
+                error = "Unable to find node in the boundary!";
                 return false;
             }
             return true;
@@ -444,7 +444,7 @@ namespace XTMF2
             return false;
         }
 
-        internal bool Load(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
+        internal bool Load(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
             JsonTextReader reader, ref string error)
         {
             if (!reader.Read() || reader.TokenType != JsonToken.StartObject)
@@ -472,23 +472,23 @@ namespace XTMF2
                         }
                         while (reader.Read() && reader.TokenType != JsonToken.EndArray)
                         {
-                            if (!Start.Load(session, structures, this, reader, out Start start, ref error))
+                            if (!Start.Load(session, node, this, reader, out Start start, ref error))
                             {
                                 return false;
                             }
                             _Starts.Add(start);
                         }
                         break;
-                    case "Modules":
+                    case "Nodes":
                         if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
                         {
-                            return FailWith(ref error, "Unexpected token when starting to read Modules for a boundary.");
+                            return FailWith(ref error, "Unexpected token when starting to read Nodes for a boundary.");
                         }
                         while (reader.Read() && reader.TokenType != JsonToken.EndArray)
                         {
                             if (reader.TokenType != JsonToken.Comment)
                             {
-                                if (!ModelSystemStructure.Load(session, typeLookup, structures, this, reader, out ModelSystemStructure mss, ref error))
+                                if (!Node.Load(session, typeLookup, node, this, reader, out Node mss, ref error))
                                 {
                                     return false;
                                 }
@@ -506,7 +506,7 @@ namespace XTMF2
                             if (reader.TokenType != JsonToken.Comment)
                             {
                                 var boundary = new Boundary(this);
-                                if (!boundary.Load(session, typeLookup, structures, reader, ref error))
+                                if (!boundary.Load(session, typeLookup, node, reader, ref error))
                                 {
                                     return false;
                                 }
@@ -522,7 +522,7 @@ namespace XTMF2
                         {
                             if (reader.TokenType != JsonToken.Comment)
                             {
-                                if (!Link.Create(session, structures, reader, out var link, ref error))
+                                if (!Link.Create(session, node, reader, out var link, ref error))
                                 {
                                     return false;
                                 }
@@ -537,7 +537,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddLink(ModelSystemStructure origin, ModelSystemStructureHook originHook, ModelSystemStructure destination, out Link link, ref string error)
+        internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link link, ref string error)
         {
             switch(originHook.Cardinality)
             {
@@ -582,7 +582,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddLink(ModelSystemStructure origin, ModelSystemStructureHook originHook, ModelSystemStructure destination, Link link, ref string error)
+        internal bool AddLink(Node origin, NodeHook originHook, Node destination, Link link, ref string error)
         {
             switch (originHook.Cardinality)
             {
@@ -697,16 +697,16 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddModelSystemStructure(ModelSystemSession session, string name, Type type, out ModelSystemStructure mss, ref string error)
+        internal bool AddNode(ModelSystemSession session, string name, Type type, out Node node, ref string error)
         {
-            mss = ModelSystemStructure.Create(session, name, type, this);
-            _Modules.Add(mss);
+            node = Node.Create(session, name, type, this);
+            _Modules.Add(node);
             return true;
         }
 
-        internal bool AddModelSystemStructure(ModelSystemSession session, string name, Type type, ModelSystemStructure mss, ref string error)
+        internal bool AddNode(ModelSystemSession session, string name, Type type, Node node, ref string error)
         {
-            _Modules.Add(mss);
+            _Modules.Add(node);
             return true;
         }
     }

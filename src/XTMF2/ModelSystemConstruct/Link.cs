@@ -28,18 +28,18 @@ using XTMF2.ModelSystemConstruct;
 namespace XTMF2
 {
     /// <summary>
-    /// Defines a directional connection between two model system structures
+    /// Defines a directional connection between two nodes
     /// </summary>
     public abstract class Link : INotifyPropertyChanged
     {
-        public ModelSystemStructure Origin { get; internal set; }
-        public ModelSystemStructureHook OriginHook { get; internal set; }
+        public Node Origin { get; internal set; }
+        public NodeHook OriginHook { get; internal set; }
 
         public bool IsDisabled { get; private set; }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        public bool SetOrigin(ModelSystemSession session, ModelSystemStructure origin, ModelSystemStructureHook originHook, ref string error)
+        public bool SetOrigin(ModelSystemSession session, Node origin, NodeHook originHook, ref string error)
         {
             Origin = origin;
             OriginHook = originHook;
@@ -57,7 +57,7 @@ namespace XTMF2
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        internal abstract void Save(Dictionary<ModelSystemStructure, int> moduleDictionary, JsonTextWriter writer);
+        internal abstract void Save(Dictionary<Node, int> moduleDictionary, JsonTextWriter writer);
         
         private static bool FailWith(out Link link, ref string error, string message)
         {
@@ -66,14 +66,14 @@ namespace XTMF2
             return false;
         }
 
-        internal static bool Create(ModelSystemSession session, Dictionary<int, ModelSystemStructure> structures, JsonTextReader reader, out Link link, ref string error)
+        internal static bool Create(ModelSystemSession session, Dictionary<int, Node> nodes, JsonTextReader reader, out Link link, ref string error)
         {
             if(reader.TokenType != JsonToken.StartObject)
             {
                 return FailWith(out link, ref error, "Expected a start object when loading a link.");
             }
-            ModelSystemStructure origin = null, destination = null;
-            List<ModelSystemStructure> destinations = null;
+            Node origin = null, destination = null;
+            List<Node> destinations = null;
             string hookName = null;
             bool disabled = false;
             int listIndex = 0;
@@ -93,7 +93,7 @@ namespace XTMF2
                     case "Origin":
                         {
                             var index = (int)reader.ReadAsInt32();
-                            origin = structures[index];
+                            origin = nodes[index];
                         }
                         break;
                     case "Hook":
@@ -112,15 +112,15 @@ namespace XTMF2
                                 case JsonToken.Integer:
                                     {
                                         var index = (int)(long)reader.Value;
-                                        destination = structures[index];
+                                        destination = nodes[index];
                                     }
                                     break;
                                 case JsonToken.StartArray:
                                     {
-                                        destinations = new List<ModelSystemStructure>();
+                                        destinations = new List<Node>();
                                         while(reader.Read() && reader.TokenType != JsonToken.EndArray)
                                         {
-                                            destinations.Add(structures[(int)(long)reader.Value]);
+                                            destinations.Add(nodes[(int)(long)reader.Value]);
                                         }
                                     }
                                     break;

@@ -207,12 +207,12 @@ namespace XTMF2.Editing
                 var linksGoingToRemovedBoundary = ModelSystem.GlobalBoundary.GetLinksGoingToBoundary(boundary);
                 if (parentBoundary.RemoveBoundary(boundary, ref error))
                 {
-                    var multiLinkHelper = new Dictionary<MultiLink, List<(int Index, ModelSystemStructure MSS)>>();
+                    var multiLinkHelper = new Dictionary<MultiLink, List<(int Index, Node MSS)>>();
                     foreach (var link in linksGoingToRemovedBoundary)
                     {
                         if (link is MultiLink ml)
                         {
-                            var list = new List<(int Index, ModelSystemStructure MSS)>();
+                            var list = new List<(int Index, Node MSS)>();
                             var dests = ml.Destinations;
                             for (int i = 0; i < dests.Count; i++)
                             {
@@ -295,10 +295,10 @@ namespace XTMF2.Editing
         /// <summary>
         /// Adds a new model system start element.
         /// </summary>
-        /// <param name="user">The user requesting to add the new structure.</param>
+        /// <param name="user">The user requesting to add the new start node.</param>
         /// <param name="startName">The name of the start element.  This must be unique in the model system.</param>
-        /// <param name="start">The newly created start structure</param>
-        /// <param name="error">A message describing why the structure was rejected.</param>
+        /// <param name="start">The newly created start node</param>
+        /// <param name="error">A message describing why the start node was rejected.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
         public bool AddModelSystemStart(User user, Boundary boundary, string startName, out Start start, ref string error)
         {
@@ -379,7 +379,7 @@ namespace XTMF2.Editing
             }
         }
 
-        public bool AddModelSystemStructure(User user, Boundary boundary, string name, Type type, out ModelSystemStructure mss, ref string error)
+        public bool AddNode(User user, Boundary boundary, string name, Type type, out Node mss, ref string error)
         {
             if (user == null)
             {
@@ -391,47 +391,47 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
-                bool success = boundary.AddModelSystemStructure(this, name, type, out mss, ref error);
+                bool success = boundary.AddNode(this, name, type, out mss, ref error);
                 if (success)
                 {
-                    ModelSystemStructure _mss = mss;
+                    Node _mss = mss;
                     Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
-                        return (boundary.RemoveModelSystemStructure(_mss, ref e), e);
+                        return (boundary.RemoveNode(_mss, ref e), e);
                     }, () =>
                     {
                         string e = null;
-                        return (boundary.AddModelSystemStructure(this, name, type, _mss, ref e), e);
+                        return (boundary.AddNode(this, name, type, _mss, ref e), e);
                     }));
                 }
                 return success;
             }
         }
 
-        public bool RemoveModelSystemStructure(User user, ModelSystemStructure mss, ref string error)
+        public bool RemoveNode(User user, Node node, ref string error)
         {
             if (user == null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (mss == null)
+            if (node == null)
             {
-                throw new ArgumentNullException(nameof(mss));
+                throw new ArgumentNullException(nameof(node));
             }
             lock (_sessionLock)
             {
-                var boundary = mss.ContainedWithin;
-                if (boundary.RemoveModelSystemStructure(mss, ref error))
+                var boundary = node.ContainedWithin;
+                if (boundary.RemoveNode(node, ref error))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
-                        return (boundary.AddModelSystemStructure(mss, ref e), e);
+                        return (boundary.AddNode(node, ref e), e);
                     }, () =>
                     {
                         string e = null;
-                        return (boundary.RemoveModelSystemStructure(mss, ref e), e);
+                        return (boundary.RemoveNode(node, ref e), e);
                     }));
                     return true;
                 }
@@ -439,7 +439,7 @@ namespace XTMF2.Editing
             }
         }
 
-        public bool SetParameterValue(User user, ModelSystemStructure basicParameter, string value, ref string error)
+        public bool SetParameterValue(User user, Node basicParameter, string value, ref string error)
         {
             if (user == null)
             {
@@ -470,33 +470,33 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
-        /// Set the model system structure to the disabled state.
+        /// Set the node to the disabled state.
         /// </summary>
         /// <param name="user">The user issuing the command</param>
-        /// <param name="mss">The model system structure</param>
+        /// <param name="node">The node</param>
         /// <param name="disabled">If it should be disabled (true) or not (false).</param>
         /// <param name="error">An error message explaining why the operation failed.</param>
         /// <returns>True if the operation completed successfully, false otherwise.</returns>
-        public bool SetModelSystemStructureDisabled(User user, ModelSystemStructure mss, bool disabled, ref string error)
+        public bool SetNodeDisabled(User user, Node node, bool disabled, ref string error)
         {
             if (user == null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (mss == null)
+            if (node == null)
             {
-                throw new ArgumentNullException(nameof(mss));
+                throw new ArgumentNullException(nameof(node));
             }
             lock (_sessionLock)
             {
-                if (mss.SetDisabled(this, disabled))
+                if (node.SetDisabled(this, disabled))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (mss.SetDisabled(this, !disabled), String.Empty);
+                        return (node.SetDisabled(this, !disabled), String.Empty);
                     }, () =>
                     {
-                        return (mss.SetDisabled(this, disabled), String.Empty);
+                        return (node.SetDisabled(this, disabled), String.Empty);
                     }));
                     return true;
                 }
@@ -601,7 +601,7 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
-        /// Add a new link originating at a hook and going to the destination model system structure
+        /// Add a new link originating at a hook and going to the destination node
         /// </summary>
         /// <param name="user"></param>
         /// <param name="origin"></param>
@@ -610,8 +610,8 @@ namespace XTMF2.Editing
         /// <param name="link"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        public bool AddLink(User user, ModelSystemStructure origin, ModelSystemStructureHook originHook,
-            ModelSystemStructure destination, out Link link, ref string error)
+        public bool AddLink(User user, Node origin, NodeHook originHook,
+            Node destination, out Link link, ref string error)
         {
             if (user == null)
             {

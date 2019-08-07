@@ -27,15 +27,15 @@ namespace XTMF2.ModelSystemConstruct
 {
     internal sealed class SingleLink : Link
     {
-        public ModelSystemStructure Destination { get; internal set; }
-        public bool SetDestination(ModelSystemSession session, ModelSystemStructure destination, ref string error)
+        public Node Destination { get; internal set; }
+        public bool SetDestination(ModelSystemSession session, Node destination, ref string error)
         {
             Destination = destination;
             Notify(nameof(Destination));
             return true;
         }
 
-        internal override void Save(Dictionary<ModelSystemStructure, int> moduleDictionary, JsonTextWriter writer)
+        internal override void Save(Dictionary<Node, int> moduleDictionary, JsonTextWriter writer)
         {
             writer.WriteStartObject();
             writer.WritePropertyName("Origin");

@@ -193,12 +193,12 @@ namespace TestXTMF
         }
 
         /// <summary>
-        /// Get a model systems structure with the given name.
+        /// Get a node hook with the given name.
         /// </summary>
         /// <param name="hooks">The stet of hooks available</param>
         /// <param name="name">The name of the hook to access</param>
         /// <returns>The hook with the given name, or null if it isn't found.</returns>
-        public static ModelSystemStructureHook GetHook(IReadOnlyList<ModelSystemStructureHook> hooks, string name)
+        public static NodeHook GetHook(IReadOnlyList<NodeHook> hooks, string name)
         {
             return hooks.FirstOrDefault(hook => hook.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         }

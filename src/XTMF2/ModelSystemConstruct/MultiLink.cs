@@ -27,34 +27,34 @@ namespace XTMF2.ModelSystemConstruct
 {
     public sealed class MultiLink : Link
     {
-        private ObservableCollection<ModelSystemStructure> _Destinations;
+        private ObservableCollection<Node> _Destinations;
 
-        public MultiLink(List<ModelSystemStructure> destinations)
+        public MultiLink(List<Node> destinations)
         {
-            _Destinations = new ObservableCollection<ModelSystemStructure>(destinations);
+            _Destinations = new ObservableCollection<Node>(destinations);
         }
 
         public MultiLink()
         {
-            _Destinations = new ObservableCollection<ModelSystemStructure>();
+            _Destinations = new ObservableCollection<Node>();
         }
 
-        public ReadOnlyObservableCollection<ModelSystemStructure> Destinations =>
-            new ReadOnlyObservableCollection<ModelSystemStructure>(_Destinations);
+        public ReadOnlyObservableCollection<Node> Destinations =>
+            new ReadOnlyObservableCollection<Node>(_Destinations);
 
-        internal bool AddDestination(ModelSystemStructure destination, ref string error)
+        internal bool AddDestination(Node destination, ref string error)
         {
             _Destinations.Add(destination);
             return true;
         }
 
-        internal bool AddDestination(ModelSystemStructure destination, int index)
+        internal bool AddDestination(Node destination, int index)
         {
             _Destinations.Insert(index, destination);
             return true;
         }
 
-        internal override void Save(Dictionary<ModelSystemStructure, int> moduleDictionary, JsonTextWriter writer)
+        internal override void Save(Dictionary<Node, int> moduleDictionary, JsonTextWriter writer)
         {
             writer.WriteStartObject();
             writer.WritePropertyName("Origin");

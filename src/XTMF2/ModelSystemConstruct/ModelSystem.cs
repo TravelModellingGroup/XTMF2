@@ -144,8 +144,8 @@ namespace XTMF2
             int index = 0;
             writer.WritePropertyName("Boundaries");
             writer.WriteStartArray();
-            Dictionary<ModelSystemStructure, int> moduleDictionary = new Dictionary<ModelSystemStructure, int>();
-            GlobalBoundary.Save(ref index, moduleDictionary, typeDictionary, writer);
+            Dictionary<Node, int> nodeDictionary = new Dictionary<Node, int>();
+            GlobalBoundary.Save(ref index, nodeDictionary, typeDictionary, writer);
             writer.WriteEndArray();
         }
 
@@ -227,7 +227,7 @@ namespace XTMF2
                 using (var reader = new JsonTextReader(stream))
                 {
                     var typeLookup = new Dictionary<int, Type>();
-                    var structures = new Dictionary<int, ModelSystemStructure>();
+                    var nodes = new Dictionary<int, Node>();
                     while (reader.Read())
                     {
                         if (reader.TokenType == JsonToken.PropertyName)
@@ -241,7 +241,7 @@ namespace XTMF2
                                     }
                                     break;
                                 case "Boundaries":
-                                    if (!LoadBoundaries(session, typeLookup, structures, reader, modelSystem.GlobalBoundary, ref error))
+                                    if (!LoadBoundaries(session, typeLookup, nodes, reader, modelSystem.GlobalBoundary, ref error))
                                     {
                                         return null;
                                     }
@@ -327,14 +327,14 @@ namespace XTMF2
             return true;
         }
 
-        private static bool LoadBoundaries(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
+        private static bool LoadBoundaries(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
             JsonTextReader reader, Boundary global, ref string error)
         {
             if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
             {
                 return FailWith(ref error, "Expected to read an array when loading boundaries!");
             }
-            if (!global.Load(session, typeLookup, structures, reader, ref error))
+            if (!global.Load(session, typeLookup, nodes, reader, ref error))
             {
                 return false;
             }

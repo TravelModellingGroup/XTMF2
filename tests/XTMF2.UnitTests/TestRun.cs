@@ -68,8 +68,8 @@ namespace TestXTMF
                 string error2 = null;
                 var ms = msSession.ModelSystem;
                 Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyFunction", typeof(SimpleTestModule), out var stm, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyFunction", typeof(SimpleTestModule), out var stm, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], stm, out var ignoreLink2, ref error2), error2);
                 CreateRunClient(true, (runBus) =>
@@ -108,9 +108,9 @@ namespace TestXTMF
                 string error2 = null;
                 var ms = msSession.ModelSystem;
                 Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error2), error2);
                 Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, "Hello World Parameter", ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], spm, out var ignoreLink2, ref error2), error2);
@@ -152,11 +152,11 @@ namespace TestXTMF
                 var ms = msSession.ModelSystem;
                 Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
 
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Execute", typeof(Execute), out var mss, ref error));
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore1", typeof(IgnoreResult<string>), out var ignore1, ref error));
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore2", typeof(IgnoreResult<string>), out var ignore2, ref error));
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore3", typeof(IgnoreResult<string>), out var ignore3, ref error));
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Hello World", typeof(SimpleTestModule), out var hello, ref error));
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Execute", typeof(Execute), out var mss, ref error));
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Ignore1", typeof(IgnoreResult<string>), out var ignore1, ref error));
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Ignore2", typeof(IgnoreResult<string>), out var ignore2, ref error));
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Ignore3", typeof(IgnoreResult<string>), out var ignore3, ref error));
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Hello World", typeof(SimpleTestModule), out var hello, ref error));
 
 
                 Assert.IsTrue(msSession.AddLink(user, start, GetHook(start.Hooks, "ToExecute"), mss, out var link, ref error), error);
@@ -207,10 +207,10 @@ namespace TestXTMF
                 string error2 = null;
                 var ms = msSession.ModelSystem;
                 Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(ReportFunctionInvocation<string>), out var report, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Message", typeof(BasicParameter<string>), out var message, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyFunction", typeof(SimpleTestModule), out var stm, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(ReportFunctionInvocation<string>), out var report, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Message", typeof(BasicParameter<string>), out var message, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyFunction", typeof(SimpleTestModule), out var stm, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], report, out var ignoreLink2, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, report, GetHook(report.Hooks, "To Invoke"), stm, out var ignoreLink3, ref error2), error2);
