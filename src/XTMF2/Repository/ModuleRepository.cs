@@ -30,8 +30,8 @@ namespace XTMF2.Repository
     /// </summary>
     public sealed class ModuleRepository
     {
-        private ConcurrentDictionary<Type, (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)> _Data
-            = new ConcurrentDictionary<Type, (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks)>();
+        private ConcurrentDictionary<Type, (ModuleAttribute Description, TypeInfo TypeInfo, NodeHook[] Hooks)> _Data
+            = new ConcurrentDictionary<Type, (ModuleAttribute Description, TypeInfo TypeInfo, NodeHook[] Hooks)>();
         private static TypeInfo IModuleTypeInfo = typeof(IModule).GetTypeInfo();
 
         /// <summary>
@@ -76,7 +76,7 @@ namespace XTMF2.Repository
         /// </summary>
         /// <param name="type">The type to get the information from.</param>
         /// <returns>The description, typeinfo, and hooks for the type.</returns>
-        public (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) this[Type type]
+        public (ModuleAttribute Description, TypeInfo TypeInfo, NodeHook[] Hooks) this[Type type]
         {
             get
             {
@@ -93,7 +93,7 @@ namespace XTMF2.Repository
             }
         }
 
-        private (ModuleAttribute Description, TypeInfo TypeInfo, ModelSystemStructureHook[] Hooks) GetTypeData(Type type)
+        private (ModuleAttribute Description, TypeInfo TypeInfo, NodeHook[] Hooks) GetTypeData(Type type)
         {
             if (type == null)
             {
@@ -101,7 +101,7 @@ namespace XTMF2.Repository
             }
 
             var typeInfo = type.GetTypeInfo();
-            var hooks = new List<ModelSystemStructureHook>();
+            var hooks = new List<NodeHook>();
             // Load properties and fields
             ModuleAttribute description = LoadModuleDescription(type);
             LoadFields(type, typeInfo, hooks);
@@ -156,7 +156,7 @@ namespace XTMF2.Repository
             return description;
         }
 
-        private static void LoadFields(Type type, TypeInfo typeInfo, List<ModelSystemStructureHook> hooks)
+        private static void LoadFields(Type type, TypeInfo typeInfo, List<NodeHook> hooks)
         {
             if (typeInfo == null)
             {
@@ -220,7 +220,7 @@ namespace XTMF2.Repository
             }
         }
 
-        private static void LoadProperties(Type type, TypeInfo typeInfo, List<ModelSystemStructureHook> hooks)
+        private static void LoadProperties(Type type, TypeInfo typeInfo, List<NodeHook> hooks)
         {
             if (typeInfo == null)
             {

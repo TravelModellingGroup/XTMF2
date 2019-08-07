@@ -24,9 +24,9 @@ using System.Text;
 namespace XTMF2
 {
     /// <summary>
-    /// Defines the places to connect links between model system structures.
+    /// Defines the places to connect links between nodes.
     /// </summary>
-    public abstract class ModelSystemStructureHook
+    public abstract class NodeHook
     {
         public string Name { get; private set; }
 
@@ -34,7 +34,7 @@ namespace XTMF2
 
         public int Index { get; private set; }
 
-        public ModelSystemStructureHook(string name, HookCardinality cardinality, int index)
+        public NodeHook(string name, HookCardinality cardinality, int index)
         {
             Name = name;
             Cardinality = cardinality;
@@ -60,7 +60,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="origin"></param>
         /// <param name="destination"></param>
-        internal abstract void Install(ModelSystemStructure origin, ModelSystemStructure destination, int index);
+        internal abstract void Install(Node origin, Node destination, int index);
 
         /// <summary>
         /// Create the array of data with the given size
@@ -79,9 +79,9 @@ namespace XTMF2
     }
 
     /// <summary>
-    /// A hook on the property of a model system structure
+    /// A hook on the property of a node
     /// </summary>
-    sealed class PropertyHook : ModelSystemStructureHook
+    sealed class PropertyHook : NodeHook
     {
         readonly PropertyInfo Property;
         public PropertyHook(string name, PropertyInfo property, bool required, int index)
@@ -92,7 +92,7 @@ namespace XTMF2
 
         private static HookCardinality GetCardinality(PropertyInfo property, bool required)
         {
-            return ModelSystemStructureHook.GetCardinality(property.PropertyType, required);
+            return NodeHook.GetCardinality(property.PropertyType, required);
         }
 
         internal override void CreateArray(IModule origin, int length)
@@ -100,7 +100,7 @@ namespace XTMF2
             Property.SetValue(origin, Array.CreateInstance(Property.PropertyType.GetElementType(), length));
         }
 
-        internal override void Install(ModelSystemStructure origin, ModelSystemStructure destination, int index)
+        internal override void Install(Node origin, Node destination, int index)
         {
             switch (Cardinality)
             {
@@ -125,9 +125,9 @@ namespace XTMF2
     }
 
     /// <summary>
-    /// A hook for the field of a model system structure
+    /// A hook for the field of a node
     /// </summary>
-    sealed class FieldHook : ModelSystemStructureHook
+    sealed class FieldHook : NodeHook
     {
         readonly FieldInfo Field;
         public FieldHook(string name, FieldInfo field, bool required, int index)
@@ -138,7 +138,7 @@ namespace XTMF2
 
         private static HookCardinality GetCardinality(FieldInfo field, bool required)
         {
-            return ModelSystemStructureHook.GetCardinality(field.FieldType, required);
+            return NodeHook.GetCardinality(field.FieldType, required);
         }
 
         internal override void CreateArray(IModule origin, int length)
@@ -146,7 +146,7 @@ namespace XTMF2
             Field.SetValue(origin, Array.CreateInstance(Field.FieldType.GetElementType(), length));
         }
 
-        internal override void Install(ModelSystemStructure origin, ModelSystemStructure destination, int index)
+        internal override void Install(Node origin, Node destination, int index)
         {
             switch (Cardinality)
             {

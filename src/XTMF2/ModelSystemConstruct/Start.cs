@@ -26,11 +26,11 @@ using XTMF2.Editing;
 namespace XTMF2.ModelSystemConstruct
 {
     /// <summary>
-    /// A start is a special model system structure where
+    /// A start is a special node where
     /// it has no type and can be used to enter the
     /// model system
     /// </summary>
-    public sealed class Start : ModelSystemStructure
+    public sealed class Start : Node
     {
         public Start(ModelSystemSession session, string startName, Boundary boundary, string description, Point point) : base(startName)
         {
@@ -41,7 +41,7 @@ namespace XTMF2.ModelSystemConstruct
             SetType(session, typeof(StartModule), ref error);
         }
 
-        internal override void Save(ref int index, Dictionary<ModelSystemStructure, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        internal override void Save(ref int index, Dictionary<Node, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
             moduleDictionary.Add(this, index);
             writer.WriteStartObject();
@@ -65,7 +65,7 @@ namespace XTMF2.ModelSystemConstruct
             return false;
         }
 
-        internal static bool Load(ModelSystemSession session, Dictionary<int, ModelSystemStructure> structures,
+        internal static bool Load(ModelSystemSession session, Dictionary<int, Node> nodes,
             Boundary boundary, JsonTextReader reader, out Start start, ref string error)
         {
             if (reader.TokenType != JsonToken.StartObject)
@@ -108,7 +108,7 @@ namespace XTMF2.ModelSystemConstruct
             {
                 return FailWith(out start, ref error, "Undefined name for a start in boundary " + boundary.FullPath);
             }
-            if (structures.ContainsKey(index))
+            if (nodes.ContainsKey(index))
             {
                 return FailWith(out start, ref error, $"Index {index} already exists!");
             }
@@ -116,7 +116,7 @@ namespace XTMF2.ModelSystemConstruct
             {
                 ContainedWithin = boundary
             };
-            structures.Add(index, start);
+            nodes.Add(index, start);
             return true;
         }
 

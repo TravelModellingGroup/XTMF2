@@ -175,14 +175,14 @@ namespace TestXTMF
         }
 
         [TestMethod]
-        public void ModelSystemSavedWithModelSystemStructureOnly()
+        public void ModelSystemSavedWithNodeOnly()
         {
-            RunInModelSystemContext("ModelSystemSavedWithModelSystemStructureOnly", (user, pSession, mSession) =>
+            RunInModelSystemContext("ModelSystemSavedWithNodeOnly", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
                 string error = null;
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
                 Assert.AreEqual("MyMSS", mss.Name);
             }, (user, pSession, mSession) =>
             {
@@ -193,14 +193,14 @@ namespace TestXTMF
         }
 
         [TestMethod]
-        public void ModelSystemSavedWithStartAndModelSystemStructure()
+        public void ModelSystemSavedWithStartAndNode()
         {
-            RunInModelSystemContext("ModelSystemSavedWithStartAndModelSystemStructure", (user, pSession, mSession) =>
+            RunInModelSystemContext("ModelSystemSavedWithStartAndNode", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
                 string error = null;
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
                 Assert.AreEqual("MyMSS", mss.Name);
             }, (user, pSession, mSession) =>
@@ -222,7 +222,7 @@ namespace TestXTMF
                 // initialization
                 var ms = mSession.ModelSystem;
                 string error = null;
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
                 Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], mss, out var link, ref error), error);
                 Assert.AreEqual("MyMSS", mss.Name);
@@ -248,11 +248,11 @@ namespace TestXTMF
                 string error = null;
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
 
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Execute", typeof(Execute), out var mss, ref error));
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore1", typeof(IgnoreResult<string>), out var ignore1, ref error));
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore2", typeof(IgnoreResult<string>), out var ignore2, ref error));
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Ignore3", typeof(IgnoreResult<string>), out var ignore3, ref error));
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Hello World", typeof(SimpleTestModule), out var hello, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Execute", typeof(Execute), out var mss, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Ignore1", typeof(IgnoreResult<string>), out var ignore1, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Ignore2", typeof(IgnoreResult<string>), out var ignore2, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Ignore3", typeof(IgnoreResult<string>), out var ignore3, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Hello World", typeof(SimpleTestModule), out var hello, ref error));
 
 
                 Assert.IsTrue(mSession.AddLink(user, start, GetHook(start.Hooks, "ToExecute"), mss, out var link, ref error), error);
@@ -330,14 +330,14 @@ namespace TestXTMF
         }
 
         [TestMethod]
-        public void UndoAddModelSystemStructure()
+        public void UndoAddNode()
         {
-            RunInModelSystemContext("UndoAddModelSystemStructure", (user, pSession, mSession) =>
+            RunInModelSystemContext("UndoAddNode", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
                     out var mss, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.IsTrue(mSession.Undo(ref error), error);
@@ -349,14 +349,14 @@ namespace TestXTMF
         }
 
         [TestMethod]
-        public void UndoRemoveModelSystemStructure()
+        public void UndoRemoveNode()
         {
-            RunInModelSystemContext("UndoRemoveModelSystemStructure", (user, pSession, mSession) =>
+            RunInModelSystemContext("UndoRemoveNode", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 string error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
                     out var mss, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.IsTrue(mSession.Undo(ref error), error);
@@ -365,8 +365,8 @@ namespace TestXTMF
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
 
-                // now remove model system structure explicitly
-                Assert.IsTrue(mSession.RemoveModelSystemStructure(user, mss, ref error), error);
+                // now remove node explicitly
+                Assert.IsTrue(mSession.RemoveNode(user, mss, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
                 Assert.IsTrue(mSession.Undo(ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
@@ -382,9 +382,9 @@ namespace TestXTMF
                 var ms = mSession.ModelSystem;
                 string error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<string>),
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<string>),
                     out var parameter, ref error), error);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(SimpleParameterModule),
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(SimpleParameterModule),
                     out var module, ref error), error);
                 Assert.AreEqual(2, ms.GlobalBoundary.Modules.Count);
                 Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
@@ -406,9 +406,9 @@ namespace TestXTMF
                 var ms = mSession.ModelSystem;
                 string error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<string>),
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<string>),
                     out var parameter, ref error), error);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "Start", typeof(SimpleParameterModule),
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(SimpleParameterModule),
                     out var module, ref error), error);
                 Assert.AreEqual(2, ms.GlobalBoundary.Modules.Count);
                 Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
@@ -444,8 +444,8 @@ namespace TestXTMF
                 var ms = mSession.ModelSystem;
                 string error = null;
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss1, ref error));
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss2, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss1, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss2, ref error));
                 Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], mss1, out var link1, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
                 // This should not create a new link but move the previous one
@@ -619,7 +619,7 @@ namespace TestXTMF
                 // Setup the delete
                 Assert.IsTrue(mSession.AddBoundary(user, global, "ToRemove", out var toRemove, ref error), error);
                 Assert.IsTrue(mSession.AddModelSystemStart(user, global, "Start", out var start, ref error), error);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, toRemove, "Tricky", typeof(IgnoreResult<string>),
+                Assert.IsTrue(mSession.AddNode(user, toRemove, "Tricky", typeof(IgnoreResult<string>),
                     out var tricky, ref error), error);
                 Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], tricky, out var link, ref error), error);
                 Assert.AreEqual(1, global.Starts.Count);
@@ -647,9 +647,9 @@ namespace TestXTMF
                 // Setup the delete
                 Assert.IsTrue(mSession.AddBoundary(user, global, "ToRemove", out var toRemove, ref error), error);
                 Assert.IsTrue(mSession.AddModelSystemStart(user, global, "Start", out var start, ref error), error);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, global, "Execute", typeof(Execute),
+                Assert.IsTrue(mSession.AddNode(user, global, "Execute", typeof(Execute),
                     out var execute, ref error), error);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, toRemove, "Tricky", typeof(IgnoreResult<string>),
+                Assert.IsTrue(mSession.AddNode(user, toRemove, "Tricky", typeof(IgnoreResult<string>),
                     out var tricky, ref error), error);
                 Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], execute, out var link, ref error), error);
                 Assert.IsTrue(mSession.AddLink(user, execute, GetHook(execute.Hooks, "To Execute"), tricky, out var link2, ref error), error);
@@ -677,9 +677,9 @@ namespace TestXTMF
                 string error = null;
                 var global = ms.GlobalBoundary;
                 Assert.IsTrue(mSession.AddModelSystemStart(user, global, "Start", out var start, ref error), error);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, global, "Execute", typeof(Execute),
+                Assert.IsTrue(mSession.AddNode(user, global, "Execute", typeof(Execute),
                     out var execute, ref error), error);
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, global, "Tricky", typeof(IgnoreResult<string>),
+                Assert.IsTrue(mSession.AddNode(user, global, "Tricky", typeof(IgnoreResult<string>),
                     out var ignore, ref error), error);
 
                 Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], execute, out var link, ref error), error);

@@ -33,25 +33,25 @@ using System.Threading;
 namespace TestXTMF.Editing
 {
     [TestClass]
-    public class TestDisabledModule
+    public class TestDisabledNode
     {
         [TestMethod]
-        public void TestDisablingModule()
+        public void TestDisablingNode()
         {
-            RunInModelSystemContext("ModelSystemSavedWithModelSystemStructureOnly", (user, pSession, mSession) =>
+            RunInModelSystemContext("TestDisablingNode", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
                 string error = null;
-                Assert.IsTrue(mSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
                 Assert.AreEqual("MyMSS", mss.Name);
-                Assert.IsFalse(mss.IsDisabled, "The model system structure started out as disabled!");
-                Assert.IsTrue(mSession.SetModelSystemStructureDisabled(user, mss, true, ref error), error);
-                Assert.IsTrue(mss.IsDisabled, "The model system structure was not disabled!");
+                Assert.IsFalse(mss.IsDisabled, "The node started out as disabled!");
+                Assert.IsTrue(mSession.SetNodeDisabled(user, mss, true, ref error), error);
+                Assert.IsTrue(mss.IsDisabled, "The node was not disabled!");
                 Assert.IsTrue(mSession.Undo(ref error), error);
-                Assert.IsFalse(mss.IsDisabled, "The model system structure was not re-enabled when undoing the disable instruction!");
+                Assert.IsFalse(mss.IsDisabled, "The node was not re-enabled when undoing the disable instruction!");
                 Assert.IsTrue(mSession.Redo(ref error), error);
-                Assert.IsTrue(mss.IsDisabled, "The model system structure was not disabled during the redo!");
+                Assert.IsTrue(mss.IsDisabled, "The node was not disabled during the redo!");
             }, (user, pSession, mSession) =>
             {
                 // after shutdown
@@ -63,17 +63,17 @@ namespace TestXTMF.Editing
         }
 
         [TestMethod]
-        public void TestDisabledModuleRunValidationFailure()
+        public void TestDisabledNodeRunValidationFailure()
         {
-            RunInModelSystemContext("ParameterModules", (user, pSession, msSession) =>
+            RunInModelSystemContext("TestDisabledNodeRunValidationFailure", (user, pSession, msSession) =>
             {
                 string error2 = null;
                 var ms = msSession.ModelSystem;
                 Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error2), error2);
-                Assert.IsTrue(msSession.SetModelSystemStructureDisabled(user, basicParameter, true, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error2), error2);
+                Assert.IsTrue(msSession.SetNodeDisabled(user, basicParameter, true, ref error2), error2);
                 Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, "Hello World Parameter", ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], spm, out var ignoreLink2, ref error2), error2);
@@ -109,15 +109,15 @@ namespace TestXTMF.Editing
         [TestMethod]
         public void TestDisableLink()
         {
-            RunInModelSystemContext("ModelSystemSavedWithModelSystemStructureOnly", (user, pSession, msSession) =>
+            RunInModelSystemContext("TestDisableLink", (user, pSession, msSession) =>
             {
                 // initialization
                 var ms = msSession.ModelSystem;
                 string error = null;
                 Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error), error);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error), error);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error), error);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error), error);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error), error);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error), error);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error), error);
                 Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var startLink, ref error), error);
 
                 Assert.IsFalse(startLink.IsDisabled, "The link initialized as disabled!");
@@ -147,9 +147,9 @@ namespace TestXTMF.Editing
                 string error2 = null;
                 var ms = msSession.ModelSystem;
                 Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error2), error2);
-                Assert.IsTrue(msSession.AddModelSystemStructure(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error2), error2);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error2), error2);
                 Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, "Hello World Parameter", ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], spm, out var requiredLink, ref error2), error2);

@@ -32,16 +32,16 @@ namespace XTMF2
     /// <summary>
     /// The basic building block of a model system
     /// </summary>
-    public class ModelSystemStructure : INotifyPropertyChanged
+    public class Node : INotifyPropertyChanged
     {
         /// <summary>
-        /// The boundary that this model system structure is contained within
+        /// The boundary that this node is contained within
         /// </summary>
         public Boundary ContainedWithin { get; protected set; }
 
         /// <summary>
         /// Don't use this field as the setter
-        /// will properly create the model system structure hooks.
+        /// will properly create the node hooks.
         /// </summary>
         private Type _Type;
 
@@ -56,26 +56,26 @@ namespace XTMF2
         public string ParameterValue { get; private set; }
 
         /// <summary>
-        /// Create the hooks for the model system structure
+        /// Create the hooks for the node
         /// </summary>
-        private void CreateModelSystemStructureHooks(ModelSystemSession session)
+        private void CreateNodeHooks(ModelSystemSession session)
         {
             Hooks = session.GetModuleRepository()[_Type].Hooks;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Hooks)));
         }
 
         /// <summary>
-        /// Get a readonly list of possible hooks to use to interface with other model system structures.
+        /// Get a readonly list of possible hooks to use to interface with other nodes.
         /// </summary>
-        public IReadOnlyList<ModelSystemStructureHook> Hooks { get; private set; }
+        public IReadOnlyList<NodeHook> Hooks { get; private set; }
 
         /// <summary>
-        /// The name of the model system structure
+        /// The name of the node
         /// </summary>
         public string Name { get; protected set; }
 
         /// <summary>
-        /// The location to graphically place this structure within a boundary
+        /// The location to graphically place this node within a boundary
         /// </summary>
         public Point Location { get; protected set; }
 
@@ -88,7 +88,7 @@ namespace XTMF2
         public event PropertyChangedEventHandler PropertyChanged;
 
         /// <summary>
-        /// Set the location of the model system structure
+        /// Set the location of the node
         /// </summary>
         /// <param name="x">The horizontal offset</param>
         /// <param name="y">The vertical offset</param>
@@ -99,7 +99,7 @@ namespace XTMF2
         }
 
         /// <summary>
-        /// Change the name of the model system structure
+        /// Change the name of the node
         /// </summary>
         /// <param name="name">The name to change it to</param>
         /// <param name="error">A description of the error if one occurs</param>
@@ -127,7 +127,7 @@ namespace XTMF2
             // ensure that the value is allowed
             if (Type == null)
             {
-                return FailWith(ref error, "Unable to set the parameter value of a model system structure that lacks a type!");
+                return FailWith(ref error, "Unable to set the parameter value of a node that lacks a type!");
             }
             if (!ArbitraryParameterParser.Check(Type.GenericTypeArguments[0], value, ref error))
             {
@@ -139,7 +139,7 @@ namespace XTMF2
         }
 
         /// <summary>
-        /// An optional description for this model system structure
+        /// An optional description for this node
         /// </summary>
         public string Description { get; protected set; }
 
@@ -157,7 +157,7 @@ namespace XTMF2
         private static readonly ConcurrentDictionary<Type, FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
 
         /// <summary>
-        /// Setup the module as defined in this model system structure.
+        /// Setup the module as defined in this node.
         /// </summary>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
@@ -185,7 +185,7 @@ namespace XTMF2
         }
 
         /// <summary>
-        /// Change the name of the model system structure
+        /// Change the name of the node
         /// </summary>
         /// <param name="description">The description to change to</param>
         /// <param name="error">A description of the error if one occurs</param>
@@ -198,10 +198,10 @@ namespace XTMF2
         }
 
         /// <summary>
-        /// Change the type of the model system structure.
+        /// Change the type of the node.
         /// </summary>
         /// <param name="session">The current editing session.</param>
-        /// <param name="type">The type to set this structure to</param>
+        /// <param name="type">The type to set this node to</param>
         /// <param name="error"></param>
         internal bool SetType(ModelSystemSession session, Type type, ref string error)
         {
@@ -212,7 +212,7 @@ namespace XTMF2
             if (_Type != type)
             {
                 _Type = type;
-                CreateModelSystemStructureHooks(session);
+                CreateNodeHooks(session);
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Type)));
             }
             return true;
@@ -232,11 +232,11 @@ namespace XTMF2
         }
 
         /// <summary>
-        /// Create a new model system struture with name only.
+        /// Create a new node with name only.
         /// Only invoke this if you are going to set the type explicitly right after.
         /// </summary>
-        /// <param name="name">The name of the model system structure</param>
-        protected ModelSystemStructure(string name)
+        /// <param name="name">The name of the node</param>
+        protected Node(string name)
         {
             Name = name;
         }
@@ -266,25 +266,25 @@ namespace XTMF2
         /// <summary>
         /// Fail with the given message.
         /// </summary>
-        /// <param name="mss">The module system structure to null out.</param>
+        /// <param name="mss">The node to null out.</param>
         /// <param name="error">The place to store the message</param>
         /// <param name="message">The message to fail with.</param>
         /// <returns>Always false</returns>
-        private static bool FailWith(out ModelSystemStructure mss, ref string error, string message)
+        private static bool FailWith(out Node mss, ref string error, string message)
         {
             mss = null;
             error = message;
             return false;
         }
 
-        internal bool GetLink(ModelSystemStructureHook hook, out Link link)
+        internal bool GetLink(NodeHook hook, out Link link)
         {
             return (link = (from l in ContainedWithin.Links
                             where l.Origin == this && l.OriginHook == hook
                             select l).FirstOrDefault()) != null;
         }
 
-        internal virtual void Save(ref int index, Dictionary<ModelSystemStructure, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        internal virtual void Save(ref int index, Dictionary<Node, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
             moduleDictionary.Add(this, index);
             writer.WriteStartObject();
@@ -313,8 +313,8 @@ namespace XTMF2
             writer.WriteEndObject();
         }
 
-        internal static bool Load(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, ModelSystemStructure> structures,
-            Boundary boundary, JsonTextReader reader, out ModelSystemStructure mss, ref string error)
+        internal static bool Load(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
+            Boundary boundary, JsonTextReader reader, out Node mss, ref string error)
         {
             if (reader.TokenType != JsonToken.StartObject)
             {
@@ -386,11 +386,11 @@ namespace XTMF2
             {
                 return FailWith(out mss, ref error, $"While loading {boundary.FullPath}.{name} we were unable to parse a valid index!");
             }
-            if (structures.ContainsKey(index))
+            if (nodes.ContainsKey(index))
             {
                 return FailWith(out mss, ref error, $"Index {index} already exists!");
             }
-            mss = new ModelSystemStructure(name)
+            mss = new Node(name)
             {
                 Description = description,
                 Location = point,
@@ -402,14 +402,14 @@ namespace XTMF2
             {
                 return false;
             }
-            structures.Add(index, mss);
+            nodes.Add(index, mss);
             return true;
         }
 
-        internal static ModelSystemStructure Create(ModelSystemSession session, string name, Type type, Boundary boundary)
+        internal static Node Create(ModelSystemSession session, string name, Type type, Boundary boundary)
         {
             string error = null;
-            var ret = new ModelSystemStructure(name)
+            var ret = new Node(name)
             {
                 ContainedWithin = boundary
             };
