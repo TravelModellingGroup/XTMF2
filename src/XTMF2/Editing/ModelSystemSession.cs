@@ -88,18 +88,18 @@ namespace XTMF2.Editing
             lock (_sessionLock)
             {
                 var oldName = boundary.Name;
-                if(boundary.SetName(name, ref error))
+                if (boundary.SetName(name, ref error))
                 {
                     Buffer.AddUndo(new Command(() =>
                    {
                        string e = null;
                        return (boundary.SetName(oldName, ref e), e);
-                   }, ()=>
+                   }, () =>
                    {
                        string e = null;
                        return (boundary.SetName(name, ref e), e);
                    }));
-                   return true;
+                    return true;
                 }
                 return false;
             }
@@ -173,6 +173,50 @@ namespace XTMF2.Editing
                     {
                         string e = null;
                         return (parentBoundary.AddBoundary(_b, ref e), e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="localUser"></param>
+        /// <param name="location"></param>
+        /// <param name="block"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        public bool AddDocumentationBlock(User user, Boundary boundary, string documentation, Point location, out DocumentationBlock block, ref string error)
+        {
+            block = null;
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (boundary is null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+            if (String.IsNullOrWhiteSpace(documentation))
+            {
+                error = "There was no documentation to store.";
+                return false;
+            }
+            lock (_sessionLock)
+            {
+                if(boundary.AddDocumentationBlock(documentation, location, out block, ref error))
+                {
+                    var _block = block;
+                    Buffer.AddUndo(new Command(()=>
+                    {
+                        string e = null;
+                        return (boundary.RemoveDocumentationBlock(_block, ref e), e);
+                    }, ()=>
+                    {
+                        string e = null;
+                        return (boundary.AddDocumentationBlock(_block, ref e), e);
                     }));
                     return true;
                 }
