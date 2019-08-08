@@ -140,5 +140,73 @@ namespace XTMF2.UnitTests.Editing
                 }), "Unable to get a model system editing session!");
             }), "Unable to create project");
         }
+
+        [TestMethod]
+        public void TestCreatingDocumentationBlockUndoRedo()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var controller = runtime.ProjectController;
+            string error = null;
+            var localUser = runtime.UserController.Users[0];
+            controller.DeleteProject(localUser, "Test", ref error);
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
+            {
+                var project = session.Project;
+                Assert.IsTrue(session.CreateNewModelSystem("TestMS", out var modelSystem, ref error), error);
+                Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
+                {
+                    var ms = msSession.ModelSystem;
+                    var documentation = "My Documentation";
+                    var location = new Point(100, 100);
+                    var docBlocks = ms.GlobalBoundary.DocumentationBlocks;
+                    Assert.AreEqual(0, docBlocks.Count);
+                    Assert.IsTrue(msSession.AddDocumentationBlock(localUser, ms.GlobalBoundary, documentation, location, out DocumentationBlock block, ref error), error);
+                    Assert.AreEqual(1, docBlocks.Count);
+                    Assert.AreEqual(documentation, docBlocks[0].Documentation);
+                    Assert.AreEqual(location, docBlocks[0].Location);
+                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.AreEqual(0, docBlocks.Count);
+                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.AreEqual(1, docBlocks.Count);
+                    Assert.AreEqual(documentation, docBlocks[0].Documentation);
+                    Assert.AreEqual(location, docBlocks[0].Location);
+                }), "Unable to get a model system editing session!");
+            }), "Unable to create project");
+        }
+
+        [TestMethod]
+        public void TestRemovingDocumentationBlockUndoRedo()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var controller = runtime.ProjectController;
+            string error = null;
+            var localUser = runtime.UserController.Users[0];
+            controller.DeleteProject(localUser, "Test", ref error);
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
+            {
+                var project = session.Project;
+                Assert.IsTrue(session.CreateNewModelSystem("TestMS", out var modelSystem, ref error), error);
+                Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
+                {
+                    var ms = msSession.ModelSystem;
+                    var documentation = "My Documentation";
+                    var location = new Point(100, 100);
+                    var docBlocks = ms.GlobalBoundary.DocumentationBlocks;
+                    Assert.AreEqual(0, docBlocks.Count);
+                    Assert.IsTrue(msSession.AddDocumentationBlock(localUser, ms.GlobalBoundary, documentation, location, out DocumentationBlock block, ref error), error);
+                    Assert.AreEqual(1, docBlocks.Count);
+                    Assert.AreEqual(documentation, docBlocks[0].Documentation);
+                    Assert.AreEqual(location, docBlocks[0].Location);
+                    Assert.IsTrue(msSession.RemoveDocumentationBlock(localUser, ms.GlobalBoundary, block, ref error), error);
+                    Assert.AreEqual(0, docBlocks.Count);
+                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.AreEqual(1, docBlocks.Count);
+                    Assert.AreEqual(documentation, docBlocks[0].Documentation);
+                    Assert.AreEqual(location, docBlocks[0].Location);
+                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.AreEqual(0, docBlocks.Count);
+                }), "Unable to get a model system editing session!");
+            }), "Unable to create project");
+        }
     }
 }
