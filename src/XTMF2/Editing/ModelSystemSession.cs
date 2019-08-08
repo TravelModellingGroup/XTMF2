@@ -225,6 +225,49 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Remove the documentation block from the given boundary.
+        /// </summary>
+        /// <param name="user">The user requesting the action.</param>
+        /// <param name="boundary">The containing boundary</param>
+        /// <param name="block">The documentation block to remove.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false with an error message otherwise./returns>
+        public bool RemoveDocumentationBlock(User user, Boundary boundary, DocumentationBlock block, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (boundary is null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+
+            if (block is null)
+            {
+                throw new ArgumentNullException(nameof(block));
+            }
+            lock(_sessionLock)
+            {
+                if(boundary.RemoveDocumentationBlock(block, ref error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (boundary.AddDocumentationBlock(block, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (boundary.RemoveDocumentationBlock(block, ref e), e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Remove a boundary from a model system
         /// </summary>
         /// <param name="user">The user that removed the boundary</param>
