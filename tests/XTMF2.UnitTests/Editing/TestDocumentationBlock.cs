@@ -17,21 +17,10 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using XTMF2;
-using XTMF2.Editing;
-using XTMF2.Controllers;
-using System.Linq;
 using XTMF2.ModelSystemConstruct;
-using static XTMF2.Helper;
-using TestXTMF.Modules;
-using XTMF2.RuntimeModules;
-using static TestXTMF.TestHelper;
-using System.IO;
-using System.Threading;
 
-namespace XTMF2.UnitTests.Editing
+namespace XTMF2.Editing
 {
     [TestClass]
     public class TestDocumentationBlock
