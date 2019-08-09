@@ -188,7 +188,7 @@ namespace XTMF2.Editing
         /// <param name="block"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        public bool AddDocumentationBlock(User user, Boundary boundary, string documentation, Point location, out DocumentationBlock block, ref string error)
+        public bool AddCommentBlock(User user, Boundary boundary, string comment, Point location, out CommentBlock block, ref string error)
         {
             block = null;
             if (user is null)
@@ -199,24 +199,24 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(boundary));
             }
-            if (String.IsNullOrWhiteSpace(documentation))
+            if (String.IsNullOrWhiteSpace(comment))
             {
-                error = "There was no documentation to store.";
+                error = "There was no comment to store.";
                 return false;
             }
             lock (_sessionLock)
             {
-                if(boundary.AddDocumentationBlock(documentation, location, out block, ref error))
+                if(boundary.AddCommentBlock(comment, location, out block, ref error))
                 {
                     var _block = block;
                     Buffer.AddUndo(new Command(()=>
                     {
                         string e = null;
-                        return (boundary.RemoveDocumentationBlock(_block, ref e), e);
+                        return (boundary.RemoveCommentBlock(_block, ref e), e);
                     }, ()=>
                     {
                         string e = null;
-                        return (boundary.AddDocumentationBlock(_block, ref e), e);
+                        return (boundary.AddCommentBlock(_block, ref e), e);
                     }));
                     return true;
                 }
@@ -225,14 +225,14 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
-        /// Remove the documentation block from the given boundary.
+        /// Remove the comment block from the given boundary.
         /// </summary>
         /// <param name="user">The user requesting the action.</param>
         /// <param name="boundary">The containing boundary</param>
-        /// <param name="block">The documentation block to remove.</param>
+        /// <param name="block">The comment block to remove.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false with an error message otherwise./returns>
-        public bool RemoveDocumentationBlock(User user, Boundary boundary, DocumentationBlock block, ref string error)
+        public bool RemoveCommentBlock(User user, Boundary boundary, CommentBlock block, ref string error)
         {
             if (user is null)
             {
@@ -250,16 +250,16 @@ namespace XTMF2.Editing
             }
             lock(_sessionLock)
             {
-                if(boundary.RemoveDocumentationBlock(block, ref error))
+                if(boundary.RemoveCommentBlock(block, ref error))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
-                        return (boundary.AddDocumentationBlock(block, ref e), e);
+                        return (boundary.AddCommentBlock(block, ref e), e);
                     }, () =>
                     {
                         string e = null;
-                        return (boundary.RemoveDocumentationBlock(block, ref e), e);
+                        return (boundary.RemoveCommentBlock(block, ref e), e);
                     }));
                     return true;
                 }

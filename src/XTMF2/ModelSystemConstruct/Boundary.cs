@@ -51,7 +51,7 @@ namespace XTMF2
         private readonly ObservableCollection<Start> _Starts = new ObservableCollection<Start>();
         private readonly ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
         private readonly ObservableCollection<Link> _Links = new ObservableCollection<Link>();
-        private readonly ObservableCollection<DocumentationBlock> _DocumentationBlocks = new ObservableCollection<DocumentationBlock>();
+        private readonly ObservableCollection<CommentBlock> _CommentBlocks = new ObservableCollection<CommentBlock>();
 
         /// <summary>
         /// Get readonly access to the links contained in this boundary.
@@ -224,11 +224,11 @@ namespace XTMF2
         /// <param name="block">The resulting block</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool AddDocumentationBlock(string documentation, Point position, out DocumentationBlock block, ref string error)
+        internal bool AddCommentBlock(string documentation, Point position, out CommentBlock block, ref string error)
         {
             block = null;
-            var _block = new DocumentationBlock(documentation, position);
-            if (!AddDocumentationBlock(_block, ref error))
+            var _block = new CommentBlock(documentation, position);
+            if (!AddCommentBlock(_block, ref error))
             {
                 return false;
             }
@@ -236,7 +236,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddDocumentationBlock(DocumentationBlock block, ref string error)
+        internal bool AddCommentBlock(CommentBlock block, ref string error)
         {
             if (block is null)
             {
@@ -244,17 +244,17 @@ namespace XTMF2
             }
             lock (_WriteLock)
             {
-                if (_DocumentationBlocks.Contains(block))
+                if (_CommentBlocks.Contains(block))
                 {
                     error = "The documentation block already belongs to the boundary!";
                     return false;
                 }
-                _DocumentationBlocks.Add(block);
+                _CommentBlocks.Add(block);
                 return true;
             }
         }
 
-        internal bool RemoveDocumentationBlock(DocumentationBlock block, ref string error)
+        internal bool RemoveCommentBlock(CommentBlock block, ref string error)
         {
             if (block is null)
             {
@@ -262,7 +262,7 @@ namespace XTMF2
             }
             lock (_WriteLock)
             {
-                if (!_DocumentationBlocks.Remove(block))
+                if (!_CommentBlocks.Remove(block))
                 {
                     error = "Unable to remove the documentation block from the boundary.";
                     return false;
@@ -407,13 +407,13 @@ namespace XTMF2
             }
         }
 
-        public ReadOnlyObservableCollection<DocumentationBlock> DocumentationBlocks
+        public ReadOnlyObservableCollection<CommentBlock> CommentBlocks
         {
             get
             {
                 lock (_WriteLock)
                 {
-                    return new ReadOnlyObservableCollection<DocumentationBlock>(_DocumentationBlocks);
+                    return new ReadOnlyObservableCollection<CommentBlock>(_CommentBlocks);
                 }
             }
         }
@@ -466,9 +466,9 @@ namespace XTMF2
                     link.Save(nodeDictionary, writer);
                 }
                 writer.WriteEndArray();
-                writer.WritePropertyName("DocumentationBlocks");
+                writer.WritePropertyName("CommentBlocks");
                 writer.WriteStartArray();
-                foreach (var docBlock in _DocumentationBlocks)
+                foreach (var docBlock in _CommentBlocks)
                 {
                     docBlock.Save(writer);
                 }
@@ -606,7 +606,7 @@ namespace XTMF2
                             }
                         }
                         break;
-                    case "DocumentationBlocks":
+                    case "CommentBlocks":
                         if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
                         {
                             return FailWith(ref error, "Unexpected token when starting to read Documentation Blocks for a boundary.");
@@ -615,11 +615,11 @@ namespace XTMF2
                         {
                             if (reader.TokenType != JsonToken.Comment)
                             {
-                                if (!DocumentationBlock.Load(reader, out DocumentationBlock block, ref error))
+                                if (!CommentBlock.Load(reader, out CommentBlock block, ref error))
                                 {
                                     return false;
                                 }
-                                _DocumentationBlocks.Add(block);
+                                _CommentBlocks.Add(block);
                             }
                         }
                         break;

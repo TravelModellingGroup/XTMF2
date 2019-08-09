@@ -25,30 +25,30 @@ using XTMF2.Editing;
 namespace XTMF2.ModelSystemConstruct
 {
     /// <summary>
-    /// This class is used to add documentation inside of a boundary
+    /// This class is used to add comments inside of a boundary
     /// </summary>
-    public sealed class DocumentationBlock
+    public sealed class CommentBlock
     {
         /// <summary>
-        /// Construct a new documentation block
+        /// Construct a new comments block
         /// </summary>
-        /// <param name="documentation"></param>
+        /// <param name="comment"></param>
         /// <param name="location"></param>
-        public DocumentationBlock(string documentation, Point location)
+        public CommentBlock(string comment, Point location)
         {
-            Documentation = documentation;
+            Comment = comment;
             Location = location;
         }
 
         /// <summary>
-        /// The location to place the Documentation Block within the boundary
+        /// The location to place the Comment Block within the boundary
         /// </summary>
         public Point Location { get; set; }
 
         /// <summary>
-        /// The documentation string to display
+        /// The comment string to display
         /// </summary>
-        public string Documentation { get; private set; }
+        public string Comment { get; private set; }
 
         internal void Save(JsonTextWriter writer)
         {
@@ -57,15 +57,15 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteValue(Location.X);
             writer.WritePropertyName("Y");
             writer.WriteValue(Location.Y);
-            writer.WritePropertyName("Documentation");
-            writer.WriteValue(Documentation);
+            writer.WritePropertyName("Comment");
+            writer.WriteValue(Comment);
             writer.WriteEnd();
         }
 
-        internal static bool Load(JsonTextReader reader, out DocumentationBlock block, ref string error)
+        internal static bool Load(JsonTextReader reader, out CommentBlock block, ref string error)
         {
             float x = 0, y = 0;
-            string documentation = "No documentation";
+            string comment = "No comment";
             while (reader.Read() && reader.TokenType != JsonToken.EndObject)
             {
                 if(reader.TokenType == JsonToken.Comment)
@@ -94,19 +94,19 @@ namespace XTMF2.ModelSystemConstruct
                                 }
                             }
                             break;
-                        case "Documentation":
+                        case "Comment":
                             {
                                 var temp = reader.ReadAsString();
                                 if(!String.IsNullOrEmpty(temp))
                                 {
-                                    documentation = temp;
+                                    comment = temp;
                                 }
                             }
                             break;
                     }
                 }
             }
-            block = new DocumentationBlock(documentation, new Point(x, y));
+            block = new CommentBlock(comment, new Point(x, y));
             return true;
         }
     }
