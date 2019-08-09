@@ -181,13 +181,13 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
-        /// 
+        /// Add a new comment block to a boundary at the given location.
         /// </summary>
-        /// <param name="localUser"></param>
-        /// <param name="location"></param>
-        /// <param name="block"></param>
-        /// <param name="error"></param>
-        /// <returns></returns>
+        /// <param name="localUser">The user requesting this operation.</param>
+        /// <param name="location">The location to send the request to.</param>
+        /// <param name="block">The newly generated comment block, null if the operation fails.</param>
+        /// <param name="error">The error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
         public bool AddCommentBlock(User user, Boundary boundary, string comment, Point location, out CommentBlock block, ref string error)
         {
             block = null;
@@ -231,7 +231,7 @@ namespace XTMF2.Editing
         /// <param name="boundary">The containing boundary</param>
         /// <param name="block">The comment block to remove.</param>
         /// <param name="error">An error message if the operation fails.</param>
-        /// <returns>True if the operation succeeds, false with an error message otherwise./returns>
+        /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
         public bool RemoveCommentBlock(User user, Boundary boundary, CommentBlock block, ref string error)
         {
             if (user is null)
