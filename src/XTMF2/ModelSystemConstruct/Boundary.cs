@@ -51,6 +51,7 @@ namespace XTMF2
         private readonly ObservableCollection<Start> _Starts = new ObservableCollection<Start>();
         private readonly ObservableCollection<Boundary> _Boundaries = new ObservableCollection<Boundary>();
         private readonly ObservableCollection<Link> _Links = new ObservableCollection<Link>();
+        private readonly ObservableCollection<CommentBlock> _CommentBlocks = new ObservableCollection<CommentBlock>();
 
         /// <summary>
         /// Get readonly access to the links contained in this boundary.
@@ -159,7 +160,7 @@ namespace XTMF2
         {
             lock (_WriteLock)
             {
-                foreach(var start in _Starts)
+                foreach (var start in _Starts)
                 {
                     if (!start.ConstructModule(runtime, ref error))
                     {
@@ -168,7 +169,7 @@ namespace XTMF2
                 }
                 foreach (var module in _Modules)
                 {
-                    if(!module.ConstructModule(runtime, ref error))
+                    if (!module.ConstructModule(runtime, ref error))
                     {
                         return false;
                     }
@@ -217,6 +218,60 @@ namespace XTMF2
         }
 
         /// <summary>
+        /// Create a new documentation block at the given location
+        /// </summary>
+        /// <param name="position">The location in the boundary to add the documentation block</param>
+        /// <param name="block">The resulting block</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
+        internal bool AddCommentBlock(string documentation, Point position, out CommentBlock block, ref string error)
+        {
+            block = null;
+            var _block = new CommentBlock(documentation, position);
+            if (!AddCommentBlock(_block, ref error))
+            {
+                return false;
+            }
+            block = _block;
+            return true;
+        }
+
+        internal bool AddCommentBlock(CommentBlock block, ref string error)
+        {
+            if (block is null)
+            {
+                throw new ArgumentNullException(nameof(block));
+            }
+            lock (_WriteLock)
+            {
+                if (_CommentBlocks.Contains(block))
+                {
+                    error = "The documentation block already belongs to the boundary!";
+                    return false;
+                }
+                _CommentBlocks.Add(block);
+                return true;
+            }
+        }
+
+        internal bool RemoveCommentBlock(CommentBlock block, ref string error)
+        {
+            if (block is null)
+            {
+                throw new ArgumentNullException(nameof(block));
+            }
+            lock (_WriteLock)
+            {
+                if (!_CommentBlocks.Remove(block))
+                {
+                    error = "Unable to remove the documentation block from the boundary.";
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Collect all links going to a given boundary.
         /// </summary>
         /// <param name="boundary">The boundary to get links to.</param>
@@ -226,30 +281,30 @@ namespace XTMF2
             var ret = new List<Link>();
             var stack = new Stack<Boundary>();
             stack.Push(this);
-            while(stack.Count > 0)
+            while (stack.Count > 0)
             {
                 var current = stack.Pop();
-                foreach(var child in current._Boundaries)
+                foreach (var child in current._Boundaries)
                 {
                     stack.Push(child);
                 }
                 // don't bother analyzing the boundary being removed
-                if(current != boundary)
+                if (current != boundary)
                 {
-                    foreach(var link in current._Links)
+                    foreach (var link in current._Links)
                     {
-                        if(link is SingleLink sl)
+                        if (link is SingleLink sl)
                         {
-                            if(sl.Destination.ContainedWithin == boundary)
+                            if (sl.Destination.ContainedWithin == boundary)
                             {
                                 ret.Add(link);
                             }
                         }
-                        else if(link is MultiLink ml)
+                        else if (link is MultiLink ml)
                         {
-                            foreach(var dest in ml.Destinations)
+                            foreach (var dest in ml.Destinations)
                             {
-                                if(dest.ContainedWithin == boundary)
+                                if (dest.ContainedWithin == boundary)
                                 {
                                     ret.Add(link);
                                     break;
@@ -281,7 +336,7 @@ namespace XTMF2
 
         internal bool RemoveBoundary(Boundary boundary, ref string error)
         {
-            if(!_Boundaries.Remove(boundary))
+            if (!_Boundaries.Remove(boundary))
             {
                 error = "Unable to find boundary to remove it!";
                 return false;
@@ -291,7 +346,7 @@ namespace XTMF2
 
         internal bool AddStart(Start start, ref string e)
         {
-            if(_Starts.Contains(start))
+            if (_Starts.Contains(start))
             {
                 e = "The start already exists in the boundary!";
                 return false;
@@ -302,11 +357,11 @@ namespace XTMF2
 
         internal bool ConstructLinks(ref string error)
         {
-            lock(_WriteLock)
+            lock (_WriteLock)
             {
-                foreach(var link in _Links)
+                foreach (var link in _Links)
                 {
-                    if(!link.Construct(ref error))
+                    if (!link.Construct(ref error))
                     {
                         return false;
                     }
@@ -352,9 +407,20 @@ namespace XTMF2
             }
         }
 
+        public ReadOnlyObservableCollection<CommentBlock> CommentBlocks
+        {
+            get
+            {
+                lock (_WriteLock)
+                {
+                    return new ReadOnlyObservableCollection<CommentBlock>(_CommentBlocks);
+                }
+            }
+        }
+
         internal bool AddNode(Node node, ref string e)
         {
-            if(_Modules.Contains(node))
+            if (_Modules.Contains(node))
             {
                 e = "The node already exists in the boundary!";
                 return false;
@@ -365,45 +431,55 @@ namespace XTMF2
 
         internal void Save(ref int index, Dictionary<Node, int> nodeDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
         {
-            writer.WriteStartObject();
-            writer.WritePropertyName("Name");
-            writer.WriteValue(Name);
-            writer.WritePropertyName("Description");
-            writer.WriteValue(Description);
-            writer.WritePropertyName("Starts");
-            writer.WriteStartArray();
-            foreach (var start in _Starts)
+            lock (_WriteLock)
             {
-                start.Save(ref index, nodeDictionary, typeDictionary, writer);
+                writer.WriteStartObject();
+                writer.WritePropertyName("Name");
+                writer.WriteValue(Name);
+                writer.WritePropertyName("Description");
+                writer.WriteValue(Description);
+                writer.WritePropertyName("Starts");
+                writer.WriteStartArray();
+                foreach (var start in _Starts)
+                {
+                    start.Save(ref index, nodeDictionary, typeDictionary, writer);
+                }
+                writer.WriteEndArray();
+                writer.WritePropertyName("Nodes");
+                writer.WriteStartArray();
+                foreach (var module in _Modules)
+                {
+                    module.Save(ref index, nodeDictionary, typeDictionary, writer);
+                }
+                writer.WriteEndArray();
+                writer.WritePropertyName("Boundaries");
+                writer.WriteStartArray();
+                foreach (var child in _Boundaries)
+                {
+                    child.Save(ref index, nodeDictionary, typeDictionary, writer);
+                }
+                writer.WriteEndArray();
+                writer.WritePropertyName("Links");
+                writer.WriteStartArray();
+                foreach (var link in _Links)
+                {
+                    link.Save(nodeDictionary, writer);
+                }
+                writer.WriteEndArray();
+                writer.WritePropertyName("CommentBlocks");
+                writer.WriteStartArray();
+                foreach (var docBlock in _CommentBlocks)
+                {
+                    docBlock.Save(writer);
+                }
+                writer.WriteEndArray();
+                writer.WriteEndObject();
             }
-            writer.WriteEndArray();
-            writer.WritePropertyName("Nodes");
-            writer.WriteStartArray();
-            foreach (var module in _Modules)
-            {
-                module.Save(ref index, nodeDictionary, typeDictionary, writer);
-            }
-            writer.WriteEndArray();
-            writer.WritePropertyName("Boundaries");
-            writer.WriteStartArray();
-            foreach (var child in _Boundaries)
-            {
-                child.Save(ref index, nodeDictionary, typeDictionary, writer);
-            }
-            writer.WriteEndArray();
-            writer.WritePropertyName("Links");
-            writer.WriteStartArray();
-            foreach (var link in _Links)
-            {
-                link.Save(nodeDictionary, writer);
-            }
-            writer.WriteEndArray();
-            writer.WriteEndObject();
         }
 
         internal bool RemoveNode(Node node, ref string error)
         {
-            if(!_Modules.Remove(node))
+            if (!_Modules.Remove(node))
             {
                 error = "Unable to find node in the boundary!";
                 return false;
@@ -429,7 +505,7 @@ namespace XTMF2
                 e = "This link is was not contained within this boundary!";
                 return false;
             }
-            if(_Links.Contains(link))
+            if (_Links.Contains(link))
             {
                 e = "This link is already contained within this boundary!";
                 return false;
@@ -530,6 +606,23 @@ namespace XTMF2
                             }
                         }
                         break;
+                    case "CommentBlocks":
+                        if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                        {
+                            return FailWith(ref error, "Unexpected token when starting to read Documentation Blocks for a boundary.");
+                        }
+                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+                        {
+                            if (reader.TokenType != JsonToken.Comment)
+                            {
+                                if (!CommentBlock.Load(reader, out CommentBlock block, ref error))
+                                {
+                                    return false;
+                                }
+                                _CommentBlocks.Add(block);
+                            }
+                        }
+                        break;
                     default:
                         return FailWith(ref error, $"Unexpected value when reading boundary {reader.Value}");
                 }
@@ -539,7 +632,7 @@ namespace XTMF2
 
         internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link link, ref string error)
         {
-            switch(originHook.Cardinality)
+            switch (originHook.Cardinality)
             {
                 case HookCardinality.Single:
                 case HookCardinality.SingleOptional:
@@ -572,7 +665,7 @@ namespace XTMF2
                             return false;
                         }
                         // if we are successful and it didn't already exist add it to our list
-                        if(previous == null)
+                        if (previous == null)
                         {
                             _Links.Add(link);
                         }
@@ -614,7 +707,7 @@ namespace XTMF2
 
         internal bool RemoveLink(Link link, ref string e)
         {
-            if(!_Links.Remove(link))
+            if (!_Links.Remove(link))
             {
                 e = "Unable to find the link to remove from the boundary!";
                 return false;
@@ -630,7 +723,7 @@ namespace XTMF2
                 return false;
             }
             var withName = Parent?.HasChildWithName(name);
-            if(withName == true)
+            if (withName == true)
             {
                 error = $"There already exists another boundary with the name {name} in the parent boundary!";
                 return false;
@@ -649,7 +742,7 @@ namespace XTMF2
 
         internal bool RemoveStart(Start start, ref string error)
         {
-            if(!_Starts.Remove(start))
+            if (!_Starts.Remove(start))
             {
                 error = "Unable to find a the given start!";
                 return false;

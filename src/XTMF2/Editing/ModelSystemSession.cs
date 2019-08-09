@@ -88,18 +88,18 @@ namespace XTMF2.Editing
             lock (_sessionLock)
             {
                 var oldName = boundary.Name;
-                if(boundary.SetName(name, ref error))
+                if (boundary.SetName(name, ref error))
                 {
                     Buffer.AddUndo(new Command(() =>
                    {
                        string e = null;
                        return (boundary.SetName(oldName, ref e), e);
-                   }, ()=>
+                   }, () =>
                    {
                        string e = null;
                        return (boundary.SetName(name, ref e), e);
                    }));
-                   return true;
+                    return true;
                 }
                 return false;
             }
@@ -173,6 +173,93 @@ namespace XTMF2.Editing
                     {
                         string e = null;
                         return (parentBoundary.AddBoundary(_b, ref e), e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Add a new comment block to a boundary at the given location.
+        /// </summary>
+        /// <param name="localUser">The user requesting this operation.</param>
+        /// <param name="location">The location to send the request to.</param>
+        /// <param name="block">The newly generated comment block, null if the operation fails.</param>
+        /// <param name="error">The error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
+        public bool AddCommentBlock(User user, Boundary boundary, string comment, Point location, out CommentBlock block, ref string error)
+        {
+            block = null;
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (boundary is null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+            if (String.IsNullOrWhiteSpace(comment))
+            {
+                error = "There was no comment to store.";
+                return false;
+            }
+            lock (_sessionLock)
+            {
+                if(boundary.AddCommentBlock(comment, location, out block, ref error))
+                {
+                    var _block = block;
+                    Buffer.AddUndo(new Command(()=>
+                    {
+                        string e = null;
+                        return (boundary.RemoveCommentBlock(_block, ref e), e);
+                    }, ()=>
+                    {
+                        string e = null;
+                        return (boundary.AddCommentBlock(_block, ref e), e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Remove the comment block from the given boundary.
+        /// </summary>
+        /// <param name="user">The user requesting the action.</param>
+        /// <param name="boundary">The containing boundary</param>
+        /// <param name="block">The comment block to remove.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
+        public bool RemoveCommentBlock(User user, Boundary boundary, CommentBlock block, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (boundary is null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+
+            if (block is null)
+            {
+                throw new ArgumentNullException(nameof(block));
+            }
+            lock(_sessionLock)
+            {
+                if(boundary.RemoveCommentBlock(block, ref error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (boundary.AddCommentBlock(block, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (boundary.RemoveCommentBlock(block, ref e), e);
                     }));
                     return true;
                 }
