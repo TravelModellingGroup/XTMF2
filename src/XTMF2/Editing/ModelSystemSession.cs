@@ -496,6 +496,37 @@ namespace XTMF2.Editing
             }
         }
 
+        public bool AddNodeGenerateParameters(User user, Boundary boundary, string name, Type type, out Node mss, out List<Node> children, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (boundary == null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+            children = null;
+            lock (_sessionLock)
+            {
+                bool success = boundary.AddNode(this, name, type, out mss, ref error);
+                if (success)
+                {
+                    Node _mss = mss;
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (boundary.RemoveNode(_mss, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (boundary.AddNode(this, name, type, _mss, ref e), e);
+                    }));
+                }
+                return success;
+            }
+        }
+
         public bool RemoveNode(User user, Node node, ref string error)
         {
             if (user == null)
