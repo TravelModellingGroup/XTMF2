@@ -612,6 +612,43 @@ namespace XTMF2.Editing
             return (nodes, links);
         }
 
+        /// <summary>
+        /// Remove the given node and all of its generic parameters.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="node">The node to remove.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, False with an error message otherwise.</returns>
+        public bool RemoveNodeGenerateParameters(User user, Node node, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (node == null)
+            {
+                throw new ArgumentNullException(nameof(node));
+            }
+            lock (_sessionLock)
+            {
+                var boundary = node.ContainedWithin;
+                if (boundary.RemoveNode(node, ref error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        return (boundary.AddNode(node, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        return (boundary.RemoveNode(node, ref e), e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
         public bool RemoveNode(User user, Node node, ref string error)
         {
             if (user == null)
