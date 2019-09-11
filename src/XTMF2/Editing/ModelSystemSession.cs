@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using XTMF2.ModelSystemConstruct;
@@ -206,14 +207,14 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
-                if(boundary.AddCommentBlock(comment, location, out block, ref error))
+                if (boundary.AddCommentBlock(comment, location, out block, ref error))
                 {
                     var _block = block;
-                    Buffer.AddUndo(new Command(()=>
+                    Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
                         return (boundary.RemoveCommentBlock(_block, ref e), e);
-                    }, ()=>
+                    }, () =>
                     {
                         string e = null;
                         return (boundary.AddCommentBlock(_block, ref e), e);
@@ -248,9 +249,9 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(block));
             }
-            lock(_sessionLock)
+            lock (_sessionLock)
             {
-                if(boundary.RemoveCommentBlock(block, ref error))
+                if (boundary.RemoveCommentBlock(block, ref error))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
@@ -496,7 +497,18 @@ namespace XTMF2.Editing
             }
         }
 
-        public bool AddNodeGenerateParameters(User user, Boundary boundary, string name, Type type, out Node mss, out List<Node> children, ref string error)
+        /// <summary>
+        /// Add a node to the boundary in addition to generating all of the parameters as BasicParameters with their default values.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="boundary">The boundary to add the module to.</param>
+        /// <param name="name">The name of the node to add.</param>
+        /// <param name="type">The type of the module to use.</param>
+        /// <param name="node">The resulting node object.</param>
+        /// <param name="children"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        public bool AddNodeGenerateParameters(User user, Boundary boundary, string name, Type type, out Node node, out List<Node> children, ref string error)
         {
             if (user == null)
             {
@@ -509,22 +521,95 @@ namespace XTMF2.Editing
             children = null;
             lock (_sessionLock)
             {
-                bool success = boundary.AddNode(this, name, type, out mss, ref error);
+                bool success = boundary.AddNode(this, name, type, out node, ref error);
                 if (success)
                 {
-                    Node _mss = mss;
+                    // now generate the children
+                    List<Link> links;
+                    (children, links) = GetChidren(node, boundary);
+                    var localChildren = children;
+                    void Add()
+                    {
+                        string e = null;
+                        foreach (var child in localChildren)
+                        {
+                            boundary.AddNode(child, ref e);
+                        }
+                        foreach (var link in links)
+                        {
+                            boundary.AddLink(link, ref e);
+                        }
+                    }
+                    void Remove()
+                    {
+                        string e = null;
+                        foreach (var link in links)
+                        {
+                            boundary.RemoveLink(link, ref e);
+                        }
+                        foreach (var child in localChildren)
+                        {
+                            boundary.RemoveNode(child, ref e);
+                        }
+                    }
+                    Add();
+                    Node _mss = node;
                     Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
+                        Remove();
                         return (boundary.RemoveNode(_mss, ref e), e);
                     }, () =>
                     {
                         string e = null;
-                        return (boundary.AddNode(this, name, type, _mss, ref e), e);
+                        if ((boundary.AddNode(this, name, type, _mss, ref e)))
+                        {
+                            Add();
+                            return (true, null);
+                        }
+                        return (false, e);
                     }));
                 }
                 return success;
             }
+        }
+
+        private (List<Node> children, List<Link> links) GetChidren(Node baseNode, Boundary boundary)
+        {
+            var t = baseNode.Type;
+            var nodes = new List<Node>();
+            var links = new List<Link>();
+            (var description, var typeinfo, var hooks) = GetModuleRepository()[t];
+
+            foreach (var hook in hooks.Where(h => h.IsParameter))
+            {
+                // we can only add children for references to a generic
+                var type = hook.Type;
+                var genericParameters = type.GetGenericArguments();
+                if (genericParameters.Length == 1)
+                {
+                    var functionType = typeof(RuntimeModules.BasicParameter<>).MakeGenericType(genericParameters[0]);
+                    if (type.IsAssignableFrom(functionType))
+                    {
+                        string error = null;
+                        var child = Node.Create(this, hook.Name, functionType, boundary);
+                        if (child.SetParameterValue(this, hook.DefaultValue, ref error))
+                        {
+                            nodes.Add(child);
+                            if (boundary.AddLink(baseNode, hook, child, out var link, ref error))
+                            {
+                                links.Add(link);
+                            }
+                            else
+                            {
+                                nodes.Remove(child);
+                            }
+                        }
+                    }
+                }
+            }
+            // Return null for now so it doesn't pass tests
+            return (nodes, links);
         }
 
         public bool RemoveNode(User user, Node node, ref string error)
