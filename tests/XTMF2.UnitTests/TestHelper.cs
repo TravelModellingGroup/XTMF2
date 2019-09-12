@@ -27,6 +27,7 @@ using System.Text;
 using XTMF2;
 using XTMF2.Bus;
 using XTMF2.Editing;
+using XTMF2.RuntimeModules;
 
 namespace TestXTMF
 {
@@ -202,5 +203,71 @@ namespace TestXTMF
         {
             return hooks.FirstOrDefault(hook => hook.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         }
+
+        /// <summary>
+        /// Automate the lifetime of a temporary file.
+        /// </summary>
+        /// <param name="action">The action to perform while the file exists.</param>
+        internal static void CreateTemporaryFile(Action<string> action)
+        {
+            string path = null;
+            try
+            {
+                path = Path.GetTempFileName();
+                action(path);
+            }
+            finally
+            {
+                try
+                {
+                    if (path != null)
+                    {
+                        File.Delete(path);
+                    }
+                }
+                catch(IOException)
+                {
+
+                }
+            }
+        }
+
+        /// <summary>
+        /// Generate a new basic parameter with the given value
+        /// </summary>
+        /// <typeparam name="T">The return type</typeparam>
+        /// <param name="value">The value to be returned</param>
+        /// <param name="moduleName">The name of the module to create.</param>
+        /// <returns></returns>
+        internal static IFunction<T> CreateParameter<T>(T value, string moduleName = null)
+        {
+            return new BasicParameter<T>()
+            {
+                Name = moduleName,
+                Value = value
+            };
+        }
+
+        /// <summary>
+        /// Execute the action and check to see if it throws an exception
+        /// </summary>
+        /// <param name="a">The action to execute.</param>
+        /// <param name="e">The exception if one occurred</param>
+        /// <returns>True if there was no exception, false otherwise with error stored in e.</returns>
+        internal static bool NoExecutionErrors(Action a, out Exception e)
+        {
+            try
+            {
+                a();
+            }
+            catch(Exception e2)
+            {
+                e = e2;
+                return false;
+            }
+            e = null;
+            return true;
+        }
+
     }
 }
