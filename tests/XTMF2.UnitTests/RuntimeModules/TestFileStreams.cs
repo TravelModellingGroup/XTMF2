@@ -35,7 +35,7 @@ namespace TestXTMF.RuntimeModules
     public class TestFileStreams
     {
         [TestMethod]
-        public void FileExistsAndTestIfExists()
+        public void ReadFileExistsAndTestIfExists()
         {
             CreateTemporaryFile((fileName) =>
             {
@@ -60,7 +60,7 @@ namespace TestXTMF.RuntimeModules
         }
 
         [TestMethod]
-        public void FileExistsAndDontTestIfExists()
+        public void ReadFileExistsAndDontTestIfExists()
         {
             CreateTemporaryFile((fileName) =>
             {
@@ -85,7 +85,7 @@ namespace TestXTMF.RuntimeModules
         }
 
         [TestMethod]
-        public void FileDoesNotExistAndTestIfExists()
+        public void ReadFileDoesNotExistAndTestIfExists()
         {
             CreateTemporaryFile((fileName) =>
             {
@@ -112,8 +112,8 @@ namespace TestXTMF.RuntimeModules
             });
         }
 
-                   [TestMethod]
-        public void FileDoesNotExistAndDontTestIfExists()
+        [TestMethod]
+        public void ReadFileDoesNotExistAndDontTestIfExists()
         {
             CreateTemporaryFile((fileName) =>
             {
@@ -138,6 +138,72 @@ namespace TestXTMF.RuntimeModules
                     }
                 }, out var _), "There was no error when reading a file that does not exist!");
             });
+        }
+
+        [TestMethod]
+        public void WriteFileWithValidPath()
+        {
+            CreateTemporaryFile((fileName) =>
+            {
+                OpenWriteStreamFromFile streamFromFile = new OpenWriteStreamFromFile()
+                {
+                    Name = "Writer",
+                    FilePath = CreateParameter(fileName, "FileName")
+                };
+                string error = null;
+                Assert.IsTrue(streamFromFile.RuntimeValidation(ref error));
+                Assert.IsNull(error);
+                Assert.IsTrue(NoExecutionErrors(() =>
+                {
+                    using(var writer = streamFromFile.Invoke())
+                    {
+
+                    }
+                }, out var e), e?.Message);
+            });
+        }
+
+        [TestMethod]
+        public void WriteFileWithInvalidPath()
+        {
+            var fileName = "ASDF??://";
+            OpenWriteStreamFromFile streamFromFile = new OpenWriteStreamFromFile()
+            {
+                Name = "Writer",
+                FilePath = CreateParameter(fileName, "FileName")
+            };
+            string error = null;
+            Assert.IsTrue(streamFromFile.RuntimeValidation(ref error));
+            Assert.IsNull(error);
+            Assert.IsFalse(NoExecutionErrors(() =>
+            {
+                using (var writer = streamFromFile.Invoke())
+                {
+
+                }
+            }, out var e), "There was no error when trying to write to an invalid path!");
+        }
+
+        [TestMethod]
+        public void WriteFileWithEmptyPath()
+        {
+            var fileName = " ";
+            OpenWriteStreamFromFile streamFromFile = new OpenWriteStreamFromFile()
+            {
+                Name = "Writer",
+                FilePath = CreateParameter(fileName, "FileName")
+            };
+            string error = null;
+            Assert.IsTrue(streamFromFile.RuntimeValidation(ref error));
+            Assert.IsNull(error);
+            Assert.IsFalse(NoExecutionErrors(() =>
+            {
+                using (var writer = streamFromFile.Invoke())
+                {
+
+                }
+            }, out var e), "There was no error when trying to write to an invalid path!");
+            Assert.IsInstanceOfType(e, typeof(XTMFRuntimeException));
         }
     }
 }
