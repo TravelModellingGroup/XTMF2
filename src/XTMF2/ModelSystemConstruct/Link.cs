@@ -190,5 +190,7 @@ namespace XTMF2
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
             return true;
         }
+
+        internal abstract bool HasDestination(Node destNode);
     }
 }

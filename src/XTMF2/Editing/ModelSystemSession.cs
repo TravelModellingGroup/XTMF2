@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using XTMF2.ModelSystemConstruct;
@@ -206,14 +207,14 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
-                if(boundary.AddCommentBlock(comment, location, out block, ref error))
+                if (boundary.AddCommentBlock(comment, location, out block, ref error))
                 {
                     var _block = block;
-                    Buffer.AddUndo(new Command(()=>
+                    Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
                         return (boundary.RemoveCommentBlock(_block, ref e), e);
-                    }, ()=>
+                    }, () =>
                     {
                         string e = null;
                         return (boundary.AddCommentBlock(_block, ref e), e);
@@ -248,9 +249,9 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(block));
             }
-            lock(_sessionLock)
+            lock (_sessionLock)
             {
-                if(boundary.RemoveCommentBlock(block, ref error))
+                if (boundary.RemoveCommentBlock(block, ref error))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
@@ -496,6 +497,121 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Add a node to the boundary in addition to generating all of the parameters as BasicParameters with their default values.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="boundary">The boundary to add the module to.</param>
+        /// <param name="name">The name of the node to add.</param>
+        /// <param name="type">The type of the module to use.</param>
+        /// <param name="node">The resulting node object.</param>
+        /// <param name="children"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        public bool AddNodeGenerateParameters(User user, Boundary boundary, string name, Type type, out Node node, out List<Node> children, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (boundary == null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+            children = null;
+            lock (_sessionLock)
+            {
+                bool success = boundary.AddNode(this, name, type, out node, ref error);
+                if (success)
+                {
+                    // now generate the children
+                    List<Link> links;
+                    (children, links) = GetChidren(node, boundary);
+                    var localChildren = children;
+                    void Add()
+                    {
+                        string e = null;
+                        foreach (var child in localChildren)
+                        {
+                            boundary.AddNode(child, ref e);
+                        }
+                        foreach (var link in links)
+                        {
+                            boundary.AddLink(link, ref e);
+                        }
+                    }
+                    void Remove()
+                    {
+                        string e = null;
+                        foreach (var link in links)
+                        {
+                            boundary.RemoveLink(link, ref e);
+                        }
+                        foreach (var child in localChildren)
+                        {
+                            boundary.RemoveNode(child, ref e);
+                        }
+                    }
+                    Add();
+                    Node _mss = node;
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        Remove();
+                        return (boundary.RemoveNode(_mss, ref e), e);
+                    }, () =>
+                    {
+                        string e = null;
+                        if ((boundary.AddNode(this, name, type, _mss, ref e)))
+                        {
+                            Add();
+                            return (true, null);
+                        }
+                        return (false, e);
+                    }));
+                }
+                return success;
+            }
+        }
+
+        private (List<Node> children, List<Link> links) GetChidren(Node baseNode, Boundary boundary)
+        {
+            var t = baseNode.Type;
+            var nodes = new List<Node>();
+            var links = new List<Link>();
+            (var description, var typeinfo, var hooks) = GetModuleRepository()[t];
+
+            foreach (var hook in hooks.Where(h => h.IsParameter))
+            {
+                // we can only add children for references to a generic
+                var type = hook.Type;
+                var genericParameters = type.GetGenericArguments();
+                if (genericParameters.Length == 1)
+                {
+                    var functionType = typeof(RuntimeModules.BasicParameter<>).MakeGenericType(genericParameters[0]);
+                    if (type.IsAssignableFrom(functionType))
+                    {
+                        string error = null;
+                        var child = Node.Create(this, hook.Name, functionType, boundary);
+                        if (child.SetParameterValue(this, hook.DefaultValue, ref error))
+                        {
+                            nodes.Add(child);
+                            if (boundary.AddLink(baseNode, hook, child, out var link, ref error))
+                            {
+                                links.Add(link);
+                            }
+                            else
+                            {
+                                nodes.Remove(child);
+                            }
+                        }
+                    }
+                }
+            }
+            // Return null for now so it doesn't pass tests
+            return (nodes, links);
+        }
+
         public bool RemoveNode(User user, Node node, ref string error)
         {
             if (user == null)
@@ -524,6 +640,113 @@ namespace XTMF2.Editing
                 }
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Remove the given node and all of its generic parameters.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="node">The node to remove.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, False with an error message otherwise.</returns>
+        public bool RemoveNodeGenerateParameters(User user, Node node, ref string error)
+        {
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (node == null)
+            {
+                throw new ArgumentNullException(nameof(node));
+            }
+            lock (_sessionLock)
+            {
+                var boundary = node.ContainedWithin;
+                // Find all of the basic parameters for the node that we need to remove.
+                var basicParameters = new List<(Node basicParameterNode, SingleLink basicParameterLink)>();
+                var advancedParameters = new List<Link>();
+                foreach(var link in boundary.Links.Where(link => link.Origin == node))
+                {
+                    if(link.OriginHook.IsParameter && link is SingleLink singleLink)
+                    {
+                        var destNode = singleLink.Destination;
+                        var destType = destNode.Type;
+                        if (destType.IsGenericType && destType.GetGenericTypeDefinition() == typeof(RuntimeModules.BasicParameter<>))
+                        {
+                            // check to see if this would be the only link referencing it.
+                            List<Link> linksGoingTo = GetLinksGoingTo(destNode);
+                            if(linksGoingTo?.Count == 1)
+                            {
+                                basicParameters.Add((destNode, singleLink));
+                            }
+                            else
+                            {
+                                advancedParameters.Add(singleLink);
+                            }
+                        }
+                    }
+                }
+                if (boundary.RemoveNode(node, ref error))
+                {
+                    void RemoveParameters()
+                    {
+                        string e = null;
+                        foreach(var p in advancedParameters)
+                        {
+                            boundary.RemoveLink(p, ref e);
+                        }
+                        foreach(var (basicParameterNode, basicParameterLink) in basicParameters)
+                        {
+                            boundary.RemoveLink(basicParameterLink, ref e);
+                            boundary.RemoveNode(basicParameterNode, ref e);
+                        }
+                    }
+                    void AddParameters()
+                    {
+                        string e = null;
+                        foreach (var (basicParameterNode, basicParameterLink) in basicParameters)
+                        {
+                            boundary.AddNode(basicParameterNode, ref e);
+                            boundary.AddLink(basicParameterLink, ref e);
+                        }
+                        foreach (var p in advancedParameters)
+                        {
+                            boundary.AddLink(p, ref e);
+                        }
+                    }
+                    RemoveParameters();
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string e = null;
+                        if (boundary.AddNode(node, ref e))
+                        {
+                            AddParameters();
+                            return (true, null);
+                        }
+                        return (false, e);
+                    }, () =>
+                    {
+                        string e = null;
+                        if(boundary.RemoveNode(node, ref e))
+                        {
+                            RemoveParameters();
+                            return (true, null);
+                        }
+                        return (false, e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        private List<Link> GetLinksGoingTo(Node destNode)
+        {
+            var ret = new List<Link>();
+            var destBoundary = destNode.ContainedWithin;
+            ret.AddRange(destBoundary.Links.Where(l => l.HasDestination(destNode)));
+            ret.AddRange(ModelSystem.GlobalBoundary.GetLinksGoingToBoundary(destBoundary).Where(l => l.HasDestination(destNode)));
+            return ret;
         }
 
         public bool SetParameterValue(User user, Node basicParameter, string value, ref string error)

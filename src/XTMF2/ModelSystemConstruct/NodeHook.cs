@@ -34,11 +34,28 @@ namespace XTMF2
 
         public int Index { get; private set; }
 
-        public NodeHook(string name, HookCardinality cardinality, int index)
+        /// <summary>
+        /// Is the hook a parameter?
+        /// </summary>
+        public bool IsParameter { get; private set; }
+
+        /// <summary>
+        /// The type of the hook.
+        /// </summary>
+        public abstract Type Type { get; }
+
+        /// <summary>
+        /// The default value of the parameter
+        /// </summary>
+        public string DefaultValue;
+
+        public NodeHook(string name, HookCardinality cardinality, int index, bool isParameter, string defaultValue)
         {
             Name = name;
             Cardinality = cardinality;
             Index = index;
+            IsParameter = isParameter;
+            DefaultValue = defaultValue;
         }
 
         protected static HookCardinality GetCardinality(Type type, bool required)
@@ -84,11 +101,13 @@ namespace XTMF2
     sealed class PropertyHook : NodeHook
     {
         readonly PropertyInfo Property;
-        public PropertyHook(string name, PropertyInfo property, bool required, int index)
-            : base(name, GetCardinality(property, required), index)
+        public PropertyHook(string name, PropertyInfo property, bool required, int index, bool isParameter, string defaultValue)
+            : base(name, GetCardinality(property, required), index, isParameter, defaultValue)
         {
             Property = property;
         }
+
+        public override Type Type => Property.PropertyType;
 
         private static HookCardinality GetCardinality(PropertyInfo property, bool required)
         {
@@ -130,11 +149,13 @@ namespace XTMF2
     sealed class FieldHook : NodeHook
     {
         readonly FieldInfo Field;
-        public FieldHook(string name, FieldInfo field, bool required, int index)
-            : base(name, GetCardinality(field, required), index)
+        public FieldHook(string name, FieldInfo field, bool required, int index, bool isParameter, string defaultValue)
+            : base(name, GetCardinality(field, required), index, isParameter, defaultValue)
         {
             Field = field;
         }
+
+        public override Type Type => Field.FieldType;
 
         private static HookCardinality GetCardinality(FieldInfo field, bool required)
         {
