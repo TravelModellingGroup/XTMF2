@@ -665,11 +665,11 @@ namespace XTMF2.Editing
                 // Find all of the basic parameters for the node that we need to remove.
                 var basicParameters = new List<(Node basicParameterNode, SingleLink basicParameterLink)>();
                 var advancedParameters = new List<Link>();
-                foreach(var l in boundary.Links.Where(l => l.Origin == node))
+                foreach(var link in boundary.Links.Where(link => link.Origin == node))
                 {
-                    if(l.OriginHook.IsParameter && l is SingleLink sl)
+                    if(link.OriginHook.IsParameter && link is SingleLink singleLink)
                     {
-                        var destNode = sl.Destination;
+                        var destNode = singleLink.Destination;
                         var destType = destNode.Type;
                         if (destType.IsGenericType && destType.GetGenericTypeDefinition() == typeof(RuntimeModules.BasicParameter<>))
                         {
@@ -677,11 +677,11 @@ namespace XTMF2.Editing
                             List<Link> linksGoingTo = GetLinksGoingTo(destNode);
                             if(linksGoingTo?.Count == 1)
                             {
-                                basicParameters.Add((destNode, sl));
+                                basicParameters.Add((destNode, singleLink));
                             }
                             else
                             {
-                                advancedParameters.Add(sl);
+                                advancedParameters.Add(singleLink);
                             }
                         }
                     }
