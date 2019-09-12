@@ -32,9 +32,16 @@ using System.Threading;
 
 namespace TestXTMF2.Editing
 {
+    /// <summary>
+    /// The test class is designed to test the automatic generation and removal of parameters
+    /// when editing a model system.
+    /// </summary>
     [TestClass]
     public class TestParameterGeneration
     {
+        /// <summary>
+        /// Test the case where we want to add a node and all parameters filled in automatically.
+        /// </summary>
         [TestMethod]
         public void TestAddNodeWithParameterGeneration()
         {
@@ -77,6 +84,10 @@ namespace TestXTMF2.Editing
             }), "Unable to create project");
         }
 
+        /// <summary>
+        /// Test the case where we want to add a node and all parameters and in addition
+        /// test that the undo and redo functionality removed and rebuilds the state properly.
+        /// </summary>
         [TestMethod]
         public void TestAddNodeWithParameterGenerationUndo()
         {
@@ -112,6 +123,9 @@ namespace TestXTMF2.Editing
             }), "Unable to create project");
         }
 
+        /// <summary>
+        /// Test the case where we want to remove a node and all simple parameters nodes and links connecting them.
+        /// </summary>
         [TestMethod]
         public void TestRemoveNodeWithParameterGeneration()
         {
@@ -165,6 +179,11 @@ namespace TestXTMF2.Editing
             }), "Unable to create project");
         }
 
+        /// <summary>
+        /// Test the case where we want to remove a node and all simple parameters nodes and links connecting them
+        /// where the basic parameter has been made complex by adding another node that references the first node's
+        /// parameter.
+        /// </summary>
         [TestMethod]
         public void TestRemoveNodeWithParameterGenerationNotRemovingIfMultiple()
         {
