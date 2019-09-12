@@ -75,5 +75,10 @@ namespace XTMF2.ModelSystemConstruct
             }
             return true;
         }
+
+        internal override bool HasDestination(Node destNode)
+        {
+            return Destination == destNode;
+        }
     }
 }

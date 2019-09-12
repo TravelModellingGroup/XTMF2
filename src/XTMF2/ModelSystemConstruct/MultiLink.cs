@@ -115,5 +115,10 @@ namespace XTMF2.ModelSystemConstruct
         {
             _Destinations.RemoveAt(i);
         }
+
+        internal override bool HasDestination(Node destNode)
+        {
+            return _Destinations.Contains(destNode);
+        }
     }
 }

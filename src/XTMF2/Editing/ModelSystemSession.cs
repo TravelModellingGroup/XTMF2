@@ -612,14 +612,7 @@ namespace XTMF2.Editing
             return (nodes, links);
         }
 
-        /// <summary>
-        /// Remove the given node and all of its generic parameters.
-        /// </summary>
-        /// <param name="user">The user issuing the command.</param>
-        /// <param name="node">The node to remove.</param>
-        /// <param name="error">An error message if the operation fails.</param>
-        /// <returns>True if the operation succeeds, False with an error message otherwise.</returns>
-        public bool RemoveNodeGenerateParameters(User user, Node node, ref string error)
+        public bool RemoveNode(User user, Node node, ref string error)
         {
             if (user == null)
             {
@@ -649,7 +642,14 @@ namespace XTMF2.Editing
             }
         }
 
-        public bool RemoveNode(User user, Node node, ref string error)
+        /// <summary>
+        /// Remove the given node and all of its generic parameters.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="node">The node to remove.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, False with an error message otherwise.</returns>
+        public bool RemoveNodeGenerateParameters(User user, Node node, ref string error)
         {
             if (user == null)
             {
@@ -662,21 +662,91 @@ namespace XTMF2.Editing
             lock (_sessionLock)
             {
                 var boundary = node.ContainedWithin;
+                // Find all of the basic parameters for the node that we need to remove.
+                var basicParameters = new List<(Node basicParameterNode, SingleLink basicParameterLink)>();
+                var advancedParameters = new List<Link>();
+                foreach(var l in boundary.Links.Where(l => l.Origin == node))
+                {
+                    if(l.OriginHook.IsParameter && l is SingleLink sl)
+                    {
+                        var destNode = sl.Destination;
+                        var destType = destNode.Type;
+                        if (destType.IsGenericType && destType.GetGenericTypeDefinition() == typeof(RuntimeModules.BasicParameter<>))
+                        {
+                            // check to see if this would be the only link referencing it.
+                            List<Link> linksGoingTo = GetLinksGoingTo(destNode);
+                            if(linksGoingTo?.Count == 1)
+                            {
+                                basicParameters.Add((destNode, sl));
+                            }
+                            else
+                            {
+                                advancedParameters.Add(sl);
+                            }
+                        }
+                    }
+                }
                 if (boundary.RemoveNode(node, ref error))
                 {
+                    void RemoveParameters()
+                    {
+                        string e = null;
+                        foreach(var p in advancedParameters)
+                        {
+                            boundary.RemoveLink(p, ref e);
+                        }
+                        foreach(var (basicParameterNode, basicParameterLink) in basicParameters)
+                        {
+                            boundary.RemoveLink(basicParameterLink, ref e);
+                            boundary.RemoveNode(basicParameterNode, ref e);
+                        }
+                    }
+                    void AddParameters()
+                    {
+                        string e = null;
+                        foreach (var (basicParameterNode, basicParameterLink) in basicParameters)
+                        {
+                            boundary.AddNode(basicParameterNode, ref e);
+                            boundary.AddLink(basicParameterLink, ref e);
+                        }
+                        foreach (var p in advancedParameters)
+                        {
+                            boundary.AddLink(p, ref e);
+                        }
+                    }
+                    RemoveParameters();
                     Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
-                        return (boundary.AddNode(node, ref e), e);
+                        if (boundary.AddNode(node, ref e))
+                        {
+                            AddParameters();
+                            return (true, null);
+                        }
+                        return (false, e);
                     }, () =>
                     {
                         string e = null;
-                        return (boundary.RemoveNode(node, ref e), e);
+                        if(boundary.RemoveNode(node, ref e))
+                        {
+                            RemoveParameters();
+                            return (true, null);
+                        }
+                        return (false, e);
                     }));
                     return true;
                 }
                 return false;
             }
+        }
+
+        private List<Link> GetLinksGoingTo(Node destNode)
+        {
+            var ret = new List<Link>();
+            var destBoundary = destNode.ContainedWithin;
+            ret.AddRange(destBoundary.Links.Where(l => l.HasDestination(destNode)));
+            ret.AddRange(ModelSystem.GlobalBoundary.GetLinksGoingToBoundary(destBoundary).Where(l => l.HasDestination(destNode)));
+            return ret;
         }
 
         public bool SetParameterValue(User user, Node basicParameter, string value, ref string error)
