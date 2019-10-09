@@ -153,9 +153,9 @@ namespace XTMF2.Editing
                     Assert.AreEqual(1, comBlock.Count);
                     Assert.AreEqual(comment, comBlock[0].Comment);
                     Assert.AreEqual(location, comBlock[0].Location);
-                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.IsTrue(msSession.Undo(localUser, ref error), error);
                     Assert.AreEqual(0, comBlock.Count);
-                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.IsTrue(msSession.Redo(localUser, ref error), error);
                     Assert.AreEqual(1, comBlock.Count);
                     Assert.AreEqual(comment, comBlock[0].Comment);
                     Assert.AreEqual(location, comBlock[0].Location);
@@ -188,11 +188,11 @@ namespace XTMF2.Editing
                     Assert.AreEqual(location, comBlocks[0].Location);
                     Assert.IsTrue(msSession.RemoveCommentBlock(localUser, ms.GlobalBoundary, block, ref error), error);
                     Assert.AreEqual(0, comBlocks.Count);
-                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.IsTrue(msSession.Undo(localUser, ref error), error);
                     Assert.AreEqual(1, comBlocks.Count);
                     Assert.AreEqual(comment, comBlocks[0].Comment);
                     Assert.AreEqual(location, comBlocks[0].Location);
-                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.IsTrue(msSession.Redo(localUser, ref error), error);
                     Assert.AreEqual(0, comBlocks.Count);
                 }), "Unable to get a model system editing session!");
             }), "Unable to create project");

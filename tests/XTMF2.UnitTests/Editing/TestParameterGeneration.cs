@@ -113,10 +113,10 @@ namespace TestXTMF2.Editing
                     var links = gBound.Links;
                     Assert.AreEqual(2, modules.Count, "It seems that the child parameter was not contained in the global boundary.");
                     Assert.AreEqual(1, links.Count, "We did not have a link!");
-                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.IsTrue(msSession.Undo(localUser, ref error), error);
                     Assert.AreEqual(0, modules.Count, "After undoing it seems that a module has survived.");
                     Assert.AreEqual(0, links.Count, "The link was not removed on undo.");
-                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.IsTrue(msSession.Redo(localUser, ref error), error);
                     Assert.AreEqual(2, modules.Count, "After redoing it seems that a module was not restored.");
                     Assert.AreEqual(1, links.Count, "The link was not re-added on redo.");
                 }), "Unable to get a model system editing session!");
@@ -169,10 +169,10 @@ namespace TestXTMF2.Editing
 
                     // Make sure that both modules were deleted
                     Assert.AreEqual(0, modules.Count, "Both modules were not removed.");
-                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.IsTrue(msSession.Undo(localUser, ref error), error);
                     Assert.AreEqual(2, modules.Count, "Both modules were not re-added.");
 
-                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.IsTrue(msSession.Redo(localUser, ref error), error);
                     Assert.AreEqual(0, modules.Count, "Both modules were not removed again.");
 
                 }), "Unable to get a model system editing session!");
@@ -216,10 +216,10 @@ namespace TestXTMF2.Editing
                     Assert.IsTrue(msSession.RemoveNodeGenerateParameters(localUser, node, ref error), error);
                     Assert.AreEqual(1, links.Count);
                     Assert.AreEqual(2, modules.Count);
-                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.IsTrue(msSession.Undo(localUser, ref error), error);
                     Assert.AreEqual(2, links.Count);
                     Assert.AreEqual(3, modules.Count);
-                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.IsTrue(msSession.Redo(localUser, ref error), error);
                     Assert.AreEqual(1, links.Count);
                     Assert.AreEqual(2, modules.Count);
 

@@ -295,9 +295,9 @@ namespace TestXTMF
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
             });
@@ -313,18 +313,18 @@ namespace TestXTMF
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
 
                 //now test explicitly removing the start
                 Assert.IsTrue(mSession.RemoveStart(user, Start, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
             });
         }
@@ -340,9 +340,9 @@ namespace TestXTMF
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
                     out var mss, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
             });
@@ -359,18 +359,18 @@ namespace TestXTMF
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
                     out var mss, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
 
                 // now remove node explicitly
                 Assert.IsTrue(mSession.RemoveNode(user, mss, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
             });
         }
 
@@ -390,9 +390,9 @@ namespace TestXTMF
                 Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
                 Assert.IsTrue(mSession.AddLink(user, module, module.Hooks[0], parameter, out var link, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
                 Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
             });
@@ -414,19 +414,19 @@ namespace TestXTMF
                 Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
                 Assert.IsTrue(mSession.AddLink(user, module, module.Hooks[0], parameter, out var link, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
                 Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
 
                 // now remove the link explicitly
                 Assert.IsTrue(mSession.RemoveLink(user, link, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
                 Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
             });
         }
@@ -465,9 +465,9 @@ namespace TestXTMF
                 Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, ref error), error);
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail1, ref error), "Created a second boundary with the same name!");
                 Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
                 Assert.AreSame(subB, ms.GlobalBoundary.Boundaries[0]);
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail2, ref error), "Created a second boundary with the same name after redo!");
@@ -515,9 +515,9 @@ namespace TestXTMF
                 Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, ref error), error);
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail1, ref error), "Created a second boundary with the same name!");
                 Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
                 Assert.AreSame(subB, ms.GlobalBoundary.Boundaries[0]);
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail2, ref error), "Created a second boundary with the same name after redo!");
@@ -525,10 +525,10 @@ namespace TestXTMF
                 // Now test removing the boundary explicitly
                 Assert.IsTrue(mSession.RemoveBoundary(user, ms.GlobalBoundary, subB, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
                 Assert.AreSame(subB, ms.GlobalBoundary.Boundaries[0]);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
             });
         }
@@ -629,9 +629,9 @@ namespace TestXTMF
                 // Now remove the boundary and check to make sure the number of links is cleaned up
                 Assert.IsTrue(mSession.RemoveBoundary(user, global, toRemove, ref error), error);
                 Assert.AreEqual(0, global.Links.Count, "We did not remove the link during the remove boundary!");
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(1, global.Links.Count, "The link was not restored after the undo on the remove boundary!");
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(0, global.Links.Count, "We did not remove the link again doing the redo of the remove boundary!");
             });
         }
@@ -661,9 +661,9 @@ namespace TestXTMF
                 // Now remove the boundary and check to make sure the number of links is cleaned up
                 Assert.IsTrue(mSession.RemoveBoundary(user, global, toRemove, ref error), error);
                 Assert.AreEqual(0, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(1, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(0, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
             });
         }
@@ -693,9 +693,9 @@ namespace TestXTMF
                 Assert.AreEqual(2, ((MultiLink)linkI1).Destinations.Count);
                 Assert.IsTrue(mSession.RemoveLinkDestination(user, linkI1, 0, ref error), error);
                 Assert.AreEqual(1, ((MultiLink)linkI1).Destinations.Count);
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.AreEqual(2, ((MultiLink)linkI1).Destinations.Count);
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.AreEqual(1, ((MultiLink)linkI1).Destinations.Count);
             });
         }

@@ -48,9 +48,9 @@ namespace TestXTMF.Editing
                 Assert.IsFalse(mss.IsDisabled, "The node started out as disabled!");
                 Assert.IsTrue(mSession.SetNodeDisabled(user, mss, true, ref error), error);
                 Assert.IsTrue(mss.IsDisabled, "The node was not disabled!");
-                Assert.IsTrue(mSession.Undo(ref error), error);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
                 Assert.IsFalse(mss.IsDisabled, "The node was not re-enabled when undoing the disable instruction!");
-                Assert.IsTrue(mSession.Redo(ref error), error);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
                 Assert.IsTrue(mss.IsDisabled, "The node was not disabled during the redo!");
             }, (user, pSession, mSession) =>
             {
@@ -123,9 +123,9 @@ namespace TestXTMF.Editing
                 Assert.IsFalse(startLink.IsDisabled, "The link initialized as disabled!");
                 Assert.IsTrue(msSession.SetLinkDisabled(user, startLink, true, ref error), error);
                 Assert.IsTrue(startLink.IsDisabled, "The link initialized as disabled!");
-                Assert.IsTrue(msSession.Undo(ref error), error);
+                Assert.IsTrue(msSession.Undo(user, ref error), error);
                 Assert.IsFalse(startLink.IsDisabled);
-                Assert.IsTrue(msSession.Redo(ref error), error);
+                Assert.IsTrue(msSession.Redo(user, ref error), error);
                 Assert.IsTrue(startLink.IsDisabled);
             }, (user, pSession, mSession) =>
             {

@@ -86,6 +86,11 @@ namespace XTMF2.Editing
                 error = "A boundary requires a unique name";
                 return false;
             }
+            if(!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
+            }
             lock (_sessionLock)
             {
                 var oldName = boundary.Name;
@@ -115,6 +120,11 @@ namespace XTMF2.Editing
             if (boundary == null)
             {
                 throw new ArgumentNullException(nameof(boundary));
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
             }
             lock (_sessionLock)
             {
@@ -161,6 +171,11 @@ namespace XTMF2.Editing
                 error = "A boundary requires a unique name";
                 return false;
             }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
+            }
             lock (_sessionLock)
             {
                 if (parentBoundary.AddBoundary(name, out boundary, ref error))
@@ -203,6 +218,11 @@ namespace XTMF2.Editing
             if (String.IsNullOrWhiteSpace(comment))
             {
                 error = "There was no comment to store.";
+                return false;
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
                 return false;
             }
             lock (_sessionLock)
@@ -249,6 +269,11 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(block));
             }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
+            }
             lock (_sessionLock)
             {
                 if (boundary.RemoveCommentBlock(block, ref error))
@@ -278,17 +303,22 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
         public bool RemoveBoundary(User user, Boundary parentBoundary, Boundary boundary, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (parentBoundary == null)
+            if (parentBoundary is null)
             {
                 throw new ArgumentNullException(nameof(parentBoundary));
             }
-            if (boundary == null)
+            if (boundary is null)
             {
                 throw new ArgumentNullException(nameof(boundary));
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
             }
             lock (_sessionLock)
             {
@@ -390,11 +420,11 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise.</returns>
         public bool AddModelSystemStart(User user, Boundary boundary, string startName, out Start start, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (boundary == null)
+            if (boundary is null)
             {
                 throw new ArgumentNullException(nameof(boundary));
             }
@@ -403,6 +433,11 @@ namespace XTMF2.Editing
             if (String.IsNullOrWhiteSpace(startName))
             {
                 error = badStartName;
+                return false;
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
                 return false;
             }
             lock (_sessionLock)
@@ -439,13 +474,18 @@ namespace XTMF2.Editing
         /// <returns></returns>
         public bool RemoveStart(User user, Start start, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (start == null)
+            if (start is null)
             {
                 throw new ArgumentNullException(nameof(start));
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
             }
             lock (_sessionLock)
             {
@@ -467,30 +507,36 @@ namespace XTMF2.Editing
             }
         }
 
-        public bool AddNode(User user, Boundary boundary, string name, Type type, out Node mss, ref string error)
+        public bool AddNode(User user, Boundary boundary, string name, Type type, out Node node, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (boundary == null)
+            if (boundary is null)
             {
                 throw new ArgumentNullException(nameof(boundary));
             }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                node = null;
+                return false;
+            }
             lock (_sessionLock)
             {
-                bool success = boundary.AddNode(this, name, type, out mss, ref error);
+                bool success = boundary.AddNode(this, name, type, out node, ref error);
                 if (success)
                 {
-                    Node _mss = mss;
+                    Node _node = node;
                     Buffer.AddUndo(new Command(() =>
                     {
                         string e = null;
-                        return (boundary.RemoveNode(_mss, ref e), e);
+                        return (boundary.RemoveNode(_node, ref e), e);
                     }, () =>
                     {
                         string e = null;
-                        return (boundary.AddNode(this, name, type, _mss, ref e), e);
+                        return (boundary.AddNode(this, name, type, _node, ref e), e);
                     }));
                 }
                 return success;
@@ -510,15 +556,21 @@ namespace XTMF2.Editing
         /// <returns></returns>
         public bool AddNodeGenerateParameters(User user, Boundary boundary, string name, Type type, out Node node, out List<Node> children, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (boundary == null)
+            if (boundary is null)
             {
                 throw new ArgumentNullException(nameof(boundary));
             }
             children = null;
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                node = null;
+                return false;
+            }
             lock (_sessionLock)
             {
                 bool success = boundary.AddNode(this, name, type, out node, ref error);
@@ -614,13 +666,18 @@ namespace XTMF2.Editing
 
         public bool RemoveNode(User user, Node node, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (node == null)
+            if (node is null)
             {
                 throw new ArgumentNullException(nameof(node));
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
             }
             lock (_sessionLock)
             {
@@ -651,13 +708,18 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, False with an error message otherwise.</returns>
         public bool RemoveNodeGenerateParameters(User user, Node node, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (node == null)
+            if (node is null)
             {
                 throw new ArgumentNullException(nameof(node));
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
             }
             lock (_sessionLock)
             {
@@ -751,13 +813,18 @@ namespace XTMF2.Editing
 
         public bool SetParameterValue(User user, Node basicParameter, string value, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (basicParameter == null)
+            if (basicParameter is null)
             {
                 throw new ArgumentNullException(nameof(basicParameter));
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
             }
             lock (_sessionLock)
             {
@@ -789,13 +856,18 @@ namespace XTMF2.Editing
         /// <returns>True if the operation completed successfully, false otherwise.</returns>
         public bool SetNodeDisabled(User user, Node node, bool disabled, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (node == null)
+            if (node is null)
             {
                 throw new ArgumentNullException(nameof(node));
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
             }
             lock (_sessionLock)
             {
@@ -824,13 +896,18 @@ namespace XTMF2.Editing
         /// <returns></returns>
         public bool SetLinkDisabled(User user, Link link, bool disabled, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (link == null)
+            if (link is null)
             {
                 throw new ArgumentNullException(nameof(link));
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
             }
             lock (_sessionLock)
             {
@@ -879,13 +956,18 @@ namespace XTMF2.Editing
 
         public bool RemoveLink(User user, Link link, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (link == null)
+            if (link is null)
             {
                 throw new ArgumentNullException(nameof(link));
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
             }
             lock (_sessionLock)
             {
@@ -923,19 +1005,28 @@ namespace XTMF2.Editing
         public bool AddLink(User user, Node origin, NodeHook originHook,
             Node destination, out Link link, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (originHook == null)
+            if(origin is null)
+            {
+                throw new ArgumentNullException(nameof(origin));
+            }
+            if (originHook is null)
             {
                 throw new ArgumentNullException(nameof(originHook));
             }
-            if (destination == null)
+            if (destination is null)
             {
                 throw new ArgumentNullException(nameof(destination));
             }
             link = null;
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
+            }
             lock (_sessionLock)
             {
                 bool success = false;
@@ -1016,13 +1107,33 @@ namespace XTMF2.Editing
             return new ModelSystemSession(session, header);
         }
 
-        public bool Undo(ref string error)
+        public bool Undo(User user, ref string error)
         {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
+            }
             return Buffer.UndoCommands(ref error);
         }
 
-        public bool Redo(ref string error)
+        public bool Redo(User user, ref string error)
         {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
+            }
             return Buffer.RedoCommands(ref error);
         }
 
@@ -1036,13 +1147,18 @@ namespace XTMF2.Editing
         /// <returns>True if successful, false otherwise with error message.</returns>
         public bool RemoveLinkDestination(User user, Link multiLink, int index, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (multiLink == null)
+            if (multiLink is null)
             {
                 throw new ArgumentNullException(nameof(multiLink));
+            }
+            if (!_session.HasAccess(user))
+            {
+                error = "The user does not have access to this project.";
+                return false;
             }
             if (multiLink is MultiLink ml)
             {

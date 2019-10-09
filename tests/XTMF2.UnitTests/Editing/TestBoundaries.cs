@@ -54,9 +54,9 @@ namespace TestXTMF.Editing
                     var oldName = ms.GlobalBoundary.Name;
                     Assert.IsTrue(msSession.SetBoundaryName(localUser, ms.GlobalBoundary, newBoundaryName, ref error), error);
                     Assert.AreEqual(newBoundaryName, ms.GlobalBoundary.Name);
-                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.IsTrue(msSession.Undo(localUser, ref error), error);
                     Assert.AreEqual(oldName, ms.GlobalBoundary.Name);
-                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.IsTrue(msSession.Redo(localUser, ref error), error);
                     Assert.AreEqual(newBoundaryName, ms.GlobalBoundary.Name);
                 }), "Unable to get a model system editing session!");
             }), "Unable to create project");
@@ -81,9 +81,9 @@ namespace TestXTMF.Editing
                     var oldName = ms.GlobalBoundary.Description;
                     Assert.IsTrue(msSession.SetBoundaryDescription(localUser, ms.GlobalBoundary, newBoundaryDescription, ref error), error);
                     Assert.AreEqual(newBoundaryDescription, ms.GlobalBoundary.Description);
-                    Assert.IsTrue(msSession.Undo(ref error), error);
+                    Assert.IsTrue(msSession.Undo(localUser, ref error), error);
                     Assert.AreEqual(oldName, ms.GlobalBoundary.Description);
-                    Assert.IsTrue(msSession.Redo(ref error), error);
+                    Assert.IsTrue(msSession.Redo(localUser, ref error), error);
                     Assert.AreEqual(newBoundaryDescription, ms.GlobalBoundary.Description);
                 }), "Unable to get a model system editing session");
             }), "Unable to create project");
