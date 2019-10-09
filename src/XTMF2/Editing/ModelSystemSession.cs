@@ -73,11 +73,11 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
         public bool SetBoundaryName(User user, Boundary boundary, string name, ref string error)
         {
-            if (user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if (boundary == null)
+            if (boundary is null)
             {
                 throw new ArgumentNullException(nameof(boundary));
             }
@@ -664,6 +664,13 @@ namespace XTMF2.Editing
             return (nodes, links);
         }
 
+        /// <summary>
+        /// Remove the given node.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="node">The node to be removed.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RemoveNode(User user, Node node, ref string error)
         {
             if (user is null)
@@ -811,6 +818,14 @@ namespace XTMF2.Editing
             return ret;
         }
 
+        /// <summary>
+        /// Set the value of a parameter
+        /// </summary>
+        /// <param name="user">The user issuing the command</param>
+        /// <param name="basicParameter">The parameter to set.</param>
+        /// <param name="value">The value to set the parameter to.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool SetParameterValue(User user, Node basicParameter, string value, ref string error)
         {
             if (user is null)

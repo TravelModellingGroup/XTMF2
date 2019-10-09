@@ -20,7 +20,7 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2;
 
-namespace TestXTMF
+namespace XTMF2
 {
     [TestClass]
     public class TestXTMFRuntime

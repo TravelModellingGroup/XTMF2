@@ -23,7 +23,7 @@ using XTMF2.Editing;
 using XTMF2.Controllers;
 using System.Linq;
 
-namespace TestXTMF
+namespace XTMF2
 {
     [TestClass]
     public class TestUsers
