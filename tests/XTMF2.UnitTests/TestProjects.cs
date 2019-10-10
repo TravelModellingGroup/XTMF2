@@ -16,12 +16,11 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
-using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using XTMF2;
+using TestXTMF;
 using XTMF2.Editing;
-using XTMF2.Controllers;
-namespace TestXTMF
+
+namespace XTMF2
 {
     [TestClass]
     public class TestProjects
@@ -39,7 +38,7 @@ namespace TestXTMF
             var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
             string error = null;
-            var localUser = runtime.UserController.Users[0];
+            var localUser = TestHelper.GetTestUser(runtime);
             // delete the project in case it has survived.
             controller.DeleteProject(localUser, "Test", ref error);
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
@@ -59,7 +58,7 @@ namespace TestXTMF
             var controller = runtime.ProjectController;
             string projectName = "Test";
             string error = null;
-            var localUser = runtime.UserController.Users[0];
+            var localUser = TestHelper.GetTestUser(runtime);
             // delete the project just in case it survived
             controller.DeleteProject(localUser, projectName, ref error);
             // now create it
@@ -75,7 +74,7 @@ namespace TestXTMF
             //Startup XTMF again
             runtime = XTMFRuntime.CreateRuntime();
             controller = runtime.ProjectController;
-            localUser = runtime.UserController.Users[0];
+            localUser = TestHelper.GetTestUser(runtime);
             Assert.AreEqual(numberOfProjects, localUser.AvailableProjects.Count);
             var regainedProject = localUser.AvailableProjects[0];
             Assert.AreEqual(projectName, regainedProject.Name);
@@ -87,7 +86,7 @@ namespace TestXTMF
             var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
             string error = null;
-            var localUser = runtime.UserController.Users[0];
+            var localUser = TestHelper.GetTestUser(runtime);
             runtime.UserController.Delete("NewUser");
             Assert.IsTrue(runtime.UserController.CreateNew("NewUser", false, out var newUser, ref error), error);
             // delete the project in case it has survived.
@@ -116,7 +115,7 @@ namespace TestXTMF
             var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
             string error = null;
-            var localUser = runtime.UserController.Users[0];
+            var localUser = TestHelper.GetTestUser(runtime);
             runtime.UserController.Delete("NewUser");
             Assert.IsTrue(runtime.UserController.CreateNew("NewUser", false, out var newUser, ref error), error);
             // delete the project in case it has survived.
@@ -126,7 +125,7 @@ namespace TestXTMF
             {
                 project = session.Project;
                 Assert.IsTrue(session.ShareWith(localUser, newUser, ref error), error);
-                
+
             }), "Unable to create project");
             Assert.IsTrue(controller.GetProjectSession(newUser, project, out var session2, ref error).UsingIf(session2, () =>
             {

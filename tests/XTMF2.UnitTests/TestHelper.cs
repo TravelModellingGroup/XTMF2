@@ -69,6 +69,99 @@ namespace TestXTMF
         }
 
         /// <summary>
+        /// Create a context to edit a model system for testing accesses with an unauthorized user
+        /// </summary>
+        /// <param name="name">A unique name for the test</param>
+        /// <param name="toExecute">The logic to execute inside of a model system context</param>
+        internal static void RunInModelSystemContext(string name, Action<User, User, ProjectSession, ModelSystemSession> toExecute)
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            string error = null;
+            string userName = name + "TempUser";
+            string unauthorizedUserName = name + "Hacker";
+            string projectName = "TestProject";
+            string modelSystemName = "ModelSystem1";
+            // clear out the user if possible
+            userController.Delete(userName);
+            userController.Delete(unauthorizedUserName);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            Assert.IsTrue(userController.CreateNew(unauthorizedUserName, false, out var unauthorizedUser, ref error), error);
+            try
+            {
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                {
+                    Assert.IsTrue(projectSession.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
+                    Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(modelSystemSession, () =>
+                    {
+                        toExecute(user, unauthorizedUser, projectSession, modelSystemSession);
+                    }), error);
+                }), error);
+            }
+            finally
+            {
+                //cleanup
+                userController.Delete(user);
+            }
+        }
+
+        /// <summary>
+        /// Gets the local administrative user for testing.
+        /// </summary>
+        /// <param name="runtime">The XTMF instance to user.</param>
+        /// <returns>The local admin for testing.</returns>
+        internal static User GetTestUser(XTMFRuntime runtime)
+        {
+            if (runtime is null)
+            {
+                throw new ArgumentNullException(nameof(runtime));
+            }
+            return runtime.UserController.GetUserByName("local");
+        }
+
+        /// <summary>
+        /// Gets a pair of users to use for testing to make sure that an unauthorized user can not issue commands.
+        /// </summary>
+        /// <param name="runtime">The XTMF instance to use.</param>
+        /// <returns>The local administrator and a user that does not have authorization to any projects.</returns>
+        internal static (User localUser, User hacker) GetTestUsers(XTMFRuntime runtime)
+        {
+            if (runtime is null)
+            {
+                throw new ArgumentNullException(nameof(runtime));
+            }
+            string error = null;
+            var localUser = runtime.UserController.GetUserByName("local");
+            var userController = runtime.UserController;
+            var unauthroizedUser = userController.GetUserByName("Hacker");
+            if (unauthroizedUser is null)
+            {
+                Assert.IsTrue(userController.CreateNew("Hacker", false, out unauthroizedUser, ref error), error);
+            }
+            else
+            {
+                // make sure this user doesn't actually have access to any projects
+                var projects = unauthroizedUser.AvailableProjects;
+                // check to see if we should remove projects.
+                if (projects.Count > 0)
+                {
+                    // This branch is only ever taken if there has been an error in a test run.
+                    Assert.IsTrue(localUser.Admin, "The local user is not an administrator!");
+                    var projectController = runtime.ProjectController;
+                    var copyOfProjects = projects.ToList();
+                    foreach (var project in copyOfProjects)
+                    {
+                        Assert.IsTrue(projectController.DeleteProject(localUser, project, ref error), error);
+                    }
+                }
+            }
+            return (localUser, unauthroizedUser);
+        }
+
+
+
+        /// <summary>
         /// Create a context to edit a model system for testing where
         /// XTMF will be saved and then shutdown between contexts.
         /// </summary>

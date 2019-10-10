@@ -81,16 +81,23 @@ namespace XTMF2.Repository
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            project = _Store.FirstOrDefault(p => p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase));
-            if(project?.CanAccess(user) == false)
-            {
-                error = "Unable to access project";
-                return false;
-            }
-            else if(project == null)
+            project = null;
+            var possibleProjects = _Store.Where(p => p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase)).OrderBy(p => p.Owner == user);
+            if(!possibleProjects.Any())
             {
                 error = $"Unable to find a project with the name {projectName}";
+
+                return false;
             }
+            foreach(var p in possibleProjects)
+            {
+                if(p.CanAccess(user))
+                {
+                    project = p;
+                    return true;
+                }
+            }
+            error = "Unable to access project";
             return project != null;
         }
     }

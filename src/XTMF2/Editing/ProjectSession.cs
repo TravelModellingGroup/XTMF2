@@ -82,6 +82,23 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Check to see if the given user has access to the project.
+        /// </summary>
+        /// <param name="user">The user to test for.</param>
+        /// <returns>True if the user has access to the project, false otherwise.</returns>
+        internal bool HasAccess(User user)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            lock(SessionLock)
+            {
+                return Project.CanAccess(user);
+            }
+        }
+
+        /// <summary>
         /// Unload a model system session and reduce the number of references
         /// to this project session.
         /// </summary>

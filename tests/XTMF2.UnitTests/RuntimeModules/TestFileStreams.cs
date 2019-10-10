@@ -16,20 +16,11 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
-using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using XTMF2;
-using XTMF2.Editing;
-using XTMF2.Controllers;
-using System.Linq;
-using XTMF2.ModelSystemConstruct;
-using static XTMF2.Helper;
-using TestXTMF.Modules;
-using XTMF2.RuntimeModules;
-using static TestXTMF.TestHelper;
 using System.IO;
+using static TestXTMF.TestHelper;
 
-namespace TestXTMF.RuntimeModules
+namespace XTMF2.RuntimeModules
 {
     [TestClass]
     public class TestFileStreams
@@ -155,7 +146,7 @@ namespace TestXTMF.RuntimeModules
                 Assert.IsNull(error);
                 Assert.IsTrue(NoExecutionErrors(() =>
                 {
-                    using(var writer = streamFromFile.Invoke())
+                    using (var writer = streamFromFile.Invoke())
                     {
 
                     }
