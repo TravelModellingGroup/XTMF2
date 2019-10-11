@@ -18,7 +18,7 @@
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.IO;
-using static TestXTMF.TestHelper;
+using static XTMF2.TestHelper;
 
 namespace XTMF2.RuntimeModules
 {

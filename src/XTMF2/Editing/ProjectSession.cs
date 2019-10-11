@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2019 University of Toronto
 
     This file is part of XTMF2.
 
@@ -19,11 +19,15 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Text;
 using System.Threading;
 using XTMF2.Controllers;
 using XTMF2.Editing;
 using XTMF2.Repository;
+using System.IO.Compression;
+using System.Text.Json;
+using System.Diagnostics;
 
 namespace XTMF2.Editing
 {
@@ -40,26 +44,26 @@ namespace XTMF2.Editing
         /// <summary>
         /// The link to the XTMFRuntime
         /// </summary>
-        private XTMFRuntime Runtime;
+        private readonly XTMFRuntime _runtime;
 
         /// <summary>
         /// The lock that must be acquired before editing any member variables.
         /// </summary>
-        private object SessionLock = new object();
+        private readonly object _sessionLock = new object();
 
-        // This is 0 instead of 1 intensionally so that the controller adds a reference
-        private int _References = 0;
+        // This is 0 instead of 1 intentionally so that the controller adds a reference
+        private int _references = 0;
 
         /// <summary>
         /// The number of references to this project session.
         /// </summary>
-        public int References => _References;
+        public int References => _references;
 
         /// <summary>
         /// The active editing sessions for the model systems contained
         /// within this project.
         /// </summary>
-        private readonly Dictionary<ModelSystemHeader, ModelSystemSession> ActiveSessions = new Dictionary<ModelSystemHeader, ModelSystemSession>();
+        private readonly Dictionary<ModelSystemHeader, ModelSystemSession> _activeSessions = new Dictionary<ModelSystemHeader, ModelSystemSession>();
 
         /// <summary>
         /// The model systems that are contained in this project
@@ -77,7 +81,7 @@ namespace XTMF2.Editing
         /// <returns>A reference to this project session</returns>
         internal ProjectSession AddReference()
         {
-            Interlocked.Increment(ref _References);
+            Interlocked.Increment(ref _references);
             return this;
         }
 
@@ -92,7 +96,7 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            lock(SessionLock)
+            lock (_sessionLock)
             {
                 return Project.CanAccess(user);
             }
@@ -105,9 +109,9 @@ namespace XTMF2.Editing
         /// <param name="modelSystemSession">The model system session to remove.</param>
         internal void UnloadSession(ModelSystemSession modelSystemSession)
         {
-            lock (SessionLock)
+            lock (_sessionLock)
             {
-                ActiveSessions.Remove(modelSystemSession.ModelSystemHeader);
+                _activeSessions.Remove(modelSystemSession.ModelSystemHeader);
             }
             // remove one reference to the project session
             Dispose();
@@ -120,7 +124,7 @@ namespace XTMF2.Editing
         /// <returns>The module repository</returns>
         internal ModuleRepository GetModuleRepository()
         {
-            return Runtime.Modules;
+            return _runtime.Modules;
         }
 
         /// <summary>
@@ -132,7 +136,7 @@ namespace XTMF2.Editing
         public ProjectSession(XTMFRuntime runtime, Project project)
         {
             Project = project;
-            Runtime = runtime;
+            _runtime = runtime;
         }
 
         /// <summary>
@@ -141,8 +145,8 @@ namespace XTMF2.Editing
         /// </summary>
         public void Dispose()
         {
-            var left = Interlocked.Decrement(ref _References);
-            if(left <= 0)
+            var left = Interlocked.Decrement(ref _references);
+            if (left <= 0)
             {
                 Dispose(true);
             }
@@ -154,7 +158,7 @@ namespace XTMF2.Editing
             {
                 GC.SuppressFinalize(this);
             }
-            Runtime.ProjectController.UnloadSession(this);
+            _runtime.ProjectController.UnloadSession(this);
         }
 
         ~ProjectSession()
@@ -169,7 +173,7 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool Save(ref string error)
         {
-            lock(SessionLock)
+            lock (_sessionLock)
             {
                 return Project.Save(ref error);
             }
@@ -185,13 +189,13 @@ namespace XTMF2.Editing
         public bool CreateNewModelSystem(string modelSystemName, out ModelSystemHeader modelSystem, ref string error)
         {
             modelSystem = null;
-            if(!ProjectController.ValidateProjectName(modelSystemName, ref error))
+            if (!ProjectController.ValidateProjectName(modelSystemName, ref error))
             {
                 return false;
             }
-            lock(SessionLock)
+            lock (_sessionLock)
             {
-                if(Project.ContainsModelSystem(modelSystemName))
+                if (Project.ContainsModelSystem(modelSystemName))
                 {
                     error = "A model system with this name already exists.";
                     return false;
@@ -211,38 +215,127 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, out ModelSystemSession session, ref string error)
         {
-            if(user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if(modelSystemHeader == null)
+            if (modelSystemHeader is null)
             {
                 throw new ArgumentNullException(nameof(modelSystemHeader));
             }
             session = null;
-            lock(SessionLock)
+            lock (_sessionLock)
             {
-                if(!Project.ContainsModelSystem(modelSystemHeader))
+                if (!Project.ContainsModelSystem(modelSystemHeader))
                 {
                     error = "The model system header provided does not belong to this project!";
                     return false;
                 }
-                if(!Project.CanAccess(user))
+                if (!Project.CanAccess(user))
                 {
                     error = "The given user does not have access to this project!";
                     return false;
                 }
-                if(!ActiveSessions.TryGetValue(modelSystemHeader, out session))
+                if (!_activeSessions.TryGetValue(modelSystemHeader, out session))
                 {
                     if (ModelSystem.Load(this, modelSystemHeader, out session, ref error))
                     {
-                        ActiveSessions.Add(modelSystemHeader, session);
+                        _activeSessions.Add(modelSystemHeader, session);
                         return true;
                     }
                     return false;
                 }
                 return true;
             }
+        }
+
+        /// <summary>
+        /// Exports a model system to file.
+        /// </summary>
+        /// <param name="user">The user that is issing the command.</param>
+        /// <param name="modelSystemHeader">The model system to export.</param>
+        /// <param name="exportPath">The location to export the model system to.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with error message.</returns>
+        public bool ExportModelSystem(User user, ModelSystemHeader modelSystemHeader, string exportPath, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (modelSystemHeader is null)
+            {
+                throw new ArgumentNullException(nameof(modelSystemHeader));
+            }
+
+            if (string.IsNullOrWhiteSpace(exportPath))
+            {
+                error = "The path to save the model system to must not be empty.";
+                return false;
+            }
+            var tempDirName = Path.Combine(Path.GetTempPath(), "XTMF-" + Project.Name + modelSystemHeader.Name + Guid.NewGuid());
+            System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            FileVersionInfo fvi = FileVersionInfo.GetVersionInfo(assembly.Location);
+            try
+            {
+                lock (_sessionLock)
+                {
+                    if (!Project.CanAccess(user))
+                    {
+                        error = "The user does not have access to the project.";
+                        return false;
+                    }
+                    if (_activeSessions.TryGetValue(modelSystemHeader, out var mss))
+                    {
+                        error = "The model system is currently being edited and can not be exported.";
+                        return false;
+                    }
+                    var tempDir = new DirectoryInfo(tempDirName);
+                    if (!tempDir.Exists)
+                    {
+                        tempDir.Create();
+                    }
+                    // copy in the model system file
+                    File.Copy(modelSystemHeader.ModelSystemPath, Path.Combine(tempDir.FullName, "ModelSystem.xmsys"));
+                    using (var metadataStream = File.OpenWrite(Path.Combine(tempDir.FullName, "metadata.json")))
+                    using (var writer = new Utf8JsonWriter(metadataStream))
+                    {
+                        writer.WriteStartObject();
+                        writer.WriteString("Name", modelSystemHeader.Name);
+                        writer.WriteString("Description", modelSystemHeader.Description);
+                        writer.WriteString("ExportedOn", DateTime.UtcNow);
+                        writer.WriteString("ExportedBy", user.UserName);
+                        writer.WriteNumber("VersionMajor", fvi.FileMajorPart);
+                        writer.WriteNumber("VersionMinor", fvi.FileMinorPart);
+                        writer.WriteEndObject();
+                    }
+                    // Zip the temporary directory and store it.
+                    ZipFile.CreateFromDirectory(tempDirName, exportPath);
+                    return true;
+                }
+            }
+            catch (IOException e)
+            {
+                error = e.Message;
+            }
+            finally
+            {
+                // Try to clean up the temporary directory if it still exists.
+                try
+                {
+                    var tempDir = new DirectoryInfo(tempDirName);
+                    if (tempDir.Exists)
+                    {
+                        tempDir.Delete(true);
+                    }
+                }
+                catch (IOException)
+                {
+                    // If we don't have access to the temporary storage there is nothing else that we can do.
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -255,17 +348,17 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool GetModelSystemHeader(User user, string modelSystemName, out ModelSystemHeader modelSystemHeader, ref string error)
         {
-            if(user == null)
+            if (user is null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if(String.IsNullOrWhiteSpace(modelSystemName))
+            if (String.IsNullOrWhiteSpace(modelSystemName))
             {
                 throw new ArgumentNullException(nameof(modelSystemName));
             }
-            lock(SessionLock)
+            lock (_sessionLock)
             {
-                if(!Project.CanAccess(user))
+                if (!Project.CanAccess(user))
                 {
                     modelSystemHeader = null;
                     error = "User is unable to access project.";
@@ -285,15 +378,15 @@ namespace XTMF2.Editing
         public bool ShareWith(User doingShare, User toSharWith, ref string error)
         {
             // test our arguments
-            if(doingShare == null)
+            if (doingShare is null)
             {
                 throw new ArgumentNullException(nameof(doingShare));
             }
-            if(toSharWith == null)
+            if (toSharWith is null)
             {
                 throw new ArgumentNullException(nameof(doingShare));
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 if (!(doingShare.Admin || doingShare == Project.Owner))
                 {
@@ -324,15 +417,15 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool SwitchOwner(User owner, User newOwner, ref string error)
         {
-            if(owner == null)
+            if (owner is null)
             {
                 throw new ArgumentNullException(nameof(owner));
             }
-            if (newOwner == null)
+            if (newOwner is null)
             {
                 throw new ArgumentNullException(nameof(newOwner));
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 if (!(owner.Admin || owner == Project.Owner))
                 {
@@ -352,15 +445,15 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RestrictAccess(User owner, User toRestrict, ref string error)
         {
-            if (owner == null)
+            if (owner is null)
             {
                 throw new ArgumentNullException(nameof(owner));
             }
-            if (toRestrict == null)
+            if (toRestrict is null)
             {
                 throw new ArgumentNullException(nameof(toRestrict));
             }
-            lock (SessionLock)
+            lock (_sessionLock)
             {
                 if (!(owner.Admin || owner == Project.Owner))
                 {

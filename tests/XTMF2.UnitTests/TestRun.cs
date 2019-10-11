@@ -23,7 +23,7 @@ using TestXTMF;
 using TestXTMF.Modules;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
-using static TestXTMF.TestHelper;
+using static XTMF2.TestHelper;
 
 namespace XTMF2
 {
