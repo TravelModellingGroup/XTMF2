@@ -1,18 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>    
-    <TargetFramework>netcoreapp2.2</TargetFramework>    
+    <TargetFramework>netcoreapp3.0</TargetFramework>    
     <RootNamespace>XTMF2</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="..\..\src\XTMF2.Run\bin\Release\netcoreapp2.2\XTMF2.Run.deps.json" Link="XTMF2.Run.deps.json">
+    <Content Include="..\..\src\XTMF2.Run\bin\Release\netcoreapp3.0\XTMF2.Run.deps.json" Link="XTMF2.Run.deps.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\src\XTMF2.Run\bin\Release\netcoreapp2.2\XTMF2.Run.runtimeconfig.dev.json" Link="XTMF2.Run.runtimeconfig.dev.json">
+    <Content Include="..\..\src\XTMF2.Run\bin\Release\netcoreapp3.0\XTMF2.Run.runtimeconfig.dev.json" Link="XTMF2.Run.runtimeconfig.dev.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\src\XTMF2.Run\bin\Release\netcoreapp2.2\XTMF2.Run.runtimeconfig.json" Link="XTMF2.Run.runtimeconfig.json">
+    <Content Include="..\..\src\XTMF2.Run\bin\Release\netcoreapp3.0\XTMF2.Run.runtimeconfig.json" Link="XTMF2.Run.runtimeconfig.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
