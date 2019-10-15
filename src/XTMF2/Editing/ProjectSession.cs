@@ -421,7 +421,16 @@ namespace XTMF2.Editing
             }
         }
 
-        public bool ImportModelSystem(User user, string fullName, string modelSystemName, out ModelSystemHeader header, ref string error)
+        /// <summary>
+        /// Import a model system from file.
+        /// </summary>
+        /// <param name="user">The user issuing the import file system command.</param>
+        /// <param name="modelSystemFilePath">The path to the file to import.</param>
+        /// <param name="modelSystemName">The name to give the model system within this project.</param>
+        /// <param name="header">A resulting header for the newly imported model system.</param>
+        /// <param name="error">The error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool ImportModelSystem(User user, string modelSystemFilePath, string modelSystemName, out ModelSystemHeader header, ref string error)
         {
             header = null;
             if (user is null)
@@ -429,9 +438,9 @@ namespace XTMF2.Editing
                 throw new ArgumentNullException(nameof(user));
             }
 
-            if (string.IsNullOrWhiteSpace(fullName))
+            if (string.IsNullOrWhiteSpace(modelSystemFilePath))
             {
-                throw new ArgumentException(nameof(fullName));
+                throw new ArgumentException(nameof(modelSystemFilePath));
             }
 
             if (string.IsNullOrWhiteSpace(modelSystemName))
@@ -440,7 +449,7 @@ namespace XTMF2.Editing
             }
             try
             {
-                using var archive = ZipFile.OpenRead(fullName);
+                using var archive = ZipFile.OpenRead(modelSystemFilePath);
                 lock (_sessionLock)
                 {
                     if (!HasAccess(user))
@@ -448,9 +457,17 @@ namespace XTMF2.Editing
                         error = "The user that issued the command does not have access to this project.";
                         return false;
                     }
-
+                    if(Project.ContainsModelSystem(modelSystemName))
+                    {
+                        error = "A model system with that name already exists!";
+                        return false;
+                    }
+                    if(!ModelSystemFile.LoadModelSystemFile(modelSystemFilePath, out var msf, ref error))
+                    {
+                        return false;
+                    }
+                    return Project.AddModelSystemFromModelSystemFile(this, modelSystemName, msf, out header, ref error);
                 }
-                return true;
             }
             catch (InvalidDataException e)
             {

@@ -354,5 +354,42 @@ namespace XTMF2
             _ModelSystems.Add(modelSystemHeader);
             return true;
         }
+
+        /// <summary>
+        /// Add a model system to the project from a model system file.
+        /// </summary>
+        /// <param name="projectSession">The project session that the model system is going into.</param>
+        /// <param name="modelSystemName">The name to use for the new model system.  It must be unique.</param>
+        /// <param name="msf">The model system file to use.</param>
+        /// <param name="header">A model system header to the newly imported model system.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise.</returns>
+        internal bool AddModelSystemFromModelSystemFile(ProjectSession projectSession, string modelSystemName, 
+            ModelSystemFile msf, out ModelSystemHeader header, ref string error)
+        {
+            header = null;
+            if (projectSession is null)
+            {
+                throw new ArgumentNullException(nameof(projectSession));
+            }
+
+            if (msf is null)
+            {
+                throw new ArgumentNullException(nameof(msf));
+            }
+            if(ContainsModelSystem(modelSystemName))
+            {
+                error = "A model system with this name already exists!";
+                return false;
+            }
+            var tempHeader = new ModelSystemHeader(this, modelSystemName, msf.Description);
+            if(!msf.ExtractModelSystemTo(tempHeader.ModelSystemPath, ref error))
+            {
+                return false;
+            }
+            _ModelSystems.Add(tempHeader);
+            header = tempHeader;
+            return true;
+        }
     }
 }

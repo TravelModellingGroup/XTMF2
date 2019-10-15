@@ -69,27 +69,34 @@ namespace XTMF2
         /// <summary>
         /// The name of the model system that was exported
         /// </summary>
-        public string Name { get; }
+        public string Name { get; private set; }
 
         /// <summary>
         /// The description of the model system that was exported
         /// </summary>
-        public string Description { get; }
+        public string Description { get; private set; }
 
         /// <summary>
         /// The name of the user that exported the model system.
         /// </summary>
-        public string ExportedBy { get; }
+        public string ExportedBy { get; private set; }
 
         /// <summary>
         /// The time that the model system was exported.
         /// </summary>
-        public DateTime ExportedOn { get; }
+        public DateTime ExportedOn { get; private set; }
 
         /// <summary>
         /// The version number (X.Y) of XTMF that exported the model system.
         /// </summary>
-        public (int Major, int Minor) ExportingXTMFVersion { get; }
+        public (int Major, int Minor) ExportingXTMFVersion => (_majorVersion, _minorVersion);
+
+        private int _majorVersion, _minorVersion;
+
+        /// <summary>
+        /// The path the model system file was loaded from.
+        /// </summary>
+        private readonly string _modelSystemFilePath = null;
 
         /// <summary>
         /// Export the model system to the given path.
@@ -161,6 +168,188 @@ namespace XTMF2
 #pragma warning restore CA1031
             }
             return false;
+        }
+
+        /// <summary>
+        /// Loads a reference to the model system file, and loads its meta-data.
+        /// </summary>
+        /// <param name="filePath">The path to the model system file.</param>
+        /// <param name="msf">The resulting model system file, null if the operation fails.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise.</returns>
+        internal static bool LoadModelSystemFile(string filePath, out ModelSystemFile msf, ref string error)
+        {
+            msf = null;
+            var toReturn = new ModelSystemFile(filePath);
+            try
+            {
+                using var archive = ZipFile.OpenRead(filePath);
+                var entry = archive.GetEntry(MetaDataFilePath);
+                if(entry is null)
+                {
+                    error = "The archive did not contain a meta-data file!";
+                    return false;
+                }
+                byte[] buffer;
+                using (var entryStream = entry.Open())
+                {
+                    buffer = new byte[entry.Length];
+                    var length = entryStream.Read(buffer, 0, buffer.Length);
+                    if(length != buffer.Length)
+                    {
+                        error = "Unable to read the meta-data file";
+                        return false;
+                    }
+                }
+                var reader = new Utf8JsonReader(buffer);
+                if (!reader.Read())
+                {
+                    error = "Unable to read the initial object.";
+                    return false;
+                }
+                while (reader.Read())
+                {
+                    if (reader.TokenType == JsonTokenType.PropertyName)
+                    {
+                        if (reader.ValueTextEquals(PropertyName))
+                        {
+                            if (!reader.Read())
+                            {
+                                error = "The reader was unable to read after a property name was declared!";
+                                return false;
+                            }
+                            if (reader.TokenType != JsonTokenType.String)
+                            {
+                                error = "Expected a string token after reading a Name property!";
+                            }
+                            toReturn.Name = reader.GetString();
+                        }
+                        else if (reader.ValueTextEquals(PropertyDescription))
+                        {
+                            if (!reader.Read())
+                            {
+                                error = "The reader was unable to read after a property name was declared!";
+                                return false;
+                            }
+                            if(reader.TokenType != JsonTokenType.String)
+                            {
+                                error = "Expected a string token after reading a Description property!";
+                            }
+                            toReturn.Description = reader.GetString();
+                        }
+                        else if (reader.ValueTextEquals(PropertyExportedOn))
+                        {
+                            if (!reader.Read())
+                            {
+                                error = "The reader was unable to read after a property name was declared!";
+                                return false;
+                            }
+                            if (reader.TokenType != JsonTokenType.String)
+                            {
+                                error = "Expected a string token after reading a ExportedOn property!";
+                            }
+                            var tempStr = reader.GetString();
+                            if(!DateTime.TryParse(tempStr, out var tempDateTime))
+                            {
+                                error = $"Unable to parse '{tempStr}' as a date-time.";
+                                return false;
+                            }
+                            toReturn.ExportedOn = tempDateTime;
+                        }
+                        else if (reader.ValueTextEquals(PropertyExportedBy))
+                        {
+                            if (!reader.Read())
+                            {
+                                error = "The reader was unable to read after a property name was declared!";
+                                return false;
+                            }
+                            if (reader.TokenType != JsonTokenType.String)
+                            {
+                                error = "Expected a string token after reading a ExportedBy property!";
+                            }
+                            toReturn.ExportedBy = reader.GetString();
+                        }
+                        else if (reader.ValueTextEquals(PropertyVersionMajor))
+                        {
+                            if (!reader.Read())
+                            {
+                                error = "The reader was unable to read after a property name was declared!";
+                                return false;
+                            }
+                            if (reader.TokenType != JsonTokenType.Number)
+                            {
+                                error = "Expected a number token after reading a VersionMajor property!";
+                            }
+                            if(!reader.TryGetInt32(out toReturn._majorVersion))
+                            {
+                                error = "Unable to read the major version number.";
+                                return false;
+                            }
+                        }
+                        else if (reader.ValueTextEquals(PropertyVersionMinor))
+                        {
+                            if (!reader.Read())
+                            {
+                                error = "The reader was unable to read after a property name was declared!";
+                                return false;
+                            }
+                            if (reader.TokenType != JsonTokenType.Number)
+                            {
+                                error = "Expected a number token after reading a VersionMinor property!";
+                            }
+                            if (!reader.TryGetInt32(out toReturn._minorVersion))
+                            {
+                                error = "Unable to read the minor version number.";
+                                return false;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        reader.Skip();
+                    }
+                }
+                msf = toReturn;
+                return true;
+            }
+            catch(IOException e)
+            {
+                error = e.Message;
+            }
+            return false;
+        }
+
+        private ModelSystemFile(string path)
+        {
+            _modelSystemFilePath = path;
+        }
+
+        /// <summary>
+        /// Extract the model system contained within the model system file
+        /// to the given path.
+        /// </summary>
+        /// <param name="modelSystemPath">The path to try to save the model system to.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        internal bool ExtractModelSystemTo(string modelSystemPath, ref string error)
+        {
+            try
+            {
+                using var archive = ZipFile.OpenRead(_modelSystemFilePath);
+                var entry = archive.GetEntry(ModelSystemFilePath);
+                if(entry is null)
+                {
+                    error = "The model system file does not contain a model system within it!";
+                    return false;
+                }
+                entry.ExtractToFile(modelSystemPath, true);
+                return true;
+            }
+            catch(IOException e)
+            {
+                error = e.Message;
+                return false;
+            }
         }
     }
 }
