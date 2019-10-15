@@ -29,10 +29,74 @@ using XTMF2.Bus;
 using XTMF2.Editing;
 using XTMF2.RuntimeModules;
 
-namespace TestXTMF
+namespace XTMF2
 {
     static class TestHelper
     {
+
+        /// <summary>
+        /// Create a context to edit a model system for testing
+        /// </summary>
+        /// <param name="name">A unique name for the test</param>
+        /// <param name="toExecute">The logic to execute inside of a model system context</param>
+        internal static void RunInProjectContext(string name, Action<User, ProjectSession> toExecute)
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            string error = null;
+            string userName = name + "TempUser";
+            string projectName = "TestProject";
+            // clear out the user if possible
+            userController.Delete(userName);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            try
+            {
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                {
+                    toExecute(user, projectSession);
+                }), error);
+            }
+            finally
+            {
+                //cleanup
+                userController.Delete(user);
+            }
+        }
+
+        /// <summary>
+        /// Create a context to edit a model system for testing
+        /// </summary>
+        /// <param name="name">A unique name for the test</param>
+        /// <param name="toExecute">The logic to execute inside of a model system context</param>
+        internal static void RunInProjectContext(string name, Action<User, User, ProjectSession> toExecute)
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            string error = null;
+            string userName = name + "TempUser";
+            string unauthorizedUserName = userName + "Hacker";
+            string projectName = "TestProject";
+            // clear out the user if possible
+            userController.Delete(userName);
+            userController.Delete(unauthorizedUserName);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            Assert.IsTrue(userController.CreateNew(unauthorizedUserName, false, out var unauthorizedUser, ref error), error);
+            try
+            {
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                {
+                    toExecute(user, unauthorizedUser, projectSession);
+                }), error);
+            }
+            finally
+            {
+                //cleanup
+                userController.Delete(user);
+            }
+        }
+
         /// <summary>
         /// Create a context to edit a model system for testing
         /// </summary>

@@ -18,11 +18,14 @@
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Text.Json;
 using TestXTMF.Modules;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
-using static TestXTMF.TestHelper;
+using static XTMF2.TestHelper;
 
 namespace XTMF2
 {
@@ -278,6 +281,178 @@ namespace XTMF2
                 Assert.AreEqual(5, ms.GlobalBoundary.Modules.Count);
                 Assert.AreEqual(5, ms.GlobalBoundary.Links.Count);
                 Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, ref error), error);
+            });
+        }
+
+        [TestMethod]
+        public void ExportModelSystem()
+        {
+            RunInProjectContext("ExportModelSystem", (user, project) =>
+            {
+                string error = null;
+                var msName = "MSToExport";
+                var startName = "MyStart";
+                var nodeName = "MyNode";
+                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    using (session)
+                    {
+                        var ms = session.ModelSystem;
+                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, ref error), error);
+                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, ref error), error);
+                        Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, ref error), error);
+                        Assert.IsTrue(session.Save(ref error), error);
+                        Assert.IsFalse(project.ExportModelSystem(user, msHeader, tempFile.FullName, ref error),
+                            "The model system was exported while there was still a session using it!");
+                        tempFile.Refresh();
+                        Assert.IsFalse(tempFile.Exists, "The model system was exported even through it reported to fail to export!");
+                    }
+                    Assert.IsTrue(project.ExportModelSystem(user, msHeader, tempFile.FullName, ref error), error);
+                    tempFile.Refresh();
+                    Assert.IsTrue(tempFile.Exists, "The exported model system does not exist even after confirming that it was exported successfully!");
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void ExportModelSystemMetaData()
+        {
+            RunInProjectContext("ExportModelSystem", (user, project) =>
+            {
+                string error = null;
+                var msName = "MSToExport";
+                var startName = "MyStart";
+                var nodeName = "MyNode";
+                var msDescription = "Description of the model system";
+                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(msHeader.SetDescription(project, msDescription, ref error), error);
+                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
+                FileInfo tempFile = new FileInfo(Path.GetTempFileName());
+                var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(typeof(XTMF2.XTMFRuntime).Assembly.Location);
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    using (session)
+                    {
+                        var ms = session.ModelSystem;
+                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, ref error), error);
+                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, ref error), error);
+                        Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, ref error), error);
+                        Assert.IsTrue(session.Save(ref error), error);
+                    }
+                    Assert.IsTrue(project.ExportModelSystem(user, msHeader, tempFile.FullName, ref error), error);
+                    tempFile.Refresh();
+                    Assert.IsTrue(tempFile.Exists, "The exported model system does not exist even after confirming that it was exported successfully!");
+
+                    // Now that we know that the exported model system exists, inspect the meta-data for the model system.
+                    using var archive = ZipFile.OpenRead(tempFile.FullName);
+                    var entry = archive.GetEntry("metadata.json");
+                    Assert.IsNotNull(entry, "There was no entry for the model system's meta-data!");
+                    byte[] buffer;
+                    using (var entryStream = entry.Open())
+                    {
+                        buffer = new byte[entry.Length];
+                        entryStream.Read(buffer, 0, buffer.Length);
+                    }
+                    var reader = new Utf8JsonReader(buffer);
+                    Assert.IsTrue(reader.Read(), "Unable to read the initial object.");
+                    Assert.IsTrue(reader.TokenType == JsonTokenType.StartObject, "The first element was not a start object");
+                    bool readName = false, readDescription = false, readExportedOn = false, readExportedBy = false,
+                            readVersionMajor = false, readVersionMinor = false;
+                    while (reader.Read())
+                    {
+                        if (reader.TokenType == JsonTokenType.PropertyName)
+                        {
+                            if (reader.ValueTextEquals("Name"))
+                            {
+                                Assert.IsTrue(reader.Read(), "The reader was unable to read after a property name was declared!");
+                                var value = reader.GetString();
+                                Assert.IsNotNull(value, "No name was read.");
+                                Assert.AreEqual(msName, value, "The name is not the same!");
+                                readName = true;
+                            }
+                            else if (reader.ValueTextEquals("Description"))
+                            {
+                                Assert.IsTrue(reader.Read(), "The reader was unable to read after a property name was declared!");
+                                var value = reader.GetString();
+                                Assert.IsNotNull(value, "No description was read.");
+                                Assert.AreEqual(msDescription, value, "The description is not the same!");
+                                readDescription = true;
+                            }
+                            else if (reader.ValueTextEquals("ExportedOn"))
+                            {
+                                Assert.IsTrue(reader.Read(), "The reader was unable to read after a property name was declared!");
+                                Assert.IsTrue(reader.TryGetDateTime(out var value), "We failed to read the date-time that the model system was exported on.");
+                                readExportedOn = true;
+                            }
+                            else if (reader.ValueTextEquals("ExportedBy"))
+                            {
+                                Assert.IsTrue(reader.Read(), "The reader was unable to read after a property name was declared!");
+                                var value = reader.GetString();
+                                Assert.IsNotNull(value, "No description was read.");
+                                Assert.AreEqual(user.UserName, value, "The exporting user name is not the same!");
+                                readExportedBy = true;
+                            }
+                            else if (reader.ValueTextEquals("VersionMajor"))
+                            {
+                                Assert.IsTrue(reader.Read(), "The reader was unable to read after a property name was declared!");
+                                Assert.IsTrue(reader.TryGetInt32(out var value), "Unable to create an int for the major version number.");
+                                Assert.AreEqual(fvi.FileMajorPart, value, "The exported major version number was unexpected!");
+                                readVersionMajor = true;
+                            }
+                            else if (reader.ValueTextEquals("VersionMinor"))
+                            {
+                                Assert.IsTrue(reader.Read(), "The reader was unable to read after a property name was declared!");
+                                Assert.IsTrue(reader.TryGetInt32(out var value), "Unable to create an int for the minor version number.");
+                                // TOOD: Automatically update the version number by referencing assembly information
+                                Assert.AreEqual(fvi.FileMinorPart, value, "The exported minor version number was unexpected!");
+                                readVersionMinor = true;
+                            }
+                            else
+                            {
+                                Assert.Fail($"Unknown meta-data property found: {System.Text.Encoding.UTF8.GetString(reader.ValueSpan)}");
+                            }
+                        }
+                        else
+                        {
+                            reader.Skip();
+                        }
+                    }
+                    Assert.IsTrue(readName, "There was no property for the name of the model system!");
+                    Assert.IsTrue(readDescription, "There was no property for the description of the model system!");
+                    Assert.IsTrue(readExportedOn, "There was no property for the time the model system was exported on of the model system!");
+                    Assert.IsTrue(readExportedBy, "There was no property for the name of the user that exported the model system!");
+                    Assert.IsTrue(readVersionMajor, "There was no property for the major version number of XTMF that saved the model system!");
+                    Assert.IsTrue(readVersionMinor, "There was no property for the minor version number of XTMF that saved the model system!");
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
             });
         }
     }
