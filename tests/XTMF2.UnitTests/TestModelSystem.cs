@@ -487,7 +487,7 @@ namespace XTMF2
                         Assert.IsTrue(session.Save(ref error), error);
                     }
                     Assert.IsTrue(project.ExportModelSystem(user, msHeader, tempFile.FullName, ref error), error);
-                    Assert.IsTrue(project.ImportModelSystem(user, tempFile.FullName, importedName, out ModelSystemHeader importedHeader), error);
+                    Assert.IsTrue(project.ImportModelSystem(user, tempFile.FullName, importedName, out ModelSystemHeader importedHeader, ref error), error);
                     Assert.IsNotNull(importedHeader, "The model system header was not set!");
                     Assert.AreEqual(importedName, importedHeader.Name, "The name of the imported model system was not the same as what was specified.");
                     Assert.AreEqual(description, importedHeader.Description);
@@ -534,7 +534,7 @@ namespace XTMF2
                         Assert.IsTrue(session.Save(ref error), error);
                     }
                     Assert.IsTrue(project.ExportModelSystem(user, msHeader, tempFile.FullName, ref error), error);
-                    Assert.IsFalse(project.ImportModelSystem(unauthorizedUser, tempFile.FullName, importedName, out ModelSystemHeader importedHeader),
+                    Assert.IsFalse(project.ImportModelSystem(unauthorizedUser, tempFile.FullName, importedName, out ModelSystemHeader importedHeader, ref error),
                         "An unauthorized user was able to import a model system!");
                     Assert.IsNull(importedHeader, "A model system header was created even though the import model system operation failed!");
                 }
@@ -562,7 +562,7 @@ namespace XTMF2
                 Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
                 Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
                 var tempFile = new FileInfo(Path.GetTempFileName());
-                Assert.IsFalse(project.ImportModelSystem(user, tempFile.FullName, importedName, out ModelSystemHeader importedHeader),
+                Assert.IsFalse(project.ImportModelSystem(user, tempFile.FullName, importedName, out ModelSystemHeader importedHeader, ref error),
                     "An unauthorized user was able to import a model system!");
                 Assert.IsNull(importedHeader, "A model system header was created even though the import model system operation failed!");
             });
@@ -583,11 +583,12 @@ namespace XTMF2
                 var tempFile = new FileInfo(Path.GetTempFileName());
                 var tempDir = new FileInfo(Path.GetTempFileName());
                 tempDir.Delete();
+                tempFile.Delete();
                 try
                 {
                     Directory.CreateDirectory(tempDir.FullName);
                     ZipFile.CreateFromDirectory(tempDir.FullName, tempFile.FullName);
-                    Assert.IsFalse(project.ImportModelSystem(user, tempFile.FullName, importedName, out ModelSystemHeader importedHeader),
+                    Assert.IsFalse(project.ImportModelSystem(user, tempFile.FullName, importedName, out ModelSystemHeader importedHeader, ref error),
                         "An unauthorized user was able to import a model system!");
                     Assert.IsNull(importedHeader, "A model system header was created even though the import model system operation failed!");
                 }
