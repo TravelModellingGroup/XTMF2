@@ -455,5 +455,155 @@ namespace XTMF2
                 }
             });
         }
+
+        [TestMethod]
+        public void ImportModelSystem()
+        {
+            RunInProjectContext("ImportModelSystem", (user, project) =>
+            {
+                string error = null;
+                var msName = "MSToExport";
+                var importedName = "MSImported";
+                var description = "A test model system.";
+                var startName = "MyStart";
+                var nodeName = "MyNode";
+                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
+                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    using (session)
+                    {
+                        var ms = session.ModelSystem;
+                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, ref error), error);
+                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, ref error), error);
+                        Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, ref error), error);
+                        Assert.IsTrue(session.Save(ref error), error);
+                    }
+                    Assert.IsTrue(project.ExportModelSystem(user, msHeader, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(project.ImportModelSystem(user, tempFile.FullName, importedName, out ModelSystemHeader importedHeader), error);
+                    Assert.IsNotNull(importedHeader, "The model system header was not set!");
+                    Assert.AreEqual(importedName, importedHeader.Name, "The name of the imported model system was not the same as what was specified.");
+                    Assert.AreEqual(description, importedHeader.Description);
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void ImportModelSystemBadUser()
+        {
+            RunInProjectContext("ImportModelSystemBadUser", (user, unauthorizedUser, project) =>
+            {
+                string error = null;
+                var msName = "MSToExport";
+                var importedName = "MSImported";
+                var description = "A test model system.";
+                var startName = "MyStart";
+                var nodeName = "MyNode";
+                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
+                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    using (session)
+                    {
+                        var ms = session.ModelSystem;
+                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, ref error), error);
+                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, ref error), error);
+                        Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, ref error), error);
+                        Assert.IsTrue(session.Save(ref error), error);
+                    }
+                    Assert.IsTrue(project.ExportModelSystem(user, msHeader, tempFile.FullName, ref error), error);
+                    Assert.IsFalse(project.ImportModelSystem(unauthorizedUser, tempFile.FullName, importedName, out ModelSystemHeader importedHeader),
+                        "An unauthorized user was able to import a model system!");
+                    Assert.IsNull(importedHeader, "A model system header was created even though the import model system operation failed!");
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void ImportModelSystemInvalidZipFile()
+        {
+            RunInProjectContext("ImportModelSystemBadFilePath", (user, project) =>
+            {
+                string error = null;
+                var msName = "MSToExport";
+                var importedName = "MSImported";
+                var description = "A test model system.";
+                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
+                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                Assert.IsFalse(project.ImportModelSystem(user, tempFile.FullName, importedName, out ModelSystemHeader importedHeader),
+                    "An unauthorized user was able to import a model system!");
+                Assert.IsNull(importedHeader, "A model system header was created even though the import model system operation failed!");
+            });
+        }
+
+        [TestMethod]
+        public void ImportModelSystemValidZipFileInvalidModelSystemFile()
+        {
+            RunInProjectContext("ImportModelSystemBadFilePath", (user, project) =>
+            {
+                string error = null;
+                var msName = "MSToExport";
+                var importedName = "MSImported";
+                var description = "A test model system.";
+                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
+                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                var tempDir = new FileInfo(Path.GetTempFileName());
+                tempDir.Delete();
+                try
+                {
+                    Directory.CreateDirectory(tempDir.FullName);
+                    ZipFile.CreateFromDirectory(tempDir.FullName, tempFile.FullName);
+                    Assert.IsFalse(project.ImportModelSystem(user, tempFile.FullName, importedName, out ModelSystemHeader importedHeader),
+                        "An unauthorized user was able to import a model system!");
+                    Assert.IsNull(importedHeader, "A model system header was created even though the import model system operation failed!");
+                }
+                finally
+                {
+                    if(Directory.Exists(tempDir.FullName))
+                    {
+                        Directory.Delete(tempDir.FullName, true);
+                    }
+                    tempFile.Refresh();
+                    if(tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
+        }
     }
 }

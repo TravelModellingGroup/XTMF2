@@ -516,5 +516,24 @@ namespace XTMF2.Editing
                 return Project.RemoveAdditionalUser(toRestrict, ref error);
             }
         }
+
+        public bool ImportModelSystem(User user, string fullName, string modelSystemName, out ModelSystemHeader header)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (string.IsNullOrWhiteSpace(fullName))
+            {
+                throw new ArgumentException(nameof(fullName));
+            }
+
+            if (string.IsNullOrWhiteSpace(modelSystemName))
+            {
+                throw new ArgumentException(nameof(modelSystemName));
+            }
+            throw new NotImplementedException();
+        }
     }
 }
