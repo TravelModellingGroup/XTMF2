@@ -250,9 +250,50 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Constant strings used for importing and exporting
+        /// a model system.
+        /// </summary>
+        private static class ModelSystemFileStrings
+        {
+            /// <summary>
+            /// A string used for the meta-data to gather the name of the model system.
+            /// </summary>
+            internal const string Name = "Name";
+            /// <summary>
+            /// A string used in the meta-data to provide a description of the model system.
+            /// </summary>
+            internal const string Description = "Description";
+            /// <summary>
+            /// A string used in the meta-data to give the name of the user that exported the model system
+            /// </summary>
+            internal const string ExportedBy = "ExportedBy";
+            /// <summary>
+            /// A string used by the meta-data to give what time in UTC that the model system was exported at.
+            /// </summary>
+            internal const string ExportedOn = "ExportedOn";
+            /// <summary>
+            /// A string used by the meta-data to indicate what version of XTMF exported the model system.
+            /// </summary>
+            internal const string VersionMajor = "VersionMajor";
+            /// <summary>
+            /// A string used by the meta-data to indicate what version of XTMF exported the model system.
+            /// </summary>
+            internal const string VersionMinor = "VersionMinor";
+
+            /// <summary>
+            /// The name of the file within the archive for where the model system was stored.
+            /// </summary>
+            internal const string ModelSystemFile = "ModelSystem.xmsys";
+            /// <summary>
+            /// The name of the file within the archive for where the meta-data was stored.
+            /// </summary>
+            internal const string MetaDataFile = "metadata.json";
+        }
+
+        /// <summary>
         /// Exports a model system to file.
         /// </summary>
-        /// <param name="user">The user that is issing the command.</param>
+        /// <param name="user">The user that is issuing the command.</param>
         /// <param name="modelSystemHeader">The model system to export.</param>
         /// <param name="exportPath">The location to export the model system to.</param>
         /// <param name="error">An error message if the operation fails.</param>
@@ -297,17 +338,17 @@ namespace XTMF2.Editing
                         tempDir.Create();
                     }
                     // copy in the model system file
-                    File.Copy(modelSystemHeader.ModelSystemPath, Path.Combine(tempDir.FullName, "ModelSystem.xmsys"));
-                    using (var metadataStream = File.OpenWrite(Path.Combine(tempDir.FullName, "metadata.json")))
+                    File.Copy(modelSystemHeader.ModelSystemPath, Path.Combine(tempDir.FullName, ModelSystemFileStrings.ModelSystemFile));
+                    using (var metadataStream = File.OpenWrite(Path.Combine(tempDir.FullName, ModelSystemFileStrings.MetaDataFile)))
                     using (var writer = new Utf8JsonWriter(metadataStream))
                     {
                         writer.WriteStartObject();
-                        writer.WriteString("Name", modelSystemHeader.Name);
-                        writer.WriteString("Description", modelSystemHeader.Description);
-                        writer.WriteString("ExportedOn", DateTime.UtcNow);
-                        writer.WriteString("ExportedBy", user.UserName);
-                        writer.WriteNumber("VersionMajor", fvi.FileMajorPart);
-                        writer.WriteNumber("VersionMinor", fvi.FileMinorPart);
+                        writer.WriteString(ModelSystemFileStrings.Name, modelSystemHeader.Name);
+                        writer.WriteString(ModelSystemFileStrings.Description, modelSystemHeader.Description);
+                        writer.WriteString(ModelSystemFileStrings.ExportedOn, DateTime.UtcNow);
+                        writer.WriteString(ModelSystemFileStrings.ExportedBy, user.UserName);
+                        writer.WriteNumber(ModelSystemFileStrings.VersionMajor, fvi.FileMajorPart);
+                        writer.WriteNumber(ModelSystemFileStrings.VersionMinor, fvi.FileMinorPart);
                         writer.WriteEndObject();
                     }
                     // Zip the temporary directory and store it.
@@ -330,10 +371,17 @@ namespace XTMF2.Editing
                         tempDir.Delete(true);
                     }
                 }
+                /*
+                 * This will warn that we should catch a more specific exception however there is no recovery in any case.
+                 * The operation has already been successful even if we are unable to clean up the temporary storage.
+                 */
+                #pragma warning disable CA1031
                 catch (IOException)
+                
                 {
                     // If we don't have access to the temporary storage there is nothing else that we can do.
                 }
+                #pragma warning restore CA1031
             }
             return false;
         }
