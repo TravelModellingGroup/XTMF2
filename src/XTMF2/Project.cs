@@ -36,6 +36,12 @@ namespace XTMF2
     public sealed class Project : INotifyPropertyChanged
     {
         private const string ProjectFile = "Project.xpjt";
+        private const string NameProperty = "Name";
+        private const string DescriptionProperty = "Description";
+        private const string ModelSystemHeadersProperty = "ModelSystemHeaders";
+        private const string OwnerProperty = "Owner";
+        private const string AdditionalUsersProperty = "AdditionalUsers";
+
         public string Name { get; private set; }
         public string Description { get; private set; }
         public string ProjectFilePath { get; private set; }
@@ -72,17 +78,17 @@ namespace XTMF2
                     {
                         if (reader.TokenType == JsonTokenType.PropertyName)
                         {
-                            if (reader.ValueTextEquals("Name"))
+                            if (reader.ValueTextEquals(NameProperty))
                             {
                                 reader.Read();
                                 project.Name = reader.GetString();
                             }
-                            else if(reader.ValueTextEquals("Description"))
+                            else if(reader.ValueTextEquals(DescriptionProperty))
                             {
                                 reader.Read();
                                 project.Description = reader.GetString();
                             }
-                            else if (reader.ValueTextEquals("ModelSystemHeaders"))
+                            else if (reader.ValueTextEquals(ModelSystemHeadersProperty))
                             {
                                 reader.Read();
                                 if (reader.TokenType != JsonTokenType.StartArray)
@@ -95,14 +101,14 @@ namespace XTMF2
                                     project._ModelSystems.Add(ModelSystemHeader.Load(project, ref reader));
                                 }
                             }
-                            else if (reader.ValueTextEquals("Owner"))
+                            else if (reader.ValueTextEquals(OwnerProperty))
                             {
                                 reader.Read();
                                 var user = userController.GetUserByName(reader.GetString());
                                 project.Owner = user;
                                 user?.AddedUserToProject(project);
                             }
-                            else if (reader.ValueTextEquals("AdditionalUsers"))
+                            else if (reader.ValueTextEquals(AdditionalUsersProperty))
                             {
                                 reader.Read();
                                 if (reader.TokenType != JsonTokenType.StartArray)
@@ -250,12 +256,12 @@ namespace XTMF2
                     using (var writer = new Utf8JsonWriter(tempFile))
                     {
                         writer.WriteStartObject();
-                        writer.WriteString("Name", Name);
-                        writer.WriteString("Description", Description);
-                        writer.WriteString("Owner", Owner.UserName);
+                        writer.WriteString(NameProperty, Name);
+                        writer.WriteString(DescriptionProperty, Description);
+                        writer.WriteString(OwnerProperty, Owner.UserName);
                         if (_AdditionalUsers.Count > 0)
                         {
-                            writer.WritePropertyName("AdditionalUsers");
+                            writer.WritePropertyName(AdditionalUsersProperty);
                             writer.WriteStartArray();
                             foreach (var user in _AdditionalUsers)
                             {
@@ -263,7 +269,7 @@ namespace XTMF2
                             }
                             writer.WriteEndArray();
                         }
-                        writer.WritePropertyName("ModelSystemHeaders");
+                        writer.WritePropertyName(ModelSystemHeadersProperty);
                         writer.WriteStartArray();
                         foreach (var ms in ModelSystems)
                         {
