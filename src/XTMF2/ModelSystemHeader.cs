@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2019 University of Toronto
 
     This file is part of XTMF2.
 
@@ -20,10 +20,11 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text;
-using Newtonsoft.Json;
+using System.Text.Json;
 using XTMF2.Editing;
 using XTMF2.Controllers;
 using System.IO;
+
 
 namespace XTMF2
 {
@@ -68,13 +69,11 @@ namespace XTMF2
             return true;
         }
 
-        internal void Save(JsonTextWriter writer)
+        internal void Save(Utf8JsonWriter writer)
         {
             writer.WriteStartObject();
-            writer.WritePropertyName("Name");
-            writer.WriteValue(Name);
-            writer.WritePropertyName("Description");
-            writer.WriteValue(Description);
+            writer.WriteString("Name", Name);
+            writer.WriteString("Description", Description);
             writer.WriteEndObject();
         }
 
@@ -83,25 +82,26 @@ namespace XTMF2
         /// </summary>
         /// <param name="reader">The reader mid project load</param>
         /// <returns>The parsed model system header</returns>
-        internal static ModelSystemHeader Load(Project project, JsonTextReader reader)
+        internal static ModelSystemHeader Load(Project project, ref Utf8JsonReader reader)
         {
-            if(reader.TokenType != JsonToken.StartObject)
+            if(reader.TokenType != JsonTokenType.StartObject)
             {
                 throw new ArgumentException(nameof(reader), "Is not processing a model system header!");
             }
             string name = null, description = null;
-            while(reader.Read() && reader.TokenType != JsonToken.EndObject)
+            while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                if(reader.TokenType == JsonToken.PropertyName)
+                if(reader.TokenType == JsonTokenType.PropertyName)
                 {
-                    switch(reader.Value)
+                    if(reader.ValueTextEquals("Name"))
                     {
-                        case "Name":
-                            name = reader.ReadAsString();
-                            break;
-                        case "Description":
-                            description = reader.ReadAsString();
-                            break;
+                        reader.Read();
+                        name = reader.GetString();
+                    }
+                    else if(reader.ValueTextEquals("Description"))
+                    {
+                        reader.Read();
+                        description = reader.GetString();
                     }
                 }
             }

@@ -22,10 +22,10 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Text;
-using Newtonsoft.Json;
 using XTMF2.Editing;
 using XTMF2.Controllers;
 using System.Linq;
+using System.Text.Json;
 
 namespace XTMF2
 {
@@ -36,6 +36,12 @@ namespace XTMF2
     public sealed class Project : INotifyPropertyChanged
     {
         private const string ProjectFile = "Project.xpjt";
+        private const string NameProperty = "Name";
+        private const string DescriptionProperty = "Description";
+        private const string ModelSystemHeadersProperty = "ModelSystemHeaders";
+        private const string OwnerProperty = "Owner";
+        private const string AdditionalUsersProperty = "AdditionalUsers";
+
         public string Name { get; private set; }
         public string Description { get; private set; }
         public string ProjectFilePath { get; private set; }
@@ -65,68 +71,65 @@ namespace XTMF2
             };
             try
             {
-                using (var fileStream = new StreamReader(File.OpenRead(filePath)))
+                byte[] buffer = File.ReadAllBytes(filePath);
+                var reader = new Utf8JsonReader(buffer.AsSpan());
                 {
-                    using (var reader = new JsonTextReader(fileStream))
+                    while (reader.Read())
                     {
-                        while (reader.Read())
+                        if (reader.TokenType == JsonTokenType.PropertyName)
                         {
-                            if (reader.TokenType == JsonToken.PropertyName)
+                            if (reader.ValueTextEquals(NameProperty))
                             {
-                                switch (reader.Value)
+                                reader.Read();
+                                project.Name = reader.GetString();
+                            }
+                            else if(reader.ValueTextEquals(DescriptionProperty))
+                            {
+                                reader.Read();
+                                project.Description = reader.GetString();
+                            }
+                            else if (reader.ValueTextEquals(ModelSystemHeadersProperty))
+                            {
+                                reader.Read();
+                                if (reader.TokenType != JsonTokenType.StartArray)
                                 {
-                                    case "Name":
-                                        project.Name = reader.ReadAsString();
-                                        break;
-                                    case "Description":
-                                        project.Description = reader.ReadAsString();
-                                        break;
-                                    case "ModelSystemHeaders":
-                                        {
-                                            reader.Read();
-                                            if (reader.TokenType != JsonToken.StartArray)
-                                            {
-                                                error = "We expected a start of array but found a " + Enum.GetName(typeof(JsonToken), reader.TokenType);
-                                                return false;
-                                            }
-                                            while (reader.Read() && reader.TokenType != JsonToken.EndArray)
-                                            {
-                                                project._ModelSystems.Add(ModelSystemHeader.Load(project, reader));
-                                            }
-                                        }
-                                        break;
-                                    case "Owner":
-                                        {
-                                            var user = userController.GetUserByName(reader.ReadAsString());
-                                            project.Owner = user;
-                                            user?.AddedUserToProject(project);
-                                        }
-                                        break;
-                                    case "AdditionalUsers":
-                                        {
-                                            reader.Read();
-                                            if(reader.TokenType != JsonToken.StartArray)
-                                            {
-                                                throw new Exception("Expected Start Array while loading project!");
-                                            }
-                                            while (reader.Read() && reader.TokenType != JsonToken.EndArray)
-                                            {
-                                                var user = userController.GetUserByName(reader.ReadAsString());
-                                                project._AdditionalUsers.Add(user);
-                                                user.AddedUserToProject(project);
-                                            }
-                                        }
-                                        break;
-                                    // if we don't know what it is just continue on.
-                                    default:
-                                        reader.Skip();
-                                        break;
+                                    error = "We expected a start of array but found a " + Enum.GetName(typeof(JsonTokenType), reader.TokenType);
+                                    return false;
                                 }
+                                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                                {
+                                    project._ModelSystems.Add(ModelSystemHeader.Load(project, ref reader));
+                                }
+                            }
+                            else if (reader.ValueTextEquals(OwnerProperty))
+                            {
+                                reader.Read();
+                                var user = userController.GetUserByName(reader.GetString());
+                                project.Owner = user;
+                                user?.AddedUserToProject(project);
+                            }
+                            else if (reader.ValueTextEquals(AdditionalUsersProperty))
+                            {
+                                reader.Read();
+                                if (reader.TokenType != JsonTokenType.StartArray)
+                                {
+                                    throw new Exception("Expected Start Array while loading project!");
+                                }
+                                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                                {
+                                    var user = userController.GetUserByName(reader.GetString());
+                                    project._AdditionalUsers.Add(user);
+                                    user.AddedUserToProject(project);
+                                }
+                            }
+                            else
+                            {
+                                reader.Skip();
                             }
                         }
                     }
                 }
-                if(project.Owner == null)
+                if (project.Owner == null)
                 {
                     error = "Unable to load an owner for the given project.";
                     return false;
@@ -147,7 +150,7 @@ namespace XTMF2
         internal bool GetModelSystemHeader(string modelSystemName, out ModelSystemHeader modelSystemHeader, ref string error)
         {
             modelSystemHeader = _ModelSystems.FirstOrDefault(msh => msh.Name.Equals(modelSystemName, StringComparison.OrdinalIgnoreCase));
-            if(modelSystemHeader == null)
+            if (modelSystemHeader == null)
             {
                 error = "A model system with the given name was not found!";
             }
@@ -166,7 +169,7 @@ namespace XTMF2
 
         internal bool GiveOwnership(User newOwner, ref string error)
         {
-            lock(ProjectLock)
+            lock (ProjectLock)
             {
                 var previousOwner = Owner;
                 Owner = newOwner;
@@ -248,28 +251,25 @@ namespace XTMF2
             var temp = Path.GetTempFileName();
             try
             {
-                using (var tempFile = new StreamWriter(File.Create(temp)))
+                using (var tempFile = File.Create(temp))
                 {
-                    using (var writer = new JsonTextWriter(tempFile))
+                    using (var writer = new Utf8JsonWriter(tempFile))
                     {
                         writer.WriteStartObject();
-                        writer.WritePropertyName("Name");
-                        writer.WriteValue(Name);
-                        writer.WritePropertyName("Description");
-                        writer.WriteValue(Description);
-                        writer.WritePropertyName("Owner");
-                        writer.WriteValue(Owner.UserName);
+                        writer.WriteString(NameProperty, Name);
+                        writer.WriteString(DescriptionProperty, Description);
+                        writer.WriteString(OwnerProperty, Owner.UserName);
                         if (_AdditionalUsers.Count > 0)
                         {
-                            writer.WritePropertyName("AdditionalUsers");
+                            writer.WritePropertyName(AdditionalUsersProperty);
                             writer.WriteStartArray();
-                            foreach(var user in _AdditionalUsers)
+                            foreach (var user in _AdditionalUsers)
                             {
-                                writer.WriteValue(user.UserName);
+                                writer.WriteStringValue(user.UserName);
                             }
                             writer.WriteEndArray();
                         }
-                        writer.WritePropertyName("ModelSystemHeaders");
+                        writer.WritePropertyName(ModelSystemHeadersProperty);
                         writer.WriteStartArray();
                         foreach (var ms in ModelSystems)
                         {
@@ -364,7 +364,7 @@ namespace XTMF2
         /// <param name="header">A model system header to the newly imported model system.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
-        internal bool AddModelSystemFromModelSystemFile(ProjectSession projectSession, string modelSystemName, 
+        internal bool AddModelSystemFromModelSystemFile(ProjectSession projectSession, string modelSystemName,
             ModelSystemFile msf, out ModelSystemHeader header, ref string error)
         {
             header = null;
@@ -377,13 +377,13 @@ namespace XTMF2
             {
                 throw new ArgumentNullException(nameof(msf));
             }
-            if(ContainsModelSystem(modelSystemName))
+            if (ContainsModelSystem(modelSystemName))
             {
                 error = "A model system with this name already exists!";
                 return false;
             }
             var tempHeader = new ModelSystemHeader(this, modelSystemName, msf.Description);
-            if(!msf.ExtractModelSystemTo(tempHeader.ModelSystemPath, ref error))
+            if (!msf.ExtractModelSystemTo(tempHeader.ModelSystemPath, ref error))
             {
                 return false;
             }
