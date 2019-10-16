@@ -19,7 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Newtonsoft.Json;
+using System.Text.Json;
 using XTMF2.Editing;
 
 namespace XTMF2.ModelSystemConstruct
@@ -29,6 +29,10 @@ namespace XTMF2.ModelSystemConstruct
     /// </summary>
     public sealed class CommentBlock
     {
+        private const string XProperty = "X";
+        private const string YProperty = "Y";
+        private const string CommentProperty = "Comment";
+
         /// <summary>
         /// Construct a new comments block
         /// </summary>
@@ -50,59 +54,41 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         public string Comment { get; private set; }
 
-        internal void Save(JsonTextWriter writer)
+        internal void Save(Utf8JsonWriter writer)
         {
             writer.WriteStartObject();
-            writer.WritePropertyName("X");
-            writer.WriteValue(Location.X);
-            writer.WritePropertyName("Y");
-            writer.WriteValue(Location.Y);
-            writer.WritePropertyName("Comment");
-            writer.WriteValue(Comment);
-            writer.WriteEnd();
+            writer.WriteNumber(XProperty, Location.X);
+            writer.WriteNumber(YProperty, Location.Y);
+            writer.WriteString(CommentProperty, Comment);
+            writer.WriteEndObject();
         }
 
-        internal static bool Load(JsonTextReader reader, out CommentBlock block, ref string error)
+        internal static bool Load(ref Utf8JsonReader reader, out CommentBlock block, ref string error)
         {
             float x = 0, y = 0;
             string comment = "No comment";
-            while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                if(reader.TokenType == JsonToken.Comment)
+                if(reader.TokenType == JsonTokenType.Comment)
                 {
                     continue;
                 }
-                if(reader.TokenType == JsonToken.PropertyName)
+                if(reader.TokenType == JsonTokenType.PropertyName)
                 {
-                    switch(reader.Value)
+                    if(reader.ValueTextEquals(XProperty))
                     {
-                        case "X":
-                            {
-                                var temp = reader.ReadAsDouble();
-                                if (temp.HasValue)
-                                {
-                                    x = (float)temp;
-                                }
-                            }
-                            break;
-                        case "Y":
-                            {
-                                var temp = reader.ReadAsDouble();
-                                if (temp.HasValue)
-                                {
-                                    y = (float)temp;
-                                }
-                            }
-                            break;
-                        case "Comment":
-                            {
-                                var temp = reader.ReadAsString();
-                                if(!String.IsNullOrEmpty(temp))
-                                {
-                                    comment = temp;
-                                }
-                            }
-                            break;
+                        reader.Read();
+                        x = reader.GetSingle();
+                    }
+                    else if (reader.ValueTextEquals(YProperty))
+                    {
+                        reader.Read();
+                        y = reader.GetSingle();
+                    }
+                    else if (reader.ValueTextEquals(CommentProperty))
+                    {
+                        reader.Read();
+                        comment = reader.GetString();
                     }
                 }
             }

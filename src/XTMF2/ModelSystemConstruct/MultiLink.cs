@@ -19,7 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Newtonsoft.Json;
+using System.Text.Json;
 using System.Collections.ObjectModel;
 using System.Linq;
 
@@ -54,24 +54,21 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal override void Save(Dictionary<Node, int> moduleDictionary, JsonTextWriter writer)
+        internal override void Save(Dictionary<Node, int> moduleDictionary, Utf8JsonWriter writer)
         {
             writer.WriteStartObject();
-            writer.WritePropertyName("Origin");
-            writer.WriteValue(moduleDictionary[Origin]);
-            writer.WritePropertyName("Hook");
-            writer.WriteValue(OriginHook.Name);
-            writer.WritePropertyName("Destination");
+            writer.WriteNumber(OriginProperty, moduleDictionary[Origin]);
+            writer.WriteString(HookProperty, OriginHook.Name);
+            writer.WritePropertyName(DestinationProperty);
             writer.WriteStartArray();
             foreach (var dest in _Destinations)
             {
-                writer.WriteValue(moduleDictionary[dest]);
+                writer.WriteNumberValue(moduleDictionary[dest]);
             }
             writer.WriteEndArray();
             if (IsDisabled)
             {
-                writer.WritePropertyName("Disabled");
-                writer.WriteValue(true);
+                writer.WriteBoolean(DisabledProperty, true);
             }
             writer.WriteEndObject();
         }

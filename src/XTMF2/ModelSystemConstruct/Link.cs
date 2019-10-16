@@ -20,7 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text;
-using Newtonsoft.Json;
+using System.Text.Json;
 using XTMF2.Editing;
 using System.Linq;
 using XTMF2.ModelSystemConstruct;
@@ -32,6 +32,12 @@ namespace XTMF2
     /// </summary>
     public abstract class Link : INotifyPropertyChanged
     {
+        protected const string OriginProperty = "Origin";
+        protected const string HookProperty = "Hook";
+        protected const string DestinationProperty = "Destination";
+        protected const string IndexProperty = "Index";
+        protected const string DisabledProperty = "Disabled";
+
         public Node Origin { get; internal set; }
         public NodeHook OriginHook { get; internal set; }
 
@@ -57,7 +63,7 @@ namespace XTMF2
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        internal abstract void Save(Dictionary<Node, int> moduleDictionary, JsonTextWriter writer);
+        internal abstract void Save(Dictionary<Node, int> moduleDictionary, Utf8JsonWriter writer);
         
         private static bool FailWith(out Link link, ref string error, string message)
         {
@@ -66,9 +72,9 @@ namespace XTMF2
             return false;
         }
 
-        internal static bool Create(ModelSystemSession session, Dictionary<int, Node> nodes, JsonTextReader reader, out Link link, ref string error)
+        internal static bool Create(ModelSystemSession session, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, out Link link, ref string error)
         {
-            if(reader.TokenType != JsonToken.StartObject)
+            if(reader.TokenType != JsonTokenType.StartObject)
             {
                 return FailWith(out link, ref error, "Expected a start object when loading a link.");
             }
@@ -78,68 +84,66 @@ namespace XTMF2
             bool disabled = false;
             int listIndex = 0;
             // read in the values
-            while(reader.Read() && reader.TokenType != JsonToken.EndObject)
+            while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                if(reader.TokenType == JsonToken.Comment)
+                if(reader.TokenType == JsonTokenType.Comment)
                 {
                     continue;
                 }
-                if(reader.TokenType != JsonToken.PropertyName)
+                if(reader.TokenType != JsonTokenType.PropertyName)
                 {
                     return FailWith(out link, ref error, "Invalid token when loading a link.");
                 }
-                switch(reader.Value)
+                if(reader.ValueTextEquals(OriginProperty))
                 {
-                    case "Origin":
-                        {
-                            var index = (int)reader.ReadAsInt32();
-                            origin = nodes[index];
-                        }
-                        break;
-                    case "Hook":
-                        {
-                            hookName = reader.ReadAsString();
-                        }
-                        break;
-                    case "Destination":
-                        {
-                            if (!reader.Read())
+                    reader.Read();
+                    var index = reader.GetInt32();
+                    origin = nodes[index];
+                }
+                else if(reader.ValueTextEquals(HookProperty))
+                {
+                    reader.Read();
+                    hookName = reader.GetString();
+                }
+                else if(reader.ValueTextEquals(DestinationProperty))
+                {
+                    if (!reader.Read())
+                    {
+                        return FailWith(out link, ref error, "No destination specified when loading a link!");
+                    }
+                    switch (reader.TokenType)
+                    {
+                        case JsonTokenType.Number:
                             {
-                                return FailWith(out link, ref error, "No destination specified when loading a link!");
+                                var index = reader.GetInt32();
+                                destination = nodes[index];
                             }
-                            switch (reader.TokenType)
+                            break;
+                        case JsonTokenType.StartArray:
                             {
-                                case JsonToken.Integer:
-                                    {
-                                        var index = (int)(long)reader.Value;
-                                        destination = nodes[index];
-                                    }
-                                    break;
-                                case JsonToken.StartArray:
-                                    {
-                                        destinations = new List<Node>();
-                                        while(reader.Read() && reader.TokenType != JsonToken.EndArray)
-                                        {
-                                            destinations.Add(nodes[(int)(long)reader.Value]);
-                                        }
-                                    }
-                                    break;
+                                destinations = new List<Node>();
+                                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                                {
+                                    destinations.Add(nodes[reader.GetInt32()]);
+                                }
                             }
-                        }
-                        break;
-                    case "Index":
-                        {
-                            listIndex = (int)reader.ReadAsInt32();
-                        }
-                        break;
-                    case "Disabled":
-                        if(reader.ReadAsBoolean() == true)
-                        {
-                            disabled = true;
-                        }
-                        break;
-                    default:
-                        return FailWith(out link, ref error, "Unknown parameter type when loading link " + reader.Value);
+                            break;
+                    }
+                }
+                else if(reader.ValueTextEquals(IndexProperty))
+                {
+                    reader.Read();
+                    listIndex = reader.GetInt32();
+
+                }
+                else if(reader.ValueTextEquals(DisabledProperty))
+                {
+                    reader.Read();
+                    disabled = reader.GetBoolean();
+                }
+                else
+                {
+                    return FailWith(out link, ref error, "Unknown parameter type when loading link " + reader.GetString());
                 }
             }
             // ensure all of the types were filled out

@@ -221,7 +221,12 @@ namespace XTMF2.Controllers
         /// <param name="projectSession"></param>
         internal void UnloadSession(ProjectSession projectSession)
         {
-            ActiveSessions.Remove(projectSession.Project);
+            var project = projectSession.Project;
+            // The project will be null if we are running the model system.
+            if (!(project is null))
+            {
+                ActiveSessions.Remove(project);
+            }
         }
 
         private string GetPath(User owner, string name)
