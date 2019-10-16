@@ -19,7 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Newtonsoft.Json;
+using System.Text.Json;
 using XTMF2.RuntimeModules;
 using XTMF2.Editing;
 
@@ -41,20 +41,15 @@ namespace XTMF2.ModelSystemConstruct
             SetType(session, typeof(StartModule), ref error);
         }
 
-        internal override void Save(ref int index, Dictionary<Node, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        internal override void Save(ref int index, Dictionary<Node, int> moduleDictionary, Dictionary<Type, int> typeDictionary, Utf8JsonWriter writer)
         {
             moduleDictionary.Add(this, index);
             writer.WriteStartObject();
-            writer.WritePropertyName("Name");
-            writer.WriteValue(Name);
-            writer.WritePropertyName("Description");
-            writer.WriteValue(Description);
-            writer.WritePropertyName("Index");
-            writer.WriteValue(index++);
-            writer.WritePropertyName("X");
-            writer.WriteValue(Location.X);
-            writer.WritePropertyName("Y");
-            writer.WriteValue(Location.Y);
+            writer.WriteString(NameProperty, Name);
+            writer.WriteString(DescriptionProperty, Description);
+            writer.WriteNumber(IndexProperty, index++);
+            writer.WriteNumber(XProperty, Location.X);
+            writer.WriteNumber(YProperty, Location.Y);
             writer.WriteEndObject();
         }
 
@@ -66,9 +61,9 @@ namespace XTMF2.ModelSystemConstruct
         }
 
         internal static bool Load(ModelSystemSession session, Dictionary<int, Node> nodes,
-            Boundary boundary, JsonTextReader reader, out Start start, ref string error)
+            Boundary boundary, ref Utf8JsonReader reader, out Start start, ref string error)
         {
-            if (reader.TokenType != JsonToken.StartObject)
+            if (reader.TokenType != JsonTokenType.StartObject)
             {
                 return FailWith(out start, ref error, "Invalid token when loading a start!");
             }
@@ -76,32 +71,41 @@ namespace XTMF2.ModelSystemConstruct
             int index = -1;
             Point point = new Point();
             string description = null;
-            while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                if (reader.TokenType == JsonToken.Comment) continue;
-                if (reader.TokenType != JsonToken.PropertyName)
+                if (reader.TokenType == JsonTokenType.Comment) continue;
+                if (reader.TokenType != JsonTokenType.PropertyName)
                 {
                     return FailWith(out start, ref error, "Invalid token when loading start");
                 }
-                switch(reader.Value)
+                if(reader.ValueTextEquals("Name"))
                 {
-                    case "Name":
-                        name = reader.ReadAsString();
-                        break;
-                    case "Description":
-                        description = reader.ReadAsString();
-                        break;
-                    case "X":
-                        point = new Point((float)reader.ReadAsDouble(), point.Y);
-                        break;
-                    case "Y":
-                        point = new Point(point.X, (float)reader.ReadAsDouble());
-                        break;
-                    case "Index":
-                        index = (int)reader.ReadAsInt32();
-                        break;
-                    default:
-                        return FailWith(out start, ref error, $"Undefined parameter type {reader.Value} when loading a start!");
+                    reader.Read();
+                    name = reader.GetString();
+                }
+                else if(reader.ValueTextEquals("Description"))
+                {
+                    reader.Read();
+                    description = reader.GetString();
+                }
+                else if(reader.ValueTextEquals("X"))
+                {
+                    reader.Read();
+                    point = new Point(reader.GetSingle(), point.Y);
+                }
+                else if (reader.ValueTextEquals("Y"))
+                {
+                    reader.Read();
+                    point = new Point(point.X, reader.GetSingle());
+                }
+                else if(reader.ValueTextEquals("Index"))
+                {
+                    reader.Read();
+                    index = reader.GetInt32();
+                }
+                else
+                {
+                    return FailWith(out start, ref error, $"Undefined parameter type {reader.GetString()} when loading a start!");
                 }
             }
             if (name == null)

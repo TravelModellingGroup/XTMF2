@@ -20,7 +20,7 @@ using System;
 using System.ComponentModel;
 using System.Collections.Generic;
 using XTMF2.Editing;
-using Newtonsoft.Json;
+using System.Text.Json;
 using System.Collections.ObjectModel;
 using System.Reflection;
 using XTMF2.RuntimeModules;
@@ -38,6 +38,15 @@ namespace XTMF2
         /// The boundary that this node is contained within
         /// </summary>
         public Boundary ContainedWithin { get; protected set; }
+
+        protected const string NameProperty = "Name";
+        protected const string DescriptionProperty = "Description";
+        protected const string XProperty = "X";
+        protected const string TypeProperty = "Type";
+        protected const string YProperty = "Y";
+        protected const string IndexProperty = "Index";
+        protected const string ParameterProperty = "Parameter";
+        protected const string DisabledProperty = "Disabled";
 
         /// <summary>
         /// Don't use this field as the setter
@@ -284,39 +293,31 @@ namespace XTMF2
                             select l).FirstOrDefault()) != null;
         }
 
-        internal virtual void Save(ref int index, Dictionary<Node, int> moduleDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        internal virtual void Save(ref int index, Dictionary<Node, int> moduleDictionary, Dictionary<Type, int> typeDictionary, Utf8JsonWriter writer)
         {
             moduleDictionary.Add(this, index);
             writer.WriteStartObject();
-            writer.WritePropertyName("Name");
-            writer.WriteValue(Name);
-            writer.WritePropertyName("Description");
-            writer.WriteValue(Description);
-            writer.WritePropertyName("Type");
-            writer.WriteValue(typeDictionary[Type]);
-            writer.WritePropertyName("X");
-            writer.WriteValue(Location.X);
-            writer.WritePropertyName("Y");
-            writer.WriteValue(Location.Y);
-            writer.WritePropertyName("Index");
-            writer.WriteValue(index++);
+            writer.WriteString(NameProperty, Name);
+            writer.WriteString(DescriptionProperty, Description);
+            writer.WriteNumber(TypeProperty, typeDictionary[Type]);
+            writer.WriteNumber(XProperty, Location.X);
+            writer.WriteNumber(YProperty, Location.Y);
+            writer.WriteNumber(IndexProperty, index++);
             if (!String.IsNullOrEmpty(ParameterValue))
             {
-                writer.WritePropertyName("Parameter");
-                writer.WriteValue(ParameterValue);
+                writer.WriteString(ParameterProperty, ParameterValue);
             }
             if(IsDisabled)
             {
-                writer.WritePropertyName("Disabled");
-                writer.WriteValue(true);
+                writer.WriteBoolean(DisabledProperty, true);
             }
             writer.WriteEndObject();
         }
 
         internal static bool Load(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
-            Boundary boundary, JsonTextReader reader, out Node mss, ref string error)
+            Boundary boundary, ref Utf8JsonReader reader, out Node mss, ref string error)
         {
-            if (reader.TokenType != JsonToken.StartObject)
+            if (reader.TokenType != JsonTokenType.StartObject)
             {
                 return FailWith(out mss, ref error, "Invalid token when loading a start!");
             }
@@ -327,55 +328,60 @@ namespace XTMF2
             Point point = new Point();
             string description = null;
             string parameter = null;
-            while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                if (reader.TokenType == JsonToken.Comment) continue;
-                if (reader.TokenType != JsonToken.PropertyName)
+                if (reader.TokenType == JsonTokenType.Comment) continue;
+                if (reader.TokenType != JsonTokenType.PropertyName)
                 {
                     return FailWith(out mss, ref error, "Invalid token when loading start");
                 }
-                switch (reader.Value)
+                if(reader.ValueTextEquals(NameProperty))
                 {
-                    case "Name":
-                        name = reader.ReadAsString();
-                        break;
-                    case "Description":
-                        description = reader.ReadAsString();
-                        break;
-                    case "X":
-                        point = new Point((float)(reader.ReadAsDouble() ?? 0.0f), point.Y);
-                        break;
-                    case "Y":
-                        point = new Point(point.X, (float)(reader.ReadAsDouble() ?? 0.0f));
-                        break;
-                    case "Index":
-                        index = (int)(reader.ReadAsInt32() ?? -1);
-                        break;
-                    case "Type":
-                        {
-                            var typeIndex = (int)reader.ReadAsInt32();
-                            if (!typeLookup.TryGetValue(typeIndex, out type))
-                            {
-                                return FailWith(out mss, ref error, $"Invalid type index {typeIndex}!");
-                            }
-                        }
-                        break;
-                    case "Parameter":
-                        {
-                            parameter = reader.ReadAsString();
-                        }
-                        break;
-                    case "Disabled":
-                        {
-                            // Assume the disabled parameter is false if a bad boolean is passed
-                            if(reader.ReadAsBoolean() == true)
-                            {
-                                disabled = true;
-                            }
-                        }
-                        break;
-                    default:
-                        return FailWith(out mss, ref error, $"Undefined parameter type {reader.Value} when loading a start!");
+                    reader.Read();
+                    name = reader.GetString();
+                }
+                else if(reader.ValueTextEquals(DescriptionProperty))
+                {
+                    reader.Read();
+                    description = reader.GetString() ?? string.Empty;
+                }
+                else if(reader.ValueTextEquals(XProperty))
+                {
+                    reader.Read();
+                    point = new Point(reader.GetSingle(), point.Y);
+                }
+                else if (reader.ValueTextEquals(YProperty))
+                {
+                    reader.Read();
+                    point = new Point(point.X, reader.GetSingle());
+                }
+                else if(reader.ValueTextEquals(IndexProperty))
+                {
+                    reader.Read();
+                    index = reader.GetInt32();
+                }
+                else if(reader.ValueTextEquals(TypeProperty))
+                {
+                    reader.Read();
+                    var typeIndex = reader.GetInt32();
+                    if (!typeLookup.TryGetValue(typeIndex, out type))
+                    {
+                        return FailWith(out mss, ref error, $"Invalid type index {typeIndex}!");
+                    }
+                }
+                else if(reader.ValueTextEquals(ParameterProperty))
+                {
+                    reader.Read();
+                    parameter = reader.GetString() ?? string.Empty;
+                }
+                else if(reader.ValueTextEquals(DisabledProperty))
+                {
+                    reader.Read();
+                    disabled = reader.GetBoolean();
+                }
+                else
+                {
+                    return FailWith(out mss, ref error, $"Undefined parameter type {reader.GetString()} when loading a start!");
                 }
             }
             if (name == null)

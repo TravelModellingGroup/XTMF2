@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017-2018 University of Toronto
+    Copyright 2017-2019 University of Toronto
 
     This file is part of XTMF2.
 
@@ -20,11 +20,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
+using System.Text.Json;
 using System.Linq;
 using System.ComponentModel;
 using XTMF2.Editing;
 using System.IO;
-using Newtonsoft.Json;
 
 namespace XTMF2
 {
@@ -63,6 +63,11 @@ namespace XTMF2
         /// </summary>
         internal ModelSystemHeader Header { get; private set; }
 
+        private const string IndexProperty = "Index";
+        private const string TypeProperty = "Type";
+        private const string TypesProperty = "Types";
+        private const string BoundariesProperty = "Boundaries";
+
         /// <summary>
         /// The lock that must be acquired before editing the model system's attributes.
         /// </summary>
@@ -82,7 +87,8 @@ namespace XTMF2
                     {
                         dir.Create();
                     }
-                    return Save(ref error, fileInfo.Create(), false);
+                    using var stream = fileInfo.Create();
+                    return Save(ref error, stream, false);
                 }
                 catch (IOException e)
                 {
@@ -96,20 +102,17 @@ namespace XTMF2
         {
             try
             {
-                using (var stream = new StreamWriter(saveTo, Encoding.Unicode, 0x1000, leaveOpen))
+                using (var writer = new Utf8JsonWriter(saveTo))
                 {
-                    using (var writer = new JsonTextWriter(stream))
-                    {
-                        var typeDictionary = GlobalBoundary.GetUsedTypes();
-                        writer.WriteStartObject();
-                        WriteTypes(writer, typeDictionary);
-                        WriteBoundaries(writer, typeDictionary);
-                        writer.WriteEndObject();
-                        return true;
-                    }
+                    var typeDictionary = GlobalBoundary.GetUsedTypes();
+                    writer.WriteStartObject();
+                    WriteTypes(writer, typeDictionary);
+                    WriteBoundaries(writer, typeDictionary);
+                    writer.WriteEndObject();
+                    return true;
                 }
             }
-            catch (JsonWriterException e)
+            catch (IOException e)
             {
                 error = e.Message;
             }
@@ -139,27 +142,25 @@ namespace XTMF2
             return Save(ref error, saveTo, true);
         }
 
-        private void WriteBoundaries(JsonTextWriter writer, Dictionary<Type, int> typeDictionary)
+        private void WriteBoundaries(Utf8JsonWriter writer, Dictionary<Type, int> typeDictionary)
         {
             int index = 0;
-            writer.WritePropertyName("Boundaries");
+            writer.WritePropertyName(BoundariesProperty);
             writer.WriteStartArray();
             Dictionary<Node, int> nodeDictionary = new Dictionary<Node, int>();
             GlobalBoundary.Save(ref index, nodeDictionary, typeDictionary, writer);
             writer.WriteEndArray();
         }
 
-        private static void WriteTypes(JsonTextWriter writer, Dictionary<Type, int> typeDictionary)
+        private static void WriteTypes(Utf8JsonWriter writer, Dictionary<Type, int> typeDictionary)
         {
-            writer.WritePropertyName("Types");
+            writer.WritePropertyName(TypesProperty);
             writer.WriteStartArray();
             foreach (var type in typeDictionary)
             {
                 writer.WriteStartObject();
-                writer.WritePropertyName("Index");
-                writer.WriteValue(type.Value);
-                writer.WritePropertyName("Type");
-                writer.WriteValue(type.Key.AssemblyQualifiedName);
+                writer.WriteNumber(IndexProperty, type.Value);
+                writer.WriteString(TypeProperty, type.Key.AssemblyQualifiedName);
                 writer.WriteEndObject();
             }
             writer.WriteEndArray();
@@ -190,9 +191,16 @@ namespace XTMF2
             msSession = new ModelSystemSession(session, modelSystemHeader);
             try
             {
-                var ms = info.Exists ?
-                    Load(File.OpenRead(modelSystemHeader.ModelSystemPath), msSession, modelSystemHeader, ref error)
-                    : new ModelSystem(modelSystemHeader);
+                ModelSystem ms;
+                if(info.Exists)
+                {
+                    using var rawStream = File.OpenRead(modelSystemHeader.ModelSystemPath);
+                    ms = Load(rawStream, msSession, modelSystemHeader, ref error);
+                }
+                else
+                {
+                    ms = new ModelSystem(modelSystemHeader);
+                }
                 if (ms == null)
                 {
                     msSession = null;
@@ -201,7 +209,7 @@ namespace XTMF2
                 msSession.ModelSystem = ms;
                 return msSession != null;
             }
-            catch(IOException e)
+            catch (IOException e)
             {
                 error = e.Message;
                 return false;
@@ -213,7 +221,8 @@ namespace XTMF2
             using (MemoryStream stream = new MemoryStream(Encoding.Unicode.GetBytes(modelSystem)))
             {
                 var header = ModelSystemHeader.CreateRunHeader(runtime);
-                ms = Load(stream, ModelSystemSession.CreateRunSession(ProjectSession.CreateRunSession(runtime), header), header, ref error);
+                using var session = ModelSystemSession.CreateRunSession(ProjectSession.CreateRunSession(runtime), header);
+                ms = Load(stream, session, header, ref error);
                 return ms != null;
             }
         }
@@ -223,39 +232,42 @@ namespace XTMF2
             try
             {
                 var modelSystem = new ModelSystem(modelSystemHeader);
-                using (var stream = new StreamReader(rawStream))
-                using (var reader = new JsonTextReader(stream))
+                using (var stream = new MemoryStream())
                 {
+                    rawStream.CopyTo(stream);
+                    var reader = new Utf8JsonReader(stream.GetBuffer().AsSpan());
                     var typeLookup = new Dictionary<int, Type>();
                     var nodes = new Dictionary<int, Node>();
                     while (reader.Read())
                     {
-                        if (reader.TokenType == JsonToken.PropertyName)
+                        if (reader.TokenType == JsonTokenType.PropertyName)
                         {
-                            switch (reader.Value)
+                            if(reader.ValueTextEquals(TypesProperty))
                             {
-                                case "Types":
-                                    if (!LoadTypes(typeLookup, reader, ref error))
-                                    {
-                                        return null;
-                                    }
-                                    break;
-                                case "Boundaries":
-                                    if (!LoadBoundaries(session, typeLookup, nodes, reader, modelSystem.GlobalBoundary, ref error))
-                                    {
-                                        return null;
-                                    }
-                                    break;
-                                default:
-                                    error = $"Unknown token found '{reader.Value}'";
+                                if (!LoadTypes(typeLookup, ref reader, ref error))
+                                {
                                     return null;
+                                }
+                            }
+                            else if(reader.ValueTextEquals(BoundariesProperty))
+                            {
+                                if (!LoadBoundaries(session, typeLookup, nodes, ref reader, modelSystem.GlobalBoundary, ref error))
+                                {
+                                    return null;
+                                }
+                                break;
+                            }
+                            else
+                            {
+                                error = $"Unknown token found '{reader.GetString()}'";
+                                return null;
                             }
                         }
                     }
                     return modelSystem;
                 }
             }
-            catch (JsonWriterException e)
+            catch (JsonException e)
             {
                 error = e.Message;
             }
@@ -272,41 +284,39 @@ namespace XTMF2
             return false;
         }
 
-        private static bool LoadTypes(Dictionary<int, Type> typeLookup, JsonTextReader reader, ref string error)
+        private static bool LoadTypes(Dictionary<int, Type> typeLookup, ref Utf8JsonReader reader, ref string error)
         {
-            if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
                 return FailWith(ref error, "Expected to read in an array of types!");
             }
-            while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
             {
                 string type = null;
                 int index = -1;
-                if (reader.TokenType != JsonToken.StartObject)
+                if (reader.TokenType != JsonTokenType.StartObject)
                 {
                     return FailWith(ref error, "Expected a start object token when starting to read in a type.");
                 }
-                while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                 {
-                    if (reader.TokenType != JsonToken.PropertyName)
+                    if (reader.TokenType != JsonTokenType.PropertyName)
                     {
                         return FailWith(ref error, "Invalid index!");
                     }
-                    switch (reader.Value)
+                    if(reader.ValueTextEquals(IndexProperty))
                     {
-                        case "Index":
-                            {
-                                var ret = reader.ReadAsInt32();
-                                if (ret == null)
-                                {
-                                    return FailWith(ref error, "While reading types we encountered an invalid index!");
-                                }
-                                index = (int)ret;
-                            }
-                            break;
-                        case "Type":
-                            type = reader.ReadAsString();
-                            break;
+                        reader.Read();
+                        if (reader.TokenType != JsonTokenType.Number)
+                        {
+                            return FailWith(ref error, "While reading types we encountered an invalid index!");
+                        }
+                        index = reader.GetInt32();
+                    }
+                    else if(reader.ValueTextEquals(TypeProperty))
+                    {
+                        reader.Read();
+                        type = reader.GetString();
                     }
                 }
                 if (type == null || index < 0)
@@ -328,18 +338,18 @@ namespace XTMF2
         }
 
         private static bool LoadBoundaries(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
-            JsonTextReader reader, Boundary global, ref string error)
+            ref Utf8JsonReader reader, Boundary global, ref string error)
         {
-            if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
                 return FailWith(ref error, "Expected to read an array when loading boundaries!");
             }
-            if (!global.Load(session, typeLookup, nodes, reader, ref error))
+            if (!global.Load(session, typeLookup, nodes, ref reader, ref error))
             {
                 return false;
             }
 
-            if (!reader.Read() || reader.TokenType != JsonToken.EndArray)
+            if (!reader.Read() || reader.TokenType != JsonTokenType.EndArray)
             {
                 return FailWith(ref error, "Expected to only have one boundary defined in the root!");
             }

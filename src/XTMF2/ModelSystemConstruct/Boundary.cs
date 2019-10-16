@@ -22,7 +22,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using Newtonsoft.Json;
+using System.Text.Json;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
 
@@ -42,6 +42,14 @@ namespace XTMF2
         /// A description of the boundary's purpose
         /// </summary>
         public string Description { get; private set; }
+
+        private const string NameProperty = "Name";
+        private const string DescriptionProperty = "Description";
+        private const string StartsProperty = "Starts";
+        private const string NodesProperty = "Nodes";
+        private const string BoundariesProperty = "Boundaries";
+        private const string LinksProperty = "Links";
+        private const string CommentBlocksProperty = "CommentBlocks";
 
         /// <summary>
         /// This lock must be obtained before changing any local settings.
@@ -429,44 +437,42 @@ namespace XTMF2
             return true;
         }
 
-        internal void Save(ref int index, Dictionary<Node, int> nodeDictionary, Dictionary<Type, int> typeDictionary, JsonTextWriter writer)
+        internal void Save(ref int index, Dictionary<Node, int> nodeDictionary, Dictionary<Type, int> typeDictionary, Utf8JsonWriter writer)
         {
             lock (_WriteLock)
             {
                 writer.WriteStartObject();
-                writer.WritePropertyName("Name");
-                writer.WriteValue(Name);
-                writer.WritePropertyName("Description");
-                writer.WriteValue(Description);
-                writer.WritePropertyName("Starts");
+                writer.WriteString(NameProperty, Name);
+                writer.WriteString(DescriptionProperty, Description);
+                writer.WritePropertyName(StartsProperty);
                 writer.WriteStartArray();
                 foreach (var start in _Starts)
                 {
                     start.Save(ref index, nodeDictionary, typeDictionary, writer);
                 }
                 writer.WriteEndArray();
-                writer.WritePropertyName("Nodes");
+                writer.WritePropertyName(NodesProperty);
                 writer.WriteStartArray();
                 foreach (var module in _Modules)
                 {
                     module.Save(ref index, nodeDictionary, typeDictionary, writer);
                 }
                 writer.WriteEndArray();
-                writer.WritePropertyName("Boundaries");
+                writer.WritePropertyName(BoundariesProperty);
                 writer.WriteStartArray();
                 foreach (var child in _Boundaries)
                 {
                     child.Save(ref index, nodeDictionary, typeDictionary, writer);
                 }
                 writer.WriteEndArray();
-                writer.WritePropertyName("Links");
+                writer.WritePropertyName(LinksProperty);
                 writer.WriteStartArray();
                 foreach (var link in _Links)
                 {
                     link.Save(nodeDictionary, writer);
                 }
                 writer.WriteEndArray();
-                writer.WritePropertyName("CommentBlocks");
+                writer.WritePropertyName(CommentBlocksProperty);
                 writer.WriteStartArray();
                 foreach (var docBlock in _CommentBlocks)
                 {
@@ -521,110 +527,118 @@ namespace XTMF2
         }
 
         internal bool Load(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
-            JsonTextReader reader, ref string error)
+            ref Utf8JsonReader reader, ref string error)
         {
-            if (!reader.Read() || reader.TokenType != JsonToken.StartObject)
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
             {
                 return FailWith(ref error, "Unexpected token when reading boundary!");
             }
-            while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                if (reader.TokenType != JsonToken.PropertyName && reader.TokenType != JsonToken.Comment)
+                if (reader.TokenType != JsonTokenType.PropertyName && reader.TokenType != JsonTokenType.Comment)
                 {
                     return FailWith(ref error, "Unexpected token when reading boundary!");
                 }
-                switch (reader.Value)
+                if(reader.ValueTextEquals(NameProperty))
                 {
-                    case "Name":
-                        Name = reader.ReadAsString();
-                        break;
-                    case "Description":
-                        Description = reader.ReadAsString();
-                        break;
-                    case "Starts":
-                        if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                    reader.Read();
+                    Name = reader.GetString();
+                }
+                else if(reader.ValueTextEquals(DescriptionProperty))
+                {
+                    reader.Read();
+                    Description = reader.GetString();
+                }
+                else if(reader.ValueTextEquals(StartsProperty))
+                {
+                    if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                    {
+                        return FailWith(ref error, "Unexpected token when starting to read Starts for a boundary.");
+                    }
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        if (!Start.Load(session, node, this, ref reader, out Start start, ref error))
                         {
-                            return FailWith(ref error, "Unexpected token when starting to read Starts for a boundary.");
+                            return false;
                         }
-                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+                        _Starts.Add(start);
+                    }
+                }
+                else if(reader.ValueTextEquals(NodesProperty))
+                {
+                    if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                    {
+                        return FailWith(ref error, "Unexpected token when starting to read Nodes for a boundary.");
+                    }
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!Start.Load(session, node, this, reader, out Start start, ref error))
+                            if (!Node.Load(session, typeLookup, node, this, ref reader, out Node mss, ref error))
                             {
                                 return false;
                             }
-                            _Starts.Add(start);
+                            _Modules.Add(mss);
                         }
-                        break;
-                    case "Nodes":
-                        if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                    }
+                }
+                else if(reader.ValueTextEquals(BoundariesProperty))
+                {
+                    if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                    {
+                        return FailWith(ref error, "Unexpected token when starting to read Modules for a boundary.");
+                    }
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            return FailWith(ref error, "Unexpected token when starting to read Nodes for a boundary.");
-                        }
-                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
-                        {
-                            if (reader.TokenType != JsonToken.Comment)
+                            var boundary = new Boundary(this);
+                            if (!boundary.Load(session, typeLookup, node, ref reader, ref error))
                             {
-                                if (!Node.Load(session, typeLookup, node, this, reader, out Node mss, ref error))
-                                {
-                                    return false;
-                                }
-                                _Modules.Add(mss);
+                                return false;
                             }
                         }
-                        break;
-                    case "Boundaries":
-                        if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                    }
+                }
+                else if (reader.ValueTextEquals(LinksProperty))
+                {
+                    if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                    {
+                        return FailWith(ref error, "Unexpected token when starting to read Links for a boundary.");
+                    }
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            return FailWith(ref error, "Unexpected token when starting to read Modules for a boundary.");
-                        }
-                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
-                        {
-                            if (reader.TokenType != JsonToken.Comment)
+                            if (!Link.Create(session, node, ref reader, out var link, ref error))
                             {
-                                var boundary = new Boundary(this);
-                                if (!boundary.Load(session, typeLookup, node, reader, ref error))
-                                {
-                                    return false;
-                                }
+                                return false;
                             }
+                            _Links.Add(link);
                         }
-                        break;
-                    case "Links":
-                        if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                    }
+                }
+                else if (reader.ValueTextEquals(CommentBlocksProperty))
+                {
+                    if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                    {
+                        return FailWith(ref error, "Unexpected token when starting to read Documentation Blocks for a boundary.");
+                    }
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            return FailWith(ref error, "Unexpected token when starting to read Links for a boundary.");
-                        }
-                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
-                        {
-                            if (reader.TokenType != JsonToken.Comment)
+                            if (!CommentBlock.Load(ref reader, out CommentBlock block, ref error))
                             {
-                                if (!Link.Create(session, node, reader, out var link, ref error))
-                                {
-                                    return false;
-                                }
-                                _Links.Add(link);
+                                return false;
                             }
+                            _CommentBlocks.Add(block);
                         }
-                        break;
-                    case "CommentBlocks":
-                        if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
-                        {
-                            return FailWith(ref error, "Unexpected token when starting to read Documentation Blocks for a boundary.");
-                        }
-                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
-                        {
-                            if (reader.TokenType != JsonToken.Comment)
-                            {
-                                if (!CommentBlock.Load(reader, out CommentBlock block, ref error))
-                                {
-                                    return false;
-                                }
-                                _CommentBlocks.Add(block);
-                            }
-                        }
-                        break;
-                    default:
-                        return FailWith(ref error, $"Unexpected value when reading boundary {reader.Value}");
+                    }
+                }
+                else
+                {
+                    return FailWith(ref error, $"Unexpected value when reading boundary {reader.GetString()}");
                 }
             }
             return true;
