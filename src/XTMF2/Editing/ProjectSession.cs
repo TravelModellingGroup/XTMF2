@@ -250,47 +250,6 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
-        /// Constant strings used for importing and exporting
-        /// a model system.
-        /// </summary>
-        private static class ModelSystemFileStrings
-        {
-            /// <summary>
-            /// A string used for the meta-data to gather the name of the model system.
-            /// </summary>
-            internal const string Name = "Name";
-            /// <summary>
-            /// A string used in the meta-data to provide a description of the model system.
-            /// </summary>
-            internal const string Description = "Description";
-            /// <summary>
-            /// A string used in the meta-data to give the name of the user that exported the model system
-            /// </summary>
-            internal const string ExportedBy = "ExportedBy";
-            /// <summary>
-            /// A string used by the meta-data to give what time in UTC that the model system was exported at.
-            /// </summary>
-            internal const string ExportedOn = "ExportedOn";
-            /// <summary>
-            /// A string used by the meta-data to indicate what version of XTMF exported the model system.
-            /// </summary>
-            internal const string VersionMajor = "VersionMajor";
-            /// <summary>
-            /// A string used by the meta-data to indicate what version of XTMF exported the model system.
-            /// </summary>
-            internal const string VersionMinor = "VersionMinor";
-
-            /// <summary>
-            /// The name of the file within the archive for where the model system was stored.
-            /// </summary>
-            internal const string ModelSystemFile = "ModelSystem.xmsys";
-            /// <summary>
-            /// The name of the file within the archive for where the meta-data was stored.
-            /// </summary>
-            internal const string MetaDataFile = "metadata.json";
-        }
-
-        /// <summary>
         /// Exports a model system to file.
         /// </summary>
         /// <param name="user">The user that is issuing the command.</param>
@@ -315,75 +274,20 @@ namespace XTMF2.Editing
                 error = "The path to save the model system to must not be empty.";
                 return false;
             }
-            var tempDirName = Path.Combine(Path.GetTempPath(), "XTMF-" + Project.Name + modelSystemHeader.Name + Guid.NewGuid());
-            System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
-            FileVersionInfo fvi = FileVersionInfo.GetVersionInfo(assembly.Location);
-            try
+            lock (_sessionLock)
             {
-                lock (_sessionLock)
+                if (!Project.CanAccess(user))
                 {
-                    if (!Project.CanAccess(user))
-                    {
-                        error = "The user does not have access to the project.";
-                        return false;
-                    }
-                    if (_activeSessions.TryGetValue(modelSystemHeader, out var mss))
-                    {
-                        error = "The model system is currently being edited and can not be exported.";
-                        return false;
-                    }
-                    var tempDir = new DirectoryInfo(tempDirName);
-                    if (!tempDir.Exists)
-                    {
-                        tempDir.Create();
-                    }
-                    // copy in the model system file
-                    File.Copy(modelSystemHeader.ModelSystemPath, Path.Combine(tempDir.FullName, ModelSystemFileStrings.ModelSystemFile));
-                    using (var metadataStream = File.OpenWrite(Path.Combine(tempDir.FullName, ModelSystemFileStrings.MetaDataFile)))
-                    using (var writer = new Utf8JsonWriter(metadataStream))
-                    {
-                        writer.WriteStartObject();
-                        writer.WriteString(ModelSystemFileStrings.Name, modelSystemHeader.Name);
-                        writer.WriteString(ModelSystemFileStrings.Description, modelSystemHeader.Description);
-                        writer.WriteString(ModelSystemFileStrings.ExportedOn, DateTime.UtcNow);
-                        writer.WriteString(ModelSystemFileStrings.ExportedBy, user.UserName);
-                        writer.WriteNumber(ModelSystemFileStrings.VersionMajor, fvi.FileMajorPart);
-                        writer.WriteNumber(ModelSystemFileStrings.VersionMinor, fvi.FileMinorPart);
-                        writer.WriteEndObject();
-                    }
-                    // Zip the temporary directory and store it.
-                    ZipFile.CreateFromDirectory(tempDirName, exportPath);
-                    return true;
+                    error = "The user does not have access to the project.";
+                    return false;
                 }
-            }
-            catch (IOException e)
-            {
-                error = e.Message;
-            }
-            finally
-            {
-                // Try to clean up the temporary directory if it still exists.
-                try
+                if (_activeSessions.TryGetValue(modelSystemHeader, out var mss))
                 {
-                    var tempDir = new DirectoryInfo(tempDirName);
-                    if (tempDir.Exists)
-                    {
-                        tempDir.Delete(true);
-                    }
+                    error = "The model system is currently being edited and can not be exported.";
+                    return false;
                 }
-                /*
-                 * This will warn that we should catch a more specific exception however there is no recovery in any case.
-                 * The operation has already been successful even if we are unable to clean up the temporary storage.
-                 */
-                #pragma warning disable CA1031
-                catch (IOException)
-                
-                {
-                    // If we don't have access to the temporary storage there is nothing else that we can do.
-                }
-                #pragma warning restore CA1031
+                return ModelSystemFile.ExportModelSystem(this, user, modelSystemHeader, exportPath, ref error);
             }
-            return false;
         }
 
         /// <summary>
@@ -515,6 +419,65 @@ namespace XTMF2.Editing
                 }
                 return Project.RemoveAdditionalUser(toRestrict, ref error);
             }
+        }
+
+        /// <summary>
+        /// Import a model system from file.
+        /// </summary>
+        /// <param name="user">The user issuing the import file system command.</param>
+        /// <param name="modelSystemFilePath">The path to the file to import.</param>
+        /// <param name="modelSystemName">The name to give the model system within this project.</param>
+        /// <param name="header">A resulting header for the newly imported model system.</param>
+        /// <param name="error">The error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool ImportModelSystem(User user, string modelSystemFilePath, string modelSystemName, out ModelSystemHeader header, ref string error)
+        {
+            header = null;
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (string.IsNullOrWhiteSpace(modelSystemFilePath))
+            {
+                throw new ArgumentException(nameof(modelSystemFilePath));
+            }
+
+            if (string.IsNullOrWhiteSpace(modelSystemName))
+            {
+                throw new ArgumentException(nameof(modelSystemName));
+            }
+            try
+            {
+                using var archive = ZipFile.OpenRead(modelSystemFilePath);
+                lock (_sessionLock)
+                {
+                    if (!HasAccess(user))
+                    {
+                        error = "The user that issued the command does not have access to this project.";
+                        return false;
+                    }
+                    if(Project.ContainsModelSystem(modelSystemName))
+                    {
+                        error = "A model system with that name already exists!";
+                        return false;
+                    }
+                    if(!ModelSystemFile.LoadModelSystemFile(modelSystemFilePath, out var msf, ref error))
+                    {
+                        return false;
+                    }
+                    return Project.AddModelSystemFromModelSystemFile(this, modelSystemName, msf, out header, ref error);
+                }
+            }
+            catch (InvalidDataException e)
+            {
+                error = e.Message;
+            }
+            catch (IOException e)
+            {
+                error = e.Message;
+            }
+            return false;
         }
     }
 }
