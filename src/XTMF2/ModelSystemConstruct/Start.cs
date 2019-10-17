@@ -78,27 +78,27 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     return FailWith(out start, ref error, "Invalid token when loading start");
                 }
-                if(reader.ValueTextEquals("Name"))
+                if(reader.ValueTextEquals(NameProperty))
                 {
                     reader.Read();
                     name = reader.GetString();
                 }
-                else if(reader.ValueTextEquals("Description"))
+                else if(reader.ValueTextEquals(DescriptionProperty))
                 {
                     reader.Read();
                     description = reader.GetString();
                 }
-                else if(reader.ValueTextEquals("X"))
+                else if(reader.ValueTextEquals(XProperty))
                 {
                     reader.Read();
                     point = new Point(reader.GetSingle(), point.Y);
                 }
-                else if (reader.ValueTextEquals("Y"))
+                else if (reader.ValueTextEquals(YProperty))
                 {
                     reader.Read();
                     point = new Point(point.X, reader.GetSingle());
                 }
-                else if(reader.ValueTextEquals("Index"))
+                else if(reader.ValueTextEquals(IndexProperty))
                 {
                     reader.Read();
                     index = reader.GetInt32();
