@@ -19,10 +19,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Text;
+using System.Text.Json;
 using System.Linq;
 using System.IO;
-using Newtonsoft.Json;
 
 namespace XTMF2
 {
@@ -40,6 +39,9 @@ namespace XTMF2
         /// Does this user have administrative rights?
         /// </summary>
         public bool Admin { get; private set; }
+
+        private const string UserNameProperty = "UserName";
+        private const string AdminProperty = "Admin";
 
         /// <summary>
         /// Lock this before editing a user's available projects
@@ -132,43 +134,32 @@ namespace XTMF2
             bool admin = false;
             try
             {
-                using (var stream = new StreamReader(File.OpenRead(userFile)))
-                using (var reader = new JsonTextReader(stream))
+                var buffer = File.ReadAllBytes(userFile);
+                var reader = new Utf8JsonReader(buffer.AsSpan());
+                while (reader.Read())
                 {
-                    while(reader.Read())
+                    if (reader.TokenType == JsonTokenType.PropertyName)
                     {
-                        if(reader.TokenType == JsonToken.PropertyName)
+                        if (reader.ValueTextEquals(UserNameProperty))
                         {
-                            switch(reader.Value)
-                            {
-                                case "UserName":
-                                    userName = reader.ReadAsString();
-                                    break;
-                                case "Admin":
-                                    {
-                                        
-                                        var result = reader.ReadAsBoolean();
-                                        if(result == null)
-                                        {
-                                            user = null;
-                                            error = "Invalid Admin element!";
-                                            return false;
-                                        }
-                                        admin = (bool)result;
-                                    }
-                                    break;
-                            }
+                            reader.Read();
+                            userName = reader.GetString();
+                        }
+                        else if (reader.ValueTextEquals(AdminProperty))
+                        {
+                            reader.Read();
+                            admin = reader.GetBoolean();
                         }
                     }
                 }
             }
-            catch(JsonException e)
+            catch (JsonException e)
             {
                 error = e.Message;
                 user = null;
                 return false;
             }
-            if(userName == null)
+            if (userName == null)
             {
                 user = null;
                 error = "The user file failed to contain a user name!";
@@ -189,18 +180,16 @@ namespace XTMF2
             try
             {
                 var userDir = new DirectoryInfo(UserPath);
-                if(!userDir.Exists)
+                if (!userDir.Exists)
                 {
                     userDir.Create();
                 }
-                using (var stream = new StreamWriter(File.Create(temp)))
-                using (JsonTextWriter writer = new JsonTextWriter(stream))
+                using (var stream = File.Create(temp))
+                using (var writer = new Utf8JsonWriter(stream))
                 {
                     writer.WriteStartObject();
-                    writer.WritePropertyName("UserName");
-                    writer.WriteValue(UserName);
-                    writer.WritePropertyName("Admin");
-                    writer.WriteValue(Admin);
+                    writer.WriteString(UserNameProperty, UserName);
+                    writer.WriteBoolean(AdminProperty, Admin);
                     writer.WriteEndObject();
                 }
                 // when we have complete copy the results
