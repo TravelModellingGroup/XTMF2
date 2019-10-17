@@ -30,7 +30,7 @@ operating XTMF2.
 > dotnet test
 
 
-### Main Branches
+## Main Branches
 
 There are 4 major branches for XTMF 2 intended for different purposes:
 * [dev](https://github.com/TravelModellingGroup/XTMF2/tree/dev) contains the latest build that is
