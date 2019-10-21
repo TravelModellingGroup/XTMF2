@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2019 University of Toronto
 
     This file is part of XTMF2.
 
@@ -38,7 +38,7 @@ namespace XTMF2
         /// <summary>
         /// Does this user have administrative rights?
         /// </summary>
-        public bool Admin { get; private set; }
+        public bool IsAdmin { get; private set; }
 
         private const string UserNameProperty = "UserName";
         private const string AdminProperty = "Admin";
@@ -46,13 +46,13 @@ namespace XTMF2
         /// <summary>
         /// Lock this before editing a user's available projects
         /// </summary>
-        private object _ProjectLock = new object();
+        private object _projectLock = new object();
 
         public ReadOnlyObservableCollection<Project> AvailableProjects
         {
             get
             {
-                return new ReadOnlyObservableCollection<Project>(_AvailableProjects);
+                return new ReadOnlyObservableCollection<Project>(_availableProjects);
             }
         }
 
@@ -64,7 +64,7 @@ namespace XTMF2
         /// <summary>
         /// The projects available for this user.
         /// </summary>
-        private ObservableCollection<Project> _AvailableProjects = new ObservableCollection<Project>();
+        private ObservableCollection<Project> _availableProjects = new ObservableCollection<Project>();
 
         /// <summary>
         /// Create a new user
@@ -75,7 +75,7 @@ namespace XTMF2
         internal User(string userPath, string userName, bool admin = false)
         {
             UserName = userName;
-            Admin = admin;
+            IsAdmin = admin;
             UserPath = userPath;
         }
 
@@ -89,9 +89,9 @@ namespace XTMF2
             {
                 throw new ArgumentNullException(nameof(project));
             }
-            lock (_ProjectLock)
+            lock (_projectLock)
             {
-                _AvailableProjects.Add(project);
+                _availableProjects.Add(project);
             }
         }
 
@@ -102,9 +102,9 @@ namespace XTMF2
         /// <returns>True if there is already a project defined with the name and is the owner.</returns>
         internal bool HasProjectWithName(string name)
         {
-            lock (_ProjectLock)
+            lock (_projectLock)
             {
-                return _AvailableProjects.Any(p => p.Owner == this && p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                return _availableProjects.Any(p => p.Owner == this && p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
             }
         }
 
@@ -115,9 +115,9 @@ namespace XTMF2
         /// <param name="project">The project to remove access from.</param>
         internal void RemovedUserForProject(Project project)
         {
-            lock (_ProjectLock)
+            lock (_projectLock)
             {
-                _AvailableProjects.Remove(project);
+                _availableProjects.Remove(project);
             }
         }
 
@@ -189,7 +189,7 @@ namespace XTMF2
                 {
                     writer.WriteStartObject();
                     writer.WriteString(UserNameProperty, UserName);
-                    writer.WriteBoolean(AdminProperty, Admin);
+                    writer.WriteBoolean(AdminProperty, IsAdmin);
                     writer.WriteEndObject();
                 }
                 // when we have complete copy the results

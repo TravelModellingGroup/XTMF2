@@ -340,7 +340,7 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
-                if (!(doingShare.Admin || doingShare == Project.Owner))
+                if (!(doingShare.IsAdmin || doingShare == Project.Owner))
                 {
                     error = "The user sharing the project must either be the owner or an administrator!";
                     return false;
@@ -379,7 +379,7 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
-                if (!(owner.Admin || owner == Project.Owner))
+                if (!(owner.IsAdmin || owner == Project.Owner))
                 {
                     error = "The owner must either be an administrator or the original owner of the project.";
                     return false;
@@ -407,7 +407,7 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
-                if (!(owner.Admin || owner == Project.Owner))
+                if (!(owner.IsAdmin || owner == Project.Owner))
                 {
                     error = "The owner must either be an administrator or the original owner of the project.";
                     return false;

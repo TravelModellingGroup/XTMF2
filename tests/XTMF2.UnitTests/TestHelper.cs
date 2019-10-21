@@ -211,7 +211,7 @@ namespace XTMF2
                 if (projects.Count > 0)
                 {
                     // This branch is only ever taken if there has been an error in a test run.
-                    Assert.IsTrue(localUser.Admin, "The local user is not an administrator!");
+                    Assert.IsTrue(localUser.IsAdmin, "The local user is not an administrator!");
                     var projectController = runtime.ProjectController;
                     var copyOfProjects = projects.ToList();
                     foreach (var project in copyOfProjects)
