@@ -17,7 +17,10 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
+using System.IO;
 using TestXTMF;
+using TestXTMF.Modules;
 using XTMF2.Editing;
 
 namespace XTMF2
@@ -25,13 +28,6 @@ namespace XTMF2
     [TestClass]
     public class TestProjects
     {
-        [TestInitialize]
-        public void Setup()
-        {
-            // hide the startup cost of XTMF
-            XTMFRuntime runtime = XTMFRuntime.CreateRuntime();
-        }
-
         [TestMethod]
         public void CreateNewProject()
         {
@@ -134,6 +130,126 @@ namespace XTMF2
 
             // cleanup
             Assert.IsTrue(controller.DeleteProject(localUser, "Test", ref error));
+        }
+
+        private static void CreateModelSystem(User user, ProjectSession project, string msName, string description, Action executeBeforeSessionClosed)
+        {
+            string error = null;
+            var startName = "MyStart";
+            var nodeName = "MyNode";
+            Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+            Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
+            Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
+            using (session)
+            {
+                var ms = session.ModelSystem;
+                Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, ref error), error);
+                Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, ref error), error);
+                Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, ref error), error);
+                Assert.IsTrue(session.Save(ref error), error);
+                if (!(executeBeforeSessionClosed is null))
+                {
+                    executeBeforeSessionClosed();
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ExportProjectNoModelSystems()
+        {
+            TestHelper.RunInProjectContext("ExportProjectNoModelSystems", (user, project) =>
+            {
+                string error = null;
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void ExportProjectSingleModelSystem()
+        {
+            TestHelper.RunInProjectContext("ExportProjectSingleModelSystem", (user, project) =>
+            {
+                string error = null;
+                var msName = "MSToExport";
+                var description = "A test model system.";
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    CreateModelSystem(user, project, msName, description, () =>
+                    {
+                        Assert.IsFalse(project.ExportProject(user, tempFile.FullName, ref error), "We were able to export a project while a model system was being edited!");
+                    });
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    tempFile.Refresh();
+                    Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void ExportProjectMultipleModelSystems()
+        {
+            TestHelper.RunInProjectContext("ExportProjectMultipleModelSystems", (user, project) =>
+            {
+                string error = null;
+                var msName = "MSToExport";
+                var description = "A test model system.";
+
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    for (int i = 0; i < 5; i++)
+                    {
+                        CreateModelSystem(user, project, msName + i, description + i, null);
+                    }
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
         }
     }
 }

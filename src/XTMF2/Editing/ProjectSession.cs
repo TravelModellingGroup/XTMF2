@@ -249,6 +249,34 @@ namespace XTMF2.Editing
             }
         }
 
+        public bool ExportProject(User user, string exportPath, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (string.IsNullOrWhiteSpace(exportPath))
+            {
+                throw new ArgumentException("message", nameof(exportPath));
+            }
+
+            lock(_sessionLock)
+            {
+                if(!Project.CanAccess(user))
+                {
+                    error = "The user does not have access to the project.";
+                    return false;
+                }
+                if(_activeSessions.Count > 0)
+                {
+                    error = "The project is currently being edited and can not be exported.";
+                    return false;
+                }
+                return ProjectFile.ExportProject(this, user, exportPath, ref error);
+            }
+        }
+
         /// <summary>
         /// Exports a model system to file.
         /// </summary>
