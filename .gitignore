@@ -254,5 +254,3 @@ paket-files/
 .idea/
 *.sln.iml
 
-# Github workflows
-.github/
