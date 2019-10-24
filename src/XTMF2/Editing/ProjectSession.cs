@@ -494,7 +494,7 @@ namespace XTMF2.Editing
                     {
                         return false;
                     }
-                    return Project.AddModelSystemFromModelSystemFile(this, modelSystemName, msf, out header, ref error);
+                    return Project.AddModelSystemFromModelSystemFile(modelSystemName, msf, out header, ref error);
                 }
             }
             catch (InvalidDataException e)

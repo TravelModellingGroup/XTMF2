@@ -99,6 +99,16 @@ namespace XTMF2
         private readonly string _modelSystemFilePath = null;
 
         /// <summary>
+        /// The project file archive containing this model system file.
+        /// </summary>
+        private readonly ZipArchive _archive;
+
+        /// <summary>
+        /// Checks if the model system file is contained within a project file.
+        /// </summary>
+        public bool IsContainedInProjectFile => !(_archive is null);
+
+        /// <summary>
         /// Export the model system to the given path.
         /// </summary>
         /// <param name="projectSession">An editing session for the project that is being exported from.</param>
@@ -183,131 +193,45 @@ namespace XTMF2
             var toReturn = new ModelSystemFile(filePath);
             try
             {
-                using var archive = ZipFile.OpenRead(filePath);
-                var entry = archive.GetEntry(MetaDataFilePath);
-                if(entry is null)
+                using var stream = File.OpenRead(filePath);
+                if(!LoadModelSystemFile(toReturn, stream, ref error))
                 {
-                    error = "The archive did not contain a meta-data file!";
                     return false;
                 }
-                byte[] buffer;
-                using (var entryStream = entry.Open())
+                msf = toReturn;
+                return true;
+            }
+            catch (IOException e)
+            {
+                error = e.Message;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Load a model system file from within a project file.
+        /// </summary>
+        /// <param name="archive">The project file archive.</param>
+        /// <param name="stream">A stream to this model system file.</param>
+        /// <param name="msf">The resulting model system file.</param>
+        /// <param name="error">An error message if loading the model system file fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        internal static bool LoadModelSystemFile(ZipArchive archive, string path, out ModelSystemFile msf, ref string error)
+        {
+            msf = null;
+            try
+            {
+                var entry = archive.GetEntry(path);
+                if (entry is null)
                 {
-                    buffer = new byte[entry.Length];
-                    var length = entryStream.Read(buffer, 0, buffer.Length);
-                    if(length != buffer.Length)
-                    {
-                        error = "Unable to read the meta-data file";
-                        return false;
-                    }
-                }
-                var reader = new Utf8JsonReader(buffer);
-                if (!reader.Read())
-                {
-                    error = "Unable to read the initial object.";
+                    error = $"No model system file was found within the project file with the name {path}";
                     return false;
                 }
-                while (reader.Read())
+                using var stream = entry.Open();
+                var toReturn = new ModelSystemFile(archive, path);
+                if (!LoadModelSystemFile(toReturn, stream, ref error))
                 {
-                    if (reader.TokenType == JsonTokenType.PropertyName)
-                    {
-                        if (reader.ValueTextEquals(PropertyName))
-                        {
-                            if (!reader.Read())
-                            {
-                                error = "The reader was unable to read after a property name was declared!";
-                                return false;
-                            }
-                            if (reader.TokenType != JsonTokenType.String)
-                            {
-                                error = "Expected a string token after reading a Name property!";
-                            }
-                            toReturn.Name = reader.GetString();
-                        }
-                        else if (reader.ValueTextEquals(PropertyDescription))
-                        {
-                            if (!reader.Read())
-                            {
-                                error = "The reader was unable to read after a property name was declared!";
-                                return false;
-                            }
-                            if(reader.TokenType != JsonTokenType.String)
-                            {
-                                error = "Expected a string token after reading a Description property!";
-                            }
-                            toReturn.Description = reader.GetString();
-                        }
-                        else if (reader.ValueTextEquals(PropertyExportedOn))
-                        {
-                            if (!reader.Read())
-                            {
-                                error = "The reader was unable to read after a property name was declared!";
-                                return false;
-                            }
-                            if (reader.TokenType != JsonTokenType.String)
-                            {
-                                error = "Expected a string token after reading a ExportedOn property!";
-                            }
-                            var tempStr = reader.GetString();
-                            if(!DateTime.TryParse(tempStr, out var tempDateTime))
-                            {
-                                error = $"Unable to parse '{tempStr}' as a date-time.";
-                                return false;
-                            }
-                            toReturn.ExportedOn = tempDateTime;
-                        }
-                        else if (reader.ValueTextEquals(PropertyExportedBy))
-                        {
-                            if (!reader.Read())
-                            {
-                                error = "The reader was unable to read after a property name was declared!";
-                                return false;
-                            }
-                            if (reader.TokenType != JsonTokenType.String)
-                            {
-                                error = "Expected a string token after reading a ExportedBy property!";
-                            }
-                            toReturn.ExportedBy = reader.GetString();
-                        }
-                        else if (reader.ValueTextEquals(PropertyVersionMajor))
-                        {
-                            if (!reader.Read())
-                            {
-                                error = "The reader was unable to read after a property name was declared!";
-                                return false;
-                            }
-                            if (reader.TokenType != JsonTokenType.Number)
-                            {
-                                error = "Expected a number token after reading a VersionMajor property!";
-                            }
-                            if(!reader.TryGetInt32(out toReturn._majorVersion))
-                            {
-                                error = "Unable to read the major version number.";
-                                return false;
-                            }
-                        }
-                        else if (reader.ValueTextEquals(PropertyVersionMinor))
-                        {
-                            if (!reader.Read())
-                            {
-                                error = "The reader was unable to read after a property name was declared!";
-                                return false;
-                            }
-                            if (reader.TokenType != JsonTokenType.Number)
-                            {
-                                error = "Expected a number token after reading a VersionMinor property!";
-                            }
-                            if (!reader.TryGetInt32(out toReturn._minorVersion))
-                            {
-                                error = "Unable to read the minor version number.";
-                                return false;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        reader.Skip();
-                    }
+                    return false;
                 }
                 msf = toReturn;
                 return true;
@@ -319,8 +243,145 @@ namespace XTMF2
             return false;
         }
 
+        private static bool LoadModelSystemFile(ModelSystemFile toReturn, Stream stream, ref string error)
+        {
+            var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+            var entry = archive.GetEntry(MetaDataFilePath);
+            if (entry is null)
+            {
+                error = "The archive did not contain a meta-data file!";
+                return false;
+            }
+            byte[] buffer;
+            using (var entryStream = entry.Open())
+            {
+                buffer = new byte[entry.Length];
+                var length = entryStream.Read(buffer, 0, buffer.Length);
+                if (length != buffer.Length)
+                {
+                    error = "Unable to read the meta-data file";
+                    return false;
+                }
+            }
+            var reader = new Utf8JsonReader(buffer);
+            if (!reader.Read())
+            {
+                error = "Unable to read the initial object.";
+                return false;
+            }
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.PropertyName)
+                {
+                    if (reader.ValueTextEquals(PropertyName))
+                    {
+                        if (!reader.Read())
+                        {
+                            error = "The reader was unable to read after a property name was declared!";
+                            return false;
+                        }
+                        if (reader.TokenType != JsonTokenType.String)
+                        {
+                            error = "Expected a string token after reading a Name property!";
+                        }
+                        toReturn.Name = reader.GetString();
+                    }
+                    else if (reader.ValueTextEquals(PropertyDescription))
+                    {
+                        if (!reader.Read())
+                        {
+                            error = "The reader was unable to read after a property name was declared!";
+                            return false;
+                        }
+                        if (reader.TokenType != JsonTokenType.String)
+                        {
+                            error = "Expected a string token after reading a Description property!";
+                        }
+                        toReturn.Description = reader.GetString();
+                    }
+                    else if (reader.ValueTextEquals(PropertyExportedOn))
+                    {
+                        if (!reader.Read())
+                        {
+                            error = "The reader was unable to read after a property name was declared!";
+                            return false;
+                        }
+                        if (reader.TokenType != JsonTokenType.String)
+                        {
+                            error = "Expected a string token after reading a ExportedOn property!";
+                        }
+                        var tempStr = reader.GetString();
+                        if (!DateTime.TryParse(tempStr, out var tempDateTime))
+                        {
+                            error = $"Unable to parse '{tempStr}' as a date-time.";
+                            return false;
+                        }
+                        toReturn.ExportedOn = tempDateTime;
+                    }
+                    else if (reader.ValueTextEquals(PropertyExportedBy))
+                    {
+                        if (!reader.Read())
+                        {
+                            error = "The reader was unable to read after a property name was declared!";
+                            return false;
+                        }
+                        if (reader.TokenType != JsonTokenType.String)
+                        {
+                            error = "Expected a string token after reading a ExportedBy property!";
+                        }
+                        toReturn.ExportedBy = reader.GetString();
+                    }
+                    else if (reader.ValueTextEquals(PropertyVersionMajor))
+                    {
+                        if (!reader.Read())
+                        {
+                            error = "The reader was unable to read after a property name was declared!";
+                            return false;
+                        }
+                        if (reader.TokenType != JsonTokenType.Number)
+                        {
+                            error = "Expected a number token after reading a VersionMajor property!";
+                        }
+                        if (!reader.TryGetInt32(out toReturn._majorVersion))
+                        {
+                            error = "Unable to read the major version number.";
+                            return false;
+                        }
+                    }
+                    else if (reader.ValueTextEquals(PropertyVersionMinor))
+                    {
+                        if (!reader.Read())
+                        {
+                            error = "The reader was unable to read after a property name was declared!";
+                            return false;
+                        }
+                        if (reader.TokenType != JsonTokenType.Number)
+                        {
+                            error = "Expected a number token after reading a VersionMinor property!";
+                        }
+                        if (!reader.TryGetInt32(out toReturn._minorVersion))
+                        {
+                            error = "Unable to read the minor version number.";
+                            return false;
+                        }
+                    }
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            }
+            return true;
+        }
+
         private ModelSystemFile(string path)
         {
+            _modelSystemFilePath = path;
+        }
+
+        public ModelSystemFile(ZipArchive archive, string path)
+        {
+            _archive = archive;
             _modelSystemFilePath = path;
         }
 
@@ -335,12 +396,25 @@ namespace XTMF2
         {
             try
             {
-                using var archive = ZipFile.OpenRead(_modelSystemFilePath);
+                using var archive = 
+                    IsContainedInProjectFile ? 
+                      new ZipArchive(_archive.GetEntry(_modelSystemFilePath).Open(), ZipArchiveMode.Read, false)
+                    : ZipFile.OpenRead(_modelSystemFilePath);
                 var entry = archive.GetEntry(ModelSystemFilePath);
                 if(entry is null)
                 {
                     error = "The model system file does not contain a model system within it!";
                     return false;
+                }
+                // Make sure that the path to the file exists, and if not create the directories.
+                var destinationPath = new FileInfo(modelSystemPath);
+                if(!destinationPath.Exists)
+                {
+                    var dir = destinationPath.Directory;
+                    if(!dir.Exists)
+                    {
+                        dir.Create();
+                    }
                 }
                 entry.ExtractToFile(modelSystemPath, true);
                 return true;

@@ -96,11 +96,11 @@ namespace XTMF2
         }
 
         /// <summary>
-        /// Checks to see if a user has a project with the given name already defined and is the owner.
+        /// Checks to see if a user owns a project with the given name already defined and is the owner.
         /// </summary>
         /// <param name="name">The name of the project</param>
         /// <returns>True if there is already a project defined with the name and is the owner.</returns>
-        internal bool HasProjectWithName(string name)
+        internal bool OwnsProjectWithName(string name)
         {
             lock (_projectLock)
             {

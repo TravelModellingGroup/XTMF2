@@ -69,6 +69,36 @@ namespace XTMF2
         /// </summary>
         /// <param name="name">A unique name for the test</param>
         /// <param name="toExecute">The logic to execute inside of a model system context</param>
+        internal static void RunInProjectContext(string name, Action<XTMFRuntime, User, ProjectSession> toExecute)
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            string error = null;
+            string userName = name + "TempUser";
+            string projectName = "TestProject";
+            // clear out the user if possible
+            userController.Delete(userName);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            try
+            {
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                {
+                    toExecute(runtime, user, projectSession);
+                }), error);
+            }
+            finally
+            {
+                //cleanup
+                userController.Delete(user);
+            }
+        }
+
+        /// <summary>
+        /// Create a context to edit a model system for testing
+        /// </summary>
+        /// <param name="name">A unique name for the test</param>
+        /// <param name="toExecute">The logic to execute inside of a model system context</param>
         internal static void RunInProjectContext(string name, Action<User, User, ProjectSession> toExecute)
         {
             var runtime = XTMFRuntime.CreateRuntime();

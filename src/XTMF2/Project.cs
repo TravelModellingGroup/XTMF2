@@ -147,6 +147,63 @@ namespace XTMF2
             return false;
         }
 
+        internal static bool Load(ProjectFile projectFile, string projectName, User owner, out Project project, ref string error)
+        {
+            bool deleteProject = true;
+            Project toReturn = null;
+            try
+            {
+                project = null;
+                if (!New(owner, projectName, projectFile.Description, out toReturn, ref error))
+                {
+                    return false;
+                }
+                foreach (var msf in projectFile.ModelSystems)
+                {
+                    if (!toReturn.AddModelSystemFromModelSystemFile(msf.Name, msf, out var _, ref error))
+                    {
+                        return false;
+                    }
+                }
+                if (!toReturn.Save(ref error))
+                {
+                    return false;
+                }
+                project = toReturn;
+                deleteProject = false;
+                return true;
+            }
+            finally
+            {
+                if(deleteProject && !(toReturn is null))
+                {
+                    toReturn.Delete(ref error);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Delete the project.  This should only be called from the project controller
+        /// unless the project has never been added to the project controller.
+        /// </summary>
+        internal bool Delete(ref string error)
+        {
+            try
+            {
+                var directory = new DirectoryInfo(ProjectDirectory);
+                if (directory.Exists)
+                {
+                    directory.Delete(true);
+                    return true;
+                }
+            }
+            catch(IOException e)
+            {
+                error = e.Message;
+            }
+            return false;
+        }
+
         internal bool GetModelSystemHeader(string modelSystemName, out ModelSystemHeader modelSystemHeader, ref string error)
         {
             modelSystemHeader = _ModelSystems.FirstOrDefault(msh => msh.Name.Equals(modelSystemName, StringComparison.OrdinalIgnoreCase));
@@ -358,21 +415,15 @@ namespace XTMF2
         /// <summary>
         /// Add a model system to the project from a model system file.
         /// </summary>
-        /// <param name="projectSession">The project session that the model system is going into.</param>
         /// <param name="modelSystemName">The name to use for the new model system.  It must be unique.</param>
         /// <param name="msf">The model system file to use.</param>
         /// <param name="header">A model system header to the newly imported model system.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
-        internal bool AddModelSystemFromModelSystemFile(ProjectSession projectSession, string modelSystemName,
+        internal bool AddModelSystemFromModelSystemFile(string modelSystemName,
             ModelSystemFile msf, out ModelSystemHeader header, ref string error)
         {
             header = null;
-            if (projectSession is null)
-            {
-                throw new ArgumentNullException(nameof(projectSession));
-            }
-
             if (msf is null)
             {
                 throw new ArgumentNullException(nameof(msf));

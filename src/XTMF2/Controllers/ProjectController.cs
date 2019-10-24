@@ -59,7 +59,7 @@ namespace XTMF2.Controllers
             var path = GetPath(owner, name);
             lock (ControllerLock)
             {
-                if (owner.HasProjectWithName(name))
+                if (owner.OwnsProjectWithName(name))
                 {
                     error = "A project with that name already exists!";
                     return false;
@@ -70,6 +70,58 @@ namespace XTMF2.Controllers
                 }
                 owner.AddedUserToProject(p);
                 session = GetSession(p);
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Import a project file.
+        /// </summary>
+        /// <param name="owner">The user that will own this project.</param>
+        /// <param name="name">The name to give this project. This must be unique for the given user.</param>
+        /// <param name="filePath">The path to the project file.</param>
+        /// <param name="session">An editing session for the imported project.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
+        public bool ImportProjectFile(User owner, string name, string filePath, out ProjectSession session, ref string error)
+        {
+            session = null;
+            if (owner is null)
+            {
+                throw new ArgumentNullException(nameof(owner));
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                error = "A project must have a non-blank unique name.";
+                return false;
+            }
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new ArgumentException("message", nameof(filePath));
+            }
+            if (!ValidateProjectName(name, ref error))
+            {
+                return false;
+            }
+            lock (ControllerLock)
+            {
+                if(owner.OwnsProjectWithName(name))
+                {
+                    error = "The user already has project with that name!";
+                    return false;
+                }
+                if(!ProjectFile.ImportProject(owner, name, filePath, out Project project, ref error))
+                {
+                    return false;
+                }
+                if(!Projects.Add(project, ref error))
+                {
+                    project.Delete(ref error);
+                    return false;
+                }
+                owner.AddedUserToProject(project);
+                session = GetSession(project);
                 return true;
             }
         }
@@ -205,13 +257,7 @@ namespace XTMF2.Controllers
                 }
                 ActiveSessions.Remove(project);
                 Projects.Remove(project);
-                var directory = new DirectoryInfo(project.ProjectDirectory);
-                if (directory.Exists)
-                {
-                    directory.Delete(true);
-                    return true;
-                }
-                return false;
+                return project.Delete(ref error);
             }
         }
 
