@@ -66,6 +66,48 @@ namespace XTMF2
         internal const string MetaDataFilePath = "metadata.json";
 
         /// <summary>
+        /// The name of the project that was exported
+        /// </summary>
+        public string Name { get; private set; }
+
+        /// <summary>
+        /// The description of the project that was exported
+        /// </summary>
+        public string Description { get; private set; }
+
+        /// <summary>
+        /// The name of the user that exported the project.
+        /// </summary>
+        public string ExportedBy { get; private set; }
+
+        /// <summary>
+        /// The time that the project was exported.
+        /// </summary>
+        public DateTime ExportedOn { get; private set; }
+
+        /// <summary>
+        /// The version number (X.Y) of XTMF that exported the project.
+        /// </summary>
+        public (int Major, int Minor) ExportingXTMFVersion => (_majorVersion, _minorVersion);
+
+        private int _majorVersion, _minorVersion;
+
+        public ReadOnlyCollection<ModelSystemFile> ModelSystems => new ReadOnlyCollection<ModelSystemFile>(_modelSystemFiles);
+
+        private readonly List<ModelSystemFile> _modelSystemFiles = new List<ModelSystemFile>();
+
+        /// <summary>
+        /// The path the model system file was loaded from.
+        /// </summary>
+        private readonly string _projectFilePath = null;
+
+        private ProjectFile(string filePath)
+        {
+            _projectFilePath = filePath;
+        }
+
+
+        /// <summary>
         /// Have a user export the project to a given path.  The project must not have any active editing sessions.
         /// </summary>
         /// <param name="projectSession">The project session to export.</param>
@@ -93,7 +135,7 @@ namespace XTMF2
                 var headers = project.ModelSystems;
                 // Write meta-data
                 WriteMetaData(tempDirName, project, user, headers);
-                if(!WriteModelSystems(projectSession, tempDirName, user, headers, ref error))
+                if (!WriteModelSystems(projectSession, tempDirName, user, headers, ref error))
                 {
                     return false;
                 }
@@ -146,7 +188,7 @@ namespace XTMF2
         /// Write a meta-data file for the 
         /// </summary>
         /// <param name="tempDirName"></param>
-        private static void WriteMetaData(string tempDirName, Project project, User user, 
+        private static void WriteMetaData(string tempDirName, Project project, User user,
             ReadOnlyObservableCollection<ModelSystemHeader> modelSystemHeaders)
         {
             System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
@@ -167,6 +209,116 @@ namespace XTMF2
             }
             writer.WriteEndArray();
             writer.WriteEndObject();
+        }
+
+        /// <summary>
+        /// Import a project file from the given path.
+        /// </summary>
+        /// <param name="owner">The owner of the imported project.</param>
+        /// <param name="name">The name to give to the project.</param>
+        /// <param name="filePath">The location of the project file.</param>
+        /// <param name="project">The resulting project.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        internal static bool ImportProject(User owner, string name, string filePath, out Project project, ref string error)
+        {
+            project = null;
+            try
+            {
+                var projectFile = new ProjectFile(filePath);
+                using var archive = ZipFile.OpenRead(filePath);
+                if (!LoadMetaData(projectFile, archive, ref error))
+                {
+                    return false;
+                }
+                return Project.Load(projectFile, name, owner, out project, ref error);
+            }
+            catch(IOException e)
+            {
+                error = e.Message;
+            }
+            catch(InvalidDataException e)
+            {
+                error = e.Message;
+            }
+            return false;
+        }
+
+        private static bool LoadMetaData(ProjectFile projectFile, ZipArchive archive, ref string error)
+        {
+            try
+            {
+                var metaDataEntry = archive.GetEntry("metadata.json");
+                if(metaDataEntry is null)
+                {
+                    error = "There was no metadata entry in the project file!";
+                    return false;
+                }
+                using var metaDataStream = metaDataEntry.Open();
+                using var backingStream = new MemoryStream();
+                metaDataStream.CopyTo(backingStream);
+                var reader = new Utf8JsonReader(backingStream.GetBuffer().AsSpan(0, (int)backingStream.Length));
+                while(reader.Read())
+                {
+                    if(reader.TokenType != JsonTokenType.PropertyName)
+                    {
+                        continue;
+                    }
+                    if(reader.ValueTextEquals(PropertyName))
+                    {
+                        reader.Read();
+                        projectFile.Name = reader.GetString();
+                    }
+                    else if(reader.ValueTextEquals(PropertyDescription))
+                    {
+                        reader.Read();
+                        projectFile.Description = reader.GetString();
+                    }
+                    else if(reader.ValueTextEquals(PropertyExportedOn))
+                    {
+                        reader.Read();
+                        projectFile.ExportedOn = reader.GetDateTime();
+                    }
+                    else if(reader.ValueTextEquals(PropertyExportedBy))
+                    {
+                        reader.Read();
+                        projectFile.ExportedBy = reader.GetString();
+                    }
+                    else if(reader.ValueTextEquals(PropertyVersionMajor))
+                    {
+                        reader.Read();
+                        projectFile._majorVersion = reader.GetInt32();
+                    }
+                    else if (reader.ValueTextEquals(PropertyVersionMinor))
+                    {
+                        reader.Read();
+                        projectFile._minorVersion = reader.GetInt32();
+                    }
+                    else if(reader.ValueTextEquals(PropertyModelSystems))
+                    {
+                        reader.Read();
+                        while(reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                        {
+                            var path = reader.GetString();
+                            if(!ModelSystemFile.LoadModelSystemFile(archive, path, out var msf, ref error))
+                            {
+                                return false;
+                            }
+                            projectFile._modelSystemFiles.Add(msf);
+                        }
+                    }
+                }
+                return true;
+            }
+            catch (JsonException e)
+            {
+                error = e.Message;
+            }
+            catch (IOException e)
+            {
+                error = e.Message;
+            }
+            return false;
         }
     }
 }

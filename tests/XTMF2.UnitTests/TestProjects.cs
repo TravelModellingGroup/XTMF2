@@ -19,6 +19,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.IO;
+using System.Linq;
 using TestXTMF;
 using TestXTMF.Modules;
 using XTMF2.Editing;
@@ -240,6 +241,165 @@ namespace XTMF2
                     }
                     Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
                     Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void ImportProjectFileNoModelSystem()
+        {
+            TestHelper.RunInProjectContext("ImportProjectFileNoModelSystem", (XTMFRuntime runtime, User user, ProjectSession project) =>
+            {
+                string error = null;
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
+                    var projectController = runtime.ProjectController;
+                    Assert.IsTrue(projectController.ImportProjectFile(user, "ImportProjectFileNoModelSystem-Imported", tempFile.FullName,
+                        out var importedSession, ref error), error);
+                    Assert.IsNotNull(importedSession);
+                    using(importedSession)
+                    {
+                        var modelSystems = importedSession.ModelSystems;
+                        Assert.AreEqual(0, modelSystems.Count);
+                    }
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void ImportProjectFileSingleModelSystem()
+        {
+            TestHelper.RunInProjectContext("ImportProjectFileSingleModelSystem", (XTMFRuntime runtime, User user, ProjectSession project) =>
+            {
+                string error = null;
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    CreateModelSystem(user, project, "ModelSystem1", "A single model system", null);
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
+                    var projectController = runtime.ProjectController;
+                    Assert.IsTrue(projectController.ImportProjectFile(user, "ImportProjectFileSingleModelSystem-Imported", tempFile.FullName,
+                        out var importedSession, ref error), error);
+                    Assert.IsNotNull(importedSession);
+                    using (importedSession)
+                    {
+                        var modelSystems = importedSession.ModelSystems;
+                        Assert.AreEqual(1, modelSystems.Count);
+                    }
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void ImportProjectFileMultipleModelSystem()
+        {
+            TestHelper.RunInProjectContext("ImportProjectFileSingleModelSystem", (XTMFRuntime runtime, User user, ProjectSession project) =>
+            {
+                string error = null;
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    const int numberOfModelSystems = 5;
+                    for(int i = 0; i < numberOfModelSystems; i++)
+                    {
+                        CreateModelSystem(user, project, "ModelSystem" + i, "One of many model systems", null);
+                    }
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
+                    var projectController = runtime.ProjectController;
+                    Assert.IsTrue(projectController.ImportProjectFile(user, "ImportProjectFileSingleModelSystem-Imported", tempFile.FullName,
+                        out var importedSession, ref error), error);
+                    Assert.IsNotNull(importedSession);
+                    using (importedSession)
+                    {
+                        var modelSystems = importedSession.ModelSystems;
+                        Assert.AreEqual(numberOfModelSystems, modelSystems.Count);
+                    }
+                }
+                finally
+                {
+                    tempFile.Refresh();
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void ImportProjectFileAddedToController()
+        {
+            const string ImportedModelSystemName = "ImportProjectFileNoModelSystemPersist-Imported";
+            TestHelper.RunInProjectContext("ImportProjectFileNoModelSystemPersist", (XTMFRuntime runtime, User user, ProjectSession project) =>
+            {
+                string error = null;
+                var tempFile = new FileInfo(Path.GetTempFileName());
+                try
+                {
+                    // Make sure the file does not exist before starting.
+                    if (tempFile.Exists)
+                    {
+                        tempFile.Delete();
+                    }
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
+                    var projectController = runtime.ProjectController;
+                    
+                    Assert.IsTrue(projectController.ImportProjectFile(user, ImportedModelSystemName, tempFile.FullName,
+                        out var importedSession, ref error), error);
+                    Assert.IsNotNull(importedSession);
+                    Assert.IsTrue(user.AvailableProjects.Any(p => p.Name == ImportedModelSystemName), "The imported project was not available to use user.");
+                    using (importedSession)
+                    {
+                        var modelSystems = importedSession.ModelSystems;
+                        Assert.AreEqual(0, modelSystems.Count);
+                    }
+                    Assert.IsTrue(user.AvailableProjects.Any(p => p.Name == ImportedModelSystemName), "The imported project was not available to use user.");
+                    
                 }
                 finally
                 {
