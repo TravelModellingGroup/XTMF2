@@ -98,7 +98,8 @@ namespace XTMF2.Controllers
             }
             if (string.IsNullOrWhiteSpace(filePath))
             {
-                throw new ArgumentException("message", nameof(filePath));
+                error = "The path to the project file must be not null or whitespace";
+                return false;
             }
             if (!ValidateProjectName(name, ref error))
             {
