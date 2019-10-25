@@ -49,6 +49,28 @@ namespace XTMF2
         }
 
         [TestMethod]
+        public void RenameProject()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var controller = runtime.ProjectController;
+            string error = null;
+            var localUser = TestHelper.GetTestUser(runtime);
+            // delete the project in case it has survived.
+            controller.DeleteProject(localUser, "Test", ref error);
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
+            {
+                var project = session.Project;
+                Assert.AreEqual("Test", project.Name);
+                Assert.AreEqual(localUser, project.Owner);
+                Assert.IsFalse(controller.RenameProject(localUser, project, "RenamedTestProject", ref error),
+                    "RenameProject succeeded even through it was currently being edited!");
+            }), "Unable to create project");
+            Assert.IsTrue(controller.GetProject(localUser, "Test", out var project, ref error), error);
+            Assert.IsTrue(controller.RenameProject(localUser, project, "RenamedTestProject", ref error), error);
+            Assert.IsTrue(controller.DeleteProject(localUser, project, ref error), "Failed to cleanup the project.");
+        }
+
+        [TestMethod]
         public void ProjectPersistance()
         {
             var runtime = XTMFRuntime.CreateRuntime();
