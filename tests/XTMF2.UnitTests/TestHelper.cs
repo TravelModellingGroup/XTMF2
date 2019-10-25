@@ -68,6 +68,43 @@ namespace XTMF2
         /// Create a context to edit a model system for testing
         /// </summary>
         /// <param name="name">A unique name for the test</param>
+        /// <param name="toExecuteFirst">The logic to execute inside of a model system context</param>
+        /// <param name="toExecuteSecond">The logic to execute inside of a model system context</param>
+        internal static void RunInProjectContext(string name, Action<User, ProjectSession> toExecuteFirst, Action<User, ProjectSession> toExecuteSecond)
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            string error = null;
+            string userName = name + "TempUser";
+            string projectName = "TestProject";
+            // clear out the user if possible
+            userController.Delete(userName);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            try
+            {
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                {
+                    toExecuteFirst(user, projectSession);
+                }), error);
+
+                Assert.IsTrue(projectController.GetProject(user, projectName, out var project, ref error), error);
+                Assert.IsTrue(projectController.GetProjectSession(user, project, out projectSession, ref error).UsingIf(projectSession, () =>
+                {
+                    toExecuteSecond(user, projectSession);
+                }), error);
+            }
+            finally
+            {
+                //cleanup
+                userController.Delete(user);
+            }
+        }
+
+        /// <summary>
+        /// Create a context to edit a model system for testing
+        /// </summary>
+        /// <param name="name">A unique name for the test</param>
         /// <param name="toExecute">The logic to execute inside of a model system context</param>
         internal static void RunInProjectContext(string name, Action<XTMFRuntime, User, ProjectSession> toExecute)
         {

@@ -507,5 +507,58 @@ namespace XTMF2.Editing
             }
             return false;
         }
+
+        /// <summary>
+        /// Set a custom run directory for this project.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="fullName">The path to where to store runs.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool SetCustomRunDirectory(User user, string fullName, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (string.IsNullOrWhiteSpace(fullName))
+            {
+                error = $"A non-blank directory is expected.";
+                return false;
+            }
+            lock(_sessionLock)
+            {
+                if(!Project.CanAccess(user))
+                {
+                    error = "The user does not have access to this project.";
+                    return false;
+                }
+                return Project.SetCustomRunsDirectory(fullName, ref error);
+            }
+        }
+
+        /// <summary>
+        /// Reset the project's run directory back to the default directory.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool ResetCustomRunDirectory(User user, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            lock (_sessionLock)
+            {
+                if(!Project.CanAccess(user))
+                {
+                    error = "The user can not access this project.";
+                    return false;
+                }
+                return Project.ResetRunsDirectory(ref error);
+            }
+        }
     }
 }
