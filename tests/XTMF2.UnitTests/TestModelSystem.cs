@@ -606,5 +606,20 @@ namespace XTMF2
                 }
             });
         }
+
+        [TestMethod]
+        public void RenameModelSystem()
+        {
+            RunInProjectContext("RenameModelSystem", (user, project) =>
+            {
+                string error = null;
+                var msName = "MSToExport";
+                var newName = "NewMSName";
+                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.AreEqual(msName, msHeader.Name);
+                Assert.IsTrue(project.RenameModelSystem(user, msHeader, newName, ref error), error);
+                Assert.AreEqual(newName, msHeader.Name);
+            });
+        }
     }
 }
