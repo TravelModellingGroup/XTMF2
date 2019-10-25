@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2019 University of Toronto
 
     This file is part of XTMF2.
 
@@ -273,7 +273,7 @@ namespace XTMF2
                     Assert.IsTrue(projectController.ImportProjectFile(user, "ImportProjectFileNoModelSystem-Imported", tempFile.FullName,
                         out var importedSession, ref error), error);
                     Assert.IsNotNull(importedSession);
-                    using(importedSession)
+                    using (importedSession)
                     {
                         var modelSystems = importedSession.ModelSystems;
                         Assert.AreEqual(0, modelSystems.Count);
@@ -343,7 +343,7 @@ namespace XTMF2
                         tempFile.Delete();
                     }
                     const int numberOfModelSystems = 5;
-                    for(int i = 0; i < numberOfModelSystems; i++)
+                    for (int i = 0; i < numberOfModelSystems; i++)
                     {
                         CreateModelSystem(user, project, "ModelSystem" + i, "One of many model systems", null);
                     }
@@ -388,7 +388,7 @@ namespace XTMF2
                     Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
                     Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
                     var projectController = runtime.ProjectController;
-                    
+
                     Assert.IsTrue(projectController.ImportProjectFile(user, ImportedModelSystemName, tempFile.FullName,
                         out var importedSession, ref error), error);
                     Assert.IsNotNull(importedSession);
@@ -399,7 +399,7 @@ namespace XTMF2
                         Assert.AreEqual(0, modelSystems.Count);
                     }
                     Assert.IsTrue(user.AvailableProjects.Any(p => p.Name == ImportedModelSystemName), "The imported project was not available to use user.");
-                    
+
                 }
                 finally
                 {
@@ -407,6 +407,69 @@ namespace XTMF2
                     if (tempFile.Exists)
                     {
                         tempFile.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void SetRunsDirectory()
+        {
+            TestHelper.RunInProjectContext("SetRunsDirectory", (User user, ProjectSession project) =>
+            {
+                var dir = new DirectoryInfo(Guid.NewGuid().ToString());
+                try
+                {
+                    string error = null;
+                    dir.Create();
+                    Assert.IsTrue(project.SetCustomRunDirectory(user, dir.FullName, ref error), error);
+                    Assert.AreEqual(dir.FullName, project.RunsDirectory);
+                }
+                finally
+                {
+                    if (dir.Exists)
+                    {
+                        dir.Delete();
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void SetRunsDirectoryToInvalidPath()
+        {
+            TestHelper.RunInProjectContext("SetRunsDirectoryToInvalidPath", (User user, ProjectSession project) =>
+            {
+                string error = null;
+                var initialDirectory = project.RunsDirectory;
+                const string anInvalidPath = ":?!@#://#%$^&|";
+                Assert.IsFalse(project.SetCustomRunDirectory(user, anInvalidPath, ref error), "An invalid path was able to be set.");
+                Assert.AreEqual(initialDirectory, project.RunsDirectory);
+            });
+        }
+
+        [TestMethod]
+        public void ResetRunsDirectory()
+        {
+            TestHelper.RunInProjectContext("ResetRunsDirectory", (User user, ProjectSession project) =>
+            {
+                var newRunDir = Guid.NewGuid().ToString();
+                DirectoryInfo dir = new DirectoryInfo(newRunDir);
+                try
+                {
+                    string error = null;
+                    dir.Create();
+                    var initialDirectory = project.RunsDirectory;
+                    Assert.IsTrue(project.SetCustomRunDirectory(user, dir.FullName, ref error), error);
+                    Assert.AreEqual(dir.FullName, project.RunsDirectory);
+                    Assert.IsTrue(project.ResetCustomRunDirectory(user, ref error), error);
+                    Assert.AreEqual(initialDirectory, project.RunsDirectory);
+                }
+                finally
+                {
+                    if (dir.Exists)
+                    {
+                        dir.Delete();
                     }
                 }
             });

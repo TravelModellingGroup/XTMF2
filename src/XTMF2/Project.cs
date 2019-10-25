@@ -41,6 +41,7 @@ namespace XTMF2
         private const string ModelSystemHeadersProperty = "ModelSystemHeaders";
         private const string OwnerProperty = "Owner";
         private const string AdditionalUsersProperty = "AdditionalUsers";
+        private const string CustomRunDirectoryProperty = "CustomRunDirectory";
 
         public string Name { get; private set; }
         public string Description { get; private set; }
@@ -52,7 +53,12 @@ namespace XTMF2
         ObservableCollection<ModelSystemHeader> _ModelSystems = new ObservableCollection<ModelSystemHeader>();
         public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => new ReadOnlyObservableCollection<ModelSystemHeader>(_ModelSystems);
 
-        public string RunsDirectory => Path.Combine(ProjectDirectory, "Runs");
+        public string RunsDirectory => HasCustomRunDirectory ? _customRunDirectory : DefaultRunDirectory;
+        private string DefaultRunDirectory => Path.Combine(ProjectDirectory, "Runs");
+
+        public bool HasCustomRunDirectory => !(_customRunDirectory is null);
+
+        private string _customRunDirectory = null;
 
         private object ProjectLock = new object();
 
@@ -122,6 +128,14 @@ namespace XTMF2
                                     user.AddedUserToProject(project);
                                 }
                             }
+                            else if(reader.ValueTextEquals(CustomRunDirectoryProperty))
+                            {
+                                reader.Read();
+                                if (reader.TokenType == JsonTokenType.String)
+                                {
+                                    project._customRunDirectory = reader.GetString();
+                                }
+                            }
                             else
                             {
                                 reader.Skip();
@@ -164,10 +178,6 @@ namespace XTMF2
                     {
                         return false;
                     }
-                }
-                if (!toReturn.Save(ref error))
-                {
-                    return false;
                 }
                 project = toReturn;
                 deleteProject = false;
@@ -240,7 +250,7 @@ namespace XTMF2
                 {
                     newOwner.AddedUserToProject(this);
                 }
-                return true;
+                return Save(ref error);
             }
         }
 
@@ -255,7 +265,7 @@ namespace XTMF2
                 }
                 _AdditionalUsers.Add(toShareWith);
                 toShareWith.AddedUserToProject(this);
-                return true;
+                return Save(ref error);
             }
         }
 
@@ -270,7 +280,7 @@ namespace XTMF2
                 }
                 _AdditionalUsers.Remove(toRemove);
                 toRemove.RemovedUserForProject(this);
-                return true;
+                return Save(ref error);
             }
         }
 
@@ -333,6 +343,10 @@ namespace XTMF2
                             ms.Save(writer);
                         }
                         writer.WriteEndArray();
+                        if(HasCustomRunDirectory)
+                        {
+                            writer.WriteString(CustomRunDirectoryProperty, _customRunDirectory);
+                        }
                         writer.WriteEndObject();
                     }
                 }
@@ -378,7 +392,7 @@ namespace XTMF2
             }
             Name = name;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
-            return true;
+            return Save(ref error);
         }
 
         public bool SetDescription(ProjectSession session, string description, ref string error)
@@ -396,7 +410,7 @@ namespace XTMF2
             }
             if (_ModelSystems.Remove(modelSystemHeader))
             {
-                return true;
+                return Save(ref error);
             }
             error = "Unable to find the model system!";
             return false;
@@ -409,7 +423,7 @@ namespace XTMF2
                 throw new ArgumentNullException(nameof(modelSystemHeader));
             }
             _ModelSystems.Add(modelSystemHeader);
-            return true;
+            return Save(ref error);
         }
 
         /// <summary>
@@ -440,7 +454,59 @@ namespace XTMF2
             }
             _ModelSystems.Add(tempHeader);
             header = tempHeader;
-            return true;
+            return Save(ref error);
+        }
+
+        internal bool SetCustomRunsDirectory(string runDirectory, ref string error)
+        {
+            var alreadyCustom = HasCustomRunDirectory;
+            try
+            {
+                // Make sure that we can actually use this directory
+                var dir = new DirectoryInfo(runDirectory);
+                if (!dir.Exists)
+                {
+                    dir.Create();
+                }
+            }
+            catch(IOException e)
+            {
+                error = $"Unable to use '{runDirectory}' for the custom runs directory. {e.Message}";
+                return false;
+            }
+            _customRunDirectory = runDirectory;
+            if (!alreadyCustom)
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasCustomRunDirectory)));
+            }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RunsDirectory)));
+            return Save(ref error);
+        }
+
+        internal bool ResetRunsDirectory(ref string error)
+        {
+            var alreadyCustom = HasCustomRunDirectory;
+            try
+            {
+                // Make sure that we can actually use this directory
+                var dir = new DirectoryInfo(DefaultRunDirectory);
+                if (!dir.Exists)
+                {
+                    dir.Create();
+                }
+            }
+            catch (IOException e)
+            {
+                error = $"Unable to use '{DefaultRunDirectory}' for the runs directory. {e.Message}";
+                return false;
+            }
+            _customRunDirectory = null;
+            if (alreadyCustom)
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasCustomRunDirectory)));
+            }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RunsDirectory)));
+            return Save(ref error);
         }
     }
 }
