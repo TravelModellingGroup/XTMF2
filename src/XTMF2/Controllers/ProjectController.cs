@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2019 University of Toronto
 
     This file is part of XTMF2.
 
@@ -27,44 +27,71 @@ using XTMF2.Editing;
 
 namespace XTMF2.Controllers
 {
+    /// <summary>
+    /// The project controller is used for getting access to
+    /// ProjectSessions, and creating new or deleting projects.
+    /// </summary>
     public sealed class ProjectController
     {
         /// <summary>
         /// The collection of projects that are available
         /// </summary>
-        private ProjectRepository Projects = new ProjectRepository();
+        private readonly ProjectRepository _projects = new ProjectRepository();
 
-        private XTMFRuntime Runtime;
+        private readonly XTMFRuntime _runtime;
 
-        private object ControllerLock = new object();
+        private readonly object _controllerLock = new object();
 
-        public ProjectController(XTMFRuntime runtime)
+        internal ProjectController(XTMFRuntime runtime)
         {
-            Runtime = runtime;
+            _runtime = runtime;
             LoadProjects(runtime);
         }
 
-        public ReadOnlyObservableCollection<Project> GetProjects(User user)
+        /// <summary>
+        /// Gets an observable collection of projects that the user
+        /// has access to.
+        /// </summary>
+        /// <param name="user">The user to get the collection for.</param>
+        /// <returns>A read only collection of the projects available to this user.</returns>
+        public static ReadOnlyObservableCollection<Project> GetProjects(User user)
         {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
             return user.AvailableProjects;
         }
 
+        /// <summary>
+        /// Create a new project.  The name of the project needs to be unique
+        /// for the given owner.
+        /// </summary>
+        /// <param name="owner">The user that owns the project.</param>
+        /// <param name="name">The name of the project.</param>
+        /// <param name="session">An editing session for this newly created project.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool CreateNewProject(User owner, string name, out ProjectSession session, ref string error)
         {
+            if (owner is null)
+            {
+                throw new ArgumentNullException(nameof(owner));
+            }
             session = null;
             if (!ValidateProjectName(name, ref error))
             {
                 return false;
             }
             var path = GetPath(owner, name);
-            lock (ControllerLock)
+            lock (_controllerLock)
             {
                 if (owner.OwnsProjectWithName(name))
                 {
                     error = "A project with that name already exists!";
                     return false;
                 }
-                if (!Projects.CreateNew(path, name, owner, out Project p, ref error))
+                if (!_projects.CreateNew(path, name, owner, out Project p, ref error))
                 {
                     return false;
                 }
@@ -105,7 +132,7 @@ namespace XTMF2.Controllers
             {
                 return false;
             }
-            lock (ControllerLock)
+            lock (_controllerLock)
             {
                 if(owner.OwnsProjectWithName(name))
                 {
@@ -116,7 +143,7 @@ namespace XTMF2.Controllers
                 {
                     return false;
                 }
-                if(!Projects.Add(project, ref error))
+                if(!_projects.Add(project, ref error))
                 {
                     project.Delete(ref error);
                     return false;
@@ -127,6 +154,14 @@ namespace XTMF2.Controllers
             }
         }
 
+        /// <summary>
+        /// Gets a project session for the given project.
+        /// </summary>
+        /// <param name="user">The user requesting the project session.</param>
+        /// <param name="project">The project that the session will be associated with.</param>
+        /// <param name="session">The resulting project session.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
         public bool GetProjectSession(User user, Project project, out ProjectSession session, ref string error)
         {
             if (user == null)
@@ -137,7 +172,7 @@ namespace XTMF2.Controllers
             {
                 throw new ArgumentNullException(nameof(project));
             }
-            lock(ControllerLock)
+            lock(_controllerLock)
             {
                 if(!project.CanAccess(user))
                 {
@@ -172,7 +207,7 @@ namespace XTMF2.Controllers
                         string error = null;
                         if (Project.Load(runtime.UserController, projectFile.FullName, out Project project, ref error))
                         {
-                            Projects.Add(project, ref error);
+                            _projects.Add(project, ref error);
                         }
                         else
                         {
@@ -184,6 +219,16 @@ namespace XTMF2.Controllers
             return errors;
         }
 
+        /// <summary>
+        /// Get a reference to the project with the user's name and project name as a string.
+        /// If the user has access to multiple projects with the same name, the one that they
+        /// own will be selected.
+        /// </summary>
+        /// <param name="userName">The name of the user that this is for.</param>
+        /// <param name="projectName">The name of the project to get a reference to.</param>
+        /// <param name="project">The resulting project reference.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
         public bool GetProject(string userName, string projectName, out Project project, ref string error)
         {
             if (String.IsNullOrWhiteSpace(userName))
@@ -194,7 +239,7 @@ namespace XTMF2.Controllers
             {
                 throw new ArgumentNullException(nameof(projectName));
             }
-            var user = Runtime.UserController.GetUserByName(userName);
+            var user = _runtime.UserController.GetUserByName(userName);
             if(user == null)
             {
                 project = null;
@@ -204,6 +249,16 @@ namespace XTMF2.Controllers
             return GetProject(user, projectName, out project, ref error);
         }
 
+        /// <summary>
+        /// Get a reference to the project with the user's name and project name as a string.
+        /// If the user has access to multiple projects with the same name, the one that they
+        /// own will be selected.
+        /// </summary>
+        /// <param name="userName">The name of the user that this is for.</param>
+        /// <param name="projectName">The name of the project to get a reference to.</param>
+        /// <param name="project">The resulting project reference.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
         public bool GetProject(User user, string projectName, out Project project, ref string error)
         {
             if(user == null)
@@ -214,12 +269,20 @@ namespace XTMF2.Controllers
             {
                 throw new ArgumentNullException(nameof(projectName));
             }
-            lock (ControllerLock)
+            lock (_controllerLock)
             {
-                return Projects.GetProject(user, projectName, out project, ref error);
+                return _projects.GetProject(user, projectName, out project, ref error);
             }
         }
 
+        /// <summary>
+        /// Delete a project with the given name.  The user must
+        /// be the owner in order to delete the project.
+        /// </summary>
+        /// <param name="user">The owner of the project.</param>
+        /// <param name="projectName">The name of the project to delete.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
         public bool DeleteProject(User user, string projectName, ref string error)
         {
             if (user == null)
@@ -230,15 +293,25 @@ namespace XTMF2.Controllers
             {
                 throw new ArgumentNullException(nameof(projectName));
             }
-            var project = GetProjects(user).FirstOrDefault(p => p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase));
-            if (project == null)
+            lock (_controllerLock)
             {
-                error = $"User does not have a project called {projectName}!";
-                return false;
+                var project = GetProjects(user).FirstOrDefault(p => p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase));
+                if (project == null)
+                {
+                    error = $"User does not have a project called {projectName}!";
+                    return false;
+                }
+                return DeleteProject(user, project, ref error);
             }
-            return DeleteProject(user, project, ref error);
         }
 
+        /// <summary>
+        /// Delete the given project.  The user must be the owner of the project.
+        /// </summary>
+        /// <param name="owner">The owner of the project.</param>
+        /// <param name="project">The project to delete.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
         public bool DeleteProject(User owner, Project project, ref string error)
         {
             if (owner == null)
@@ -249,15 +322,15 @@ namespace XTMF2.Controllers
             {
                 throw new ArgumentNullException(nameof(project));
             }
-            lock (ControllerLock)
+            lock (_controllerLock)
             {
                 owner.RemovedUserForProject(project);
                 foreach (var user in project.AdditionalUsers)
                 {
                     user.RemovedUserForProject(project);
                 }
-                ActiveSessions.Remove(project);
-                Projects.Remove(project);
+                _activeSessions.Remove(project);
+                _projects.Remove(project);
                 return project.Delete(ref error);
             }
         }
@@ -272,7 +345,7 @@ namespace XTMF2.Controllers
             // The project will be null if we are running the model system.
             if (!(project is null))
             {
-                ActiveSessions.Remove(project);
+                _activeSessions.Remove(project);
             }
         }
 
@@ -283,12 +356,12 @@ namespace XTMF2.Controllers
 
         private ProjectSession GetSession(Project project)
         {
-            lock (ControllerLock)
+            lock (_controllerLock)
             {
-                if (!ActiveSessions.TryGetValue(project, out var session))
+                if (!_activeSessions.TryGetValue(project, out var session))
                 {
-                    session = new ProjectSession(Runtime, project);
-                    ActiveSessions.Add(project, session);
+                    session = new ProjectSession(_runtime, project);
+                    _activeSessions.Add(project, session);
                 }
                 return session.AddReference();
             }
@@ -308,7 +381,7 @@ namespace XTMF2.Controllers
                 error = "A name must contain characters";
                 return false;
             }
-            if (name.Any(c => InvalidCharacters.Contains(c)))
+            if (name.Any(c => _invalidCharacters.Contains(c)))
             {
                 error = "An invalid character was found in the name.";
                 return false;
@@ -316,9 +389,9 @@ namespace XTMF2.Controllers
             return true;
         }
 
-        private Dictionary<Project, ProjectSession> ActiveSessions = new Dictionary<Project, ProjectSession>();
+        private readonly Dictionary<Project, ProjectSession> _activeSessions = new Dictionary<Project, ProjectSession>();
 
-        private static char[] InvalidCharacters =
+        private static readonly char[] _invalidCharacters =
             Path.GetInvalidPathChars().Union(Path.GetInvalidFileNameChars()).ToArray();
 
         /// <summary>
@@ -339,7 +412,7 @@ namespace XTMF2.Controllers
             {
                 return false;
             }
-            lock(ControllerLock)
+            lock(_controllerLock)
             {
                 if(!project.CanAccess(user))
                 {
@@ -351,7 +424,7 @@ namespace XTMF2.Controllers
                     error = $"The user already owns a project with the name {newProjectName}";
                     return false;
                 }
-                if (ActiveSessions.ContainsKey(project))
+                if (_activeSessions.ContainsKey(project))
                 {
                     error = "You can not rename a project that is currently being edited";
                     return false;
