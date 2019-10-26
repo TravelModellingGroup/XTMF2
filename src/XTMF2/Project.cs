@@ -438,6 +438,16 @@ namespace XTMF2
             return Save(ref error);
         }
 
+        internal bool RenameModelSystem(ModelSystemHeader modelSystem, string newName, ref string error)
+        {
+            if(_ModelSystems.Any(ms => newName.Equals(ms.Name, StringComparison.InvariantCultureIgnoreCase)))
+            {
+                error = $"A model system with the name '{newName}' already exists in the project.";
+                return false;
+            }
+            return modelSystem.SetName(newName, ref error);
+        }
+
         /// <summary>
         /// Add a model system to the project from a model system file.
         /// </summary>

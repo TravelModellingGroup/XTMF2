@@ -50,16 +50,24 @@ namespace XTMF2
             Description = description;
         }
 
-        public bool SetName(ProjectSession session, string name, ref string error)
+        public bool SetName(string name, ref string error)
         {
-            if (String.IsNullOrWhiteSpace(name))
+            try
             {
-                error = "A name cannot be whitespace.";
+                var file = new FileInfo(ModelSystemPath);
+                if (file.Exists)
+                {
+                    file.MoveTo(Path.Combine(file.DirectoryName, name + ".xmsys"));
+                }
+                Name = name;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+                return true;
+            }
+            catch(IOException e)
+            {
+                error = e.Message;
                 return false;
             }
-            Name = name;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
-            return true;
         }
 
         public bool SetDescription(ProjectSession session, string description, ref string error)

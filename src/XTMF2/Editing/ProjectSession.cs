@@ -201,7 +201,7 @@ namespace XTMF2.Editing
                     return false;
                 }
                 modelSystem = new ModelSystemHeader(Project, modelSystemName);
-                return Project.Add(this, modelSystem, ref error); ;
+                return Project.Add(this, modelSystem, ref error);
             }
         }
 
@@ -558,6 +558,40 @@ namespace XTMF2.Editing
                     return false;
                 }
                 return Project.ResetRunsDirectory(ref error);
+            }
+        }
+
+        /// <summary>
+        /// Rename a model system.  The model system can not be currently
+        /// being edited.
+        /// </summary>
+        /// <param name="user">The use issuing the command.</param>
+        /// <param name="newName">The new name of the model system.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool RenameModelSystem(User user, ModelSystemHeader modelSystem, string newName, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (modelSystem is null)
+            {
+                throw new ArgumentNullException(nameof(modelSystem));
+            }
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                error = "The name of the model system must not be blank.";
+                return false;
+            }
+            lock(_sessionLock)
+            {
+                if(!Project.CanAccess(user))
+                {
+                    error = "The user can not access this project.";
+                    return false;
+                }
+                return Project.RenameModelSystem(modelSystem, newName, ref error);
             }
         }
     }
