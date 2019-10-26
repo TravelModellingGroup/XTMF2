@@ -69,7 +69,7 @@ namespace XTMF2
 
         }
 
-        public static bool Load(UserController userController, string filePath, out Project project, ref string error)
+        internal static bool Load(UserController userController, string filePath, out Project project, ref string error)
         {
             project = new Project()
             {
@@ -284,7 +284,7 @@ namespace XTMF2
             }
         }
 
-        public static bool New(User owner, string name, string description, out Project project, ref string error)
+        internal static bool New(User owner, string name, string description, out Project project, ref string error)
         {
             project = new Project()
             {
@@ -374,7 +374,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="user">The user to test for</param>
         /// <returns>True if the user is allowed</returns>
-        public bool CanAccess(User user)
+        internal bool CanAccess(User user)
         {
             if (user == null)
             {
@@ -383,26 +383,38 @@ namespace XTMF2
             return user == Owner || _AdditionalUsers.Contains(user);
         }
 
-        public bool SetName(ProjectSession session, string name, ref string error)
+        internal bool SetName(string name, ref string error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
                 error = "A name cannot be whitespace.";
                 return false;
             }
-            Name = name;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
-            return Save(ref error);
+            var oldName = Name;
+            try
+            {
+                var dir = new DirectoryInfo(ProjectDirectory);
+                dir.MoveTo(Path.Combine(Owner.UserPath, name));
+                Name = name;
+                ProjectFilePath = Path.Combine(Owner.UserPath, name, ProjectFile);
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+                return Save(ref error);
+            }
+            catch(IOException e)
+            {
+                error = e.Message;
+                return false;
+            }
         }
 
-        public bool SetDescription(ProjectSession session, string description, ref string error)
+        internal bool SetDescription(ProjectSession session, string description, ref string error)
         {
             Description = description;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
             return true;
         }
 
-        public bool Remove(ProjectSession session, ModelSystemHeader modelSystemHeader, ref string error)
+        internal bool Remove(ProjectSession session, ModelSystemHeader modelSystemHeader, ref string error)
         {
             if (modelSystemHeader == null)
             {
@@ -416,7 +428,7 @@ namespace XTMF2
             return false;
         }
 
-        public bool Add(ProjectSession session, ModelSystemHeader modelSystemHeader, ref string error)
+        internal bool Add(ProjectSession session, ModelSystemHeader modelSystemHeader, ref string error)
         {
             if (modelSystemHeader == null)
             {

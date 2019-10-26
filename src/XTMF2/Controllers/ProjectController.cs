@@ -320,5 +320,44 @@ namespace XTMF2.Controllers
 
         private static char[] InvalidCharacters =
             Path.GetInvalidPathChars().Union(Path.GetInvalidFileNameChars()).ToArray();
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="user"></param>
+        /// <param name="project"></param>
+        /// <param name="newProjectName"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        public bool RenameProject(User user, Project project, string newProjectName, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (!ValidateProjectName(newProjectName, ref error))
+            {
+                return false;
+            }
+            lock(ControllerLock)
+            {
+                if(!project.CanAccess(user))
+                {
+                    error = "The user does not have access to this project.";
+                    return false;
+                }
+                if (user.OwnsProjectWithName(newProjectName))
+                {
+                    error = $"The user already owns a project with the name {newProjectName}";
+                    return false;
+                }
+                if (ActiveSessions.ContainsKey(project))
+                {
+                    error = "You can not rename a project that is currently being edited";
+                    return false;
+                }
+                return project.SetName(newProjectName, ref error);
+            }
+        }
     }
 }
