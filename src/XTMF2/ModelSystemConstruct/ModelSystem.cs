@@ -116,6 +116,13 @@ namespace XTMF2
             {
                 error = e.Message;
             }
+            finally
+            {
+                if(!leaveOpen)
+                {
+                    saveTo.Dispose();
+                }
+            }
             return false;
         }
 
