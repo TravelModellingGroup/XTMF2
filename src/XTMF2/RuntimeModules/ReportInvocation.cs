@@ -30,14 +30,14 @@ Description = "Reports to XTMF that the model system has run through this point.
         [Parameter(Name = "Message", Description = "The message to report to XTMF", DefaultValue = "Got here", Index = 0)]
         public IFunction<string> Message;
 
-        private XTMFRuntime Runtime;
+        private readonly XTMFRuntime Runtime;
 
         public ReportFunctionInvocation(XTMFRuntime runtime)
         {
             Runtime = runtime;
         }
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signaling context", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1)]
         public IFunction<Return> ToInvoke;
         
 
@@ -55,14 +55,14 @@ Description = "Reports to XTMF that the model system has run through this point.
         [Parameter(Name = "Message", Description = "The message to report to XTMF", DefaultValue = "Got here", Index = 0)]
         public IFunction<string> Message;
 
-        private XTMFRuntime Runtime;
+        private readonly XTMFRuntime Runtime;
 
         public ReportFunctionInvocation(XTMFRuntime runtime)
         {
             Runtime = runtime;
         }
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signaling context", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1)]
         public IFunction<Context, Return> ToInvoke;
 
         public override Return Invoke(Context context)
@@ -79,14 +79,14 @@ Description = "Reports to XTMF that the model system has run through this point.
         [Parameter(Name = "Message", Description = "The message to report to XTMF", DefaultValue = "Got here", Index = 0)]
         public IFunction<string> Message;
 
-        private XTMFRuntime Runtime;
+        private readonly XTMFRuntime Runtime;
 
         public ReportActionInvocation(XTMFRuntime runtime)
         {
             Runtime = runtime;
         }
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signaling context", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1)]
         public IAction ToInvoke;
 
         public override void Invoke()
@@ -103,14 +103,14 @@ Description = "Reports to XTMF that the model system has run through this point.
         [Parameter(Name = "Message", Description = "The message to report to XTMF", DefaultValue = "Got here", Index = 0)]
         public IFunction<string> Message;
 
-        private XTMFRuntime Runtime;
+        private readonly XTMFRuntime Runtime;
 
         public ReportActionInvocation(XTMFRuntime runtime)
         {
             Runtime = runtime;
         }
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signaling context", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1)]
         public IAction<Context> ToInvoke;
 
         public override void Invoke(Context context)
@@ -127,14 +127,14 @@ Description = "Reports to XTMF that the model system has run through this point.
         [Parameter(Name = "Message", Description = "The message to report to XTMF", DefaultValue = "Got here", Index = 0)]
         public IFunction<Context, string> Message;
 
-        private XTMFRuntime Runtime;
+        private readonly XTMFRuntime Runtime;
 
         public ReportActionInvocationWithContext(XTMFRuntime runtime)
         {
             Runtime = runtime;
         }
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signaling context", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1)]
         public IAction<Context> ToInvoke;
 
         public override void Invoke(Context context)
