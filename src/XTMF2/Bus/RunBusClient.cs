@@ -30,11 +30,11 @@ namespace XTMF2.Bus
     /// </summary>
     public sealed class RunBusClient : IDisposable
     {
-        private Stream _ClientHost;
-        private bool _Owner;
+        private readonly Stream _ClientHost;
+        private readonly bool _Owner;
         private volatile bool _Exit = false;
 
-        private Scheduler _RunScheduler;
+        private readonly Scheduler _RunScheduler;
 
         /// <summary>
         /// The link to the XTMFRuntime
@@ -87,7 +87,8 @@ namespace XTMF2.Bus
             Heartbeat = 0,
             RunModelSystem = 1,
             CancelModelRun = 2,
-            KillModelRun = 3
+            KillModelRun = 3,
+            KillClient = 4
         }
 
         private enum Out
@@ -112,10 +113,8 @@ namespace XTMF2.Bus
         {
             lock (WriteLock)
             {
-                using (var writer = new BinaryWriter(_ClientHost, Encoding.Unicode, true))
-                {
-                    writeWith(writer);
-                }
+                using var writer = new BinaryWriter(_ClientHost, Encoding.UTF8, true);
+                writeWith(writer);
             }
         }
 
@@ -174,6 +173,7 @@ namespace XTMF2.Bus
             Write((writer) =>
             {
                 writer.Write((int)Out.ClientFinishedModelSystem);
+                writer.Write(context.ID);
             });
         }
 
@@ -194,39 +194,33 @@ namespace XTMF2.Bus
         /// </summary>
         public void ProcessRequests()
         {
-            try
+            // the writer will clear things up
+            using var reader = new BinaryReader(_ClientHost, Encoding.UTF8, false);
+            while (!_Exit)
             {
-                // the writer will clear things up
-                BinaryReader reader = new BinaryReader(_ClientHost, Encoding.Unicode, false);
-                while (!_Exit)
+                switch ((In)reader.ReadInt32())
                 {
-                    switch ((In)reader.ReadInt32())
-                    {
-                        case In.RunModelSystem:
+                    case In.RunModelSystem:
+                        {
+                            var id = reader.ReadString();
+                            var cwd = reader.ReadString();
+                            var start = reader.ReadString();
+                            var msSize = (int)reader.ReadInt64();
+                            using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
+                            if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, out var context))
                             {
-                                var id = reader.ReadString();
-                                var cwd = reader.ReadString();
-                                var start = reader.ReadString();
-                                var msSize = (int)reader.ReadInt64();
-                                using (var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize))
-                                {
-                                    if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, out var context))
-                                    {
-                                        _RunScheduler.Run(context);
-                                    }
-                                }
+                                _RunScheduler.Run(context);
                             }
-                            break;
-                        // failsafe
-                        default:
-                            return;
-                    }
-                    Interlocked.MemoryBarrier();
+                        }
+                        break;
+                    case In.KillClient:
+                        _Exit = true;
+                        break;
+                    // failsafe
+                    default:
+                        return;
                 }
-            }
-            catch (IOException)
-            {
-
+                Interlocked.MemoryBarrier();
             }
         }
     }
