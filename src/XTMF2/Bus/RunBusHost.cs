@@ -31,8 +31,8 @@ namespace XTMF2.Bus
     /// </summary>
     public sealed class RunBusHost : IDisposable
     {
-        private Stream _HostStream;
-        private bool _Owner;
+        private readonly Stream _HostStream;
+        private readonly bool _Owner;
         private volatile bool _Exit = false;
         private volatile bool _Exited = false;
 
@@ -97,9 +97,10 @@ namespace XTMF2.Bus
         }
 
         /// <summary>
-        /// This event is signaled when a client finishes running a model system.
+        /// This event is signalled when a client finishes running a model system.
+        /// The parameter is the name of the completed model system.
         /// </summary>
-        public event EventHandler ClientFinishedModelSystem;
+        public event EventHandler<string> ClientFinishedModelSystem;
 
         /// <summary>
         /// Used to report that a model system has had a run error.
@@ -119,7 +120,7 @@ namespace XTMF2.Bus
         public delegate void ClientStatusUpdate(object sender, string runID, string status);
 
         /// <summary>
-        /// This event is signaled when a client runs into an error.
+        /// This event is signalled when a client runs into an error.
         /// </summary>
         public event RunError ClientErrorWhenRunningModelSystem;
 
@@ -127,6 +128,21 @@ namespace XTMF2.Bus
         /// This event is triggered when the client has sent an update for the run's status message.
         /// </summary>
         public event ClientStatusUpdate ClientReportedStatus;
+
+        private static void IgnoreWarnings(Action toRun)
+        {
+            /*
+* We are disabling the warning to catch a specific error since we are going to
+* be called into unknown code.
+*/
+#pragma warning disable CA1031
+            try
+            {
+                toRun();
+            }
+            catch { }
+#pragma warning restore CA1031
+        }
 
         /// <summary>
         /// Invoke this to start listening on a separate thread.
@@ -137,74 +153,37 @@ namespace XTMF2.Bus
             {
                 try
                 {
-                    BinaryReader reader = new BinaryReader(_HostStream, Encoding.Unicode, true);
+                    using var reader = new BinaryReader(_HostStream, Encoding.UTF8, true);
                     while (!_Exit)
                     {
-                        try
+                        var command = (In)reader.ReadInt32();
+                        switch (command)
                         {
-                            var command = (In)reader.ReadInt32();
-                            switch (command)
-                            {
-                                case In.Heartbeat:
-                                    // do nothing
-                                    break;
-                                case In.ClientReady:
-                                    break;
-                                case In.ClientExiting:
-                                    _Exit = true;
-                                    break;
-                                case In.ClientErrorValidatingModelSystem:
-                                    try
-                                    {
-                                        ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), String.Empty);
-                                    }
-                                    catch
-                                    {
-
-                                    }
-                                    break;
-                                case In.ClientFinishedModelSystem:
-                                    try
-                                    {
-                                        ClientFinishedModelSystem?.Invoke(this, new EventArgs());
-                                    }
-                                    catch
-                                    {
-
-                                    }
-                                    break;
-                                case In.ClientErrorWhenRunningModelSystem:
-                                    try
-                                    {
-                                        ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), reader.ReadString());
-                                    }
-                                    catch
-                                    {
-
-                                    }
-                                    break;
-                                case In.ClientReportedStatus:
-                                    try
-                                    {
-                                        ClientReportedStatus?.Invoke(this, reader.ReadString(), reader.ReadString());
-                                    }
-                                    catch
-                                    {
-
-                                    }
-                                    break;
-                                default:
-                                    throw new Exception($"Unsupported command: {Enum.GetName(typeof(In), command)}");
-                            }
-                        }
-                        catch (TimeoutException)
-                        {
+                            case In.Heartbeat:
+                                // do nothing
+                                break;
+                            case In.ClientReady:
+                                break;
+                            case In.ClientExiting:
+                                _Exit = true;
+                                break;
+                            case In.ClientErrorValidatingModelSystem:
+                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), String.Empty));
+                                break;
+                            case In.ClientFinishedModelSystem:
+                                IgnoreWarnings(() => ClientFinishedModelSystem?.Invoke(this, reader.ReadString()));
+                                break;
+                            case In.ClientErrorWhenRunningModelSystem:
+                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), reader.ReadString()));
+                                break;
+                            case In.ClientReportedStatus:
+                                IgnoreWarnings(() => ClientReportedStatus?.Invoke(this, reader.ReadString(), reader.ReadString()));
+                                break;
+                            default:
+                                throw new Exception($"Unsupported command: {Enum.GetName(typeof(In), command)}");
                         }
                         System.Threading.Interlocked.MemoryBarrier();
                     }
-                }
-                catch (IOException)
-                {
                 }
                 finally
                 {
@@ -221,16 +200,10 @@ namespace XTMF2.Bus
             KillModelRun = 3
         }
 
-        private object OutLock = new object();
-
-        private void SendHeartbeat()
-        {
-            lock (OutLock)
-            {
-                var writer = new BinaryWriter(_HostStream, Encoding.Unicode, true);
-                writer.Write((int)Out.Heartbeat);
-            }
-        }
+        /// <summary>
+        /// Take this lock before writing anything to the out stream.
+        /// </summary>
+        private readonly object _outLock = new object();
 
         /// <summary>
         /// 
@@ -244,35 +217,32 @@ namespace XTMF2.Bus
         public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, out string id, ref string error)
         {
             id = null;
-            lock (OutLock)
+            lock (_outLock)
             {
                 try
                 {
-                    using (var memStream = new MemoryStream())
+                    using var memStream = new MemoryStream();
+                    using var write = new BinaryWriter(memStream, Encoding.UTF8, true);
+                    if (!modelSystem.Save(ref error, memStream))
                     {
-                        BinaryWriter write = new BinaryWriter(memStream, Encoding.Unicode, true);
-                        if (!modelSystem.Save(ref error, memStream))
-                        {
-                            return false;
-                        }
-                        id = Guid.NewGuid().ToString();
-                        // int64
-                        var writer = new BinaryWriter(_HostStream, Encoding.Unicode, true);
-                        writer.Write((int)Out.RunModelSystem);
-                        writer.Write(id);
-                        writer.Write(cwd);
-                        writer.Write(startToExecute);
-                        writer.Write(memStream.Length);
-                        memStream.WriteTo(_HostStream);
-                        return true;
+                        return false;
                     }
+                    id = Guid.NewGuid().ToString();
+                    // int64
+                    using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
+                    writer.Write((int)Out.RunModelSystem);
+                    writer.Write(id);
+                    writer.Write(cwd);
+                    writer.Write(startToExecute);
+                    writer.Write(memStream.Length);
+                    memStream.WriteTo(_HostStream);
+                    return true;
                 }
                 catch (IOException e)
                 {
                     error = e.Message;
                     return false;
                 }
-                
             }
         }
     }
