@@ -24,12 +24,12 @@ namespace XTMF2.RuntimeModules
 {
     [Module(Name = "Cache", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
     Description = "Provides a way to keep the result of a function unless unloaded by an event.")]
-    public class Cache<T> : BaseFunction<T>, IDisposable
+    public sealed class Cache<T> : BaseFunction<T>, IDisposable
     {
-        object Lock = new object();
+        private readonly object _lock = new object();
 
-        private T CachedValue;
-        private bool Initialized = false;
+        private T _cachedValue;
+        private bool _initialized = false;
 
 
         [SubModule(Required = true, Name = "Source", Description = "Get the cached data", Index = 0)]
@@ -40,14 +40,15 @@ namespace XTMF2.RuntimeModules
 
         public override T Invoke()
         {
-            lock (Lock)
+            lock (_lock)
             {
-                if (!Initialized)
+                if (!_initialized)
                 {
-                    CachedValue = Source.Invoke();
-                    Initialized = true;
+                    _cachedValue = Source.Invoke();
+                    _initialized = true;
+                    GC.ReRegisterForFinalize(this);
                 }
-                return CachedValue;
+                return _cachedValue;
             }
         }
 
@@ -55,25 +56,40 @@ namespace XTMF2.RuntimeModules
         {
             ForceUpdate?.Register(() =>
             {
-                lock (Lock)
+                lock (_lock)
                 {
-                    Initialized = false;
+                    _initialized = false;
                     Dispose();
                 }
             });
             return true;
         }
 
-        public void Dispose()
+        ~Cache()
         {
-            lock (Lock)
+            Dispose(false);
+        }
+
+        private void Dispose(bool managed)
+        {
+            if(managed)
             {
-                if (Initialized && CachedValue is IDisposable disposable)
+                GC.SuppressFinalize(this);
+            }
+            lock (_lock)
+            {
+                if (_initialized && _cachedValue is IDisposable disposable)
                 {
                     disposable.Dispose();
-                    CachedValue = default(T);
                 }
+                _cachedValue = default;
+                _initialized = false;
             }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
         }
     }
 }

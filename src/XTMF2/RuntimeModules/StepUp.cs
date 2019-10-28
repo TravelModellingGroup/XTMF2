@@ -32,7 +32,7 @@ Description = "Converts the result of a function to the expected type from the c
 
         public override ConvertTo Invoke()
         {
-            return (ConvertTo)ToInvoke.Invoke();
+            return ToInvoke.Invoke();
         }
     }
 
@@ -46,7 +46,7 @@ Description = "Converts the result of a function to the expected type from the c
 
         public override ConvertTo Invoke(Context context)
         {
-            return (ConvertTo)ToInvoke.Invoke(context);
+            return ToInvoke.Invoke(context);
         }
     }
 
@@ -60,7 +60,7 @@ Description = "Converts the result of a function to the expected type from the c
 
         public override void Invoke(Original context)
         {
-            ToInvoke.Invoke((ConvertTo)context);
+            ToInvoke.Invoke(context);
         }
     }
 }

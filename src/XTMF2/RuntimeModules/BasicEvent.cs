@@ -27,15 +27,15 @@ namespace XTMF2.RuntimeModules
     Description = "Provides the ability for modules to invoke a set of other modules that are waiting for something to occur.")]
     public sealed class BasicEvent : BaseEvent
     {
-        private List<Action> ToInvoke = new List<Action>();
+        private readonly List<Action> _toInvoke = new List<Action>();
 
         public override void Invoke()
         {
             // make a copy in case the invocation causes an additional registration
             List<Action> copy;
-            lock(ToInvoke)
+            lock(_toInvoke)
             {
-                copy = ToInvoke.ToList();
+                copy = _toInvoke.ToList();
             }
             foreach(var registered in copy)
             {
@@ -45,9 +45,9 @@ namespace XTMF2.RuntimeModules
 
         public override void Register(Action module)
         {
-            lock(ToInvoke)
+            lock(_toInvoke)
             {
-                ToInvoke.Add(module);
+                _toInvoke.Add(module);
             }
         }
     }
@@ -56,15 +56,15 @@ namespace XTMF2.RuntimeModules
     Description = "Provides the ability for modules to invoke a set of other modules that are waiting for something to occur.")]
     public sealed class BasicEvent<Context> : BaseEvent<Context>
     {
-        private List<Action<Context>> ToInvoke = new List<Action<Context>>();
+        private readonly List<Action<Context>> _toInvoke = new List<Action<Context>>();
 
         public override void Invoke(Context context)
         {
             // make a copy in case the invocation causes an additional registration
             List<Action<Context>> copy;
-            lock (ToInvoke)
+            lock (_toInvoke)
             {
-                copy = ToInvoke.ToList();
+                copy = _toInvoke.ToList();
             }
             foreach (var registered in copy)
             {
@@ -74,9 +74,9 @@ namespace XTMF2.RuntimeModules
 
         public override void Register(Action<Context> module)
         {
-            lock (ToInvoke)
+            lock (_toInvoke)
             {
-                ToInvoke.Add(module);
+                _toInvoke.Add(module);
             }
         }
     }

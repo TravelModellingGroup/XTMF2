@@ -30,20 +30,20 @@ Description = "Provides functionality for synchronizing the writing of events to
         [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.", Index = 0)]
         public IFunction<WriteStream> LogStream;
 
-        private object WriteLock = new object();
+        private readonly object _writeLock = new object();
 
-        private StreamWriter Writer;
+        private StreamWriter _writer;
 
         public override void Invoke(string message)
         {
-            lock (WriteLock)
+            lock (_writeLock)
             {
-                if(Writer == null)
+                if(_writer == null)
                 {
-                    Writer = new StreamWriter(LogStream.Invoke(), Encoding.Unicode, 0x4000, false);
+                    _writer = new StreamWriter(LogStream.Invoke(), Encoding.Unicode, 0x4000, false);
                 }
                 // don't block while writing
-                Writer.WriteLineAsync(TimeStampMessage(message));
+                _writer.WriteLineAsync(TimeStampMessage(message));
             }
         }
 
@@ -59,8 +59,8 @@ Description = "Provides functionality for synchronizing the writing of events to
             {
                 GC.SuppressFinalize(this);
             }
-            Writer?.Dispose();
-            Writer = null;
+            _writer?.Dispose();
+            _writer = null;
         }
 
         public void Dispose()
