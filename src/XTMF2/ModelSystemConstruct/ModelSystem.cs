@@ -40,7 +40,24 @@ namespace XTMF2
         public ModelSystem(ModelSystemHeader header)
         {
             Header = header;
-            GlobalBoundary = new Boundary("global");
+            header.PropertyChanged += Header_PropertyChanged;
+            GlobalBoundary = new Boundary(GlobalBoundaryName);
+        }
+
+        private void Header_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if(sender is ModelSystemHeader header)
+            {
+                switch(e.PropertyName)
+                {
+                    case nameof(Name):
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+                        break;
+                    case nameof(Description):
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
+                        break;
+                }
+            }
         }
 
         /// <summary>
@@ -63,6 +80,7 @@ namespace XTMF2
         /// </summary>
         internal ModelSystemHeader Header { get; private set; }
 
+        private const string GlobalBoundaryName = "global";
         private const string IndexProperty = "Index";
         private const string TypeProperty = "Type";
         private const string TypesProperty = "Types";
@@ -102,15 +120,13 @@ namespace XTMF2
         {
             try
             {
-                using (var writer = new Utf8JsonWriter(saveTo))
-                {
-                    var typeDictionary = GlobalBoundary.GetUsedTypes();
-                    writer.WriteStartObject();
-                    WriteTypes(writer, typeDictionary);
-                    WriteBoundaries(writer, typeDictionary);
-                    writer.WriteEndObject();
-                    return true;
-                }
+                using var writer = new Utf8JsonWriter(saveTo);
+                var typeDictionary = GlobalBoundary.GetUsedTypes();
+                writer.WriteStartObject();
+                WriteTypes(writer, typeDictionary);
+                WriteBoundaries(writer, typeDictionary);
+                writer.WriteEndObject();
+                return true;
             }
             catch (IOException e)
             {
@@ -225,13 +241,11 @@ namespace XTMF2
 
         internal static bool Load(string modelSystem, XTMFRuntime runtime, out ModelSystem ms, ref string error)
         {
-            using (MemoryStream stream = new MemoryStream(Encoding.Unicode.GetBytes(modelSystem)))
-            {
-                var header = ModelSystemHeader.CreateRunHeader(runtime);
-                using var session = ModelSystemSession.CreateRunSession(ProjectSession.CreateRunSession(runtime), header);
-                ms = Load(stream, session, header, ref error);
-                return ms != null;
-            }
+            using var stream = new MemoryStream(Encoding.Unicode.GetBytes(modelSystem));
+            var header = ModelSystemHeader.CreateRunHeader(runtime);
+            using var session = ModelSystemSession.CreateRunSession(ProjectSession.CreateRunSession(runtime), header);
+            ms = Load(stream, session, header, ref error);
+            return ms != null;
         }
 
         private static ModelSystem Load(Stream rawStream, ModelSystemSession session, ModelSystemHeader modelSystemHeader, ref string error)
@@ -239,40 +253,38 @@ namespace XTMF2
             try
             {
                 var modelSystem = new ModelSystem(modelSystemHeader);
-                using (var stream = new MemoryStream())
+                using var stream = new MemoryStream();
+                rawStream.CopyTo(stream);
+                var reader = new Utf8JsonReader(stream.GetBuffer().AsSpan());
+                var typeLookup = new Dictionary<int, Type>();
+                var nodes = new Dictionary<int, Node>();
+                while (reader.Read())
                 {
-                    rawStream.CopyTo(stream);
-                    var reader = new Utf8JsonReader(stream.GetBuffer().AsSpan());
-                    var typeLookup = new Dictionary<int, Type>();
-                    var nodes = new Dictionary<int, Node>();
-                    while (reader.Read())
+                    if (reader.TokenType == JsonTokenType.PropertyName)
                     {
-                        if (reader.TokenType == JsonTokenType.PropertyName)
+                        if (reader.ValueTextEquals(TypesProperty))
                         {
-                            if(reader.ValueTextEquals(TypesProperty))
+                            if (!LoadTypes(typeLookup, ref reader, ref error))
                             {
-                                if (!LoadTypes(typeLookup, ref reader, ref error))
-                                {
-                                    return null;
-                                }
-                            }
-                            else if(reader.ValueTextEquals(BoundariesProperty))
-                            {
-                                if (!LoadBoundaries(session, typeLookup, nodes, ref reader, modelSystem.GlobalBoundary, ref error))
-                                {
-                                    return null;
-                                }
-                                break;
-                            }
-                            else
-                            {
-                                error = $"Unknown token found '{reader.GetString()}'";
                                 return null;
                             }
                         }
+                        else if (reader.ValueTextEquals(BoundariesProperty))
+                        {
+                            if (!LoadBoundaries(session, typeLookup, nodes, ref reader, modelSystem.GlobalBoundary, ref error))
+                            {
+                                return null;
+                            }
+                            break;
+                        }
+                        else
+                        {
+                            error = $"Unknown token found '{reader.GetString()}'";
+                            return null;
+                        }
                     }
-                    return modelSystem;
                 }
+                return modelSystem;
             }
             catch (JsonException e)
             {
