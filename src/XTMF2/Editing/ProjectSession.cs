@@ -186,7 +186,7 @@ namespace XTMF2.Editing
         /// <param name="modelSystem">The resulting model system session</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool CreateNewModelSystem(string modelSystemName, out ModelSystemHeader modelSystem, ref string error)
+        public bool CreateNewModelSystem(User user, string modelSystemName, out ModelSystemHeader modelSystem, ref string error)
         {
             modelSystem = null;
             if (!ProjectController.ValidateProjectName(modelSystemName, ref error))
@@ -195,6 +195,11 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
+                if(!Project.CanAccess(user))
+                {
+                    error = "The user does not have access to this project!";
+                    return false;
+                }
                 if (Project.ContainsModelSystem(modelSystemName))
                 {
                     error = "A model system with this name already exists.";
@@ -245,6 +250,56 @@ namespace XTMF2.Editing
                     }
                     return false;
                 }
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Remove a model system from the project.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="modelSystem">The model system to remove.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool RemoveModelSystem(User user, ModelSystemHeader modelSystem, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (modelSystem is null)
+            {
+                throw new ArgumentNullException(nameof(modelSystem));
+            }
+
+            lock (_sessionLock)
+            {
+                if(Project.Owner != user)
+                {
+                    error = "You can not remove a model system that you are not the owner of.";
+                    return false;
+                }
+                if(_activeSessions.ContainsKey(modelSystem))
+                {
+                    error = "You can not remove a model system that is currently being edited!";
+                    return false;
+                }
+                var modelSystemFile = modelSystem.ModelSystemPath;
+                if(!Project.Remove(this, modelSystem, ref error))
+                {
+                    return false;
+                }
+                try
+                {
+                    File.Delete(modelSystemFile);
+                }
+#pragma warning disable CA1031 // If the model system file is already gone, then the operation actually succeeded.
+                catch (IOException)
+                {
+
+                }
+#pragma warning restore CA1031 // Do not catch general exception types
                 return true;
             }
         }

@@ -185,7 +185,7 @@ namespace XTMF2
             {
                 Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
                 {
-                    Assert.IsTrue(projectSession.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
+                    Assert.IsTrue(projectSession.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, ref error), error);
                     Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(modelSystemSession, () =>
                     {
                         toExecute(user, projectSession, modelSystemSession);
@@ -223,7 +223,7 @@ namespace XTMF2
             {
                 Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
                 {
-                    Assert.IsTrue(projectSession.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
+                    Assert.IsTrue(projectSession.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, ref error), error);
                     Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(modelSystemSession, () =>
                     {
                         toExecute(user, unauthorizedUser, projectSession, modelSystemSession);
@@ -316,7 +316,7 @@ namespace XTMF2
             {
                 Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
                 {
-                    Assert.IsTrue(projectSession.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
+                    Assert.IsTrue(projectSession.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, ref error), error);
                     Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(modelSystemSession, () =>
                     {
                         toExecuteFirst(user, projectSession, modelSystemSession);
