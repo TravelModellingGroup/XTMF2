@@ -47,7 +47,7 @@ namespace XTMF2
             Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
             Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, ref error).UsingIf(session, () =>
             {
-                Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
+                Assert.IsTrue(session.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, ref error), error);
                 Assert.IsTrue(session.Save(ref error));
             }), error);
             runtime.Shutdown();
@@ -98,7 +98,7 @@ namespace XTMF2
                 // share the session with the second user
                 Assert.IsTrue(session.ShareWith(user, user2, ref error), error);
                 // create a new model system for both users to try to edit
-                Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
+                Assert.IsTrue(session.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, ref error), error);
                 Assert.IsTrue(session.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(
                     modelSystemSession, () =>
                     {
@@ -135,7 +135,7 @@ namespace XTMF2
                 // share the session with the second user
                 Assert.IsTrue(session.ShareWith(user, user2, ref error), error);
                 // create a new model system for both users to try to edit
-                Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystemHeader, ref error), error);
+                Assert.IsTrue(session.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, ref error), error);
                 Assert.IsTrue(session.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(
                     modelSystemSession, () =>
                     {
@@ -293,7 +293,7 @@ namespace XTMF2
                 var msName = "MSToExport";
                 var startName = "MyStart";
                 var nodeName = "MyNode";
-                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
                 Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
                 var tempFile = new FileInfo(Path.GetTempFileName());
                 try
@@ -340,7 +340,7 @@ namespace XTMF2
                 var startName = "MyStart";
                 var nodeName = "MyNode";
                 var msDescription = "Description of the model system";
-                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
                 Assert.IsTrue(msHeader.SetDescription(project, msDescription, ref error), error);
                 Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
                 FileInfo tempFile = new FileInfo(Path.GetTempFileName());
@@ -467,7 +467,7 @@ namespace XTMF2
                 var description = "A test model system.";
                 var startName = "MyStart";
                 var nodeName = "MyNode";
-                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
                 Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
                 Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
                 var tempFile = new FileInfo(Path.GetTempFileName());
@@ -514,7 +514,7 @@ namespace XTMF2
                 var description = "A test model system.";
                 var startName = "MyStart";
                 var nodeName = "MyNode";
-                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
                 Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
                 Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
                 var tempFile = new FileInfo(Path.GetTempFileName());
@@ -558,7 +558,7 @@ namespace XTMF2
                 var msName = "MSToExport";
                 var importedName = "MSImported";
                 var description = "A test model system.";
-                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
                 Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
                 Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
                 var tempFile = new FileInfo(Path.GetTempFileName());
@@ -577,7 +577,7 @@ namespace XTMF2
                 var msName = "MSToExport";
                 var importedName = "MSImported";
                 var description = "A test model system.";
-                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
                 Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
                 Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
                 var tempFile = new FileInfo(Path.GetTempFileName());
@@ -615,7 +615,7 @@ namespace XTMF2
                 string error = null;
                 var msName = "MSToExport";
                 var newName = "NewMSName";
-                Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+                Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
                 Assert.AreEqual(msName, msHeader.Name);
                 Assert.IsTrue(project.RenameModelSystem(user, msHeader, newName, ref error), error);
                 Assert.AreEqual(newName, msHeader.Name);

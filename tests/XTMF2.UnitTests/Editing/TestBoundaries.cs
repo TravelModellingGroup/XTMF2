@@ -226,7 +226,7 @@ namespace XTMF2.Editing
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
             {
                 var project = session.Project;
-                Assert.IsTrue(session.CreateNewModelSystem("TestMS", out var modelSystem, ref error), error);
+                Assert.IsTrue(session.CreateNewModelSystem(localUser, "TestMS", out var modelSystem, ref error), error);
                 Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
                 {
                     var ms = msSession.ModelSystem;
@@ -253,7 +253,7 @@ namespace XTMF2.Editing
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
             {
                 var project = session.Project;
-                Assert.IsTrue(session.CreateNewModelSystem("TestMS", out var modelSystem, ref error), error);
+                Assert.IsTrue(session.CreateNewModelSystem(localUser, "TestMS", out var modelSystem, ref error), error);
                 Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
                 {
                     var ms = msSession.ModelSystem;
@@ -274,7 +274,7 @@ namespace XTMF2.Editing
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
             {
                 var project = session.Project;
-                Assert.IsTrue(session.CreateNewModelSystem("TestMS", out var modelSystem, ref error), error);
+                Assert.IsTrue(session.CreateNewModelSystem(localUser, "TestMS", out var modelSystem, ref error), error);
                 Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
                 {
                     var ms = msSession.ModelSystem;
@@ -301,7 +301,7 @@ namespace XTMF2.Editing
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
             {
                 var project = session.Project;
-                Assert.IsTrue(session.CreateNewModelSystem("TestMS", out var modelSystem, ref error), error);
+                Assert.IsTrue(session.CreateNewModelSystem(localUser, "TestMS", out var modelSystem, ref error), error);
                 Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
                 {
                     var ms = msSession.ModelSystem;
@@ -329,7 +329,7 @@ namespace XTMF2.Editing
                 Assert.IsTrue(controller.CreateNewProject(localUser, projectName, out ProjectSession session, ref error).UsingIf(session, () =>
                 {
                     var project = session.Project;
-                    Assert.IsTrue(session.CreateNewModelSystem(modelSystemName, out var modelSystem, ref error), error);
+                    Assert.IsTrue(session.CreateNewModelSystem(localUser, modelSystemName, out var modelSystem, ref error), error);
                     Assert.IsTrue(session.EditModelSystem(localUser, modelSystem, out var msSession, ref error).UsingIf(msSession, () =>
                         {
                             var ms = msSession.ModelSystem;

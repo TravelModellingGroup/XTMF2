@@ -160,7 +160,7 @@ namespace XTMF2
             string error = null;
             var startName = "MyStart";
             var nodeName = "MyNode";
-            Assert.IsTrue(project.CreateNewModelSystem(msName, out var msHeader, ref error), error);
+            Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
             Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
             Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
             using (session)
@@ -494,6 +494,22 @@ namespace XTMF2
                         dir.Delete();
                     }
                 }
+            });
+        }
+
+        [TestMethod]
+        public void RemoveModelSystem()
+        {
+            TestHelper.RunInProjectContext("RemoveModelSystem", (User user, ProjectSession project) =>
+            {
+                const string msName = "RemoveMe";
+                string error = null;
+                Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
+                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error).UsingIf(session, ()=>
+                {
+                    Assert.IsFalse(project.RemoveModelSystem(user, msHeader, ref error), "A model system was able to be removed while it was being edited!");
+                }), error);
+                Assert.IsTrue(project.RemoveModelSystem(user, msHeader, ref error), error);
             });
         }
     }
