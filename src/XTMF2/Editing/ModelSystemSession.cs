@@ -111,6 +111,14 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Sets the description for the given boundary.
+        /// </summary>
+        /// <param name="user">The user issuing the action.</param>
+        /// <param name="boundary">The boundary to change.</param>
+        /// <param name="description">The new description to assign to the boundary.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
         public bool SetBoundaryDescription(User user, Boundary boundary, string description, ref string error)
         {
             if (user == null)
@@ -507,6 +515,16 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Creates a new node in the given boundary.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="boundary">The boundary that the new node will be created in.</param>
+        /// <param name="name">The name to give to the new node.</param>
+        /// <param name="type">The type of module to assign to the new node.</param>
+        /// <param name="node">The resulting node if the operation succeeds, null if the operation fails.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
         public bool AddNode(User user, Boundary boundary, string name, Type type, out Node node, ref string error)
         {
             if (user is null)
@@ -969,6 +987,13 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Remove the given link from the model system.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="link">The link to remove.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RemoveLink(User user, Link link, ref string error)
         {
             if (user is null)
@@ -1122,6 +1147,12 @@ namespace XTMF2.Editing
             return new ModelSystemSession(session, header);
         }
 
+        /// <summary>
+        /// Undo the previous command.
+        /// </summary>
+        /// <param name="user">The user requesting the undo.</param>
+        /// <param name="error">An error message if the undo fails.</param>
+        /// <returns>True if the undo succeeds, false otherwise with an error message.</returns>
         public bool Undo(User user, ref string error)
         {
             if (user is null)
@@ -1137,6 +1168,12 @@ namespace XTMF2.Editing
             return Buffer.UndoCommands(ref error);
         }
 
+        /// <summary>
+        /// Redo the previously undon command.
+        /// </summary>
+        /// <param name="user">The user requesting the redo.</param>
+        /// <param name="error">An error message if the redo fails.</param>
+        /// <returns>True if the redo succeeds, false otherwise with an error message.</returns>
         public bool Redo(User user, ref string error)
         {
             if (user is null)
