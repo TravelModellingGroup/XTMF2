@@ -304,6 +304,13 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Exports a project meta-data and model systems to the given path as a zip file.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="exportPath">The file that the project will be saved as.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool ExportProject(User user, string exportPath, ref string error)
         {
             if (user is null)
