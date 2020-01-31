@@ -144,8 +144,7 @@ namespace XTMF2.Controllers
         }
 
         /// <summary>
-        /// Get a reference to the user with the given name.  This method is intended to be
-        /// used by
+        /// Get a reference to the user with the given name.
         /// </summary>
         /// <param name="userName">The name of the user to get the reference for.</param>
         /// <returns>A reference to the user to find.  Null if the user does not exist.</returns>
