@@ -42,6 +42,14 @@ namespace XTMF2.Controllers
         /// </summary>
         public ReadOnlyObservableCollection<User> Users => new ReadOnlyObservableCollection<User>(_Users);
 
+        /// <summary>
+        /// Create a new user with the given name.  Names must be unique.
+        /// </summary>
+        /// <param name="userName">The name to create the user with.</param>
+        /// <param name="admin">Should the user have administrative permissions.</param>
+        /// <param name="user">The resulting user, null if the operation fails.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool CreateNew(string userName, bool admin, out User user, ref string error)
         {
             user = null;
@@ -135,6 +143,12 @@ namespace XTMF2.Controllers
             return !name.Any(c => InvalidCharacters.Contains(c));
         }
 
+        /// <summary>
+        /// Get a reference to the user with the given name.  This method is intended to be
+        /// used by
+        /// </summary>
+        /// <param name="userName">The name of the user to get the reference for.</param>
+        /// <returns>A reference to the user to find.  Null if the user does not exist.</returns>
         public User GetUserByName(string userName)
         {
             lock (UserLock)
@@ -143,8 +157,7 @@ namespace XTMF2.Controllers
             }
         }
 
-
-        public UserController(XTMFRuntime runtime)
+        internal UserController(XTMFRuntime runtime)
         {
             Runtime = runtime;
             LoadUsers();
