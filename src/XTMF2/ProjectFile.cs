@@ -99,11 +99,11 @@ namespace XTMF2
         /// <summary>
         /// The path the model system file was loaded from.
         /// </summary>
-        private readonly string _projectFilePath = null;
+        public string Path { get; private set; }
 
         private ProjectFile(string filePath)
         {
-            _projectFilePath = filePath;
+            Path = filePath;
         }
 
 
@@ -128,7 +128,7 @@ namespace XTMF2
 
             var project = projectSession.Project;
             // we need this declared outside of the
-            string tempDirName = Path.Combine(Path.GetTempPath(), "XTMF-" + project.Name + Guid.NewGuid());
+            string tempDirName = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "XTMF-" + project.Name + Guid.NewGuid());
             try
             {
                 Directory.CreateDirectory(tempDirName);
@@ -176,7 +176,7 @@ namespace XTMF2
         {
             for (int i = 0; i < headers.Count; i++)
             {
-                if (!ModelSystemFile.ExportModelSystem(projectSession, user, headers[i], Path.Combine(tempDirName, $"{i}.xmsys"), ref error))
+                if (!ModelSystemFile.ExportModelSystem(projectSession, user, headers[i], System.IO.Path.Combine(tempDirName, $"{i}.xmsys"), ref error))
                 {
                     return false;
                 }
@@ -193,7 +193,7 @@ namespace XTMF2
         {
             System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
             var fvi = FileVersionInfo.GetVersionInfo(assembly.Location);
-            using var stream = File.OpenWrite(Path.Combine(tempDirName, MetaDataFilePath));
+            using var stream = File.OpenWrite(System.IO.Path.Combine(tempDirName, MetaDataFilePath));
             using var writer = new Utf8JsonWriter(stream);
             writer.WriteStartObject();
             writer.WriteString(PropertyName, project.Name);

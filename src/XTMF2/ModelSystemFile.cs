@@ -96,7 +96,7 @@ namespace XTMF2
         /// <summary>
         /// The path the model system file was loaded from.
         /// </summary>
-        private readonly string _modelSystemFilePath = null;
+        public string Path { get; private set; }
 
         /// <summary>
         /// The project file archive containing this model system file.
@@ -124,7 +124,7 @@ namespace XTMF2
             try
             {
                 var project = projectSession.Project;
-                tempDirName = Path.Combine(Path.GetTempPath(), "XTMF-" + project.Name + modelSystemHeader.Name + Guid.NewGuid());
+                tempDirName = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "XTMF-" + project.Name + modelSystemHeader.Name + Guid.NewGuid());
                 System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
                 FileVersionInfo fvi = FileVersionInfo.GetVersionInfo(assembly.Location);
                 var tempDir = new DirectoryInfo(tempDirName);
@@ -133,8 +133,8 @@ namespace XTMF2
                     tempDir.Create();
                 }
                 // copy in the model system file
-                File.Copy(modelSystemHeader.ModelSystemPath, Path.Combine(tempDir.FullName, ModelSystemFilePath));
-                using (var metadataStream = File.OpenWrite(Path.Combine(tempDir.FullName, MetaDataFilePath)))
+                File.Copy(modelSystemHeader.ModelSystemPath, System.IO.Path.Combine(tempDir.FullName, ModelSystemFilePath));
+                using (var metadataStream = File.OpenWrite(System.IO.Path.Combine(tempDir.FullName, MetaDataFilePath)))
                 using (var writer = new Utf8JsonWriter(metadataStream))
                 {
                     writer.WriteStartObject();
@@ -376,13 +376,13 @@ namespace XTMF2
 
         private ModelSystemFile(string path)
         {
-            _modelSystemFilePath = path;
+            Path = path;
         }
 
         public ModelSystemFile(ZipArchive archive, string path)
         {
             _archive = archive;
-            _modelSystemFilePath = path;
+            Path = path;
         }
 
         /// <summary>
@@ -398,8 +398,8 @@ namespace XTMF2
             {
                 using var archive = 
                     IsContainedInProjectFile ? 
-                      new ZipArchive(_archive.GetEntry(_modelSystemFilePath).Open(), ZipArchiveMode.Read, false)
-                    : ZipFile.OpenRead(_modelSystemFilePath);
+                      new ZipArchive(_archive.GetEntry(Path).Open(), ZipArchiveMode.Read, false)
+                    : ZipFile.OpenRead(Path);
                 var entry = archive.GetEntry(ModelSystemFilePath);
                 if(entry is null)
                 {
