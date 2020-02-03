@@ -1,3 +1,6 @@
+
+![CI](https://github.com/TravelModellingGroup/XTMF2/workflows/CI/badge.svg?branch=dev)
+
 # XTMF2
 The eXtensible Travel Modelling Framework 2
 
