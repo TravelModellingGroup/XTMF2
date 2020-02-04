@@ -18,7 +18,6 @@
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
-using TestXTMF;
 
 namespace XTMF2.Editing
 {

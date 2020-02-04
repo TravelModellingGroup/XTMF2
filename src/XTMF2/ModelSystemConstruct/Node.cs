@@ -147,6 +147,25 @@ namespace XTMF2
             return true;
         }
 
+        internal bool Validate(ref string moduleName, ref string error)
+        {
+            foreach(var hook in Hooks)
+            {
+                // if the 
+                if(hook.Cardinality == HookCardinality.Single
+                   || hook.Cardinality == HookCardinality.AtLeastOne)
+                {
+                    if(!ContainedWithin.Links.Any(l=> l.Origin == this && l.OriginHook == hook))
+                    {
+                        moduleName = Name;
+                        error = $"A required link was not assigned for the hook {hook.Name}!";
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
         /// <summary>
         /// An optional description for this node
         /// </summary>
@@ -175,6 +194,7 @@ namespace XTMF2
             Module = (IModule)(
                 Type.GetTypeInfo().GetConstructor(RuntimeConstructor)?.Invoke(new[] { runtime })
                 ?? Type.GetTypeInfo().GetConstructor(EmptyConstructor).Invoke(EmptyConstructor));
+            Module.Name = Name;
             if (Type.IsConstructedGenericType && Type.GetGenericTypeDefinition() == GenericParameter)
             {
                 var paramType = Type.GenericTypeArguments[0];

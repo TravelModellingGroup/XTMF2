@@ -84,10 +84,10 @@ namespace XTMF2.Bus
         /// <param name="start">The starting point to run in.</param>
         /// <param name="context">The resulting context.</param>
         /// <returns>True if the model system was able to be processed, false otherwise.</returns>
-        public static bool CreateRunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd, 
+        public static bool CreateRunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd,
             string start, out RunContext context)
         {
-            if(!Convert(modelSystem, out string modelSystemAsString))
+            if (!Convert(modelSystem, out string modelSystemAsString))
             {
                 context = null;
                 return false;
@@ -109,16 +109,29 @@ namespace XTMF2.Bus
         /// <returns>True if the model system is valid, false otherwise with an error message.</returns>
         internal bool ValidateModelSystem(ref string error)
         {
-            // Construct the model system
-            if (!XTMF2.ModelSystem.Load(_ModelSystemAsString, _Runtime, out ModelSystem ms, ref error)
-                || !ms.Construct(_Runtime, ref error))
+            string moduleName = null;
+            // Make sure that we are able to actually construct the directory
+            try
             {
+                Directory.CreateDirectory(_CurrentWorkingDirectory);
+            }
+            catch (IOException e)
+            {
+                error = e.Message;
+                return false;
+            }
+            // Construct the model system
+            if (!ModelSystem.Load(_ModelSystemAsString, _Runtime, out ModelSystem ms, ref error)
+                || !ms.Construct(_Runtime, ref error)
+                || !ms.Validate(ref moduleName, ref error))
+            {
+                RunResults.WriteValidationError(_CurrentWorkingDirectory, moduleName, error);
                 return false;
             }
             _ModelSystem = ms;
             // Ensure that the starting point exists
             if (!GetStart(Start.ParseStartString(StartToExecute),
-                out var s, ref error))
+                out var _, ref error))
             {
                 _ModelSystem = null;
                 return false;
@@ -139,24 +152,24 @@ namespace XTMF2.Bus
             for (int i = 0; i < startPath.Count - 1; i++)
             {
                 bool found = false;
-                foreach(var child in current.Boundaries)
+                foreach (var child in current.Boundaries)
                 {
-                    if(child.Name.Equals(startPath[i], StringComparison.OrdinalIgnoreCase))
+                    if (child.Name.Equals(startPath[i], StringComparison.OrdinalIgnoreCase))
                     {
                         found = true;
                         current = child;
                     }
                 }
-                if(!found)
+                if (!found)
                 {
                     error = $"Unable to find a child boundary named {startPath[i]} in parent boundary {current.Name}!";
                     return false;
                 }
             }
             var startName = startPath[startPath.Count - 1];
-            foreach(var s in current.Starts)
+            foreach (var s in current.Starts)
             {
-                if(startName.Equals(s.Name, StringComparison.OrdinalIgnoreCase))
+                if (startName.Equals(s.Name, StringComparison.OrdinalIgnoreCase))
                 {
                     start = s;
                     return true;
@@ -174,21 +187,28 @@ namespace XTMF2.Bus
         /// <returns>True if the run succeeds, false otherwise with an error message and a stack trace.</returns>
         internal bool Run(ref string error, ref string stackTrace)
         {
-            if(!GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error))
+            if (!GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error))
             {
                 return false;
             }
             var originalDir = Directory.GetCurrentDirectory();
             try
             {
-                Directory.CreateDirectory(_CurrentWorkingDirectory);
+                string moduleName = null;
                 Directory.SetCurrentDirectory(_CurrentWorkingDirectory);
+                if (!RuntimeValidation(ref moduleName, ref error))
+                {
+                    RunResults.WriteValidationError(_CurrentWorkingDirectory, moduleName, error);
+                    return false;
+                }
                 ((IAction)startingMss.Module).Invoke();
+                RunResults.WriteRunCompleted(_CurrentWorkingDirectory);
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 error = e.Message;
                 stackTrace = e.StackTrace;
+                RunResults.WriteError(_CurrentWorkingDirectory, e);
                 return false;
             }
             finally
@@ -196,6 +216,41 @@ namespace XTMF2.Bus
                 Directory.SetCurrentDirectory(originalDir);
             }
             // success for now
+            return true;
+        }
+
+        private bool RuntimeValidation(ref string moduleName, ref string errorMessage)
+        {
+            Stack<Boundary> toProcess = new Stack<Boundary>();
+            toProcess.Push(_ModelSystem.GlobalBoundary);
+            Boundary current;
+            while(toProcess.TryPop(out current))
+            {
+                foreach (var child in current.Boundaries)
+                {
+                    toProcess.Push(child);
+                }
+                foreach(var module in current.Modules)
+                {
+                    if(module.Module is IModule realModule)
+                    {
+                        try
+                        {
+                            if (!realModule.RuntimeValidation(ref errorMessage))
+                            {
+                                moduleName = module.Name;
+                                return false;
+                            }
+                        }
+                        catch(Exception e)
+                        {
+                            moduleName = module.Name;
+                            errorMessage = e.Message;
+                            return false;
+                        }
+                    }
+                }
+            }
             return true;
         }
     }

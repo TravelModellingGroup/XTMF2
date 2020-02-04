@@ -21,7 +21,7 @@ using System.Collections.Generic;
 using System.Text;
 using XTMF2;
 
-namespace TestXTMF.Modules
+namespace XTMF2.RuntimeModules
 {
     [Module(Name = "Ignore Result", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
 Description = "Ignore the result of a function call.  This allows you to call functions from an action.")]

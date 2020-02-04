@@ -68,7 +68,7 @@ namespace XTMF2.Bus
                             Current = context;
                             if (context.ValidateModelSystem(ref error))
                             {
-                                if(!context.Run(ref error, ref stackTrace))
+                                if (!context.Run(ref error, ref stackTrace))
                                 {
                                     _Bus.ModelRunFailed(context, error, stackTrace);
                                 }

@@ -20,9 +20,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.IO;
 using System.Linq;
-using TestXTMF;
-using TestXTMF.Modules;
 using XTMF2.Editing;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2
 {

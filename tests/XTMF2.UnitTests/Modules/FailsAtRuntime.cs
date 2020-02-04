@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2020 University of Toronto
 
     This file is part of XTMF2.
 
@@ -22,16 +22,13 @@ using System.Text;
 
 namespace XTMF2.Modules
 {
-    [Module(Name = "Simple Parameter Module", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
-        Description = "A test module to invoke a function that returns a string.")]
-    public class SimpleParameterModule : BaseFunction<string>
+    [Module(Name = "Fails At Runtime", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    Description = "A test module to cause an XTMFRuntime exception at runtime.")]
+    public sealed class FailsAtRuntime : BaseAction
     {
-        [Parameter(Name = "Real Function", Description = "Will be called", Required = true, Index = 0, DefaultValue = "Hello World")]
-        public IFunction<string> RealValue;
-
-        public override string Invoke()
+        public override void Invoke()
         {
-            return RealValue.Invoke();
+            throw new XTMFRuntimeException(this, "This module should fail!");
         }
     }
 }
