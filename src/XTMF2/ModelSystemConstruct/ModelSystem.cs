@@ -143,8 +143,20 @@ namespace XTMF2
         }
 
         /// <summary>
+        /// Check that all requirements have been met when constructing the model system.
+        /// </summary>
+        /// <param name="moduleName">The name of the module that is causing the validation error.</param>
+        /// <param name="error">An error message if the validation fails.</param>
+        /// <returns>True if the validation passes, false otherwise with an error message.</returns>
+        internal bool Validate(ref string moduleName, ref string error)
+        {
+            return GlobalBoundary.Validate(ref moduleName, ref error);
+        }
+
+        /// <summary>
         /// Generate the concrete model system for execution.
         /// </summary>
+        /// <param name="runtime">The XTMF run time that we are executing within.</param>
         /// <param name="error">An error message if it can not be constructed.</param>
         /// <returns>True if it was created, false with message otherwise.</returns>
         internal bool Construct(XTMFRuntime runtime, ref string error)

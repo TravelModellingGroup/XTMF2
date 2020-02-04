@@ -129,6 +129,25 @@ namespace XTMF2
             }
         }
 
+        internal bool Validate(ref string moduleName, ref string error)
+        {
+            foreach(var module in _Modules)
+            {
+                if(!module.Validate(ref moduleName, ref error))
+                {
+                    return false;
+                }
+            }
+            foreach(var children in _Boundaries)
+            {
+                if(!children.Validate(ref moduleName, ref error))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         /// <summary>
         /// Creates a dictionary of type to index number for types contained in the model system.
         /// </summary>
