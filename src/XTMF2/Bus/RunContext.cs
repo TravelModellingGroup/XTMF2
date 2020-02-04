@@ -202,7 +202,7 @@ namespace XTMF2.Bus
                     return false;
                 }
                 ((IAction)startingMss.Module).Invoke();
-                RunResults.WriteRunCompelted(_CurrentWorkingDirectory);
+                RunResults.WriteRunCompleted(_CurrentWorkingDirectory);
             }
             catch (Exception e)
             {

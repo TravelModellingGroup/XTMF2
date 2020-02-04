@@ -19,9 +19,8 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.IO;
 using System.Threading;
-using TestXTMF;
-using TestXTMF.Modules;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.Modules;
 using XTMF2.RuntimeModules;
 using static XTMF2.TestHelper;
 

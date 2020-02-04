@@ -137,7 +137,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="runDirectory">The directory that the run was completed in.</param>
         /// <returns></returns>
-        internal static void WriteRunCompelted(string runDirectory)
+        internal static void WriteRunCompleted(string runDirectory)
         {
             using var stream = File.OpenWrite(Path.Combine(runDirectory, ResultsFile));
             using var writer = new Utf8JsonWriter(stream);

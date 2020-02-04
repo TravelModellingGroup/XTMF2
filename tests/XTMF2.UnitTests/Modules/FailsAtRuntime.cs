@@ -19,9 +19,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using XTMF2;
 
-namespace TestXTMF.Modules
+namespace XTMF2.Modules
 {
     [Module(Name = "Fails At Runtime", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
     Description = "A test module to cause an XTMFRuntime exception at runtime.")]
