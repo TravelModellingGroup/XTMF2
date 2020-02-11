@@ -28,11 +28,10 @@ namespace XTMF2.Bus
     /// </summary>
     internal sealed class Scheduler : IDisposable
     {
-        private ConcurrentQueue<RunContext> _ToRun = new ConcurrentQueue<RunContext>();
-        private RunBusClient _Bus;
-        private Task _ExecutionTask;
-        private CancellationTokenSource _CancelExecutionEngine;
-        private SemaphoreSlim _RunsToGo = new SemaphoreSlim(0);
+        private readonly ConcurrentQueue<RunContext> _ToRun = new ConcurrentQueue<RunContext>();
+        private readonly ClientBus _Bus;
+        private readonly CancellationTokenSource _CancelExecutionEngine;
+        private readonly SemaphoreSlim _RunsToGo = new SemaphoreSlim(0);
 
         /// <summary>
         /// The currently executing RunContext.
@@ -44,12 +43,12 @@ namespace XTMF2.Bus
         /// Create a new Scheduler to process the given client bus.
         /// </summary>
         /// <param name="bus">The bus to listen to.</param>
-        public Scheduler(RunBusClient bus)
+        public Scheduler(ClientBus bus)
         {
             _Bus = bus;
             _CancelExecutionEngine = new CancellationTokenSource();
             var token = _CancelExecutionEngine.Token;
-            _ExecutionTask = Task.Factory.StartNew(()=>
+            Task.Factory.StartNew(()=>
             {
                 while(!token.IsCancellationRequested)
                 {

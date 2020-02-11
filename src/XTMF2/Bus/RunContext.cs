@@ -32,7 +32,7 @@ namespace XTMF2.Bus
         /// <summary>
         /// A string representation of the model system.
         /// </summary>
-        private string _ModelSystemAsString;
+        private readonly string _ModelSystemAsString;
 
         /// <summary>
         /// The directory that this run will be executed in.
@@ -47,7 +47,7 @@ namespace XTMF2.Bus
         /// <summary>
         /// A reference to the XTMFRuntime that will execute the model system.
         /// </summary>
-        private XTMFRuntime _Runtime;
+        private readonly XTMFRuntime _Runtime;
 
         /// <summary>
         /// Set tot true if the model system has finished executing.
@@ -223,16 +223,15 @@ namespace XTMF2.Bus
         {
             Stack<Boundary> toProcess = new Stack<Boundary>();
             toProcess.Push(_ModelSystem.GlobalBoundary);
-            Boundary current;
-            while(toProcess.TryPop(out current))
+            while (toProcess.TryPop(out Boundary current))
             {
                 foreach (var child in current.Boundaries)
                 {
                     toProcess.Push(child);
                 }
-                foreach(var module in current.Modules)
+                foreach (var module in current.Modules)
                 {
-                    if(module.Module is IModule realModule)
+                    if (module.Module is IModule realModule)
                     {
                         try
                         {
@@ -242,7 +241,7 @@ namespace XTMF2.Bus
                                 return false;
                             }
                         }
-                        catch(Exception e)
+                        catch (Exception e)
                         {
                             moduleName = module.Name;
                             errorMessage = e.Message;

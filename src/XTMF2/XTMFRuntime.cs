@@ -50,7 +50,7 @@ namespace XTMF2
         /// <summary>
         /// The currently executing ClientBus
         /// </summary>
-        public RunBusClient ClientBus { get; internal set; }
+        public ClientBus ClientBus { get; internal set; }
 
         /// <summary>
         /// The users in the system.  Ensure you dereference the

@@ -23,7 +23,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Threading.Tasks;
 
-namespace XTMF2.Run
+namespace XTMF2.Client
 {
     public static class CreateStreams
     {

@@ -26,9 +26,10 @@ using System.Threading.Tasks;
 namespace XTMF2.Bus
 {
     /// <summary>
-    /// Provides communication to the XTMF Interface
+    /// Provides communication to the host and forwards communication
+    /// to the Run.
     /// </summary>
-    public sealed class RunBusClient : IDisposable
+    public sealed class ClientBus : IDisposable
     {
         private readonly Stream _ClientHost;
         private readonly bool _Owner;
@@ -47,7 +48,7 @@ namespace XTMF2.Bus
         /// <param name="serverStream">A stream that connects to the host.</param>
         /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
         /// <param name="runtime">The XTMFRuntime to work within.</param>
-        public RunBusClient(Stream serverStream, bool streamOwner, XTMFRuntime runtime)
+        public ClientBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime)
         {
             Runtime = runtime;
             _RunScheduler = new Scheduler(this);
@@ -77,7 +78,7 @@ namespace XTMF2.Bus
             Dispose(true);
         }
 
-        ~RunBusClient()
+        ~ClientBus()
         {
             Dispose(false);
         }
