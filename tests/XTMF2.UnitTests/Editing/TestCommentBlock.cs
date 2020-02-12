@@ -173,5 +173,53 @@ namespace XTMF2.UnitTests.Editing
                 Assert.AreEqual(0, comBlocks.Count);
             });
         }
+
+        [TestMethod]
+        public void TestChangingCommentBlockText()
+        {
+            TestHelper.RunInModelSystemContext("TestChangingCommentBlockText", (user, pSession, msSession) =>
+            {
+                string error = null;
+                var ms = msSession.ModelSystem;
+                var comment = "My Comment";
+                var newComment = "New comment";
+                var location = new Point(100, 100);
+                var comBlocks = ms.GlobalBoundary.CommentBlocks;
+                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, ref error), error);
+                Assert.AreEqual(1, comBlocks.Count);
+                Assert.AreEqual(comment, comBlocks[0].Comment);
+                Assert.IsTrue(msSession.SetCommentBlockText(user, block, newComment, ref error), error);
+                Assert.AreEqual(newComment, block.Comment, "The comment block's text was not set!");
+                Assert.IsTrue(msSession.Undo(user, ref error), error);
+                Assert.AreEqual(comment, block.Comment, "The comment block's text was not undone!");
+                Assert.IsTrue(msSession.Redo(user, ref error), error);
+                Assert.AreEqual(newComment, block.Comment);
+            });
+        }
+
+        [TestMethod]
+        public void TestChangingCommentBlockPosition()
+        {
+            TestHelper.RunInModelSystemContext("TestChangingCommentBlockPosition", (user, pSession, msSession) =>
+            {
+                string error = null;
+                var ms = msSession.ModelSystem;
+                var comment = "My Comment";
+                var location = new Point(100, 100);
+                var newLocation = new Point(100, 200);
+                var comBlocks = ms.GlobalBoundary.CommentBlocks;
+                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, ref error), error);
+                Assert.AreEqual(1, comBlocks.Count);
+                Assert.AreEqual(comment, comBlocks[0].Comment);
+                Assert.IsTrue(msSession.SetCommentBlockLocation(user, block, newLocation, ref error), error);
+                Assert.AreEqual(newLocation, block.Location, "The comment block's location was not set!");
+                Assert.IsTrue(msSession.Undo(user, ref error), error);
+                Assert.AreEqual(location, block.Location, "The comment block's location was not undone!");
+                Assert.IsTrue(msSession.Redo(user, ref error), error);
+                Assert.AreEqual(newLocation, block.Location);
+            });
+        }
     }
 }

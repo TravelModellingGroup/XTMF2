@@ -18,6 +18,7 @@
 */
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using XTMF2.Editing;
@@ -27,11 +28,13 @@ namespace XTMF2.ModelSystemConstruct
     /// <summary>
     /// This class is used to add comments inside of a boundary
     /// </summary>
-    public sealed class CommentBlock
+    public sealed class CommentBlock : INotifyPropertyChanged
     {
         private const string XProperty = "X";
         private const string YProperty = "Y";
         private const string CommentProperty = "Comment";
+
+        public event PropertyChangedEventHandler PropertyChanged;
 
         /// <summary>
         /// Construct a new comments block
@@ -45,14 +48,42 @@ namespace XTMF2.ModelSystemConstruct
         }
 
         /// <summary>
+        /// Invoke this when a property is changed
+        /// </summary>
+        /// <param name="propertyName">The name of the property that was changed</param>
+        private void Notify(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private Point _location;
+        private string _comment;
+
+        /// <summary>
         /// The location to place the Comment Block within the boundary
         /// </summary>
-        public Point Location { get; set; }
+        public Point Location
+        {
+            get => _location;
+            set
+            {
+                _location = value;
+                Notify(nameof(Location));
+            }
+        }
 
         /// <summary>
         /// The comment string to display
         /// </summary>
-        public string Comment { get; private set; }
+        public string Comment
+        {
+            get => _comment;
+            set
+            {
+                _comment = value;
+                Notify(nameof(Comment));
+            }
+        }
 
         internal void Save(Utf8JsonWriter writer)
         {
@@ -69,13 +100,13 @@ namespace XTMF2.ModelSystemConstruct
             string comment = "No comment";
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                if(reader.TokenType == JsonTokenType.Comment)
+                if (reader.TokenType == JsonTokenType.Comment)
                 {
                     continue;
                 }
-                if(reader.TokenType == JsonTokenType.PropertyName)
+                if (reader.TokenType == JsonTokenType.PropertyName)
                 {
-                    if(reader.ValueTextEquals(XProperty))
+                    if (reader.ValueTextEquals(XProperty))
                     {
                         reader.Read();
                         x = reader.GetSingle();
