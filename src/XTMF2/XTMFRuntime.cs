@@ -48,9 +48,9 @@ namespace XTMF2
         public ModuleRepository Modules => SystemConfiguration.Modules;
 
         /// <summary>
-        /// The currently executing ClientBus
+        /// The currently executing RunBus
         /// </summary>
-        public ClientBus ClientBus { get; internal set; }
+        public RunBus RunBus { get; internal set; }
 
         /// <summary>
         /// The users in the system.  Ensure you dereference the

@@ -27,7 +27,7 @@ using XTMF2.Configuration;
 
 namespace XTMF2.Client
 {
-    class Program
+    public class Program
     {
         [MTAThread]
         static void Main(string[] args)
@@ -95,7 +95,7 @@ namespace XTMF2.Client
             {
                 loadedConfig.LoadAssembly(dll);
             }
-            using var clientBus = new ClientBus(serverStream, true, runtime);
+            using var clientBus = new ClientBus(serverStream, true, runtime, extraDlls);
             clientBus.ProcessRequests();
         }
     }

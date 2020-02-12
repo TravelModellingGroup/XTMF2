@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using XTMF2.Bus;
 
 namespace XTMF2.Run
 {
-    class Program
+    public class Program
     {
         static void Main(string[] args)
         {
@@ -40,27 +42,39 @@ namespace XTMF2.Run
                             Console.WriteLine("Expected a pipe name after getting a -namedPipe instruction!");
                             return;
                         }
-                        /*Stream clientStream = null;
+                        Stream toClient = null;
                         try
                         {
-                            if (!CreateStreams.CreateNamedPipeClient(args[i], out serverStream, ref error))
+                            if (!CreateStreams.CreateNamedPipeClient(args[i], out toClient, ref error))
                             {
                                 Console.WriteLine("Error creating run client\r\n" + error);
                                 return;
                             }
-                            RunClient(serverStream, dllsToLoad);
+                            Run(toClient, dllsToLoad);
                         }
                         finally
                         {
-                            serverStream?.Dispose();
+                            toClient?.Dispose();
                         }
-                        */
+                        
                         break;
                     default:
                         Console.WriteLine($"Unknown argument '{args[i]}'!");
                         return;
                 }
             }
+        }
+
+        private static void Run(Stream toClient, List<string> dllsToLoad)
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var config = runtime.SystemConfiguration;
+            foreach(var dll in dllsToLoad)
+            {
+                config.LoadAssembly(dll);
+            }
+            using var runBus = new RunBus(toClient, true, runtime);
+            runBus.ProcessRequests();
         }
     }
 }

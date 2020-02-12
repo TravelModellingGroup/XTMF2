@@ -63,7 +63,7 @@ namespace XTMF2.Bus
                         try
                         {
                             Current = context;
-                            if (context.StartRunInCurrentProcess() is RunError runError)
+                            if (context.StartRunInCurrentProcess(_Bus) is RunError runError)
                             {
                                 switch(runError.Type)
                                 {

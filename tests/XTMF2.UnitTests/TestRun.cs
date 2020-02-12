@@ -208,28 +208,28 @@ namespace XTMF2.UnitTests
                 Assert.IsTrue(msSession.AddLink(user, report, GetHook(report.Hooks, "To Invoke"), stm, out var ignoreLink3, ref error2), error2);
                 Assert.IsTrue(msSession.AddLink(user, report, GetHook(report.Hooks, "Message"), message, out var ignoreLink4, ref error2), error2);
                 Assert.IsTrue(msSession.SetParameterValue(user, message, "Reporting through XTMF", ref error2), error2);
-                CreateRunClient(true, (runBus) =>
+                CreateRunClient(true, (clientBus) =>
                 {
                     string error = null;
                     bool success = false;
                     string reportedStatus = null;
                     using SemaphoreSlim sim = new SemaphoreSlim(0);
 
-                    runBus.ClientFinishedModelSystem += (sender, e) =>
+                    clientBus.ClientFinishedModelSystem += (sender, e) =>
                     {
                         success = true;
                         sim.Release();
                     };
-                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    clientBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
                     {
                         error = e + "\r\n" + stack;
                         sim.Release();
                     };
-                    runBus.ClientReportedStatus += (sender, runId, status) =>
+                    clientBus.ClientReportedStatus += (sender, runId, status) =>
                     {
                         reportedStatus = status;
                     };
-                    Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "ReportRunProgress"), "Start", out var id, ref error), error);
+                    Assert.IsTrue(clientBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "ReportRunProgress"), "Start", out var id, ref error), error);
                     // give the models system some time to complete
                     if (!sim.Wait(2000))
                     {

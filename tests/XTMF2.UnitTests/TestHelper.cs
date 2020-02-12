@@ -356,12 +356,12 @@ namespace XTMF2.UnitTests
         {
             string error = null;
             var id = startClientProcess ? Guid.NewGuid().ToString() : "123";
-            var xtmfRunFileName = typeof(XTMF2.Client.CreateStreams).GetTypeInfo().Assembly.Location;
+            var xtmfRunFileName = typeof(XTMF2.Client.Program).GetTypeInfo().Assembly.Location;
             var testFileName = Path.GetFullPath(typeof(TestHelper).GetTypeInfo().Assembly.Location);
             Process client = null;
             try
             {
-                Assert.IsTrue(XTMF2.Client.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, ref error,
+                Assert.IsTrue(XTMF2.Bus.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, ref error,
                 () =>
                 {
                     if (startClientProcess)

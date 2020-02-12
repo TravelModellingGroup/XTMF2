@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 Travel Modelling Group, Department of Civil Engineering, University of Toronto
+    Copyright 2017-2020 Travel Modelling Group, Department of Civil Engineering, University of Toronto
 
     This file is part of XTMF2.
 
@@ -31,11 +31,12 @@ namespace XTMF2.Bus
     /// </summary>
     public sealed class ClientBus : IDisposable
     {
-        private readonly Stream _ClientHost;
-        private readonly bool _Owner;
-        private volatile bool _Exit = false;
+        private readonly Stream _clientHost;
+        private readonly bool _owner;
+        private volatile bool _exit = false;
 
-        private readonly Scheduler _RunScheduler;
+        private readonly Scheduler _runScheduler;
+        private readonly List<string> _extraDlls;
 
         /// <summary>
         /// The link to the XTMFRuntime
@@ -43,18 +44,23 @@ namespace XTMF2.Bus
         public XTMFRuntime Runtime { get; private set; }
 
         /// <summary>
+        /// Additional DLLs that the client should load.
+        /// </summary>
+        public IReadOnlyList<string> ExtraDlls => _extraDlls;
+
+        /// <summary>
         /// Create the bus to interact with the host.
         /// </summary>
         /// <param name="serverStream">A stream that connects to the host.</param>
         /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
         /// <param name="runtime">The XTMFRuntime to work within.</param>
-        public ClientBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime)
+        public ClientBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string> extraDlls = null)
         {
             Runtime = runtime;
-            _RunScheduler = new Scheduler(this);
-            _ClientHost = serverStream;
-            _Owner = streamOwner;
-            Runtime.ClientBus = this;
+            _runScheduler = new Scheduler(this);
+            _clientHost = serverStream;
+            _owner = streamOwner;
+            _extraDlls = extraDlls;
         }
 
         private void Dispose(bool managed)
@@ -62,11 +68,11 @@ namespace XTMF2.Bus
             if (managed)
             {
                 GC.SuppressFinalize(this);
-                _RunScheduler.Dispose();
+                _runScheduler.Dispose();
             }
-            if (_Owner)
+            if (_owner)
             {
-                _ClientHost.Dispose();
+                _clientHost.Dispose();
             }
         }
 
@@ -108,15 +114,39 @@ namespace XTMF2.Bus
         /// <summary>
         /// This must be obtained before sending any data to the host
         /// </summary>
-        private readonly object WriteLock = new object();
+        private readonly object _writeLock = new object();
 
         private void Write(Action<BinaryWriter> writeWith)
         {
-            lock (WriteLock)
+            lock (_writeLock)
             {
-                using var writer = new BinaryWriter(_ClientHost, Encoding.UTF8, true);
+                using var writer = new BinaryWriter(_clientHost, Encoding.UTF8, true);
                 writeWith(writer);
             }
+        }
+
+        internal void StartProcessingRequestFromRun(Stream clientToRunStream)
+        {
+            Task.Factory.StartNew(() =>
+            {
+                var reader = new BinaryReader(clientToRunStream, Encoding.UTF8, true);
+                try
+                {
+                    while (true)
+                    {
+                        switch (reader.ReadInt32())
+                        {
+                            case Out.:
+                                
+                                break;
+                        };
+                    }
+                }
+                catch
+                {
+
+                }
+            }, TaskCreationOptions.LongRunning);
         }
 
         /// <summary>
@@ -160,7 +190,7 @@ namespace XTMF2.Bus
             Write((writer) =>
             {
                 writer.Write((int)(Out.ClientReportedStatus));
-                writer.Write(_RunScheduler.Current.ID);
+                writer.Write(_runScheduler.Current.ID);
                 writer.Write(message ?? String.Empty);
             });
         }
@@ -196,8 +226,8 @@ namespace XTMF2.Bus
         public void ProcessRequests()
         {
             // the writer will clear things up
-            using var reader = new BinaryReader(_ClientHost, Encoding.UTF8, false);
-            while (!_Exit)
+            using var reader = new BinaryReader(_clientHost, Encoding.UTF8, false);
+            while (!_exit)
             {
                 switch ((In)reader.ReadInt32())
                 {
@@ -210,12 +240,12 @@ namespace XTMF2.Bus
                             using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
                             if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, out var context))
                             {
-                                _RunScheduler.Run(context);
+                                _runScheduler.Run(context);
                             }
                         }
                         break;
                     case In.KillClient:
-                        _Exit = true;
+                        _exit = true;
                         break;
                     // failsafe
                     default:

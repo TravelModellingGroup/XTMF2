@@ -18,8 +18,10 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.Bus
@@ -86,13 +88,72 @@ namespace XTMF2.Bus
             return true;
         }
 
-        public RunError StartRunInNewProcess()
+        private Stream CreateRunBus(bool localProcess, ClientBus clientBus)
         {
+            var pipeName = Guid.NewGuid().ToString();
+            string error = null;
+            Stream clientToRunStream = null;
+            CreateStreams.CreateNewNamedPipeHost(pipeName, out clientToRunStream, ref error, () =>
+            {
+                clientBus.StartProcessingRequestFromRun(clientToRunStream);
+                if (!localProcess)
+                {
+                    var path = Path.GetDirectoryName(typeof(ClientBus).Assembly.Location);
+                    var startInfo = new ProcessStartInfo()
+                    {
+                        FileName = "dotnet",
+                        Arguments = $"\"{Path.Combine(path, "XTMF.Run.dll")}\" {GetExtraDlls(clientBus)}-namedPipe \"{pipeName}\"",
+                        CreateNoWindow = false,
+                        WorkingDirectory = path
+                    };
+                    var client = new Process()
+                    {
+                        StartInfo = startInfo
+                    };
+                    client.EnableRaisingEvents = true;
+                    client.Start();
+                }
+                else
+                {
+                    if (CreateStreams.CreateNamedPipeClient(pipeName, out var runToClientStream, ref error))
+                    {
+                        Task.Factory.StartNew(() =>
+                        {
+                            using var rb = new RunBus(runToClientStream, true, _runtime);
+                            rb.ProcessRequests();
+                        }, TaskCreationOptions.LongRunning);
+                    }
+                }
+            });
+            return clientToRunStream;
+        }
+
+        private string GetExtraDlls(ClientBus client)
+        {
+            if(client.ExtraDlls is IReadOnlyList<string> dlls)
+            {
+                var builder = new StringBuilder();
+                foreach(var dll in dlls)
+                {
+                    builder.Append("-loaddll ");
+                    builder.Append(dll);
+                    builder.Append(' ');
+                }
+                return builder.ToString();
+            }
+            return String.Empty;
+        }
+
+
+        public RunError StartRunInNewProcess(ClientBus client)
+        {
+            using var stream = CreateRunBus(false, client);
             throw new NotImplementedException("Running in a new process has not been implemented yet!");
         }
 
-        public RunError StartRunInCurrentProcess()
+        public RunError StartRunInCurrentProcess(ClientBus client)
         {
+            using var stream = CreateRunBus(true, client);
             return new Run(ID, _modelSystem, StartToExecute, _runtime, _currentWorkingDirectory).StartRun();
         }
     }
