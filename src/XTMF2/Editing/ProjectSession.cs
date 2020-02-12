@@ -51,6 +51,27 @@ namespace XTMF2.Editing
         /// </summary>
         private readonly object _sessionLock = new object();
 
+        /// <summary>
+        /// Invoked when a view into the model system session is disposed.
+        /// </summary>
+        /// <param name="mss">The model system session to be decremented</param>
+        /// <param name="references"></param>
+        internal void ModelSystemSessionDecrementing(ModelSystemSession mss, ref int references)
+        {
+            lock (_sessionLock)
+            {
+                if (Interlocked.Decrement(ref references) <= 0)
+                {
+                    lock (_sessionLock)
+                    {
+                        _activeSessions.Remove(mss.ModelSystemHeader);
+                    }
+                    // remove one reference to the project session
+                    Dispose();
+                }
+            }
+        }
+
         // This is 0 instead of 1 intentionally so that the controller adds a reference
         private int _references = 0;
 
@@ -100,21 +121,6 @@ namespace XTMF2.Editing
             {
                 return Project.CanAccess(user);
             }
-        }
-
-        /// <summary>
-        /// Unload a model system session and reduce the number of references
-        /// to this project session.
-        /// </summary>
-        /// <param name="modelSystemSession">The model system session to remove.</param>
-        internal void UnloadSession(ModelSystemSession modelSystemSession)
-        {
-            lock (_sessionLock)
-            {
-                _activeSessions.Remove(modelSystemSession.ModelSystemHeader);
-            }
-            // remove one reference to the project session
-            Dispose();
         }
 
         /// <summary>
@@ -246,9 +252,14 @@ namespace XTMF2.Editing
                     if (ModelSystem.Load(this, modelSystemHeader, out session, ref error))
                     {
                         _activeSessions.Add(modelSystemHeader, session);
+                        Interlocked.Increment(ref _references);
                         return true;
                     }
                     return false;
+                }
+                else
+                {
+                    session.AddReference();
                 }
                 return true;
             }
