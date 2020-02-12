@@ -20,7 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.Modules
+namespace XTMF2.UnitTests.Modules
 {
     [Module(Name = "Simple Parameter Module", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
         Description = "A test module to invoke a function that returns a string.")]

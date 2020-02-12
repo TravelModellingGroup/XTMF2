@@ -29,7 +29,7 @@ using XTMF2.Bus;
 using XTMF2.Editing;
 using XTMF2.RuntimeModules;
 
-namespace XTMF2
+namespace XTMF2.UnitTests
 {
     static class TestHelper
     {

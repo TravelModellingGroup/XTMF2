@@ -20,11 +20,11 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.IO;
 using System.Threading;
 using XTMF2.ModelSystemConstruct;
-using XTMF2.Modules;
+using XTMF2.UnitTests.Modules;
 using XTMF2.RuntimeModules;
-using static XTMF2.TestHelper;
+using static XTMF2.UnitTests.TestHelper;
 
-namespace XTMF2
+namespace XTMF2.UnitTests
 {
     [TestClass]
     public class TestRun

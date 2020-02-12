@@ -23,11 +23,11 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using XTMF2.ModelSystemConstruct;
-using XTMF2.Modules;
+using XTMF2.UnitTests.Modules;
 using XTMF2.RuntimeModules;
-using static XTMF2.TestHelper;
+using static XTMF2.UnitTests.TestHelper;
 
-namespace XTMF2
+namespace XTMF2.UnitTests
 {
     [TestClass]
     public class TestModelSystem
