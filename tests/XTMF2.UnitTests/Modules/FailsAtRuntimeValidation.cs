@@ -20,7 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.Modules
+namespace XTMF2.UnitTests.Modules
 {
     [Module(Name = "Fails At Runtime Validation", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
 Description = "A test module to cause an XTMFRuntime exception at run time validation.")]

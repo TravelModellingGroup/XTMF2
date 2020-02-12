@@ -18,8 +18,9 @@
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using XTMF2.Editing;
 
-namespace XTMF2.Editing
+namespace XTMF2.UnitTests.Editing
 {
     [TestClass]
     public class TestBoundaries

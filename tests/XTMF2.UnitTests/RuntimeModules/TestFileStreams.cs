@@ -18,9 +18,10 @@
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.IO;
-using static XTMF2.TestHelper;
+using XTMF2.RuntimeModules;
+using static XTMF2.UnitTests.TestHelper;
 
-namespace XTMF2.RuntimeModules
+namespace XTMF2.UnitTests.RuntimeModules
 {
     [TestClass]
     public class TestFileStreams

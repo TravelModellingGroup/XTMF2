@@ -19,11 +19,11 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.IO;
 using System.Threading;
-using XTMF2.Modules;
+using XTMF2.UnitTests.Modules;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
 
-namespace XTMF2.Editing
+namespace XTMF2.UnitTests.Editing
 {
     [TestClass]
     public class TestNode

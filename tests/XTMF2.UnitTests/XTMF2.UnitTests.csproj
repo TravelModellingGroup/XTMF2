@@ -2,7 +2,7 @@
 
   <PropertyGroup>    
     <TargetFramework>netcoreapp3.1</TargetFramework>    
-    <RootNamespace>XTMF2</RootNamespace>
+    <RootNamespace>XTMF2.UnitTests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

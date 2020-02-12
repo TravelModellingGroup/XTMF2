@@ -20,7 +20,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.ModelSystemConstruct;
 
-namespace XTMF2.Editing
+namespace XTMF2.UnitTests.Editing
 {
     [TestClass]
     public class TestCommentBlock
