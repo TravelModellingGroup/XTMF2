@@ -352,16 +352,16 @@ namespace XTMF2
         /// 
         /// </summary>
         /// <param name="runLogic"></param>
-        public static void CreateRunClient(bool startClientProcess, Action<RunBusHost> runLogic)
+        public static void CreateRunClient(bool startClientProcess, Action<HostBus> runLogic)
         {
             string error = null;
             var id = startClientProcess ? Guid.NewGuid().ToString() : "123";
-            var xtmfRunFileName = typeof(XTMF2.Run.CreateStreams).GetTypeInfo().Assembly.Location;
+            var xtmfRunFileName = typeof(XTMF2.Client.CreateStreams).GetTypeInfo().Assembly.Location;
             var testFileName = Path.GetFullPath(typeof(TestHelper).GetTypeInfo().Assembly.Location);
             Process client = null;
             try
             {
-                Assert.IsTrue(XTMF2.Run.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, ref error,
+                Assert.IsTrue(XTMF2.Client.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, ref error,
                 () =>
                 {
                     if (startClientProcess)
@@ -394,7 +394,7 @@ namespace XTMF2
                 {
                     Assert.IsNotNull(client, "The client was never created!");
                 }
-                runLogic(new RunBusHost(hostStream, true));
+                runLogic(new HostBus(hostStream, true));
             }), error);
             }
             finally

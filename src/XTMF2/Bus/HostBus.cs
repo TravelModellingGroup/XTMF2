@@ -27,9 +27,9 @@ using XTMF2.Editing;
 namespace XTMF2.Bus
 {
     /// <summary>
-    /// Provides communication with the run process
+    /// Provides communication with the client process
     /// </summary>
-    public sealed class RunBusHost : IDisposable
+    public sealed class HostBus : IDisposable
     {
         private readonly Stream _HostStream;
         private readonly bool _Owner;
@@ -41,14 +41,14 @@ namespace XTMF2.Bus
         /// </summary>
         /// <param name="hostStream">The stream to host.</param>
         /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
-        public RunBusHost(Stream hostStream, bool streamOwner)
+        public HostBus(Stream hostStream, bool streamOwner)
         {
             _Owner = streamOwner;
             _HostStream = hostStream ?? throw new ArgumentNullException(nameof(hostStream));
             StartListenner();
         }
 
-        ~RunBusHost()
+        ~HostBus()
         {
             Dispose(false);
         }

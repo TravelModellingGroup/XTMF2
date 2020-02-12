@@ -32,22 +32,17 @@ namespace XTMF2.Bus
         /// <summary>
         /// A string representation of the model system.
         /// </summary>
-        private string _ModelSystemAsString;
+        private readonly byte[] _modelSystem;
 
         /// <summary>
         /// The directory that this run will be executed in.
         /// </summary>
-        private readonly string _CurrentWorkingDirectory;
-
-        /// <summary>
-        /// The processed representation of the model system.
-        /// </summary>
-        private ModelSystem _ModelSystem;
+        private readonly string _currentWorkingDirectory;
 
         /// <summary>
         /// A reference to the XTMFRuntime that will execute the model system.
         /// </summary>
-        private XTMFRuntime _Runtime;
+        private readonly XTMFRuntime _runtime;
 
         /// <summary>
         /// Set tot true if the model system has finished executing.
@@ -64,12 +59,12 @@ namespace XTMF2.Bus
         /// </summary>
         public string StartToExecute { get; private set; }
 
-        private RunContext(XTMFRuntime runtime, string id, string modelSystem, string cwd, string start)
+        private RunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd, string start)
         {
-            _Runtime = runtime;
+            _runtime = runtime;
             ID = id;
-            _ModelSystemAsString = modelSystem;
-            _CurrentWorkingDirectory = cwd;
+            _modelSystem = modelSystem;
+            _currentWorkingDirectory = cwd;
             HasExecuted = false;
             StartToExecute = start;
         }
@@ -87,171 +82,18 @@ namespace XTMF2.Bus
         public static bool CreateRunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd,
             string start, out RunContext context)
         {
-            if (!Convert(modelSystem, out string modelSystemAsString))
-            {
-                context = null;
-                return false;
-            }
-            context = new RunContext(runtime, id, modelSystemAsString, cwd, start);
+            context = new RunContext(runtime, id, modelSystem, cwd, start);
             return true;
         }
 
-        private static bool Convert(byte[] rawData, out string modelSystemAsString)
+        public RunError StartRunInNewProcess()
         {
-            modelSystemAsString = Encoding.Unicode.GetString(rawData);
-            return !String.IsNullOrWhiteSpace(modelSystemAsString);
+            throw new NotImplementedException("Running in a new process has not been implemented yet!");
         }
 
-        /// <summary>
-        /// Validate the model system contained within this run context.
-        /// </summary>
-        /// <param name="error">An error message if the model system is invalid.</param>
-        /// <returns>True if the model system is valid, false otherwise with an error message.</returns>
-        internal bool ValidateModelSystem(ref string error)
+        public RunError StartRunInCurrentProcess()
         {
-            string moduleName = null;
-            // Make sure that we are able to actually construct the directory
-            try
-            {
-                Directory.CreateDirectory(_CurrentWorkingDirectory);
-            }
-            catch (IOException e)
-            {
-                error = e.Message;
-                return false;
-            }
-            // Construct the model system
-            if (!ModelSystem.Load(_ModelSystemAsString, _Runtime, out ModelSystem ms, ref error)
-                || !ms.Construct(_Runtime, ref error)
-                || !ms.Validate(ref moduleName, ref error))
-            {
-                RunResults.WriteValidationError(_CurrentWorkingDirectory, moduleName, error);
-                return false;
-            }
-            _ModelSystem = ms;
-            // Ensure that the starting point exists
-            if (!GetStart(Start.ParseStartString(StartToExecute),
-                out var _, ref error))
-            {
-                _ModelSystem = null;
-                return false;
-            }
-            return true;
-        }
-
-        private bool GetStart(List<string> startPath, out Start start, ref string error)
-        {
-            start = null;
-            if (startPath.Count == 0)
-            {
-                error = "No start path was defined!";
-                return false;
-            }
-            // get the boundary the start should be contained within.
-            Boundary current = _ModelSystem.GlobalBoundary;
-            for (int i = 0; i < startPath.Count - 1; i++)
-            {
-                bool found = false;
-                foreach (var child in current.Boundaries)
-                {
-                    if (child.Name.Equals(startPath[i], StringComparison.OrdinalIgnoreCase))
-                    {
-                        found = true;
-                        current = child;
-                    }
-                }
-                if (!found)
-                {
-                    error = $"Unable to find a child boundary named {startPath[i]} in parent boundary {current.Name}!";
-                    return false;
-                }
-            }
-            var startName = startPath[startPath.Count - 1];
-            foreach (var s in current.Starts)
-            {
-                if (startName.Equals(s.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    start = s;
-                    return true;
-                }
-            }
-            error = $"Unable to find {startName} within boundary = {current.FullPath}.";
-            return false;
-        }
-
-        /// <summary>
-        /// Execute the run context.
-        /// </summary>
-        /// <param name="error">The error message if the run fails.</param>
-        /// <param name="stackTrace">The stack trace at the point of the error if the run fails.</param>
-        /// <returns>True if the run succeeds, false otherwise with an error message and a stack trace.</returns>
-        internal bool Run(ref string error, ref string stackTrace)
-        {
-            if (!GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error))
-            {
-                return false;
-            }
-            var originalDir = Directory.GetCurrentDirectory();
-            try
-            {
-                string moduleName = null;
-                Directory.SetCurrentDirectory(_CurrentWorkingDirectory);
-                if (!RuntimeValidation(ref moduleName, ref error))
-                {
-                    RunResults.WriteValidationError(_CurrentWorkingDirectory, moduleName, error);
-                    return false;
-                }
-                ((IAction)startingMss.Module).Invoke();
-                RunResults.WriteRunCompleted(_CurrentWorkingDirectory);
-            }
-            catch (Exception e)
-            {
-                error = e.Message;
-                stackTrace = e.StackTrace;
-                RunResults.WriteError(_CurrentWorkingDirectory, e);
-                return false;
-            }
-            finally
-            {
-                Directory.SetCurrentDirectory(originalDir);
-            }
-            // success for now
-            return true;
-        }
-
-        private bool RuntimeValidation(ref string moduleName, ref string errorMessage)
-        {
-            Stack<Boundary> toProcess = new Stack<Boundary>();
-            toProcess.Push(_ModelSystem.GlobalBoundary);
-            Boundary current;
-            while(toProcess.TryPop(out current))
-            {
-                foreach (var child in current.Boundaries)
-                {
-                    toProcess.Push(child);
-                }
-                foreach(var module in current.Modules)
-                {
-                    if(module.Module is IModule realModule)
-                    {
-                        try
-                        {
-                            if (!realModule.RuntimeValidation(ref errorMessage))
-                            {
-                                moduleName = module.Name;
-                                return false;
-                            }
-                        }
-                        catch(Exception e)
-                        {
-                            moduleName = module.Name;
-                            errorMessage = e.Message;
-                            return false;
-                        }
-                    }
-                }
-            }
-            return true;
+            return new Run(ID, _modelSystem, StartToExecute, _runtime, _currentWorkingDirectory).StartRun();
         }
     }
 }
