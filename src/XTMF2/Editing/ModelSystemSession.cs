@@ -302,6 +302,95 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Sets the location of the CommentBlock
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="commentBlock">The comment block to change.</param>
+        /// <param name="newLocation">The location to set the comment block to.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool SetCommentBlockLocation(User user, CommentBlock commentBlock, Point newLocation, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (commentBlock is null)
+            {
+                throw new ArgumentNullException(nameof(commentBlock));
+            }
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = "The user does not have access to this project.";
+                    return false;
+                }
+                var oldLocation = commentBlock.Location;
+                commentBlock.Location = newLocation;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    commentBlock.Location = oldLocation;
+                    return (true, null);
+                }, () =>
+                {
+                    commentBlock.Location = newLocation;
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Set the comment text within a comment block
+        /// </summary>
+        /// <param name="user">The using issuing the command.</param>
+        /// <param name="commentBlock">The comment block to edit.</param>
+        /// <param name="newText">The new text to set.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool SetCommentBlockText(User user, CommentBlock commentBlock, string newText, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (commentBlock is null)
+            {
+                throw new ArgumentNullException(nameof(commentBlock));
+            }
+
+            if (string.IsNullOrEmpty(newText))
+            {
+                error = "A comment block must have text!";
+                return false;
+            }
+            lock(_sessionLock)
+            {
+                if(!_session.HasAccess(user))
+                {
+                    error = "The user does not have access to this project.";
+                    return false;
+                }
+                var oldComment = commentBlock.Comment;
+                commentBlock.Comment = newText;
+                Buffer.AddUndo(new Command(() =>
+              {
+                  commentBlock.Comment = oldComment;
+                  return (true, null);
+              }, () =>
+              {
+                  commentBlock.Comment = newText;
+                  return (true, null);
+              }));
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Remove a boundary from a model system
         /// </summary>
         /// <param name="user">The user that removed the boundary</param>
