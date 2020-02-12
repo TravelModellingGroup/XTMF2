@@ -62,20 +62,28 @@ namespace XTMF2.Bus
                     {
                         try
                         {
-                            string error = null;
-                            string stackTrace = null;
                             Current = context;
-                            if (context.ValidateModelSystem(ref error))
+                            if (context.StartRunInCurrentProcess() is RunError runError)
                             {
-                                if (!context.Run(ref error, ref stackTrace))
+                                switch(runError.Type)
                                 {
-                                    _Bus.ModelRunFailed(context, error, stackTrace);
+                                    case RunErrorType.Validation:
+                                        _Bus.ModelRunFailedValidation(context, runError.Message);
+                                        break;
+                                    case RunErrorType.RuntimeValidation:
+                                        _Bus.ModelRunFailedValidation(context, runError.Message);
+                                        break;
+                                    case RunErrorType.Runtime:
+                                        _Bus.ModelRunFailed(context, runError.Message, runError.StackTrace);
+                                        break;
+                                    default:
+                                        _Bus.ModelRunComplete(context);
+                                        break;
                                 }
-                                _Bus.ModelRunComplete(context);
                             }
                             else
                             {
-                                _Bus.ModelRunFailedValidation(context, error);
+                                _Bus.ModelRunComplete(context);
                             }
                         }
                         catch (Exception e)
