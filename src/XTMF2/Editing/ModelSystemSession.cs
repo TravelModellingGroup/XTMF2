@@ -52,10 +52,7 @@ namespace XTMF2.Editing
 
         public void Dispose()
         {
-            if (Interlocked.Decrement(ref _References) <= 0)
-            {
-                _session.UnloadSession(this);
-            }
+            _session.ModelSystemSessionDecrementing(this, ref _References);
         }
 
         internal ModuleRepository GetModuleRepository()
@@ -86,7 +83,7 @@ namespace XTMF2.Editing
                 error = "A boundary requires a unique name";
                 return false;
             }
-            if(!_session.HasAccess(user))
+            if (!_session.HasAccess(user))
             {
                 error = "The user does not have access to this project.";
                 return false;
@@ -254,6 +251,14 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Add a new reference to the model system session
+        /// </summary>
+        internal void AddReference()
+        {
+            Interlocked.Increment(ref _References);
+        }
+
+        /// <summary>
         /// Remove the comment block from the given boundary.
         /// </summary>
         /// <param name="user">The user requesting the action.</param>
@@ -368,9 +373,9 @@ namespace XTMF2.Editing
                 error = "A comment block must have text!";
                 return false;
             }
-            lock(_sessionLock)
+            lock (_sessionLock)
             {
-                if(!_session.HasAccess(user))
+                if (!_session.HasAccess(user))
                 {
                     error = "The user does not have access to this project.";
                     return false;
@@ -841,9 +846,9 @@ namespace XTMF2.Editing
                 // Find all of the basic parameters for the node that we need to remove.
                 var basicParameters = new List<(Node basicParameterNode, SingleLink basicParameterLink)>();
                 var advancedParameters = new List<Link>();
-                foreach(var link in boundary.Links.Where(link => link.Origin == node))
+                foreach (var link in boundary.Links.Where(link => link.Origin == node))
                 {
-                    if(link.OriginHook.IsParameter && link is SingleLink singleLink)
+                    if (link.OriginHook.IsParameter && link is SingleLink singleLink)
                     {
                         var destNode = singleLink.Destination;
                         var destType = destNode.Type;
@@ -851,7 +856,7 @@ namespace XTMF2.Editing
                         {
                             // check to see if this would be the only link referencing it.
                             List<Link> linksGoingTo = GetLinksGoingTo(destNode);
-                            if(linksGoingTo?.Count == 1)
+                            if (linksGoingTo?.Count == 1)
                             {
                                 basicParameters.Add((destNode, singleLink));
                             }
@@ -867,11 +872,11 @@ namespace XTMF2.Editing
                     void RemoveParameters()
                     {
                         string e = null;
-                        foreach(var p in advancedParameters)
+                        foreach (var p in advancedParameters)
                         {
                             boundary.RemoveLink(p, ref e);
                         }
-                        foreach(var (basicParameterNode, basicParameterLink) in basicParameters)
+                        foreach (var (basicParameterNode, basicParameterLink) in basicParameters)
                         {
                             boundary.RemoveLink(basicParameterLink, ref e);
                             boundary.RemoveNode(basicParameterNode, ref e);
@@ -903,7 +908,7 @@ namespace XTMF2.Editing
                     }, () =>
                     {
                         string e = null;
-                        if(boundary.RemoveNode(node, ref e))
+                        if (boundary.RemoveNode(node, ref e))
                         {
                             RemoveParameters();
                             return (true, null);
@@ -1138,7 +1143,7 @@ namespace XTMF2.Editing
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            if(origin is null)
+            if (origin is null)
             {
                 throw new ArgumentNullException(nameof(origin));
             }
