@@ -43,7 +43,7 @@ Description = "Reports to XTMF that the model system has run through this point.
 
         public override Return Invoke()
         {
-            _runtime.ClientBus.SendStatusMessage(Message.Invoke());
+            _runtime.RunBus.SendStatusMessage(Message.Invoke());
             return ToInvoke.Invoke();
         }
     }
@@ -67,7 +67,7 @@ Description = "Reports to XTMF that the model system has run through this point.
 
         public override Return Invoke(Context context)
         {
-            _runtime.ClientBus.SendStatusMessage(Message.Invoke());
+            _runtime.RunBus.SendStatusMessage(Message.Invoke());
             return ToInvoke.Invoke(context);
         }
     }
@@ -91,7 +91,7 @@ Description = "Reports to XTMF that the model system has run through this point.
 
         public override void Invoke()
         {
-            _runtime.ClientBus.SendStatusMessage(Message.Invoke());
+            _runtime.RunBus.SendStatusMessage(Message.Invoke());
             ToInvoke.Invoke();
         }
     }
@@ -115,7 +115,7 @@ Description = "Reports to XTMF that the model system has run through this point.
 
         public override void Invoke(Context context)
         {
-            _runtime.ClientBus.SendStatusMessage(Message.Invoke());
+            _runtime.RunBus.SendStatusMessage(Message.Invoke());
             ToInvoke.Invoke(context);
         }
     }
@@ -139,7 +139,7 @@ Description = "Reports to XTMF that the model system has run through this point.
 
         public override void Invoke(Context context)
         {
-            _runtime.ClientBus.SendStatusMessage(Message.Invoke(context));
+            _runtime.RunBus.SendStatusMessage(Message.Invoke(context));
             ToInvoke.Invoke(context);
         }
     }

@@ -194,7 +194,7 @@ namespace XTMF2.Bus
             }
             catch (Exception e)
             {
-                while(e.InnerException is Exception current)
+                while (e.InnerException is Exception current)
                 {
                     e = current;
                 }

@@ -1,23 +1,33 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using XTMF2.Bus;
 
 namespace XTMF2.Run
 {
-    class Program
+    public class Program
     {
         static void Main(string[] args)
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: XTMF.Run [-loadDLL dllPath] [-config CONFIGURATION] [-remote SERVER_ADDRESS] [-namedPipe PIPE_NAME]");
+                Console.WriteLine("Usage: XTMF.Run [-runID RunID] [-loadDLL dllPath] [-config CONFIGURATION] [-remote SERVER_ADDRESS] [-namedPipe PIPE_NAME]");
                 return;
             }
             List<string> dllsToLoad = new List<string>();
             string error = null;
+            string runID = null;
             for (int i = 0; i < args.Length; i++)
             {
                 switch (args[i].ToLowerInvariant())
                 {
+                    case "-runid":
+                        if (args.Length == ++i)
+                        {
+                            return;
+                        }
+                        runID = args[i];
+                        break;
                     case "-loaddll":
                         if (i + 1 < args.Length)
                         {
@@ -40,27 +50,44 @@ namespace XTMF2.Run
                             Console.WriteLine("Expected a pipe name after getting a -namedPipe instruction!");
                             return;
                         }
-                        /*Stream clientStream = null;
+                        Stream toClient = null;
                         try
                         {
-                            if (!CreateStreams.CreateNamedPipeClient(args[i], out serverStream, ref error))
+                            if (!CreateStreams.CreateNamedPipeClient(args[i], out toClient, ref error))
                             {
                                 Console.WriteLine("Error creating run client\r\n" + error);
                                 return;
                             }
-                            RunClient(serverStream, dllsToLoad);
+                            if(runID == null)
+                            {
+                                Console.WriteLine("No runID was provided!");
+                                return;
+                            }
+                            Run(runID, toClient, dllsToLoad);
                         }
                         finally
                         {
-                            serverStream?.Dispose();
+                            toClient?.Dispose();
                         }
-                        */
+                        
                         break;
                     default:
                         Console.WriteLine($"Unknown argument '{args[i]}'!");
                         return;
                 }
             }
+        }
+
+        private static void Run(string runID, Stream toClient, List<string> dllsToLoad)
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var config = runtime.SystemConfiguration;
+            foreach(var dll in dllsToLoad)
+            {
+                config.LoadAssembly(dll);
+            }
+            using var runBus = new RunBus(runID, toClient, true, runtime);
+            runBus.ProcessRequests();
         }
     }
 }

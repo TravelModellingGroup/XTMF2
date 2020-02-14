@@ -160,7 +160,8 @@ namespace XTMF2.Bus
                         switch (command)
                         {
                             case In.Heartbeat:
-                                // do nothing
+                                // Read in the ID of the run that issued the Heartbeat.
+                                reader.ReadString(); 
                                 break;
                             case In.ClientReady:
                                 break;

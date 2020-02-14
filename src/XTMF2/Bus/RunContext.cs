@@ -18,8 +18,11 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.Bus
@@ -86,14 +89,84 @@ namespace XTMF2.Bus
             return true;
         }
 
-        public RunError StartRunInNewProcess()
+        private Stream CreateRunBusLocal(ClientBus clientBus)
         {
-            throw new NotImplementedException("Running in a new process has not been implemented yet!");
+            var pipeName = Guid.NewGuid().ToString();
+            string error = null;
+            Stream clientToRunStream = null;
+            CreateStreams.CreateNewNamedPipeHost(pipeName, out clientToRunStream, ref error, () =>
+            {
+                clientBus.StartProcessingRequestFromRun(ID, clientToRunStream);
+                if (CreateStreams.CreateNamedPipeClient(pipeName, out var runToClientStream, ref error))
+                {
+                    Task.Factory.StartNew(() =>
+                    {
+                        using var rb = new RunBus(ID, runToClientStream, true, _runtime);
+                        rb.ProcessRequests();
+                    }, TaskCreationOptions.LongRunning);
+                }
+            });
+            return clientToRunStream;
         }
 
-        public RunError StartRunInCurrentProcess()
+        private (Stream clientToRunStream, Process runProcess) CreateRunBusRemote(ClientBus clientBus)
         {
-            return new Run(ID, _modelSystem, StartToExecute, _runtime, _currentWorkingDirectory).StartRun();
+            var pipeName = Guid.NewGuid().ToString();
+            string error = null;
+            Stream clientToRunStream = null;
+            Process runProcess = null;
+            CreateStreams.CreateNewNamedPipeHost(pipeName, out clientToRunStream, ref error, () =>
+            {
+                var path = Path.GetDirectoryName(typeof(ClientBus).GetTypeInfo().Assembly.Location);
+                var startInfo = new ProcessStartInfo()
+                {
+                    FileName = "dotnet",
+                    Arguments = $"\"{Path.Combine(path, "XTMF2.Run.dll")}\" -runID \"{ID}\" {GetExtraDlls(clientBus)}-namedPipe \"{pipeName}\"",
+                    CreateNoWindow = false,
+                    WorkingDirectory = path
+                };
+                runProcess = new Process()
+                {
+                    StartInfo = startInfo
+                };
+                runProcess.EnableRaisingEvents = true;
+                runProcess.Start();
+            });
+            clientBus.StartProcessingRequestFromRun(ID, clientToRunStream);
+            return (clientToRunStream, runProcess);
+        }
+
+        private string GetExtraDlls(ClientBus client)
+        {
+            var builder = new StringBuilder();
+            foreach (var dll in client.ExtraDlls)
+            {
+                builder.Append("-loaddll ");
+                builder.Append(dll);
+                builder.Append(' ');
+            }
+            return builder.ToString();
+        }
+
+
+        public void RunInNewProcess(ClientBus client)
+        {
+            (Stream stream, Process runProcess) = CreateRunBusRemote(client);
+            using var writer = new BinaryWriter(stream, Encoding.UTF8, false);
+            // Send the commend to start a run
+            writer.Write((int)1);
+            writer.Write(ID);
+            writer.Write(_currentWorkingDirectory);
+            writer.Write(StartToExecute);
+            writer.Write(_modelSystem.LongLength);
+            writer.Write(_modelSystem);
+            runProcess.WaitForExit();
+        }
+
+        public void RunInCurrentProcess(ClientBus client)
+        {
+            using var stream = CreateRunBusLocal(client);
+            new Run(ID, _modelSystem, StartToExecute, _runtime, _currentWorkingDirectory).StartRun();
         }
     }
 }
