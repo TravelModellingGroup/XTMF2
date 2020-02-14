@@ -61,7 +61,7 @@ namespace XTMF2.Bus
             _runScheduler = new Scheduler(this);
             _clientHost = serverStream;
             _owner = streamOwner;
-            _extraDlls = extraDlls;
+            _extraDlls = extraDlls ?? new List<string>();
         }
 
         private void Dispose(bool managed)

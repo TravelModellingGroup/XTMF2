@@ -138,18 +138,14 @@ namespace XTMF2.Bus
 
         private string GetExtraDlls(ClientBus client)
         {
-            if (client.ExtraDlls is IReadOnlyList<string> dlls)
+            var builder = new StringBuilder();
+            foreach (var dll in client.ExtraDlls)
             {
-                var builder = new StringBuilder();
-                foreach (var dll in dlls)
-                {
-                    builder.Append("-loaddll ");
-                    builder.Append(dll);
-                    builder.Append(' ');
-                }
-                return builder.ToString();
+                builder.Append("-loaddll ");
+                builder.Append(dll);
+                builder.Append(' ');
             }
-            return String.Empty;
+            return builder.ToString();
         }
 
 
