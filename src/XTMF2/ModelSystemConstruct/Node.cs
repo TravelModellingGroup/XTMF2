@@ -44,6 +44,8 @@ namespace XTMF2
         protected const string XProperty = "X";
         protected const string TypeProperty = "Type";
         protected const string YProperty = "Y";
+        protected const string WidthProperty = "Width";
+        protected const string HeightProperty = "Height";
         protected const string IndexProperty = "Index";
         protected const string ParameterProperty = "Parameter";
         protected const string DisabledProperty = "Disabled";
@@ -86,7 +88,7 @@ namespace XTMF2
         /// <summary>
         /// The location to graphically place this node within a boundary
         /// </summary>
-        public Point Location { get; protected set; }
+        public Rectangle Location { get; protected set; }
 
         /// <summary>
         /// The link to the executing object.
@@ -99,11 +101,10 @@ namespace XTMF2
         /// <summary>
         /// Set the location of the node
         /// </summary>
-        /// <param name="x">The horizontal offset</param>
-        /// <param name="y">The vertical offset</param>
-        internal void SetLocation(float x, float y)
+        /// <param name="newLocation">The location to use.</param>
+        internal void SetLocation(Rectangle newLocation)
         {
-            Location = new Point(x, y);
+            Location = newLocation;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Location)));
         }
 
@@ -322,6 +323,8 @@ namespace XTMF2
             writer.WriteNumber(TypeProperty, typeDictionary[Type]);
             writer.WriteNumber(XProperty, Location.X);
             writer.WriteNumber(YProperty, Location.Y);
+            writer.WriteNumber(WidthProperty, Location.Width);
+            writer.WriteNumber(HeightProperty, Location.Height);
             writer.WriteNumber(IndexProperty, index++);
             if (!String.IsNullOrEmpty(ParameterValue))
             {
@@ -345,7 +348,7 @@ namespace XTMF2
             string name = null;
             int index = -1;
             bool disabled = false;
-            Point point = new Point();
+            Rectangle point = new Rectangle();
             string description = null;
             string parameter = null;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -368,12 +371,22 @@ namespace XTMF2
                 else if(reader.ValueTextEquals(XProperty))
                 {
                     reader.Read();
-                    point = new Point(reader.GetSingle(), point.Y);
+                    point = new Rectangle(reader.GetSingle(), point.Y, point.Width, point.Height);
                 }
                 else if (reader.ValueTextEquals(YProperty))
                 {
                     reader.Read();
-                    point = new Point(point.X, reader.GetSingle());
+                    point = new Rectangle(point.X, reader.GetSingle(), point.Width, point.Height);
+                }
+                else if (reader.ValueTextEquals(WidthProperty))
+                {
+                    reader.Read();
+                    point = new Rectangle(point.X, point.Y, reader.GetSingle(), point.Height);
+                }
+                else if (reader.ValueTextEquals(HeightProperty))
+                {
+                    reader.Read();
+                    point = new Rectangle(point.X, point.Y, point.Width, reader.GetSingle());
                 }
                 else if(reader.ValueTextEquals(IndexProperty))
                 {

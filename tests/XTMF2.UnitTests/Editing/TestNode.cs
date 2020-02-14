@@ -595,5 +595,33 @@ namespace XTMF2.UnitTests.Editing
                 });
             });
         }
+
+        [TestMethod]
+        public void NodeLocation()
+        {
+            var newLocation = new Rectangle(10, 20, 30, 40);
+            TestHelper.RunInModelSystemContext("NodeLocation", (user, pSession, mSession) =>
+            {
+                // initialization
+                var ms = mSession.ModelSystem;
+                string error = null;
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                Assert.AreEqual("MyMSS", mss.Name);
+                var oldLocation = mss.Location;
+                Assert.IsTrue(mSession.SetNodeLocation(user, mss, newLocation, ref error), error);
+                Assert.AreEqual(newLocation, mss.Location);
+                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.AreEqual(oldLocation, mss.Location);
+                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.AreEqual(newLocation, mss.Location);
+                
+            }, (user, pSession, mSession) =>
+            {
+                // after shutdown
+                var ms = mSession.ModelSystem;
+                var modules = ms.GlobalBoundary.Modules;
+                Assert.AreEqual(newLocation, modules[0].Location);
+            });
+        }
     }
 }

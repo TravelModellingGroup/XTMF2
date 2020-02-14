@@ -33,7 +33,7 @@ namespace XTMF2.UnitTests.Editing
                 string error = null;
                 var ms = mSession.ModelSystem;
                 var comment = "My Comment";
-                var location = new Point(100, 100);
+                var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
                 Assert.AreEqual(0, comBlocks.Count);
                 Assert.IsTrue(mSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, ref error), error);
@@ -51,7 +51,7 @@ namespace XTMF2.UnitTests.Editing
                 string error = null;
                 var ms = mSession.ModelSystem;
                 var comment = "My Comment";
-                var location = new Point(100, 100);
+                var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
                 Assert.AreEqual(0, comBlocks.Count);
                 Assert.IsFalse(mSession.AddCommentBlock(unauthorizedUser, ms.GlobalBoundary, comment, location, out CommentBlock block, ref error), error);
@@ -63,7 +63,7 @@ namespace XTMF2.UnitTests.Editing
         public void TestCommentBlockPersistence()
         {
             var comment = "My Comment";
-            var location = new Point(100, 100);
+            var location = new Rectangle(100, 100);
             TestHelper.RunInModelSystemContext("TestCommentBlockPersistence", (user, pSession, msSession) =>
             {
                 string error = null;
@@ -93,7 +93,7 @@ namespace XTMF2.UnitTests.Editing
                 string error = null;
                 var ms = msSession.ModelSystem;
                 var comment = "My Comment";
-                var location = new Point(100, 100);
+                var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
                 Assert.AreEqual(0, comBlocks.Count);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, ref error), error);
@@ -113,7 +113,7 @@ namespace XTMF2.UnitTests.Editing
                 string error = null;
                 var ms = msSession.ModelSystem;
                 var comment = "My Comment";
-                var location = new Point(100, 100);
+                var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
                 Assert.AreEqual(0, comBlocks.Count);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, ref error), error);
@@ -133,7 +133,7 @@ namespace XTMF2.UnitTests.Editing
                 string error = null;
                 var ms = msSession.ModelSystem;
                 var comment = "My Comment";
-                var location = new Point(100, 100);
+                var location = new Rectangle(100, 100);
                 var comBlock = ms.GlobalBoundary.CommentBlocks;
                 Assert.AreEqual(0, comBlock.Count);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, ref error), error);
@@ -156,7 +156,7 @@ namespace XTMF2.UnitTests.Editing
                 string error = null;
                 var ms = msSession.ModelSystem;
                 var comment = "My Comment";
-                var location = new Point(100, 100);
+                var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
                 Assert.AreEqual(0, comBlocks.Count);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, ref error), error);
@@ -183,7 +183,7 @@ namespace XTMF2.UnitTests.Editing
                 var ms = msSession.ModelSystem;
                 var comment = "My Comment";
                 var newComment = "New comment";
-                var location = new Point(100, 100);
+                var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
                 Assert.AreEqual(0, comBlocks.Count);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, ref error), error);
@@ -206,8 +206,8 @@ namespace XTMF2.UnitTests.Editing
                 string error = null;
                 var ms = msSession.ModelSystem;
                 var comment = "My Comment";
-                var location = new Point(100, 100);
-                var newLocation = new Point(100, 200);
+                var location = new Rectangle(100, 100);
+                var newLocation = new Rectangle(100, 200);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
                 Assert.AreEqual(0, comBlocks.Count);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, ref error), error);

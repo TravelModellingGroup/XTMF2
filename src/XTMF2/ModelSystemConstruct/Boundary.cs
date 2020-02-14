@@ -251,7 +251,7 @@ namespace XTMF2
         /// <param name="block">The resulting block</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool AddCommentBlock(string documentation, Point position, out CommentBlock block, ref string error)
+        internal bool AddCommentBlock(string documentation, Rectangle position, out CommentBlock block, ref string error)
         {
             block = null;
             var _block = new CommentBlock(documentation, position);
@@ -795,7 +795,7 @@ namespace XTMF2
                     return false;
                 }
             }
-            start = new Start(session, startName, this, null, new Point(0, 0));
+            start = new Start(session, startName, this, null, new Rectangle(0, 0, 0, 0));
             _Starts.Add(start);
             return true;
         }
