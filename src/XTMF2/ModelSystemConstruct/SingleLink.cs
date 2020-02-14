@@ -25,7 +25,7 @@ using System.ComponentModel;
 
 namespace XTMF2.ModelSystemConstruct
 {
-    internal sealed class SingleLink : Link
+    public sealed class SingleLink : Link
     {
         public Node Destination { get; internal set; }
         public bool SetDestination(ModelSystemSession session, Node destination, ref string error)
