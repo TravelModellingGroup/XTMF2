@@ -356,7 +356,7 @@ namespace XTMF2.UnitTests
         {
             string error = null;
             var id = startClientProcess ? Guid.NewGuid().ToString() : "123";
-            var xtmfRunFileName = typeof(XTMF2.Client.Program).GetTypeInfo().Assembly.Location;
+            var xtmfClientFileName = typeof(XTMF2.Client.Program).GetTypeInfo().Assembly.Location;
             var testFileName = Path.GetFullPath(typeof(TestHelper).GetTypeInfo().Assembly.Location);
             Process client = null;
             try
@@ -371,7 +371,7 @@ namespace XTMF2.UnitTests
                             var startInfo = new ProcessStartInfo()
                             {
                                 FileName = "dotnet",
-                                Arguments = $"\"{xtmfRunFileName}\" -loadDLL \"{testFileName}\" -namedPipe \"{id}\"",
+                                Arguments = $"\"{xtmfClientFileName}\" -loadDLL \"{testFileName}\" -namedPipe \"{id}\"",
                                 CreateNoWindow = false,
                                 WorkingDirectory = Path.GetDirectoryName(typeof(TestHelper).GetTypeInfo().Assembly.Location)
                             };

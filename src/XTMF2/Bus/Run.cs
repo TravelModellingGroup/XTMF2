@@ -176,6 +176,7 @@ namespace XTMF2.Bus
         public RunError StartRun()
         {
             string error = null, moduleName = null, stackTrace = string.Empty;
+            Console.WriteLine("About to validate the model system.");
             if (!ValidateModelSystem(ref error) || !GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error))
             {
                 return new RunError(RunErrorType.Validation, error, moduleName, stackTrace);
@@ -189,12 +190,14 @@ namespace XTMF2.Bus
                     RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, error);
                     return new RunError(RunErrorType.Runtime, error, moduleName, stackTrace);
                 }
+                Console.WriteLine("Invoking the model run.");
                 ((IAction)startingMss.Module).Invoke();
                 RunResults.WriteRunCompleted(_currentWorkingDirectory);
             }
             catch (Exception e)
             {
-                while(e.InnerException is Exception current)
+                Console.WriteLine("An error occurred when running the model system!");
+                while (e.InnerException is Exception current)
                 {
                     e = current;
                 }

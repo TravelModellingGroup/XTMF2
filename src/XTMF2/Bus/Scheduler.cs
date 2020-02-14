@@ -63,28 +63,7 @@ namespace XTMF2.Bus
                         try
                         {
                             Current = context;
-                            if (context.StartRunInCurrentProcess(_Bus) is RunError runError)
-                            {
-                                switch(runError.Type)
-                                {
-                                    case RunErrorType.Validation:
-                                        _Bus.ModelRunFailedValidation(context.ID, runError.Message);
-                                        break;
-                                    case RunErrorType.RuntimeValidation:
-                                        _Bus.ModelRunFailedValidation(context.ID, runError.Message);
-                                        break;
-                                    case RunErrorType.Runtime:
-                                        _Bus.ModelRunFailed(context.ID, runError.Message, runError.StackTrace);
-                                        break;
-                                    default:
-                                        _Bus.ModelRunComplete(context.ID);
-                                        break;
-                                }
-                            }
-                            else
-                            {
-                                _Bus.ModelRunComplete(context.ID);
-                            }
+                            context.RunInNewProcess(_Bus);
                         }
                         catch (Exception e)
                         {

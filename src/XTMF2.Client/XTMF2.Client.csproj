@@ -11,9 +11,19 @@
 
   <ItemGroup>
     <PackageReference Include="System.IO.Pipes" Version="4.3.0" />
+    <Content Include="..\..\src\XTMF2.Run\bin\$(Configuration)\$(TargetFramework)\XTMF2.Run.deps.json" Link="XTMF2.Run.deps.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\src\XTMF2.Run\bin\$(Configuration)\$(TargetFramework)\XTMF2.Run.runtimeconfig.dev.json" Link="XTMF2.Run.runtimeconfig.dev.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\src\XTMF2.Run\bin\$(Configuration)\$(TargetFramework)\XTMF2.Run.runtimeconfig.json" Link="XTMF2.Run.runtimeconfig.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\XTMF2.Run\XTMF2.Run.csproj" />
     <ProjectReference Include="..\XTMF2\XTMF2.csproj" />
     <ProjectReference Include="..\XTMF2.Interfaces\XTMF2.Interfaces.csproj" />
   </ItemGroup>

@@ -165,31 +165,47 @@ namespace XTMF2.Bus
                 {
                     case In.RunModelSystem:
                         {
+                            Console.WriteLine("Client has requested to run a model system.");
                             _id = reader.ReadString();
+                            Console.WriteLine($"ID = {_id}");
                             var cwd = reader.ReadString();
+                            Console.WriteLine($"CWD = {cwd}");
                             var start = reader.ReadString();
+                            Console.WriteLine($"Start = {start}");
                             var msSize = (int)reader.ReadInt64();
                             using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
+                            Console.WriteLine("Client has sent all data needed to construct a run.");
                             var run = new Run(_id, mem.ToArray(), start, _runtime, cwd);
+                            Console.WriteLine("Created a run.");
                             Task.Run(() =>
                             {
-                                var error = run.StartRun();
-                                switch (error?.Type)
+                                try
                                 {
-                                    case RunErrorType.Validation:
-                                        ModelRunFailedValidation(error.Message);
-                                        break;
-                                    case RunErrorType.RuntimeValidation:
-                                        ModelRunFailedValidation(error.Message);
-                                        break;
-                                    case RunErrorType.Runtime:
-                                        ModelRunFailed(error.Message, error.StackTrace);
-                                        break;
-                                    default:
-                                        ModelRunComplete();
-                                        break;
+                                    Console.WriteLine("About to start a run.");
+                                    var error = run.StartRun();
+                                    Console.WriteLine("Run has completed, about to report.");
+                                    switch (error?.Type)
+                                    {
+                                        case RunErrorType.Validation:
+                                            ModelRunFailedValidation(error.Message);
+                                            break;
+                                        case RunErrorType.RuntimeValidation:
+                                            ModelRunFailedValidation(error.Message);
+                                            break;
+                                        case RunErrorType.Runtime:
+                                            ModelRunFailed(error.Message, error.StackTrace);
+                                            break;
+                                        default:
+                                            ModelRunComplete();
+                                            break;
+                                    }
+                                    Console.WriteLine("Reporting has finished.");
+                                    _toClient.Dispose();
                                 }
-                                _toClient.Dispose();
+                                catch(Exception e)
+                                {
+                                    Console.WriteLine(e.Message + "\r\n" + e.StackTrace);
+                                }
                                 Environment.Exit(0);
                             });
                         }

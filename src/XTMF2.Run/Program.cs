@@ -21,10 +21,9 @@ namespace XTMF2.Run
             {
                 switch (args[i].ToLowerInvariant())
                 {
-                    case "-runID":
+                    case "-runid":
                         if (args.Length == ++i)
                         {
-
                             return;
                         }
                         runID = args[i];
@@ -81,13 +80,16 @@ namespace XTMF2.Run
 
         private static void Run(string runID, Stream toClient, List<string> dllsToLoad)
         {
+            Console.WriteLine("Starting XTMF.Run.exe");
             var runtime = XTMFRuntime.CreateRuntime();
             var config = runtime.SystemConfiguration;
             foreach(var dll in dllsToLoad)
             {
                 config.LoadAssembly(dll);
             }
+            Console.WriteLine("About to start run bus");
             using var runBus = new RunBus(runID, toClient, true, runtime);
+            Console.WriteLine("About to start accepting requests.");
             runBus.ProcessRequests();
         }
     }

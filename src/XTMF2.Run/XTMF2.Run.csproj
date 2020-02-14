@@ -6,8 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\XTMF2.Interfaces\XTMF2.Interfaces.csproj" />
-    <ProjectReference Include="..\src\XTMF2\XTMF2.csproj" />
+    <ProjectReference Include="..\XTMF2.Interfaces\XTMF2.Interfaces.csproj" />
+    <ProjectReference Include="..\XTMF2\XTMF2.csproj" />
   </ItemGroup>
 
 </Project>
