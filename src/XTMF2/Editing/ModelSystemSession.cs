@@ -921,6 +921,40 @@ namespace XTMF2.Editing
             }
         }
 
+        public bool SetNodeLocation(User user, Node mss, Rectangle newLocation, ref string error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (mss is null)
+            {
+                throw new ArgumentNullException(nameof(mss));
+            }
+
+            lock(_sessionLock)
+            {
+                if(!(_session.HasAccess(user)))
+                {
+                    error = "The user does not have access to this project.";
+                    return false;
+                }
+                var oldLocation = mss.Location;
+                mss.SetLocation(newLocation);
+                Buffer.AddUndo(new Command(() =>
+                {
+                    mss.SetLocation(oldLocation);
+                    return (true, string.Empty);
+                }, () =>
+                {
+                    mss.SetLocation(newLocation);
+                    return (true, string.Empty);
+                }));
+                return true;
+            }
+        }
+
         private List<Link> GetLinksGoingTo(Node destNode)
         {
             var ret = new List<Link>();

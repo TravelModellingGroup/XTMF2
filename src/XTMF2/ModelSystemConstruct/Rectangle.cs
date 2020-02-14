@@ -60,12 +60,17 @@ namespace XTMF2
 
         public static bool operator ==(Rectangle left, Rectangle right)
         {
-            return left.Equals(right);
+            return left.X == right.X & left.Y == right.Y & left.Width == right.Width & left.Height == right.Height;
         }
 
         public static bool operator !=(Rectangle left, Rectangle right)
         {
-            return !(left == right);
+            return left.X != right.X | left.Y != right.Y | left.Width != right.Width | left.Height != right.Height;
+        }
+
+        public override string ToString()
+        {
+            return $"{{{X},{Y},{Width},{Height}}}";
         }
     }
 }

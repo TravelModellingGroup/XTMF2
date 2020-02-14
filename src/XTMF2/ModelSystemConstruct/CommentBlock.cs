@@ -32,6 +32,8 @@ namespace XTMF2.ModelSystemConstruct
     {
         private const string XProperty = "X";
         private const string YProperty = "Y";
+        private const string WidthProperty = "Width";
+        private const string HeightProperty = "Height";
         private const string CommentProperty = "Comment";
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -90,13 +92,15 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteStartObject();
             writer.WriteNumber(XProperty, Location.X);
             writer.WriteNumber(YProperty, Location.Y);
+            writer.WriteNumber(WidthProperty, Location.Width);
+            writer.WriteNumber(HeightProperty, Location.Height);
             writer.WriteString(CommentProperty, Comment);
             writer.WriteEndObject();
         }
 
         internal static bool Load(ref Utf8JsonReader reader, out CommentBlock block, ref string error)
         {
-            float x = 0, y = 0;
+            float x = 0, y = 0, width = 0, height = 0;
             string comment = "No comment";
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
@@ -116,6 +120,16 @@ namespace XTMF2.ModelSystemConstruct
                         reader.Read();
                         y = reader.GetSingle();
                     }
+                    else if (reader.ValueTextEquals(WidthProperty))
+                    {
+                        reader.Read();
+                        width = reader.GetSingle();
+                    }
+                    else if (reader.ValueTextEquals(HeightProperty))
+                    {
+                        reader.Read();
+                        height = reader.GetSingle();
+                    }
                     else if (reader.ValueTextEquals(CommentProperty))
                     {
                         reader.Read();
@@ -123,7 +137,7 @@ namespace XTMF2.ModelSystemConstruct
                     }
                 }
             }
-            block = new CommentBlock(comment, new Rectangle(x, y));
+            block = new CommentBlock(comment, new Rectangle(x, y, width, height));
             return true;
         }
     }
