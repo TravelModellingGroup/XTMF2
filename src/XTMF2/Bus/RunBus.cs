@@ -37,8 +37,9 @@ namespace XTMF2.Bus
         private volatile bool _Exit = false;
         private string _id = string.Empty;
 
-        public RunBus(Stream toClient, bool streamOwner, XTMFRuntime runtime)
+        public RunBus(string runId, Stream toClient, bool streamOwner, XTMFRuntime runtime)
         {
+            _id = runId;
             _toClient = toClient;
             _streamOwner = streamOwner;
             _runtime = runtime;

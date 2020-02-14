@@ -125,7 +125,7 @@ namespace XTMF2.Bus
             }
         }
 
-        internal void StartProcessingRequestFromRun(Stream clientToRunStream)
+        internal void StartProcessingRequestFromRun(string id, Stream clientToRunStream)
         {
             Task.Factory.StartNew(() =>
             {
@@ -134,12 +134,29 @@ namespace XTMF2.Bus
                 {
                     while (true)
                     {
-                        switch (reader.ReadInt32())
+                        switch((Out)reader.ReadInt32())
                         {
-                            case Out.:
-                                
+                            case Out.Heartbeat:
+                                WriteHeartbeat(reader.ReadString());
                                 break;
-                        };
+                            case Out.ClientErrorValidatingModelSystem:
+                                ModelRunFailedValidation(reader.ReadString(), reader.ReadString());
+                                return;
+                            case Out.ClientErrorWhenRunningModelSystem:
+                                ModelRunFailed(reader.ReadString(), reader.ReadString(), reader.ReadString());
+                                return;
+                            case Out.ClientReportedStatus:
+                                SendStatusMessage(reader.ReadString(), reader.ReadString());
+                                break;
+                            case Out.ClientFinishedModelSystem:
+                                ModelRunComplete(reader.ReadString());
+                                break;
+                            case Out.ProgressUpdate:
+                                SendProgressUpdate(reader.ReadString(), reader.ReadSingle());
+                                return;
+                            default:
+                                return;
+                        }
                     }
                 }
                 catch
@@ -149,17 +166,39 @@ namespace XTMF2.Bus
             }, TaskCreationOptions.LongRunning);
         }
 
+        private void SendProgressUpdate(string runId, float progress)
+        {
+            Write(writer =>
+            {
+                writer.Write((int)Out.ProgressUpdate);
+                writer.Write(progress);
+            });
+        }
+
+        /// <summary>
+        /// Signal to the host the run is still alive.
+        /// </summary>
+        /// <param name="runId">The ID of the run that is reporting that it still exists.</param>
+        internal void WriteHeartbeat(string runId)
+        {
+            Write(writer =>
+            {
+                writer.Write((int)Out.Heartbeat);
+                writer.Write(runId);
+            });
+        }
+
         /// <summary>
         /// Signal to the host that the run failed in the validation step.
         /// </summary>
         /// <param name="context">The run that failed.</param>
         /// <param name="error">The error message.</param>
-        internal void ModelRunFailedValidation(RunContext context, string error)
+        internal void ModelRunFailedValidation(string runId, string error)
         {
             Write((writer) =>
             {
                 writer.Write((int)Out.ClientErrorValidatingModelSystem);
-                writer.Write(context.ID);
+                writer.Write(runId);
                 writer.Write(error ?? "No error message!");
             });
         }
@@ -170,12 +209,12 @@ namespace XTMF2.Bus
         /// <param name="context">The run that failed.</param>
         /// <param name="message">The message containing the error.</param>
         /// <param name="stackTrace">The stack trace from the time of the error.</param>
-        internal void ModelRunFailed(RunContext context, string message, string stackTrace)
+        internal void ModelRunFailed(string runId, string message, string stackTrace)
         {
             Write((writer) =>
             {
                 writer.Write((int)(Out.ClientErrorWhenRunningModelSystem));
-                writer.Write(context.ID);
+                writer.Write(runId);
                 writer.Write(message ?? String.Empty);
                 writer.Write(stackTrace ?? String.Empty);
             });
@@ -185,12 +224,12 @@ namespace XTMF2.Bus
         /// Report to the host the current status message.
         /// </summary>
         /// <param name="message">The current status message.</param>
-        internal void SendStatusMessage(string message)
+        internal void SendStatusMessage(string runId, string message)
         {
             Write((writer) =>
             {
                 writer.Write((int)(Out.ClientReportedStatus));
-                writer.Write(_runScheduler.Current.ID);
+                writer.Write(runId);
                 writer.Write(message ?? String.Empty);
             });
         }
@@ -199,12 +238,12 @@ namespace XTMF2.Bus
         /// Signal to the host that the run has completed.
         /// </summary>
         /// <param name="context">The run that has completed.</param>
-        internal void ModelRunComplete(RunContext context)
+        internal void ModelRunComplete(string runId)
         {
             Write((writer) =>
             {
                 writer.Write((int)Out.ClientFinishedModelSystem);
-                writer.Write(context.ID);
+                writer.Write(runId);
             });
         }
 

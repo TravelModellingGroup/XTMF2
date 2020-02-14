@@ -238,7 +238,6 @@ namespace XTMF2.UnitTests
                     Assert.IsNotNull(reportedStatus);
                     Assert.AreEqual("Reporting through XTMF", reportedStatus);
                     Assert.IsTrue(success, "The model system failed to execute to success! " + error);
-
                 });
             });
         }

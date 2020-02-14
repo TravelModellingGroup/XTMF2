@@ -11,15 +11,24 @@ namespace XTMF2.Run
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: XTMF.Run [-loadDLL dllPath] [-config CONFIGURATION] [-remote SERVER_ADDRESS] [-namedPipe PIPE_NAME]");
+                Console.WriteLine("Usage: XTMF.Run [-runID RunID] [-loadDLL dllPath] [-config CONFIGURATION] [-remote SERVER_ADDRESS] [-namedPipe PIPE_NAME]");
                 return;
             }
             List<string> dllsToLoad = new List<string>();
             string error = null;
+            string runID = null;
             for (int i = 0; i < args.Length; i++)
             {
                 switch (args[i].ToLowerInvariant())
                 {
+                    case "-runID":
+                        if (args.Length == ++i)
+                        {
+
+                            return;
+                        }
+                        runID = args[i];
+                        break;
                     case "-loaddll":
                         if (i + 1 < args.Length)
                         {
@@ -50,7 +59,12 @@ namespace XTMF2.Run
                                 Console.WriteLine("Error creating run client\r\n" + error);
                                 return;
                             }
-                            Run(toClient, dllsToLoad);
+                            if(runID == null)
+                            {
+                                Console.WriteLine("No runID was provided!");
+                                return;
+                            }
+                            Run(runID, toClient, dllsToLoad);
                         }
                         finally
                         {
@@ -65,7 +79,7 @@ namespace XTMF2.Run
             }
         }
 
-        private static void Run(Stream toClient, List<string> dllsToLoad)
+        private static void Run(string runID, Stream toClient, List<string> dllsToLoad)
         {
             var runtime = XTMFRuntime.CreateRuntime();
             var config = runtime.SystemConfiguration;
@@ -73,7 +87,7 @@ namespace XTMF2.Run
             {
                 config.LoadAssembly(dll);
             }
-            using var runBus = new RunBus(toClient, true, runtime);
+            using var runBus = new RunBus(runID, toClient, true, runtime);
             runBus.ProcessRequests();
         }
     }

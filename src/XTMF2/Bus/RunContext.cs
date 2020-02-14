@@ -95,14 +95,14 @@ namespace XTMF2.Bus
             Stream clientToRunStream = null;
             CreateStreams.CreateNewNamedPipeHost(pipeName, out clientToRunStream, ref error, () =>
             {
-                clientBus.StartProcessingRequestFromRun(clientToRunStream);
+                clientBus.StartProcessingRequestFromRun(ID, clientToRunStream);
                 if (!localProcess)
                 {
                     var path = Path.GetDirectoryName(typeof(ClientBus).Assembly.Location);
                     var startInfo = new ProcessStartInfo()
                     {
                         FileName = "dotnet",
-                        Arguments = $"\"{Path.Combine(path, "XTMF.Run.dll")}\" {GetExtraDlls(clientBus)}-namedPipe \"{pipeName}\"",
+                        Arguments = $"\"{Path.Combine(path, "XTMF.Run.dll")}\" -runId \"{ID}\" {GetExtraDlls(clientBus)}-namedPipe \"{pipeName}\"",
                         CreateNoWindow = false,
                         WorkingDirectory = path
                     };
@@ -119,7 +119,7 @@ namespace XTMF2.Bus
                     {
                         Task.Factory.StartNew(() =>
                         {
-                            using var rb = new RunBus(runToClientStream, true, _runtime);
+                            using var rb = new RunBus(ID, runToClientStream, true, _runtime);
                             rb.ProcessRequests();
                         }, TaskCreationOptions.LongRunning);
                     }

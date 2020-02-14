@@ -68,27 +68,27 @@ namespace XTMF2.Bus
                                 switch(runError.Type)
                                 {
                                     case RunErrorType.Validation:
-                                        _Bus.ModelRunFailedValidation(context, runError.Message);
+                                        _Bus.ModelRunFailedValidation(context.ID, runError.Message);
                                         break;
                                     case RunErrorType.RuntimeValidation:
-                                        _Bus.ModelRunFailedValidation(context, runError.Message);
+                                        _Bus.ModelRunFailedValidation(context.ID, runError.Message);
                                         break;
                                     case RunErrorType.Runtime:
-                                        _Bus.ModelRunFailed(context, runError.Message, runError.StackTrace);
+                                        _Bus.ModelRunFailed(context.ID, runError.Message, runError.StackTrace);
                                         break;
                                     default:
-                                        _Bus.ModelRunComplete(context);
+                                        _Bus.ModelRunComplete(context.ID);
                                         break;
                                 }
                             }
                             else
                             {
-                                _Bus.ModelRunComplete(context);
+                                _Bus.ModelRunComplete(context.ID);
                             }
                         }
                         catch (Exception e)
                         {
-                            _Bus.ModelRunFailed(context, e.Message, e.StackTrace);
+                            _Bus.ModelRunFailed(context.ID, e.Message, e.StackTrace);
                         }
                     }
                     Interlocked.MemoryBarrier();
