@@ -32,7 +32,7 @@ namespace XTMF2.ModelSystemConstruct
     /// </summary>
     public sealed class Start : Node
     {
-        public Start(ModelSystemSession session, string startName, Boundary boundary, string description, Point point) : base(startName)
+        public Start(ModelSystemSession session, string startName, Boundary boundary, string description, Rectangle point) : base(startName)
         {
             ContainedWithin = boundary;
             Description = description;
@@ -69,7 +69,7 @@ namespace XTMF2.ModelSystemConstruct
             }
             string name = null;
             int index = -1;
-            Point point = new Point();
+            Rectangle point = new Rectangle();
             string description = null;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
@@ -91,12 +91,12 @@ namespace XTMF2.ModelSystemConstruct
                 else if(reader.ValueTextEquals(XProperty))
                 {
                     reader.Read();
-                    point = new Point(reader.GetSingle(), point.Y);
+                    point = new Rectangle(reader.GetSingle(), point.Y);
                 }
                 else if (reader.ValueTextEquals(YProperty))
                 {
                     reader.Read();
-                    point = new Point(point.X, reader.GetSingle());
+                    point = new Rectangle(point.X, reader.GetSingle());
                 }
                 else if(reader.ValueTextEquals(IndexProperty))
                 {

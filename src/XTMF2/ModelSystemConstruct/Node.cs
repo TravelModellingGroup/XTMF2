@@ -86,7 +86,7 @@ namespace XTMF2
         /// <summary>
         /// The location to graphically place this node within a boundary
         /// </summary>
-        public Point Location { get; protected set; }
+        public Rectangle Location { get; protected set; }
 
         /// <summary>
         /// The link to the executing object.
@@ -103,7 +103,7 @@ namespace XTMF2
         /// <param name="y">The vertical offset</param>
         internal void SetLocation(float x, float y)
         {
-            Location = new Point(x, y);
+            Location = new Rectangle(x, y);
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Location)));
         }
 
@@ -345,7 +345,7 @@ namespace XTMF2
             string name = null;
             int index = -1;
             bool disabled = false;
-            Point point = new Point();
+            Rectangle point = new Rectangle();
             string description = null;
             string parameter = null;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -368,12 +368,12 @@ namespace XTMF2
                 else if(reader.ValueTextEquals(XProperty))
                 {
                     reader.Read();
-                    point = new Point(reader.GetSingle(), point.Y);
+                    point = new Rectangle(reader.GetSingle(), point.Y);
                 }
                 else if (reader.ValueTextEquals(YProperty))
                 {
                     reader.Read();
-                    point = new Point(point.X, reader.GetSingle());
+                    point = new Rectangle(point.X, reader.GetSingle());
                 }
                 else if(reader.ValueTextEquals(IndexProperty))
                 {

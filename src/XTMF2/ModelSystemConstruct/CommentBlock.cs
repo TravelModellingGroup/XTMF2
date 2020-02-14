@@ -41,7 +41,7 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         /// <param name="comment"></param>
         /// <param name="location"></param>
-        public CommentBlock(string comment, Point location)
+        public CommentBlock(string comment, Rectangle location)
         {
             Comment = comment;
             Location = location;
@@ -56,13 +56,13 @@ namespace XTMF2.ModelSystemConstruct
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        private Point _location;
+        private Rectangle _location;
         private string _comment;
 
         /// <summary>
         /// The location to place the Comment Block within the boundary
         /// </summary>
-        public Point Location
+        public Rectangle Location
         {
             get => _location;
             set
@@ -123,7 +123,7 @@ namespace XTMF2.ModelSystemConstruct
                     }
                 }
             }
-            block = new CommentBlock(comment, new Point(x, y));
+            block = new CommentBlock(comment, new Rectangle(x, y));
             return true;
         }
     }

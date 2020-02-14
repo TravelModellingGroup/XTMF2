@@ -209,7 +209,7 @@ namespace XTMF2.Editing
         /// <param name="block">The newly generated comment block, null if the operation fails.</param>
         /// <param name="error">The error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
-        public bool AddCommentBlock(User user, Boundary boundary, string comment, Point location, out CommentBlock block, ref string error)
+        public bool AddCommentBlock(User user, Boundary boundary, string comment, Rectangle location, out CommentBlock block, ref string error)
         {
             block = null;
             if (user is null)
@@ -314,7 +314,7 @@ namespace XTMF2.Editing
         /// <param name="newLocation">The location to set the comment block to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SetCommentBlockLocation(User user, CommentBlock commentBlock, Point newLocation, ref string error)
+        public bool SetCommentBlockLocation(User user, CommentBlock commentBlock, Rectangle newLocation, ref string error)
         {
             if (user is null)
             {
