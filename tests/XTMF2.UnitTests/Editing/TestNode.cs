@@ -22,6 +22,7 @@ using System.Threading;
 using XTMF2.UnitTests.Modules;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
+using XTMF2.Editing;
 
 namespace XTMF2.UnitTests.Editing
 {
@@ -34,9 +35,9 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("AddStart", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
             });
         }
@@ -47,9 +48,9 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("AddStartWithBadUser", (user, unauthorizedUser, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsFalse(mSession.AddModelSystemStart(unauthorizedUser, ms.GlobalBoundary, "Start", out var Start, ref error), error);
+                Assert.IsFalse(mSession.AddModelSystemStart(unauthorizedUser, ms.GlobalBoundary, "Start", out var Start, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
             });
         }
@@ -60,13 +61,13 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
             });
@@ -78,18 +79,18 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
 
                 //now test explicitly removing the start
-                Assert.IsTrue(mSession.RemoveStart(user, Start, ref error), error);
+                Assert.IsTrue(mSession.RemoveStart(user, Start, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
             });
         }
@@ -100,18 +101,18 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("RemoveStartWithBadUser", (user, unauthorizedUser, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
 
                 //now test explicitly removing the start
-                Assert.IsFalse(mSession.RemoveStart(unauthorizedUser, Start, ref error), error);
+                Assert.IsFalse(mSession.RemoveStart(unauthorizedUser, Start, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
             });
         }
@@ -122,22 +123,22 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, ref error), error);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out var Start, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
 
                 //now test explicitly removing the start
-                Assert.IsTrue(mSession.RemoveStart(user, Start, ref error), error);
+                Assert.IsTrue(mSession.RemoveStart(user, Start, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
             });
         }
@@ -148,10 +149,10 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("AddNode", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
-                    out var mss, ref error), error);
+                    out var mss, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
             });
         }
@@ -162,10 +163,10 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("AddNodeWithBadUser", (user, unauthorizedUser, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
                 Assert.IsFalse(mSession.AddNode(unauthorizedUser, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
-                    out var mss, ref error), error);
+                    out var mss, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
             });
         }
@@ -176,14 +177,14 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("UndoAddNode", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
-                    out var mss, ref error), error);
+                    out var mss, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
             });
@@ -195,19 +196,19 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("RemoveNode", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
-                    out var mss, ref error), error);
+                    out var mss, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
 
                 // now remove node explicitly
-                Assert.IsTrue(mSession.RemoveNode(user, mss, ref error), error);
+                Assert.IsTrue(mSession.RemoveNode(user, mss, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
             });
         }
@@ -218,19 +219,19 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("RemoveNodeWithBadUser", (user, unauthorizedUser, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
-                    out var mss, ref error), error);
+                    out var mss, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
 
                 // now remove node explicitly
-                Assert.IsFalse(mSession.RemoveNode(unauthorizedUser, mss, ref error), error);
+                Assert.IsFalse(mSession.RemoveNode(unauthorizedUser, mss, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
             });
         }
@@ -241,23 +242,23 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("UndoRemoveNode", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                string error = null;
+                CommandError error = null;
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>),
-                    out var mss, ref error), error);
+                    out var mss, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
 
                 // now remove node explicitly
-                Assert.IsTrue(mSession.RemoveNode(user, mss, ref error), error);
+                Assert.IsTrue(mSession.RemoveNode(user, mss, out error), error?.Message);
                 Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
             });
         }
 
@@ -269,11 +270,11 @@ namespace XTMF2.UnitTests.Editing
         {
             TestHelper.RunInModelSystemContext("AddNodeWithParameterGeneration", (user, pSession, msSession) =>
             {
-                string error = null;
+                CommandError error = null;
                 var ms = msSession.ModelSystem;
                 var gBound = ms.GlobalBoundary;
                 Assert.IsTrue(msSession.AddNodeGenerateParameters(user, ms.GlobalBoundary, "Test",
-                    typeof(SimpleParameterModule), out var node, out var children, ref error), error);
+                    typeof(SimpleParameterModule), out var node, out var children, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNotNull(children, "The child parameters of the node were returned as a null!");
                 Assert.AreEqual(1, children.Count);
@@ -305,11 +306,11 @@ namespace XTMF2.UnitTests.Editing
         {
             TestHelper.RunInModelSystemContext("AddNodeWithParameterGenerationWithBadUser", (user, unauthorizedUser, pSession, msSession) =>
             {
-                string error = null;
+                CommandError error = null;
                 var ms = msSession.ModelSystem;
                 var gBound = ms.GlobalBoundary;
                 Assert.IsFalse(msSession.AddNodeGenerateParameters(unauthorizedUser, ms.GlobalBoundary, "Test",
-                    typeof(SimpleParameterModule), out var node, out var children, ref error), error);
+                    typeof(SimpleParameterModule), out var node, out var children, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNull(children, "The child parameters of the node were returned as a null!");
                 var modules = gBound.Modules;
@@ -328,11 +329,11 @@ namespace XTMF2.UnitTests.Editing
         {
             TestHelper.RunInModelSystemContext("AddNodeWithParameterGenerationUndo", (user, pSession, msSession) =>
             {
-                string error = null;
+                CommandError error = null;
                 var ms = msSession.ModelSystem;
                 var gBound = ms.GlobalBoundary;
                 Assert.IsTrue(msSession.AddNodeGenerateParameters(user, ms.GlobalBoundary, "Test",
-                    typeof(SimpleParameterModule), out var node, out var children, ref error), error);
+                    typeof(SimpleParameterModule), out var node, out var children, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNotNull(children, "The child parameters of the node were returned as a null!");
                 Assert.AreEqual(1, children.Count);
@@ -340,10 +341,10 @@ namespace XTMF2.UnitTests.Editing
                 var links = gBound.Links;
                 Assert.AreEqual(2, modules.Count, "It seems that the child parameter was not contained in the global boundary.");
                 Assert.AreEqual(1, links.Count, "We did not have a link!");
-                Assert.IsTrue(msSession.Undo(user, ref error), error);
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(0, modules.Count, "After undoing it seems that a module has survived.");
                 Assert.AreEqual(0, links.Count, "The link was not removed on undo.");
-                Assert.IsTrue(msSession.Redo(user, ref error), error);
+                Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(2, modules.Count, "After redoing it seems that a module was not restored.");
                 Assert.AreEqual(1, links.Count, "The link was not re-added on redo.");
             });
@@ -357,11 +358,11 @@ namespace XTMF2.UnitTests.Editing
         {
             TestHelper.RunInModelSystemContext("RemoveNodeWithParameterGeneration", (user, pSession, msSession) =>
             {
-                string error = null;
+                CommandError error = null;
                 var ms = msSession.ModelSystem;
                 var gBound = ms.GlobalBoundary;
                 Assert.IsTrue(msSession.AddNodeGenerateParameters(user, ms.GlobalBoundary, "Test",
-                    typeof(SimpleParameterModule), out var node, out var children, ref error), error);
+                    typeof(SimpleParameterModule), out var node, out var children, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNotNull(children, "The child parameters of the node were returned as a null!");
                 Assert.AreEqual(1, children.Count);
@@ -383,14 +384,14 @@ namespace XTMF2.UnitTests.Editing
                 }
                 Assert.IsTrue(found, "We did not find the automatically created parameter module!");
 
-                Assert.IsTrue(msSession.RemoveNodeGenerateParameters(user, node, ref error), error);
+                Assert.IsTrue(msSession.RemoveNodeGenerateParameters(user, node, out error), error?.Message);
 
                 // Make sure that both modules were deleted
                 Assert.AreEqual(0, modules.Count, "Both modules were not removed.");
-                Assert.IsTrue(msSession.Undo(user, ref error), error);
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(2, modules.Count, "Both modules were not re-added.");
 
-                Assert.IsTrue(msSession.Redo(user, ref error), error);
+                Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(0, modules.Count, "Both modules were not removed again.");
             });
         }
@@ -403,11 +404,11 @@ namespace XTMF2.UnitTests.Editing
         {
             TestHelper.RunInModelSystemContext("RemoveNodeWithParameterGenerationWithBadUser", (user, unauthorizedUser, pSession, msSession) =>
             {
-                string error = null;
+                CommandError error = null;
                 var ms = msSession.ModelSystem;
                 var gBound = ms.GlobalBoundary;
                 Assert.IsTrue(msSession.AddNodeGenerateParameters(user, ms.GlobalBoundary, "Test",
-                    typeof(SimpleParameterModule), out var node, out var children, ref error), error);
+                    typeof(SimpleParameterModule), out var node, out var children, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNotNull(children, "The child parameters of the node were returned as a null!");
                 Assert.AreEqual(1, children.Count);
@@ -428,7 +429,7 @@ namespace XTMF2.UnitTests.Editing
                     }
                 }
                 Assert.IsTrue(found, "We did not find the automatically created parameter module!");
-                Assert.IsFalse(msSession.RemoveNodeGenerateParameters(unauthorizedUser, node, ref error), error);
+                Assert.IsFalse(msSession.RemoveNodeGenerateParameters(unauthorizedUser, node, out error), error?.Message);
                 Assert.AreEqual(2, modules.Count, "The number of modules changed after an invalid user invoked RemoveNodeGenerateParameters.");
                 Assert.AreEqual(1, links.Count, "The number of links changed after an invalid user invoked RemoveNodeGenerateParameters!");
             });
@@ -444,13 +445,13 @@ namespace XTMF2.UnitTests.Editing
         {
             TestHelper.RunInModelSystemContext("RemoveNodeWithParameterGenerationWithBadUser", (user, unauthorizedUser, pSession, msSession) =>
             {
-                string error = null;
+                CommandError error = null;
                 var ms = msSession.ModelSystem;
                 var gBound = ms.GlobalBoundary;
                 Assert.IsTrue(msSession.AddNodeGenerateParameters(user, ms.GlobalBoundary, "Test",
-                    typeof(SimpleParameterModule), out var node, out var children, ref error), error);
+                    typeof(SimpleParameterModule), out var node, out var children, out error), error?.Message);
                 Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Test",
-                    typeof(SimpleParameterModule), out var node2, ref error), error);
+                    typeof(SimpleParameterModule), out var node2, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNotNull(children, "The child parameters of the node were returned as a null!");
                 Assert.AreEqual(1, children.Count);
@@ -458,15 +459,15 @@ namespace XTMF2.UnitTests.Editing
                 var links = gBound.Links;
                 Assert.AreEqual(1, links.Count);
                 Assert.AreEqual(3, modules.Count);
-                Assert.IsTrue(msSession.AddLink(user, node2, node2.Hooks[0], children[0], out var node2Link, ref error), error);
+                Assert.IsTrue(msSession.AddLink(user, node2, node2.Hooks[0], children[0], out var node2Link, out error), error?.Message);
                 Assert.AreEqual(2, links.Count, "The second link was not added");
-                Assert.IsTrue(msSession.RemoveNodeGenerateParameters(user, node, ref error), error);
+                Assert.IsTrue(msSession.RemoveNodeGenerateParameters(user, node, out error), error?.Message);
                 Assert.AreEqual(1, links.Count);
                 Assert.AreEqual(2, modules.Count);
-                Assert.IsTrue(msSession.Undo(user, ref error), error);
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(2, links.Count);
                 Assert.AreEqual(3, modules.Count);
-                Assert.IsTrue(msSession.Redo(user, ref error), error);
+                Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(1, links.Count);
                 Assert.AreEqual(2, modules.Count);
             });
@@ -477,14 +478,14 @@ namespace XTMF2.UnitTests.Editing
         {
             TestHelper.RunInModelSystemContext("SetParameterValue", (user, pSession, msSession) =>
             {
-                string error2 = null;
+                CommandError error2 = null;
                 var ms = msSession.ModelSystem;
                 var parameterValue = "Hello World Parameter";
-                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error2), error2);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error2), error2);
-                Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, parameterValue, ref error2), error2);
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, out error2), error2?.Message);
+                Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, parameterValue, out error2), error2?.Message);
                 Assert.AreEqual(parameterValue, basicParameter.ParameterValue, "The value of the parameter was not set correctly."); 
             });
         }
@@ -494,18 +495,18 @@ namespace XTMF2.UnitTests.Editing
         {
             TestHelper.RunInModelSystemContext("SetParameterValueWithBadUser", (user, unauthorizedUser, pSession, msSession) =>
             {
-                string error2 = null;
+                CommandError error2 = null;
                 var ms = msSession.ModelSystem;
                 var parameterValue = "Hello World Parameter";
                 var badParameterValue = "HackerValue";
-                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error2), error2);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error2), error2);
-                Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, parameterValue, ref error2), error2);
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, out error2), error2?.Message);
+                Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, parameterValue, out error2), error2?.Message);
                 Assert.AreEqual(parameterValue, basicParameter.ParameterValue, "The value of the parameter was not set correctly.");
 
-                Assert.IsFalse(msSession.SetParameterValue(unauthorizedUser, basicParameter, badParameterValue, ref error2), error2);
+                Assert.IsFalse(msSession.SetParameterValue(unauthorizedUser, basicParameter, badParameterValue, out error2), error2?.Message);
                 Assert.AreEqual(parameterValue, basicParameter.ParameterValue, "The unauthorized user changed the parameter's value!");
             });
         }
@@ -517,15 +518,15 @@ namespace XTMF2.UnitTests.Editing
             {
                 // initialization
                 var ms = mSession.ModelSystem;
-                string error = null;
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                CommandError error = null;
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, out error));
                 Assert.AreEqual("MyMSS", mss.Name);
                 Assert.IsFalse(mss.IsDisabled, "The node started out as disabled!");
-                Assert.IsTrue(mSession.SetNodeDisabled(user, mss, true, ref error), error);
+                Assert.IsTrue(mSession.SetNodeDisabled(user, mss, true, out error), error?.Message);
                 Assert.IsTrue(mss.IsDisabled, "The node was not disabled!");
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.IsFalse(mss.IsDisabled, "The node was not re-enabled when undoing the disable instruction!");
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.IsTrue(mss.IsDisabled, "The node was not disabled during the redo!");
             }, (user, pSession, mSession) =>
             {
@@ -544,11 +545,11 @@ namespace XTMF2.UnitTests.Editing
             {
                 // initialization
                 var ms = mSession.ModelSystem;
-                string error = null;
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                CommandError error = null;
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, out error));
                 Assert.AreEqual("MyMSS", mss.Name);
                 Assert.IsFalse(mss.IsDisabled, "The node started out as disabled!");
-                Assert.IsFalse(mSession.SetNodeDisabled(unauthroizedUser, mss, true, ref error), error);
+                Assert.IsFalse(mSession.SetNodeDisabled(unauthroizedUser, mss, true, out error), error?.Message);
             });
         }
 
@@ -557,20 +558,21 @@ namespace XTMF2.UnitTests.Editing
         {
             TestHelper.RunInModelSystemContext("DisabledNodeRunValidationFailure", (user, pSession, msSession) =>
             {
-                string error2 = null;
+                CommandError error2 = null;
                 var ms = msSession.ModelSystem;
-                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, ref error2), error2);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, ref error2), error2);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, ref error2), error2);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, ref error2), error2);
-                Assert.IsTrue(msSession.SetNodeDisabled(user, basicParameter, true, ref error2), error2);
-                Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, "Hello World Parameter", ref error2), error2);
-                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, ref error2), error2);
-                Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], spm, out var ignoreLink2, ref error2), error2);
-                Assert.IsTrue(msSession.AddLink(user, spm, spm.Hooks[0], basicParameter, out var ignoreLink3, ref error2), error2);
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", out Start start, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), out var ignoreMSS, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), out var spm, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), out var basicParameter, out error2), error2?.Message);
+                Assert.IsTrue(msSession.SetNodeDisabled(user, basicParameter, true, out error2), error2?.Message);
+                Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, "Hello World Parameter", out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], spm, out var ignoreLink2, out error2), error2?.Message);
+                Assert.IsTrue(msSession.AddLink(user, spm, spm.Hooks[0], basicParameter, out var ignoreLink3, out error2), error2?.Message);
                 TestHelper.CreateRunClient(true, (runBus) =>
                 {
-                    string error = null;
+                    CommandError error = null;
+                    string errorString = null;
                     bool success = false;
                     using (SemaphoreSlim sim = new SemaphoreSlim(0))
                     {
@@ -581,10 +583,10 @@ namespace XTMF2.UnitTests.Editing
                         };
                         runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
                         {
-                            error = e + "\r\n" + stack;
+                            errorString = e + "\r\n" + stack;
                             sim.Release();
                         };
-                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "Start", out var id, ref error), error);
+                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "Start", out var id, out error), error?.Message);
                         // give the models system some time to complete
                         if (!sim.Wait(2000))
                         {
@@ -604,15 +606,15 @@ namespace XTMF2.UnitTests.Editing
             {
                 // initialization
                 var ms = mSession.ModelSystem;
-                string error = null;
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, ref error));
+                CommandError error = null;
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, out error));
                 Assert.AreEqual("MyMSS", mss.Name);
                 var oldLocation = mss.Location;
-                Assert.IsTrue(mSession.SetNodeLocation(user, mss, newLocation, ref error), error);
+                Assert.IsTrue(mSession.SetNodeLocation(user, mss, newLocation, out error), error?.Message);
                 Assert.AreEqual(newLocation, mss.Location);
-                Assert.IsTrue(mSession.Undo(user, ref error), error);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(oldLocation, mss.Location);
-                Assert.IsTrue(mSession.Redo(user, ref error), error);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(newLocation, mss.Location);
                 
             }, (user, pSession, mSession) =>

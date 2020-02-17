@@ -22,6 +22,7 @@ using System.Text;
 using System.Text.Json;
 using System.Collections.ObjectModel;
 using System.Linq;
+using XTMF2.Editing;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -42,9 +43,10 @@ namespace XTMF2.ModelSystemConstruct
         public ReadOnlyObservableCollection<Node> Destinations =>
             new ReadOnlyObservableCollection<Node>(_Destinations);
 
-        internal bool AddDestination(Node destination, ref string error)
+        internal bool AddDestination(Node destination, out CommandError error)
         {
             _Destinations.Add(destination);
+            error = null;
             return true;
         }
 

@@ -22,6 +22,7 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Linq;
 using System.IO;
+using XTMF2.Editing;
 
 namespace XTMF2
 {
@@ -174,7 +175,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="error">The error message in case of failure.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool Save(ref string error)
+        internal bool Save(out CommandError error)
         {
             var temp = Path.GetTempFileName();
             try
@@ -194,11 +195,12 @@ namespace XTMF2
                 }
                 // when we have complete copy the results
                 File.Copy(temp, Path.Combine(UserPath, "User.xusr"), true);
+                error = null;
                 return true;
             }
             catch (IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
                 return false;
             }
             finally

@@ -114,14 +114,15 @@ namespace XTMF2
         /// <param name="name">The name to change it to</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        public bool SetName(ModelSystemSession session, string name, ref string error)
+        public bool SetName(ModelSystemSession session, string name, out CommandError error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
-                return FailWith(ref error, "A name cannot be whitespace.");
+                return FailWith(out error, "A name cannot be whitespace.");
             }
             Name = name;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+            error = null;
             return true;
         }
 
@@ -132,19 +133,21 @@ namespace XTMF2
         /// <param name="value">The value to change the parameter to.</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        public bool SetParameterValue(ModelSystemSession sesson, string value, ref string error)
+        public bool SetParameterValue(ModelSystemSession sesson, string value, out CommandError error)
         {
             // ensure that the value is allowed
             if (Type == null)
             {
-                return FailWith(ref error, "Unable to set the parameter value of a node that lacks a type!");
+                return FailWith(out error, "Unable to set the parameter value of a node that lacks a type!");
             }
-            if (!ArbitraryParameterParser.Check(Type.GenericTypeArguments[0], value, ref error))
+            string errorString = null;
+            if (!ArbitraryParameterParser.Check(Type.GenericTypeArguments[0], value, ref errorString))
             {
-                return FailWith(ref error, $"Unable to create a parse the value {value} for type {Type.GenericTypeArguments[0].FullName}!");
+                return FailWith(out error, $"Unable to create a parse the value {value} for type {Type.GenericTypeArguments[0].FullName}!");
             }
             ParameterValue = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ParameterValue)));
+            error = null;
             return true;
         }
 
@@ -202,7 +205,7 @@ namespace XTMF2
                 var (Sucess, Value) = ArbitraryParameterParser.ArbitraryParameterParse(paramType, ParameterValue, ref error);
                 if (!Sucess)
                 {
-                    return FailWith(ref error, $"Unable to assign the value of {ParameterValue} to type {paramType.FullName}!");
+                    return FailWith(out error, $"Unable to assign the value of {ParameterValue} to type {paramType.FullName}!");
                 }
                 if (!GenericValue.TryGetValue(_Type, out var info))
                 {
@@ -211,6 +214,7 @@ namespace XTMF2
                 }
                 info.SetValue(Module, Value);
             }
+            error = null;
             return true;
         }
 
@@ -237,7 +241,7 @@ namespace XTMF2
         {
             if (type == null)
             {
-                return FailWith(ref error, "The given type was null!");
+                return FailWith(out error, "The given type was null!");
             }
             if (_Type != type)
             {
@@ -245,6 +249,7 @@ namespace XTMF2
                 CreateNodeHooks(session);
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Type)));
             }
+            error = null;
             return true;
         }
 
@@ -254,10 +259,11 @@ namespace XTMF2
         /// <param name="modelSystemSession">The model system session</param>
         /// <param name="disabled"></param>
         /// <returns></returns>
-        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled)
+        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled, out CommandError error)
         {
             IsDisabled = disabled;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
+            error = null;
             return true;
         }
 
@@ -287,7 +293,13 @@ namespace XTMF2
         /// <param name="error">The place to store the message</param>
         /// <param name="message">The message to fail with.</param>
         /// <returns>Always false</returns>
-        private static bool FailWith(ref string error, string message)
+        private static bool FailWith(out CommandError error, string message)
+        {
+            error = new CommandError(message);
+            return false;
+        }
+
+        private static bool FailWith(out string error, string message)
         {
             error = message;
             return false;

@@ -215,7 +215,7 @@ namespace XTMF2.Bus
         /// <param name="id">The ID given to this model run.</param>
         /// <param name="error">An error message if there is an issue creating the model system.</param>
         /// <returns>True if the model system was sent</returns>
-        public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, out string id, ref string error)
+        public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, out string id, out CommandError error)
         {
             id = null;
             lock (_outLock)
@@ -224,7 +224,7 @@ namespace XTMF2.Bus
                 {
                     using var memStream = new MemoryStream();
                     using var write = new BinaryWriter(memStream, Encoding.UTF8, true);
-                    if (!modelSystem.Save(ref error, memStream))
+                    if (!modelSystem.Save(out error, memStream))
                     {
                         return false;
                     }
@@ -241,7 +241,7 @@ namespace XTMF2.Bus
                 }
                 catch (IOException e)
                 {
-                    error = e.Message;
+                    error = new CommandError(e.Message);
                     return false;
                 }
             }

@@ -50,7 +50,7 @@ namespace XTMF2
             Description = description;
         }
 
-        public bool SetName(string name, ref string error)
+        public bool SetName(string name, out CommandError error)
         {
             try
             {
@@ -61,19 +61,21 @@ namespace XTMF2
                 }
                 Name = name;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+                error = null;
                 return true;
             }
             catch(IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
                 return false;
             }
         }
 
-        public bool SetDescription(ProjectSession session, string description, ref string error)
+        public bool SetDescription(ProjectSession session, string description, out CommandError error)
         {
             Description = description;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
+            error = null;
             return true;
         }
 

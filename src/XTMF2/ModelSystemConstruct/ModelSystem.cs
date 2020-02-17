@@ -111,8 +111,8 @@ namespace XTMF2
                 catch (IOException e)
                 {
                     error = e.Message;
+                    return false;
                 }
-                return false;
             }
         }
 
@@ -131,6 +131,7 @@ namespace XTMF2
             catch (IOException e)
             {
                 error = e.Message;
+                return false;
             }
             finally
             {
@@ -139,7 +140,6 @@ namespace XTMF2
                     saveTo.Dispose();
                 }
             }
-            return false;
         }
 
         /// <summary>
@@ -218,11 +218,13 @@ namespace XTMF2
             }
         }
 
-        internal static bool Load(ProjectSession session, ModelSystemHeader modelSystemHeader, out ModelSystemSession msSession, ref string error)
+        internal static bool Load(ProjectSession session, ModelSystemHeader modelSystemHeader, out ModelSystemSession msSession, out CommandError error)
         {
             // the parameters are have already been vetted
             var path = modelSystemHeader.ModelSystemPath;
             var info = new FileInfo(path);
+            string errorString = null;
+            error = null;
             msSession = new ModelSystemSession(session, modelSystemHeader);
             try
             {
@@ -230,7 +232,7 @@ namespace XTMF2
                 if(info.Exists)
                 {
                     using var rawStream = File.OpenRead(modelSystemHeader.ModelSystemPath);
-                    ms = Load(rawStream, msSession, modelSystemHeader, ref error);
+                    ms = Load(rawStream, msSession, modelSystemHeader, ref errorString);
                 }
                 else
                 {
@@ -239,14 +241,17 @@ namespace XTMF2
                 if (ms == null)
                 {
                     msSession = null;
+                    // Give a generic error message if one was not already supplied.
+                    error = new CommandError(errorString ?? "Unable to create a model system session for the given header.");
                     return false;
                 }
                 msSession.ModelSystem = ms;
-                return msSession != null;
+                error = null;
+                return true;
             }
             catch (IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
                 return false;
             }
         }

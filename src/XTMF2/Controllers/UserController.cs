@@ -23,6 +23,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using XTMF2.Configuration;
+using XTMF2.Editing;
 
 namespace XTMF2.Controllers
 {
@@ -50,12 +51,12 @@ namespace XTMF2.Controllers
         /// <param name="user">The resulting user, null if the operation fails.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool CreateNew(string userName, bool admin, out User user, ref string error)
+        public bool CreateNew(string userName, bool admin, out User user, out CommandError error)
         {
             user = null;
             if (!ValidateUserName(userName))
             {
-                error = "Invalid name for a user.";
+                error = new CommandError("Invalid name for a user.");
                 return false;
             }
             lock (UserLock)
@@ -63,11 +64,11 @@ namespace XTMF2.Controllers
                 //ensure there is no other user with the same name
                 if(_Users.Any(u => u.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase)))
                 {
-                    error = "A user with this name already exists.";
+                    error = new CommandError("A user with this name already exists.");
                     return false;
                 }
                 _Users.Add(user = new User(GetUserPath(userName), userName, admin));
-                return user.Save(ref error);
+                return user.Save(out error);
             }
         }
 
@@ -115,8 +116,7 @@ namespace XTMF2.Controllers
                                         where user == p.Owner
                                         select p ).ToList())
                 {
-                    string error = null;
-                    projectController.DeleteProject(user, toDelete, ref error);
+                    projectController.DeleteProject(user, toDelete, out var error);
                 }
                 _Users.Remove(user);
                 // now remove all of the users files from the system.
@@ -208,8 +208,7 @@ namespace XTMF2.Controllers
             // Create a new user by default
             var firstUser = new User(GetUserPath(userName), userName, true);
             _Users.Add(firstUser);
-            string error = null;
-            firstUser.Save(ref error);
+            firstUser.Save(out var _);
             return;
         }
 

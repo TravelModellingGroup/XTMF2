@@ -25,45 +25,45 @@ namespace XTMF2.Editing
     public sealed class CommandBuffer
     {
         private const int MaxCapacity = 20;
-        private EditingStack Undo = new EditingStack(MaxCapacity);
-        private EditingStack Redo = new EditingStack(MaxCapacity);
-        private object ExecutionLock = new object();
+        private readonly EditingStack _undo = new EditingStack(MaxCapacity);
+        private readonly EditingStack _redo = new EditingStack(MaxCapacity);
+        private readonly object _executionLock = new object();
 
-        public bool UndoCommands(ref string error)
+        public bool UndoCommands(out CommandError error)
         {
-            lock (ExecutionLock)
+            lock (_executionLock)
             {
-                if (Undo.TryPop(out var batch))
+                if (_undo.TryPop(out var batch))
                 {
-                    if (batch.Undo(ref error))
+                    if (batch.Undo(out error))
                     {
-                        Redo.Add(batch);
+                        _redo.Add(batch);
                         return true;
                     }
                 }
                 else
                 {
-                    error = "No command to undo";
+                    error = new CommandError("No command to undo");
                 }
                 return false;
             }
         }
 
-        public bool RedoCommands(ref string error)
+        public bool RedoCommands(out CommandError error)
         {
-            lock (ExecutionLock)
+            lock (_executionLock)
             {
-                if (Redo.TryPop(out var batch))
+                if (_redo.TryPop(out var batch))
                 {
-                    if (batch.Redo(ref error))
+                    if (batch.Redo(out error))
                     {
-                        Undo.Add(batch);
+                        _undo.Add(batch);
                         return true;
                     }
                 }
                 else
                 {
-                    error = "No command to redo";
+                    error = new CommandError("No command to redo");
                 }
                 return false;
             }
@@ -71,9 +71,9 @@ namespace XTMF2.Editing
 
         internal void AddUndo(Command command)
         {
-            lock(ExecutionLock)
+            lock(_executionLock)
             {
-                Undo.Add(new CommandBatch(command));
+                _undo.Add(new CommandBatch(command));
             }
         }
     }

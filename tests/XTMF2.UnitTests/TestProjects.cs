@@ -33,18 +33,18 @@ namespace XTMF2.UnitTests
         {
             var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             var localUser = TestHelper.GetTestUser(runtime);
             // delete the project in case it has survived.
-            controller.DeleteProject(localUser, "Test", ref error);
-            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
+            controller.DeleteProject(localUser, "Test", out error);
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, out error).UsingIf(session, () =>
             {
                 var project = session.Project;
                 Assert.AreEqual("Test", project.Name);
                 Assert.AreEqual(localUser, project.Owner);
             }), "Unable to create project");
-            Assert.IsTrue(controller.DeleteProject(localUser, "Test", ref error));
-            Assert.IsFalse(controller.DeleteProject(localUser, "Test", ref error));
+            Assert.IsTrue(controller.DeleteProject(localUser, "Test", out error));
+            Assert.IsFalse(controller.DeleteProject(localUser, "Test", out error));
         }
 
         [TestMethod]
@@ -52,21 +52,21 @@ namespace XTMF2.UnitTests
         {
             var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             var localUser = TestHelper.GetTestUser(runtime);
             // delete the project in case it has survived.
-            controller.DeleteProject(localUser, "Test", ref error);
-            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
+            controller.DeleteProject(localUser, "Test", out error);
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, out error).UsingIf(session, () =>
             {
                 var project = session.Project;
                 Assert.AreEqual("Test", project.Name);
                 Assert.AreEqual(localUser, project.Owner);
-                Assert.IsFalse(controller.RenameProject(localUser, project, "RenamedTestProject", ref error),
+                Assert.IsFalse(controller.RenameProject(localUser, project, "RenamedTestProject", out error),
                     "RenameProject succeeded even through it was currently being edited!");
             }), "Unable to create project");
-            Assert.IsTrue(controller.GetProject(localUser, "Test", out var project, ref error), error);
-            Assert.IsTrue(controller.RenameProject(localUser, project, "RenamedTestProject", ref error), error);
-            Assert.IsTrue(controller.DeleteProject(localUser, project, ref error), "Failed to cleanup the project.");
+            Assert.IsTrue(controller.GetProject(localUser, "Test", out var project, out error), error?.Message);
+            Assert.IsTrue(controller.RenameProject(localUser, project, "RenamedTestProject", out error), error?.Message);
+            Assert.IsTrue(controller.DeleteProject(localUser, project, out error), "Failed to cleanup the project.");
         }
 
         [TestMethod]
@@ -75,12 +75,12 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
             string projectName = "Test";
-            string error = null;
+            CommandError error = null;
             var localUser = TestHelper.GetTestUser(runtime);
             // delete the project just in case it survived
-            controller.DeleteProject(localUser, projectName, ref error);
+            controller.DeleteProject(localUser, projectName, out error);
             // now create it
-            Assert.IsTrue(controller.CreateNewProject(localUser, projectName, out ProjectSession session, ref error).UsingIf(session, () =>
+            Assert.IsTrue(controller.CreateNewProject(localUser, projectName, out ProjectSession session, out error).UsingIf(session, () =>
             {
                 var project = session.Project;
                 Assert.AreEqual(projectName, project.Name);
@@ -103,24 +103,24 @@ namespace XTMF2.UnitTests
         {
             var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             var localUser = TestHelper.GetTestUser(runtime);
             runtime.UserController.Delete("NewUser");
-            Assert.IsTrue(runtime.UserController.CreateNew("NewUser", false, out var newUser, ref error), error);
+            Assert.IsTrue(runtime.UserController.CreateNew("NewUser", false, out var newUser, out error), error?.Message);
             // delete the project in case it has survived.
-            controller.DeleteProject(localUser, "Test", ref error);
-            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
+            controller.DeleteProject(localUser, "Test", out error);
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, out error).UsingIf(session, () =>
             {
                 var project = session.Project;
-                Assert.IsTrue(session.ShareWith(localUser, newUser, ref error), error);
-                Assert.IsTrue(controller.GetProjectSession(newUser, project, out var session2, ref error).UsingIf(session2, () =>
+                Assert.IsTrue(session.ShareWith(localUser, newUser, out error), error?.Message);
+                Assert.IsTrue(controller.GetProjectSession(newUser, project, out var session2, out error).UsingIf(session2, () =>
                 {
                     Assert.AreSame(session, session2);
-                }), error);
+                }), error?.Message);
             }), "Unable to create project");
 
             // cleanup
-            Assert.IsTrue(controller.DeleteProject(localUser, "Test", ref error));
+            Assert.IsTrue(controller.DeleteProject(localUser, "Test", out error));
         }
 
         [TestMethod]
@@ -132,43 +132,43 @@ namespace XTMF2.UnitTests
              */
             var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             var localUser = TestHelper.GetTestUser(runtime);
             runtime.UserController.Delete("NewUser");
-            Assert.IsTrue(runtime.UserController.CreateNew("NewUser", false, out var newUser, ref error), error);
+            Assert.IsTrue(runtime.UserController.CreateNew("NewUser", false, out var newUser, out error), error?.Message);
             // delete the project in case it has survived.
-            controller.DeleteProject(localUser, "Test", ref error);
+            controller.DeleteProject(localUser, "Test", out error);
             Project project = null;
-            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, ref error).UsingIf(session, () =>
+            Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, out error).UsingIf(session, () =>
             {
                 project = session.Project;
-                Assert.IsTrue(session.ShareWith(localUser, newUser, ref error), error);
+                Assert.IsTrue(session.ShareWith(localUser, newUser, out error), error?.Message);
 
             }), "Unable to create project");
-            Assert.IsTrue(controller.GetProjectSession(newUser, project, out var session2, ref error).UsingIf(session2, () =>
+            Assert.IsTrue(controller.GetProjectSession(newUser, project, out var session2, out error).UsingIf(session2, () =>
             {
                 Assert.AreNotSame(session, session2);
-            }), error);
+            }), error?.Message);
 
             // cleanup
-            Assert.IsTrue(controller.DeleteProject(localUser, "Test", ref error));
+            Assert.IsTrue(controller.DeleteProject(localUser, "Test", out error));
         }
 
         private static void CreateModelSystem(User user, ProjectSession project, string msName, string description, Action executeBeforeSessionClosed)
         {
-            string error = null;
+            CommandError error = null;
             var startName = "MyStart";
             var nodeName = "MyNode";
-            Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
-            Assert.IsTrue(msHeader.SetDescription(project, description, ref error), error);
-            Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error), error);
+            Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, out error), error?.Message);
+            Assert.IsTrue(msHeader.SetDescription(project, description, out error), error?.Message);
+            Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, out error), error?.Message);
             using (session)
             {
                 var ms = session.ModelSystem;
-                Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, ref error), error);
-                Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, ref error), error);
-                Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, ref error), error);
-                Assert.IsTrue(session.Save(ref error), error);
+                Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, out error), error?.Message);
+                Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, out error), error?.Message);
+                Assert.IsTrue(session.Save(out error), error?.Message);
                 if (!(executeBeforeSessionClosed is null))
                 {
                     executeBeforeSessionClosed();
@@ -181,7 +181,7 @@ namespace XTMF2.UnitTests
         {
             TestHelper.RunInProjectContext("ExportProjectNoModelSystems", (user, project) =>
             {
-                string error = null;
+                CommandError error = null;
                 var tempFile = new FileInfo(Path.GetTempFileName());
                 try
                 {
@@ -190,7 +190,7 @@ namespace XTMF2.UnitTests
                     {
                         tempFile.Delete();
                     }
-                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, out error), error?.Message);
                     Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
                 }
                 finally
@@ -209,7 +209,7 @@ namespace XTMF2.UnitTests
         {
             TestHelper.RunInProjectContext("ExportProjectSingleModelSystem", (user, project) =>
             {
-                string error = null;
+                CommandError error = null;
                 var msName = "MSToExport";
                 var description = "A test model system.";
                 var tempFile = new FileInfo(Path.GetTempFileName());
@@ -222,9 +222,9 @@ namespace XTMF2.UnitTests
                     }
                     CreateModelSystem(user, project, msName, description, () =>
                     {
-                        Assert.IsFalse(project.ExportProject(user, tempFile.FullName, ref error), "We were able to export a project while a model system was being edited!");
+                        Assert.IsFalse(project.ExportProject(user, tempFile.FullName, out error), "We were able to export a project while a model system was being edited!");
                     });
-                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, out error), error?.Message);
                     tempFile.Refresh();
                     Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
                 }
@@ -244,7 +244,7 @@ namespace XTMF2.UnitTests
         {
             TestHelper.RunInProjectContext("ExportProjectMultipleModelSystems", (user, project) =>
             {
-                string error = null;
+                CommandError error = null;
                 var msName = "MSToExport";
                 var description = "A test model system.";
 
@@ -260,7 +260,7 @@ namespace XTMF2.UnitTests
                     {
                         CreateModelSystem(user, project, msName + i, description + i, null);
                     }
-                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, out error), error?.Message);
                     Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
                 }
                 finally
@@ -279,7 +279,7 @@ namespace XTMF2.UnitTests
         {
             TestHelper.RunInProjectContext("ImportProjectFileNoModelSystem", (XTMFRuntime runtime, User user, ProjectSession project) =>
             {
-                string error = null;
+                CommandError error = null;
                 var tempFile = new FileInfo(Path.GetTempFileName());
                 try
                 {
@@ -288,11 +288,11 @@ namespace XTMF2.UnitTests
                     {
                         tempFile.Delete();
                     }
-                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, out error), error?.Message);
                     Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
                     var projectController = runtime.ProjectController;
                     Assert.IsTrue(projectController.ImportProjectFile(user, "ImportProjectFileNoModelSystem-Imported", tempFile.FullName,
-                        out var importedSession, ref error), error);
+                        out var importedSession, out error), error?.Message);
                     Assert.IsNotNull(importedSession);
                     using (importedSession)
                     {
@@ -316,7 +316,7 @@ namespace XTMF2.UnitTests
         {
             TestHelper.RunInProjectContext("ImportProjectFileSingleModelSystem", (XTMFRuntime runtime, User user, ProjectSession project) =>
             {
-                string error = null;
+                CommandError error = null;
                 var tempFile = new FileInfo(Path.GetTempFileName());
                 try
                 {
@@ -326,11 +326,11 @@ namespace XTMF2.UnitTests
                         tempFile.Delete();
                     }
                     CreateModelSystem(user, project, "ModelSystem1", "A single model system", null);
-                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, out error), error?.Message);
                     Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
                     var projectController = runtime.ProjectController;
                     Assert.IsTrue(projectController.ImportProjectFile(user, "ImportProjectFileSingleModelSystem-Imported", tempFile.FullName,
-                        out var importedSession, ref error), error);
+                        out var importedSession, out error), error?.Message);
                     Assert.IsNotNull(importedSession);
                     using (importedSession)
                     {
@@ -354,7 +354,7 @@ namespace XTMF2.UnitTests
         {
             TestHelper.RunInProjectContext("ImportProjectFileSingleModelSystem", (XTMFRuntime runtime, User user, ProjectSession project) =>
             {
-                string error = null;
+                CommandError error = null;
                 var tempFile = new FileInfo(Path.GetTempFileName());
                 try
                 {
@@ -368,11 +368,11 @@ namespace XTMF2.UnitTests
                     {
                         CreateModelSystem(user, project, "ModelSystem" + i, "One of many model systems", null);
                     }
-                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, out error), error?.Message);
                     Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
                     var projectController = runtime.ProjectController;
                     Assert.IsTrue(projectController.ImportProjectFile(user, "ImportProjectFileSingleModelSystem-Imported", tempFile.FullName,
-                        out var importedSession, ref error), error);
+                        out var importedSession, out error), error?.Message);
                     Assert.IsNotNull(importedSession);
                     using (importedSession)
                     {
@@ -397,7 +397,7 @@ namespace XTMF2.UnitTests
             const string ImportedModelSystemName = "ImportProjectFileNoModelSystemPersist-Imported";
             TestHelper.RunInProjectContext("ImportProjectFileNoModelSystemPersist", (XTMFRuntime runtime, User user, ProjectSession project) =>
             {
-                string error = null;
+                CommandError error = null;
                 var tempFile = new FileInfo(Path.GetTempFileName());
                 try
                 {
@@ -406,12 +406,12 @@ namespace XTMF2.UnitTests
                     {
                         tempFile.Delete();
                     }
-                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, ref error), error);
+                    Assert.IsTrue(project.ExportProject(user, tempFile.FullName, out error), error?.Message);
                     Assert.IsTrue(tempFile.Exists, "The exported file does not exist!");
                     var projectController = runtime.ProjectController;
 
                     Assert.IsTrue(projectController.ImportProjectFile(user, ImportedModelSystemName, tempFile.FullName,
-                        out var importedSession, ref error), error);
+                        out var importedSession, out error), error?.Message);
                     Assert.IsNotNull(importedSession);
                     Assert.IsTrue(user.AvailableProjects.Any(p => p.Name == ImportedModelSystemName), "The imported project was not available to use user.");
                     using (importedSession)
@@ -441,9 +441,9 @@ namespace XTMF2.UnitTests
                 var dir = new DirectoryInfo(Guid.NewGuid().ToString());
                 try
                 {
-                    string error = null;
+                    CommandError error = null;
                     dir.Create();
-                    Assert.IsTrue(project.SetCustomRunDirectory(user, dir.FullName, ref error), error);
+                    Assert.IsTrue(project.SetCustomRunDirectory(user, dir.FullName, out error), error?.Message);
                     Assert.AreEqual(dir.FullName, project.RunsDirectory);
                 }
                 finally
@@ -461,10 +461,10 @@ namespace XTMF2.UnitTests
         {
             TestHelper.RunInProjectContext("SetRunsDirectoryToInvalidPath", (User user, ProjectSession project) =>
             {
-                string error = null;
+                CommandError error = null;
                 var initialDirectory = project.RunsDirectory;
                 const string anInvalidPath = ":?!@#://#%$^&|";
-                Assert.IsFalse(project.SetCustomRunDirectory(user, anInvalidPath, ref error), "An invalid path was able to be set.");
+                Assert.IsFalse(project.SetCustomRunDirectory(user, anInvalidPath, out error), "An invalid path was able to be set.");
                 Assert.AreEqual(initialDirectory, project.RunsDirectory);
             });
         }
@@ -478,12 +478,12 @@ namespace XTMF2.UnitTests
                 DirectoryInfo dir = new DirectoryInfo(newRunDir);
                 try
                 {
-                    string error = null;
+                    CommandError error = null;
                     dir.Create();
                     var initialDirectory = project.RunsDirectory;
-                    Assert.IsTrue(project.SetCustomRunDirectory(user, dir.FullName, ref error), error);
+                    Assert.IsTrue(project.SetCustomRunDirectory(user, dir.FullName, out error), error?.Message);
                     Assert.AreEqual(dir.FullName, project.RunsDirectory);
-                    Assert.IsTrue(project.ResetCustomRunDirectory(user, ref error), error);
+                    Assert.IsTrue(project.ResetCustomRunDirectory(user, out error), error?.Message);
                     Assert.AreEqual(initialDirectory, project.RunsDirectory);
                 }
                 finally
@@ -502,13 +502,13 @@ namespace XTMF2.UnitTests
             TestHelper.RunInProjectContext("RemoveModelSystem", (User user, ProjectSession project) =>
             {
                 const string msName = "RemoveMe";
-                string error = null;
-                Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, ref error), error);
-                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, ref error).UsingIf(session, ()=>
+                CommandError error = null;
+                Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, out error), error?.Message);
+                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, out error).UsingIf(session, ()=>
                 {
-                    Assert.IsFalse(project.RemoveModelSystem(user, msHeader, ref error), "A model system was able to be removed while it was being edited!");
-                }), error);
-                Assert.IsTrue(project.RemoveModelSystem(user, msHeader, ref error), error);
+                    Assert.IsFalse(project.RemoveModelSystem(user, msHeader, out error), "A model system was able to be removed while it was being edited!");
+                }), error?.Message);
+                Assert.IsTrue(project.RemoveModelSystem(user, msHeader, out error), error?.Message);
             });
         }
     }
