@@ -209,6 +209,7 @@ namespace XTMF2
                         return false;
                     }
                 }
+                error = null;
                 return true;
             }
         }
@@ -225,22 +226,23 @@ namespace XTMF2
         /// <param name="boundary">The resulting boundary.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool AddBoundary(string name, out Boundary boundary, ref string error)
+        internal bool AddBoundary(string name, out Boundary boundary, out CommandError error)
         {
             if (string.IsNullOrWhiteSpace(name))
             {
                 boundary = null;
-                error = "The name of a boundary must be set.";
+                error = new CommandError("The name of a boundary must be set.");
                 return false;
             }
 
             if (HasChildWithName(name))
             {
                 boundary = null;
-                error = "The name already exists in this boundary!";
+                error = new CommandError("The name already exists in this boundary!");
                 return false;
             }
             _Boundaries.Add((boundary = new Boundary(name, this)));
+            error = null;
             return true;
         }
 
@@ -251,11 +253,11 @@ namespace XTMF2
         /// <param name="block">The resulting block</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool AddCommentBlock(string documentation, Rectangle position, out CommentBlock block, ref string error)
+        internal bool AddCommentBlock(string documentation, Rectangle position, out CommentBlock block, out CommandError error)
         {
             block = null;
             var _block = new CommentBlock(documentation, position);
-            if (!AddCommentBlock(_block, ref error))
+            if (!AddCommentBlock(_block, out error))
             {
                 return false;
             }
@@ -263,17 +265,18 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddCommentBlock(CommentBlock block, ref string error)
+        internal bool AddCommentBlock(CommentBlock block, out CommandError error)
         {
             if (block is null)
             {
                 throw new ArgumentNullException(nameof(block));
             }
+            error = null;
             lock (_WriteLock)
             {
                 if (_CommentBlocks.Contains(block))
                 {
-                    error = "The documentation block already belongs to the boundary!";
+                    error = new CommandError("The documentation block already belongs to the boundary!");
                     return false;
                 }
                 _CommentBlocks.Add(block);
@@ -281,7 +284,7 @@ namespace XTMF2
             }
         }
 
-        internal bool RemoveCommentBlock(CommentBlock block, ref string error)
+        internal bool RemoveCommentBlock(CommentBlock block, out CommandError error)
         {
             if (block is null)
             {
@@ -291,10 +294,11 @@ namespace XTMF2
             {
                 if (!_CommentBlocks.Remove(block))
                 {
-                    error = "Unable to remove the documentation block from the boundary.";
+                    error = new CommandError("Unable to remove the documentation block from the boundary.");
                     return false;
                 }
             }
+            error = null;
             return true;
         }
 
@@ -350,35 +354,38 @@ namespace XTMF2
         /// <param name="boundary"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        internal bool AddBoundary(Boundary boundary, ref string error)
+        internal bool AddBoundary(Boundary boundary, out CommandError error)
         {
             if (_Boundaries.Contains(boundary))
             {
-                error = "The name already exists in this boundary!";
+                error = new CommandError("The name already exists in this boundary!");
                 return false;
             }
             _Boundaries.Add(boundary);
+            error = null;
             return true;
         }
 
-        internal bool RemoveBoundary(Boundary boundary, ref string error)
+        internal bool RemoveBoundary(Boundary boundary, out CommandError error)
         {
             if (!_Boundaries.Remove(boundary))
             {
-                error = "Unable to find boundary to remove it!";
+                error = new CommandError("Unable to find boundary to remove it!");
                 return false;
             }
+            error = null;
             return true;
         }
 
-        internal bool AddStart(Start start, ref string e)
-        {
+        internal bool AddStart(Start start, out CommandError error)
+        { 
             if (_Starts.Contains(start))
             {
-                e = "The start already exists in the boundary!";
+                error = new CommandError("The start already exists in the boundary!");
                 return false;
             }
             _Starts.Add(start);
+            error = null;
             return true;
         }
 
@@ -445,14 +452,15 @@ namespace XTMF2
             }
         }
 
-        internal bool AddNode(Node node, ref string e)
+        internal bool AddNode(Node node, out CommandError e)
         {
             if (_Modules.Contains(node))
             {
-                e = "The node already exists in the boundary!";
+                e = new CommandError("The node already exists in the boundary!");
                 return false;
             }
             _Modules.Add(node);
+            e = null;
             return true;
         }
 
@@ -502,13 +510,14 @@ namespace XTMF2
             }
         }
 
-        internal bool RemoveNode(Node node, ref string error)
+        internal bool RemoveNode(Node node, out CommandError error)
         {
             if (!_Modules.Remove(node))
             {
-                error = "Unable to find node in the boundary!";
+                error = new CommandError("Unable to find node in the boundary!");
                 return false;
             }
+            error = null;
             return true;
         }
 
@@ -519,7 +528,7 @@ namespace XTMF2
         /// <param name="link">The returning link</param>
         /// <param name="e">An error message if one occurs</param>
         /// <returns>True if it was added again, false otherwise with message.</returns>
-        internal bool AddLink(Link link, ref string e)
+        internal bool AddLink(Link link, out CommandError e)
         {
             if (link == null)
             {
@@ -527,15 +536,16 @@ namespace XTMF2
             }
             if (link.Origin.ContainedWithin != this)
             {
-                e = "This link is was not contained within this boundary!";
+                e = new CommandError("This link is was not contained within this boundary!");
                 return false;
             }
             if (_Links.Contains(link))
             {
-                e = "This link is already contained within this boundary!";
+                e = new CommandError("This link is already contained within this boundary!");
                 return false;
             }
             _Links.Add(link);
+            e = null;
             return true;
         }
 
@@ -663,7 +673,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link link, ref string error)
+        internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link link, out CommandError error)
         {
             switch (originHook.Cardinality)
             {
@@ -692,7 +702,7 @@ namespace XTMF2
                                 OriginHook = originHook
                             };
                         }
-                        if (!((MultiLink)link).AddDestination(destination, ref error))
+                        if (!((MultiLink)link).AddDestination(destination, out error))
                         {
                             link = null;
                             return false;
@@ -705,10 +715,11 @@ namespace XTMF2
                     }
                     break;
             }
+            error = null;
             return true;
         }
 
-        internal bool AddLink(Node origin, NodeHook originHook, Node destination, Link link, ref string error)
+        internal bool AddLink(Node origin, NodeHook originHook, Node destination, Link link, out CommandError error)
         {
             switch (originHook.Cardinality)
             {
@@ -723,7 +734,7 @@ namespace XTMF2
                         {
                             link = previous;
                         }
-                        if (!((MultiLink)link).AddDestination(destination, ref error))
+                        if (!((MultiLink)link).AddDestination(destination, out error))
                         {
                             return false;
                         }
@@ -735,55 +746,60 @@ namespace XTMF2
                     }
                     break;
             }
+            error = null;
             return true;
         }
 
-        internal bool RemoveLink(Link link, ref string e)
+        internal bool RemoveLink(Link link, out CommandError error)
         {
             if (!_Links.Remove(link))
             {
-                e = "Unable to find the link to remove from the boundary!";
+                error = new CommandError("Unable to find the link to remove from the boundary!");
                 return false;
             }
+            error = null;
             return true;
         }
 
-        public bool SetName(string name, ref string error)
+        internal bool SetName(string name, out CommandError error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
-                error = "A name cannot be whitespace.";
+                error = new CommandError("A name cannot be whitespace.");
                 return false;
             }
             var withName = Parent?.HasChildWithName(name);
             if (withName == true)
             {
-                error = $"There already exists another boundary with the name {name} in the parent boundary!";
+                error = new CommandError($"There already exists another boundary with the name {name} in the parent boundary!");
                 return false;
             }
             Name = name;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+            error = null;
             return true;
         }
 
-        public bool SetDescription(string description, ref string error)
+        internal bool SetDescription(string description, out CommandError error)
         {
+            error = null;
             Description = description;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
             return true;
         }
 
-        internal bool RemoveStart(Start start, ref string error)
+        internal bool RemoveStart(Start start, out CommandError error)
         {
             if (!_Starts.Remove(start))
             {
-                error = "Unable to find a the given start!";
+                error = new CommandError("Unable to find a the given start!");
                 return false;
             }
+            error = null;
             return true;
         }
 
-        internal bool AddStart(ModelSystemSession session, string startName, out Start start, ref string error)
+        internal bool AddStart(ModelSystemSession session, string startName, out Start start, out CommandError error)
         {
             start = null;
             // ensure the name is unique between starting points
@@ -791,12 +807,13 @@ namespace XTMF2
             {
                 if (ms.Name.Equals(startName, StringComparison.OrdinalIgnoreCase))
                 {
-                    error = "There already exists a start with the same name!";
+                    error = new CommandError("There already exists a start with the same name!");
                     return false;
                 }
             }
             start = new Start(session, startName, this, null, new Rectangle(0, 0, 0, 0));
             _Starts.Add(start);
+            error = null;
             return true;
         }
 
@@ -808,31 +825,34 @@ namespace XTMF2
         /// <param name="start"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        internal bool AddStart(ModelSystemSession session, string startName, Start start, ref string error)
+        internal bool AddStart(ModelSystemSession session, string startName, Start start, out CommandError error)
         {
             // ensure the name is unique between starting points
             foreach (var ms in _Starts)
             {
                 if (ms.Name.Equals(startName, StringComparison.OrdinalIgnoreCase))
                 {
-                    error = "There already exists a start with the same name!";
+                    error = new CommandError("There already exists a start with the same name!");
                     return false;
                 }
             }
             _Starts.Add(start);
+            error = null;
             return true;
         }
 
-        internal bool AddNode(ModelSystemSession session, string name, Type type, out Node node, ref string error)
+        internal bool AddNode(ModelSystemSession session, string name, Type type, out Node node, out CommandError error)
         {
             node = Node.Create(session, name, type, this);
             _Modules.Add(node);
+            error = null;
             return true;
         }
 
-        internal bool AddNode(ModelSystemSession session, string name, Type type, Node node, ref string error)
+        internal bool AddNode(ModelSystemSession session, string name, Type type, Node node, out CommandError error)
         {
             _Modules.Add(node);
+            error = null;
             return true;
         }
     }

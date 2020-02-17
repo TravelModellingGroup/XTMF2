@@ -188,10 +188,11 @@ namespace XTMF2
 
         internal abstract bool Construct(ref string error);
 
-        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled)
+        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled, out CommandError error)
         {
             IsDisabled = disabled;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
+            error = null;
             return true;
         }
 

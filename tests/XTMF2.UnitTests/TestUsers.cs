@@ -33,13 +33,13 @@ namespace XTMF2.UnitTests
         {
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
-            string error = null;
+            CommandError error = null;
             const string userName = "NewUser";
             // ensure the user doesn't exist before we start
             userController.Delete(userName);
-            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error));
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error));
             Assert.IsNull(error);
-            Assert.IsFalse(userController.CreateNew(userName, false, out var secondUser, ref error));
+            Assert.IsFalse(userController.CreateNew(userName, false, out var secondUser, out error));
             Assert.IsNotNull(error);
             error = null;
             Assert.IsTrue(userController.Delete(user));
@@ -51,11 +51,11 @@ namespace XTMF2.UnitTests
             //ensure that a user can survive between different XTMF sessions
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
-            string error = null;
+            CommandError error = null;
             const string userName = "NewUser";
             // ensure the user doesn't exist before we start
             userController.Delete(userName);
-            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error));
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error));
             // unload XTMF to simulate it shutting down
             runtime.Shutdown();
             // rebuild XTMF
@@ -72,7 +72,7 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             const string userName1 = "FirstUser";
             const string userName2 = "SecondtUser";
             const string projectName1 = "TestShareBetweenUsers1";
@@ -80,24 +80,24 @@ namespace XTMF2.UnitTests
             // ensure the user doesn't exist before we start and then create our users
             userController.Delete(userName1);
             userController.Delete(userName2);
-            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, ref error), error);
-            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, out error), error?.Message);
+            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, out error), error?.Message);
             // now we need to create a project for both users
 
-            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, ref error), error);
-            Assert.IsTrue(projectController.CreateNewProject(user2, projectName2, out var session2, ref error), error);
+            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, out error), error?.Message);
+            Assert.IsTrue(projectController.CreateNewProject(user2, projectName2, out var session2, out error), error?.Message);
 
             // make sure we only have 1 project
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(1, user2.AvailableProjects.Count);
 
             // Share project1 with user1
-            Assert.IsTrue(session1.ShareWith(user1, user2, ref error), error);
+            Assert.IsTrue(session1.ShareWith(user1, user2, out error), error?.Message);
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(2, user2.AvailableProjects.Count);
 
-            Assert.IsFalse(session1.ShareWith(user1, user2, ref error), error);
-            Assert.IsFalse(session1.ShareWith(user2, user2, ref error), error);
+            Assert.IsFalse(session1.ShareWith(user1, user2, out error), error?.Message);
+            Assert.IsFalse(session1.ShareWith(user2, user2, out error), error?.Message);
 
             // Delete user1 and make sure that user2 loses reference to project1
             Assert.IsTrue(userController.Delete(user1));
@@ -113,28 +113,28 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             const string userName1 = "FirstUser";
             const string userName2 = "SecondtUser";
             const string projectName1 = "TestShareBetweenUsers1";
             // ensure the user doesn't exist before we start and then create our users
             userController.Delete(userName1);
             userController.Delete(userName2);
-            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, ref error), error);
-            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, out error), error?.Message);
+            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, out error), error?.Message);
             // now we need to create a project for both users
 
-            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, ref error), error);
+            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, out error), error?.Message);
             
             // make sure we only have 1 project
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(0, user2.AvailableProjects.Count);
 
-            Assert.IsTrue(session1.ShareWith(user1, user2, ref error));
+            Assert.IsTrue(session1.ShareWith(user1, user2, out error));
             Assert.AreEqual(1, user2.AvailableProjects.Count);
 
             // Ensure that the command fails to be added the second time
-            Assert.IsFalse(session1.ShareWith(user1, user2, ref error));
+            Assert.IsFalse(session1.ShareWith(user1, user2, out error));
             Assert.AreEqual(1, user2.AvailableProjects.Count);
 
             // Delete user1 and make sure that user2 loses reference to project1
@@ -151,7 +151,7 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             const string userName1 = "FirstUser";
             const string userName2 = "SecondtUser";
             const string projectName1 = "TestShareBetweenUsers1";
@@ -159,28 +159,28 @@ namespace XTMF2.UnitTests
             // ensure the user doesn't exist before we start and then create our users
             userController.Delete(userName1);
             userController.Delete(userName2);
-            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, ref error), error);
-            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, out error), error?.Message);
+            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, out error), error?.Message);
             // now we need to create a project for both users
 
-            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, ref error), error);
-            Assert.IsTrue(projectController.CreateNewProject(user2, projectName2, out var session2, ref error), error);
+            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, out error), error?.Message);
+            Assert.IsTrue(projectController.CreateNewProject(user2, projectName2, out var session2, out error), error?.Message);
 
             // make sure we only have 1 project
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(1, user2.AvailableProjects.Count);
 
             // Share project1 with user1
-            Assert.IsTrue(session1.ShareWith(user1, user2, ref error), error);
+            Assert.IsTrue(session1.ShareWith(user1, user2, out error), error?.Message);
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(2, user2.AvailableProjects.Count);
 
-            Assert.IsFalse(session1.ShareWith(user1, user2, ref error), error);
-            Assert.IsFalse(session1.ShareWith(user2, user2, ref error), error);
+            Assert.IsFalse(session1.ShareWith(user1, user2, out error), error?.Message);
+            Assert.IsFalse(session1.ShareWith(user2, user2, out error), error?.Message);
 
-            Assert.IsFalse(session1.RestrictAccess(user1, user1, ref error));
-            Assert.IsFalse(session1.RestrictAccess(user2, user1, ref error));
-            Assert.IsTrue(session1.RestrictAccess(user1, user2, ref error), error);
+            Assert.IsFalse(session1.RestrictAccess(user1, user1, out error));
+            Assert.IsFalse(session1.RestrictAccess(user2, user1, out error));
+            Assert.IsTrue(session1.RestrictAccess(user1, user2, out error), error?.Message);
 
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(1, user2.AvailableProjects.Count);
@@ -199,7 +199,7 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             const string userName1 = "FirstUser";
             const string userName2 = "SecondtUser";
             const string projectName1 = "TestShareBetweenUsers1";
@@ -207,30 +207,30 @@ namespace XTMF2.UnitTests
             // ensure the user doesn't exist before we start and then create our users
             userController.Delete(userName1);
             userController.Delete(userName2);
-            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, ref error), error);
-            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, out error), error?.Message);
+            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, out error), error?.Message);
             // now we need to create a project for both users
 
-            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, ref error), error);
-            Assert.IsTrue(projectController.CreateNewProject(user2, projectName2, out var session2, ref error), error);
+            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, out error), error?.Message);
+            Assert.IsTrue(projectController.CreateNewProject(user2, projectName2, out var session2, out error), error?.Message);
 
             // make sure we only have 1 project
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(1, user2.AvailableProjects.Count);
 
             // Share project1 with user1
-            Assert.IsTrue(session1.ShareWith(user1, user2, ref error), error);
+            Assert.IsTrue(session1.ShareWith(user1, user2, out error), error?.Message);
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(2, user2.AvailableProjects.Count);
 
-            Assert.IsFalse(session1.ShareWith(user1, user2, ref error), error);
-            Assert.IsFalse(session1.ShareWith(user2, user2, ref error), error);
+            Assert.IsFalse(session1.ShareWith(user1, user2, out error), error?.Message);
+            Assert.IsFalse(session1.ShareWith(user2, user2, out error), error?.Message);
 
-            Assert.IsFalse(session1.RestrictAccess(user1, user1, ref error));
-            Assert.IsFalse(session1.RestrictAccess(user2, user1, ref error));
-            Assert.IsTrue(session1.RestrictAccess(user1, user2, ref error), error);
+            Assert.IsFalse(session1.RestrictAccess(user1, user1, out error));
+            Assert.IsFalse(session1.RestrictAccess(user2, user1, out error));
+            Assert.IsTrue(session1.RestrictAccess(user1, user2, out error), error?.Message);
             // Ensure that we can't do it again
-            Assert.IsFalse(session1.RestrictAccess(user1, user2, ref error), error);
+            Assert.IsFalse(session1.RestrictAccess(user1, user2, out error), error?.Message);
 
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(1, user2.AvailableProjects.Count);
@@ -249,24 +249,24 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             const string userName1 = "FirstUser";
             const string userName2 = "SecondtUser";
             const string projectName1 = "TestShareBetweenUsers1";
             // ensure the user doesn't exist before we start and then create our users
             userController.Delete(userName1);
             userController.Delete(userName2);
-            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, ref error), error);
-            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName1, false, out var user1, out error), error?.Message);
+            Assert.IsTrue(userController.CreateNew(userName2, false, out var user2, out error), error?.Message);
             // now we need to create a project for both users
 
-            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, ref error), error);
+            Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, out error), error?.Message);
 
             Assert.AreEqual(1, user1.AvailableProjects.Count);
             Assert.AreEqual(0, user2.AvailableProjects.Count);
 
-            Assert.IsTrue(session1.SwitchOwner(user1, user2, ref error), error);
-            Assert.IsFalse(session1.SwitchOwner(user1, user2, ref error));
+            Assert.IsTrue(session1.SwitchOwner(user1, user2, out error), error?.Message);
+            Assert.IsFalse(session1.SwitchOwner(user1, user2, out error));
 
             Assert.AreEqual(0, user1.AvailableProjects.Count);
             Assert.AreEqual(1, user2.AvailableProjects.Count);

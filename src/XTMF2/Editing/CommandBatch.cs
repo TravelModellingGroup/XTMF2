@@ -56,17 +56,18 @@ namespace XTMF2.Editing
         /// </summary>
         /// <param name="error">An error message if the undo fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        public bool Undo(ref string error)
+        public bool Undo(out CommandError error)
         {
             foreach (var command in _Commands)
             {
                 var result = command.Undo();
                 if (!result.Success)
                 {
-                    error = result.Message;
+                    error = result.Error;
                     return false;
                 }
             }
+            error = null;
             return true;
         }
 
@@ -75,17 +76,18 @@ namespace XTMF2.Editing
         /// </summary>
         /// <param name="error">An error message if the redo fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        public bool Redo(ref string error)
+        public bool Redo(out CommandError error)
         {
             foreach (var command in _Commands)
             {
                 var result = command.Redo();
                 if (!result.Success)
                 {
-                    error = result.Message;
+                    error = result.Error;
                     return false;
                 }
             }
+            error = null;
             return true;
         }
     }

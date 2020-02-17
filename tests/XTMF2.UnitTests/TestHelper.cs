@@ -44,18 +44,18 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             string userName = name + "TempUser";
             string projectName = "TestProject";
             // clear out the user if possible
             userController.Delete(userName);
-            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error), error?.Message);
             try
             {
-                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, out error).UsingIf(projectSession, () =>
                 {
                     toExecute(user, projectSession);
-                }), error);
+                }), error?.Message);
             }
             finally
             {
@@ -75,24 +75,24 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             string userName = name + "TempUser";
             string projectName = "TestProject";
             // clear out the user if possible
             userController.Delete(userName);
-            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error), error?.Message);
             try
             {
-                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, out error).UsingIf(projectSession, () =>
                 {
                     toExecuteFirst(user, projectSession);
-                }), error);
+                }), error?.Message);
 
-                Assert.IsTrue(projectController.GetProject(user, projectName, out var project, ref error), error);
-                Assert.IsTrue(projectController.GetProjectSession(user, project, out projectSession, ref error).UsingIf(projectSession, () =>
+                Assert.IsTrue(projectController.GetProject(user, projectName, out var project, out error), error?.Message);
+                Assert.IsTrue(projectController.GetProjectSession(user, project, out projectSession, out error).UsingIf(projectSession, () =>
                 {
                     toExecuteSecond(user, projectSession);
-                }), error);
+                }), error?.Message);
             }
             finally
             {
@@ -111,18 +111,18 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             string userName = name + "TempUser";
             string projectName = "TestProject";
             // clear out the user if possible
             userController.Delete(userName);
-            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error), error?.Message);
             try
             {
-                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, out error).UsingIf(projectSession, () =>
                 {
                     toExecute(runtime, user, projectSession);
-                }), error);
+                }), error?.Message);
             }
             finally
             {
@@ -141,21 +141,21 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             string userName = name + "TempUser";
             string unauthorizedUserName = userName + "Hacker";
             string projectName = "TestProject";
             // clear out the user if possible
             userController.Delete(userName);
             userController.Delete(unauthorizedUserName);
-            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
-            Assert.IsTrue(userController.CreateNew(unauthorizedUserName, false, out var unauthorizedUser, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error), error?.Message);
+            Assert.IsTrue(userController.CreateNew(unauthorizedUserName, false, out var unauthorizedUser, out error), error?.Message);
             try
             {
-                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, out error).UsingIf(projectSession, () =>
                 {
                     toExecute(user, unauthorizedUser, projectSession);
-                }), error);
+                }), error?.Message);
             }
             finally
             {
@@ -174,23 +174,23 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             string userName = name + "TempUser";
             string projectName = "TestProject";
             string modelSystemName = "ModelSystem1";
             // clear out the user if possible
             userController.Delete(userName);
-            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error), error?.Message);
             try
             {
-                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, out error).UsingIf(projectSession, () =>
                 {
-                    Assert.IsTrue(projectSession.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, ref error), error);
-                    Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(modelSystemSession, () =>
+                    Assert.IsTrue(projectSession.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, out error), error?.Message);
+                    Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, out error).UsingIf(modelSystemSession, () =>
                     {
                         toExecute(user, projectSession, modelSystemSession);
-                    }), error);
-                }), error);
+                    }), error?.Message);
+                }), error?.Message);
             }
             finally
             {
@@ -209,7 +209,7 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             string userName = name + "TempUser";
             string unauthorizedUserName = name + "Hacker";
             string projectName = "TestProject";
@@ -217,18 +217,18 @@ namespace XTMF2.UnitTests
             // clear out the user if possible
             userController.Delete(userName);
             userController.Delete(unauthorizedUserName);
-            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
-            Assert.IsTrue(userController.CreateNew(unauthorizedUserName, false, out var unauthorizedUser, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error), error?.Message);
+            Assert.IsTrue(userController.CreateNew(unauthorizedUserName, false, out var unauthorizedUser, out error), error?.Message);
             try
             {
-                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, out error).UsingIf(projectSession, () =>
                 {
-                    Assert.IsTrue(projectSession.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, ref error), error);
-                    Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(modelSystemSession, () =>
+                    Assert.IsTrue(projectSession.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, out error), error?.Message);
+                    Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, out error).UsingIf(modelSystemSession, () =>
                     {
                         toExecute(user, unauthorizedUser, projectSession, modelSystemSession);
-                    }), error);
-                }), error);
+                    }), error?.Message);
+                }), error?.Message);
             }
             finally
             {
@@ -262,13 +262,13 @@ namespace XTMF2.UnitTests
             {
                 throw new ArgumentNullException(nameof(runtime));
             }
-            string error = null;
+            CommandError error = null;
             var localUser = runtime.UserController.GetUserByName("local");
             var userController = runtime.UserController;
             var unauthroizedUser = userController.GetUserByName("Hacker");
             if (unauthroizedUser is null)
             {
-                Assert.IsTrue(userController.CreateNew("Hacker", false, out unauthroizedUser, ref error), error);
+                Assert.IsTrue(userController.CreateNew("Hacker", false, out unauthroizedUser, out error), error?.Message);
             }
             else
             {
@@ -283,7 +283,7 @@ namespace XTMF2.UnitTests
                     var copyOfProjects = projects.ToList();
                     foreach (var project in copyOfProjects)
                     {
-                        Assert.IsTrue(projectController.DeleteProject(localUser, project, ref error), error);
+                        Assert.IsTrue(projectController.DeleteProject(localUser, project, out error), error?.Message);
                     }
                 }
             }
@@ -304,26 +304,26 @@ namespace XTMF2.UnitTests
             var runtime = XTMFRuntime.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
-            string error = null;
+            CommandError error = null;
             string userName = name + "TempUser";
             string projectName = "TestProject";
             string modelSystemName = "ModelSystem1";
             // clear out the user if possible
             userController.Delete(userName);
 
-            Assert.IsTrue(userController.CreateNew(userName, false, out var user, ref error), error);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error), error?.Message);
             try
             {
-                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, ref error).UsingIf(projectSession, () =>
+                Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var projectSession, out error).UsingIf(projectSession, () =>
                 {
-                    Assert.IsTrue(projectSession.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, ref error), error);
-                    Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(modelSystemSession, () =>
+                    Assert.IsTrue(projectSession.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, out error), error?.Message);
+                    Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, out error).UsingIf(modelSystemSession, () =>
                     {
                         toExecuteFirst(user, projectSession, modelSystemSession);
-                        Assert.IsTrue(modelSystemSession.Save(ref error), error);
-                    }), error);
-                    Assert.IsTrue(projectSession.Save(ref error));
-                }), error);
+                        Assert.IsTrue(modelSystemSession.Save(out error), error?.Message);
+                    }), error?.Message);
+                    Assert.IsTrue(projectSession.Save(out error));
+                }), error?.Message);
 
                 runtime.Shutdown();
 
@@ -331,15 +331,15 @@ namespace XTMF2.UnitTests
                 userController = runtime.UserController;
                 projectController = runtime.ProjectController;
                 user = userController.GetUserByName(userName);
-                Assert.IsTrue(projectController.GetProject(userName, projectName, out var project, ref error), error);
-                Assert.IsTrue(projectController.GetProjectSession(user, project, out projectSession, ref error).UsingIf(projectSession, () =>
+                Assert.IsTrue(projectController.GetProject(userName, projectName, out var project, out error), error?.Message);
+                Assert.IsTrue(projectController.GetProjectSession(user, project, out projectSession, out error).UsingIf(projectSession, () =>
                 {
-                    Assert.IsTrue(projectSession.GetModelSystemHeader(user, modelSystemName, out var modelSystemHeader, ref error), error);
-                    Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, ref error).UsingIf(modelSystemSession, () =>
+                    Assert.IsTrue(projectSession.GetModelSystemHeader(user, modelSystemName, out var modelSystemHeader, out error), error?.Message);
+                    Assert.IsTrue(projectSession.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, out error).UsingIf(modelSystemSession, () =>
                     {
                         toExecuteSecond(user, projectSession, modelSystemSession);
-                    }), error);
-                }), error);
+                    }), error?.Message);
+                }), error?.Message);
             }
             finally
             {
@@ -354,14 +354,14 @@ namespace XTMF2.UnitTests
         /// <param name="runLogic"></param>
         public static void CreateRunClient(bool startClientProcess, Action<HostBus> runLogic)
         {
-            string error = null;
             var id = startClientProcess ? Guid.NewGuid().ToString() : "123";
             var xtmfClientFileName = typeof(XTMF2.Client.Program).GetTypeInfo().Assembly.Location;
             var testFileName = Path.GetFullPath(typeof(TestHelper).GetTypeInfo().Assembly.Location);
             Process client = null;
             try
             {
-                Assert.IsTrue(XTMF2.Bus.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, ref error,
+                string errorString = null;
+                Assert.IsTrue(XTMF2.Bus.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, ref errorString,
                 () =>
                 {
                     if (startClientProcess)
@@ -395,7 +395,7 @@ namespace XTMF2.UnitTests
                     Assert.IsNotNull(client, "The client was never created!");
                 }
                 runLogic(new HostBus(hostStream, true));
-            }), error);
+            }), errorString);
             }
             finally
             {
@@ -449,7 +449,7 @@ namespace XTMF2.UnitTests
                         File.Delete(path);
                     }
                 }
-                catch(IOException)
+                catch (IOException)
                 {
 
                 }
@@ -484,7 +484,7 @@ namespace XTMF2.UnitTests
             {
                 a();
             }
-            catch(Exception e2)
+            catch (Exception e2)
             {
                 e = e2;
                 return false;

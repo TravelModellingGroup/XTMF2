@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Linq;
+using XTMF2.Editing;
 
 namespace XTMF2.Repository
 {
@@ -58,13 +59,19 @@ namespace XTMF2.Repository
         /// <param name="error">A message containing a description of the error</param>
         /// <param name="ret">The returned project</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool CreateNew(string path, string name, User owner, out Project ret, ref string error)
+        internal bool CreateNew(string path, string name, User owner, out Project ret, out CommandError error)
         {
-            if (!Project.New(owner, name, null, out ret, ref error))
+            if (!Project.New(owner, name, null, out ret, out error))
             {
                 return false;
             }
-            return Add(ret, ref error);
+            string errorString = null;
+            if(!Add(ret, ref errorString))
+            {
+                error = new CommandError(errorString);
+                return false;
+            }
+            return true;
         }
 
         /// <summary>
@@ -75,7 +82,7 @@ namespace XTMF2.Repository
         /// <param name="project">The resulting project.</param>
         /// <param name="error">An error message if the undo fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool GetProject(User user, string projectName, out Project project, ref string error)
+        internal bool GetProject(User user, string projectName, out Project project, out CommandError error)
         {
             if (user == null)
             {
@@ -83,22 +90,23 @@ namespace XTMF2.Repository
             }
             project = null;
             var possibleProjects = _Store.Where(p => p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase)).OrderBy(p => p.Owner == user);
-            if(!possibleProjects.Any())
+            if (!possibleProjects.Any())
             {
-                error = $"Unable to find a project with the name {projectName}";
-
+                error = new CommandError($"Unable to find a project with the name {projectName}");
                 return false;
             }
-            foreach(var p in possibleProjects)
+            foreach (var p in possibleProjects)
             {
-                if(p.CanAccess(user))
+                if (p.CanAccess(user))
                 {
                     project = p;
+                    error = null;
                     return true;
                 }
             }
-            error = "Unable to access project";
-            return project != null;
+            // TODO: Rethink the phrasing as it will give away more information than needed to an unauthorized user
+            error = new CommandError("Unable to access project");
+            return false;
         }
     }
 }

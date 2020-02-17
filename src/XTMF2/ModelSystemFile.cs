@@ -118,7 +118,7 @@ namespace XTMF2
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         internal static bool ExportModelSystem(ProjectSession projectSession, User user,
-            ModelSystemHeader modelSystemHeader, string exportPath, ref string error)
+            ModelSystemHeader modelSystemHeader, string exportPath, out CommandError error)
         {
             var tempDirName = string.Empty;
             try
@@ -148,11 +148,13 @@ namespace XTMF2
                 }
                 // Zip the temporary directory and store it.
                 ZipFile.CreateFromDirectory(tempDirName, exportPath);
+                error = null;
                 return true;
             }
             catch (IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
+                return false;
             }
             finally
             {
@@ -177,7 +179,6 @@ namespace XTMF2
                 }
 #pragma warning restore CA1031
             }
-            return false;
         }
 
         /// <summary>
@@ -187,14 +188,14 @@ namespace XTMF2
         /// <param name="msf">The resulting model system file, null if the operation fails.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
-        internal static bool LoadModelSystemFile(string filePath, out ModelSystemFile msf, ref string error)
+        internal static bool LoadModelSystemFile(string filePath, out ModelSystemFile msf, out CommandError error)
         {
             msf = null;
             var toReturn = new ModelSystemFile(filePath);
             try
             {
                 using var stream = File.OpenRead(filePath);
-                if(!LoadModelSystemFile(toReturn, stream, ref error))
+                if(!LoadModelSystemFile(toReturn, stream, out error))
                 {
                     return false;
                 }
@@ -203,9 +204,9 @@ namespace XTMF2
             }
             catch (IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
+                return false;
             }
-            return false;
         }
 
         /// <summary>
@@ -216,7 +217,7 @@ namespace XTMF2
         /// <param name="msf">The resulting model system file.</param>
         /// <param name="error">An error message if loading the model system file fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        internal static bool LoadModelSystemFile(ZipArchive archive, string path, out ModelSystemFile msf, ref string error)
+        internal static bool LoadModelSystemFile(ZipArchive archive, string path, out ModelSystemFile msf, out CommandError error)
         {
             msf = null;
             try
@@ -224,12 +225,12 @@ namespace XTMF2
                 var entry = archive.GetEntry(path);
                 if (entry is null)
                 {
-                    error = $"No model system file was found within the project file with the name {path}";
+                    error = new CommandError($"No model system file was found within the project file with the name {path}");
                     return false;
                 }
                 using var stream = entry.Open();
                 var toReturn = new ModelSystemFile(archive, path);
-                if (!LoadModelSystemFile(toReturn, stream, ref error))
+                if (!LoadModelSystemFile(toReturn, stream, out error))
                 {
                     return false;
                 }
@@ -238,18 +239,18 @@ namespace XTMF2
             }
             catch(IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
+                return false;
             }
-            return false;
         }
 
-        private static bool LoadModelSystemFile(ModelSystemFile toReturn, Stream stream, ref string error)
+        private static bool LoadModelSystemFile(ModelSystemFile toReturn, Stream stream, out CommandError error)
         {
             var archive = new ZipArchive(stream, ZipArchiveMode.Read);
             var entry = archive.GetEntry(MetaDataFilePath);
             if (entry is null)
             {
-                error = "The archive did not contain a meta-data file!";
+                error = new CommandError("The archive did not contain a meta-data file!");
                 return false;
             }
             byte[] buffer;
@@ -259,14 +260,14 @@ namespace XTMF2
                 var length = entryStream.Read(buffer, 0, buffer.Length);
                 if (length != buffer.Length)
                 {
-                    error = "Unable to read the meta-data file";
+                    error = new CommandError("Unable to read the meta-data file");
                     return false;
                 }
             }
             var reader = new Utf8JsonReader(buffer);
             if (!reader.Read())
             {
-                error = "Unable to read the initial object.";
+                error = new CommandError("Unable to read the initial object.");
                 return false;
             }
             while (reader.Read())
@@ -277,12 +278,13 @@ namespace XTMF2
                     {
                         if (!reader.Read())
                         {
-                            error = "The reader was unable to read after a property name was declared!";
+                            error = new CommandError("The reader was unable to read after a property name was declared!");
                             return false;
                         }
                         if (reader.TokenType != JsonTokenType.String)
                         {
-                            error = "Expected a string token after reading a Name property!";
+                            error = new CommandError("Expected a string token after reading a Name property!");
+                            return false;
                         }
                         toReturn.Name = reader.GetString();
                     }
@@ -290,12 +292,13 @@ namespace XTMF2
                     {
                         if (!reader.Read())
                         {
-                            error = "The reader was unable to read after a property name was declared!";
+                            error = new CommandError("The reader was unable to read after a property name was declared!");
                             return false;
                         }
                         if (reader.TokenType != JsonTokenType.String)
                         {
-                            error = "Expected a string token after reading a Description property!";
+                            error = new CommandError("Expected a string token after reading a Description property!");
+                            return false;
                         }
                         toReturn.Description = reader.GetString();
                     }
@@ -303,17 +306,18 @@ namespace XTMF2
                     {
                         if (!reader.Read())
                         {
-                            error = "The reader was unable to read after a property name was declared!";
+                            error = new CommandError("The reader was unable to read after a property name was declared!");
                             return false;
                         }
                         if (reader.TokenType != JsonTokenType.String)
                         {
-                            error = "Expected a string token after reading a ExportedOn property!";
+                            error = new CommandError("Expected a string token after reading a ExportedOn property!");
+                            return false;
                         }
                         var tempStr = reader.GetString();
                         if (!DateTime.TryParse(tempStr, out var tempDateTime))
                         {
-                            error = $"Unable to parse '{tempStr}' as a date-time.";
+                            error = new CommandError($"Unable to parse '{tempStr}' as a date-time.");
                             return false;
                         }
                         toReturn.ExportedOn = tempDateTime;
@@ -322,12 +326,13 @@ namespace XTMF2
                     {
                         if (!reader.Read())
                         {
-                            error = "The reader was unable to read after a property name was declared!";
+                            error = new CommandError("The reader was unable to read after a property name was declared!");
                             return false;
                         }
                         if (reader.TokenType != JsonTokenType.String)
                         {
-                            error = "Expected a string token after reading a ExportedBy property!";
+                            error = new CommandError("Expected a string token after reading a ExportedBy property!");
+                            return false;
                         }
                         toReturn.ExportedBy = reader.GetString();
                     }
@@ -335,16 +340,17 @@ namespace XTMF2
                     {
                         if (!reader.Read())
                         {
-                            error = "The reader was unable to read after a property name was declared!";
+                            error = new CommandError("The reader was unable to read after a property name was declared!");
                             return false;
                         }
                         if (reader.TokenType != JsonTokenType.Number)
                         {
-                            error = "Expected a number token after reading a VersionMajor property!";
+                            error = new CommandError("Expected a number token after reading a VersionMajor property!");
+                            return false;
                         }
                         if (!reader.TryGetInt32(out toReturn._majorVersion))
                         {
-                            error = "Unable to read the major version number.";
+                            error = new CommandError("Unable to read the major version number.");
                             return false;
                         }
                     }
@@ -352,16 +358,17 @@ namespace XTMF2
                     {
                         if (!reader.Read())
                         {
-                            error = "The reader was unable to read after a property name was declared!";
+                            error = new CommandError("The reader was unable to read after a property name was declared!");
                             return false;
                         }
                         if (reader.TokenType != JsonTokenType.Number)
                         {
-                            error = "Expected a number token after reading a VersionMinor property!";
+                            error = new CommandError("Expected a number token after reading a VersionMinor property!");
+                            return false;
                         }
                         if (!reader.TryGetInt32(out toReturn._minorVersion))
                         {
-                            error = "Unable to read the minor version number.";
+                            error = new CommandError("Unable to read the minor version number.");
                             return false;
                         }
                     }
@@ -371,6 +378,7 @@ namespace XTMF2
                     reader.Skip();
                 }
             }
+            error = null;
             return true;
         }
 
@@ -392,7 +400,7 @@ namespace XTMF2
         /// <param name="modelSystemPath">The path to try to save the model system to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        internal bool ExtractModelSystemTo(string modelSystemPath, ref string error)
+        internal bool ExtractModelSystemTo(string modelSystemPath, out CommandError error)
         {
             try
             {
@@ -403,7 +411,7 @@ namespace XTMF2
                 var entry = archive.GetEntry(ModelSystemFilePath);
                 if(entry is null)
                 {
-                    error = "The model system file does not contain a model system within it!";
+                    error = new CommandError("The model system file does not contain a model system within it!");
                     return false;
                 }
                 // Make sure that the path to the file exists, and if not create the directories.
@@ -417,11 +425,12 @@ namespace XTMF2
                     }
                 }
                 entry.ExtractToFile(modelSystemPath, true);
+                error = null;
                 return true;
             }
             catch(IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
                 return false;
             }
         }

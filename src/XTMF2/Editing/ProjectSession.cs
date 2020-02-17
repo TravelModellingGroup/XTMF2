@@ -177,11 +177,18 @@ namespace XTMF2.Editing
         /// </summary>
         /// <param name="error">An error message if the save fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool Save(ref string error)
+        public bool Save(out CommandError error)
         {
             lock (_sessionLock)
             {
-                return Project.Save(ref error);
+                string errorString = null;
+                if(!Project.Save(ref errorString))
+                {
+                    error = new CommandError(errorString);
+                    return false;
+                }
+                error = null;
+                return true;
             }
         }
 
@@ -192,10 +199,10 @@ namespace XTMF2.Editing
         /// <param name="modelSystem">The resulting model system session</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool CreateNewModelSystem(User user, string modelSystemName, out ModelSystemHeader modelSystem, ref string error)
+        public bool CreateNewModelSystem(User user, string modelSystemName, out ModelSystemHeader modelSystem, out CommandError error)
         {
             modelSystem = null;
-            if (!ProjectController.ValidateProjectName(modelSystemName, ref error))
+            if (!ProjectController.ValidateProjectName(modelSystemName, out error))
             {
                 return false;
             }
@@ -203,16 +210,16 @@ namespace XTMF2.Editing
             {
                 if(!Project.CanAccess(user))
                 {
-                    error = "The user does not have access to this project!";
+                    error = new CommandError("The user does not have access to this project!", true);
                     return false;
                 }
                 if (Project.ContainsModelSystem(modelSystemName))
                 {
-                    error = "A model system with this name already exists.";
+                    error = new CommandError("A model system with this name already exists.");
                     return false;
                 }
                 modelSystem = new ModelSystemHeader(Project, modelSystemName);
-                return Project.Add(this, modelSystem, ref error);
+                return Project.Add(this, modelSystem, out error);
             }
         }
 
@@ -224,7 +231,7 @@ namespace XTMF2.Editing
         /// <param name="session">The resulting session.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, out ModelSystemSession session, ref string error)
+        public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, out ModelSystemSession session, out CommandError error)
         {
             if (user is null)
             {
@@ -237,19 +244,19 @@ namespace XTMF2.Editing
             session = null;
             lock (_sessionLock)
             {
-                if (!Project.ContainsModelSystem(modelSystemHeader))
-                {
-                    error = "The model system header provided does not belong to this project!";
-                    return false;
-                }
                 if (!Project.CanAccess(user))
                 {
-                    error = "The given user does not have access to this project!";
+                    error = new CommandError("The given user does not have access to this project!", true);
+                    return false;
+                }
+                if (!Project.ContainsModelSystem(modelSystemHeader))
+                {
+                    error = new CommandError("The model system header provided does not belong to this project!");
                     return false;
                 }
                 if (!_activeSessions.TryGetValue(modelSystemHeader, out session))
                 {
-                    if (ModelSystem.Load(this, modelSystemHeader, out session, ref error))
+                    if (ModelSystem.Load(this, modelSystemHeader, out session, out error))
                     {
                         _activeSessions.Add(modelSystemHeader, session);
                         Interlocked.Increment(ref _references);
@@ -261,6 +268,7 @@ namespace XTMF2.Editing
                 {
                     session.AddReference();
                 }
+                error = null;
                 return true;
             }
         }
@@ -272,7 +280,7 @@ namespace XTMF2.Editing
         /// <param name="modelSystem">The model system to remove.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RemoveModelSystem(User user, ModelSystemHeader modelSystem, ref string error)
+        public bool RemoveModelSystem(User user, ModelSystemHeader modelSystem, out CommandError error)
         {
             if (user is null)
             {
@@ -288,16 +296,16 @@ namespace XTMF2.Editing
             {
                 if(Project.Owner != user)
                 {
-                    error = "You can not remove a model system that you are not the owner of.";
+                    error = new CommandError("You can not remove a model system that you are not the owner of.", true);
                     return false;
                 }
                 if(_activeSessions.ContainsKey(modelSystem))
                 {
-                    error = "You can not remove a model system that is currently being edited!";
+                    error = new CommandError("You can not remove a model system that is currently being edited!");
                     return false;
                 }
                 var modelSystemFile = modelSystem.ModelSystemPath;
-                if(!Project.Remove(this, modelSystem, ref error))
+                if(!Project.Remove(this, modelSystem, out error))
                 {
                     return false;
                 }
@@ -322,7 +330,7 @@ namespace XTMF2.Editing
         /// <param name="exportPath">The file that the project will be saved as.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ExportProject(User user, string exportPath, ref string error)
+        public bool ExportProject(User user, string exportPath, out CommandError error)
         {
             if (user is null)
             {
@@ -338,15 +346,15 @@ namespace XTMF2.Editing
             {
                 if(!Project.CanAccess(user))
                 {
-                    error = "The user does not have access to the project.";
+                    error = new CommandError("The user does not have access to the project.", true);
                     return false;
                 }
                 if(_activeSessions.Count > 0)
                 {
-                    error = "The project is currently being edited and can not be exported.";
+                    error = new CommandError("The project is currently being edited and can not be exported.");
                     return false;
                 }
-                return ProjectFile.ExportProject(this, user, exportPath, ref error);
+                return ProjectFile.ExportProject(this, user, exportPath, out error);
             }
         }
 
@@ -358,7 +366,7 @@ namespace XTMF2.Editing
         /// <param name="exportPath">The location to export the model system to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with error message.</returns>
-        public bool ExportModelSystem(User user, ModelSystemHeader modelSystemHeader, string exportPath, ref string error)
+        public bool ExportModelSystem(User user, ModelSystemHeader modelSystemHeader, string exportPath, out CommandError error)
         {
             if (user is null)
             {
@@ -372,22 +380,22 @@ namespace XTMF2.Editing
 
             if (string.IsNullOrWhiteSpace(exportPath))
             {
-                error = "The path to save the model system to must not be empty.";
+                error = new CommandError("The path to save the model system to must not be empty.");
                 return false;
             }
             lock (_sessionLock)
             {
                 if (!Project.CanAccess(user))
                 {
-                    error = "The user does not have access to the project.";
+                    error = new CommandError("The user does not have access to the project.", true);
                     return false;
                 }
                 if (_activeSessions.TryGetValue(modelSystemHeader, out var mss))
                 {
-                    error = "The model system is currently being edited and can not be exported.";
+                    error = new CommandError("The model system is currently being edited and can not be exported.");
                     return false;
                 }
-                return ModelSystemFile.ExportModelSystem(this, user, modelSystemHeader, exportPath, ref error);
+                return ModelSystemFile.ExportModelSystem(this, user, modelSystemHeader, exportPath, out error);
             }
         }
 
@@ -399,7 +407,7 @@ namespace XTMF2.Editing
         /// <param name="modelSystemHeader">The resulting model system header.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool GetModelSystemHeader(User user, string modelSystemName, out ModelSystemHeader modelSystemHeader, ref string error)
+        public bool GetModelSystemHeader(User user, string modelSystemName, out ModelSystemHeader modelSystemHeader, out CommandError error)
         {
             if (user is null)
             {
@@ -414,10 +422,10 @@ namespace XTMF2.Editing
                 if (!Project.CanAccess(user))
                 {
                     modelSystemHeader = null;
-                    error = "User is unable to access project.";
+                    error = new CommandError("User is unable to access project.", true);
                     return false;
                 }
-                return Project.GetModelSystemHeader(modelSystemName, out modelSystemHeader, ref error);
+                return Project.GetModelSystemHeader(modelSystemName, out modelSystemHeader, out error);
             }
         }
 
@@ -428,7 +436,7 @@ namespace XTMF2.Editing
         /// <param name="toSharWith">The person to share with</param>
         /// <param name="error">An error message if appropriate</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ShareWith(User doingShare, User toSharWith, ref string error)
+        public bool ShareWith(User doingShare, User toSharWith, out CommandError error)
         {
             // test our arguments
             if (doingShare is null)
@@ -443,11 +451,11 @@ namespace XTMF2.Editing
             {
                 if (!(doingShare.IsAdmin || doingShare == Project.Owner))
                 {
-                    error = "The user sharing the project must either be the owner or an administrator!";
+                    error = new CommandError("The user sharing the project must either be the owner or an administrator!", true);
                     return false;
                 }
                 // now that we know that we can do the share
-                return Project.AddAdditionalUser(toSharWith, ref error);
+                return Project.AddAdditionalUser(toSharWith, out error);
             }
         }
 
@@ -468,7 +476,7 @@ namespace XTMF2.Editing
         /// <param name="newOwner"></param>
         /// <param name="error"></param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SwitchOwner(User owner, User newOwner, ref string error)
+        public bool SwitchOwner(User owner, User newOwner, out CommandError error)
         {
             if (owner is null)
             {
@@ -482,10 +490,10 @@ namespace XTMF2.Editing
             {
                 if (!(owner.IsAdmin || owner == Project.Owner))
                 {
-                    error = "The owner must either be an administrator or the original owner of the project.";
+                    error = new CommandError("The owner must either be an administrator or the original owner of the project.", true);
                     return false;
                 }
-                return Project.GiveOwnership(newOwner, ref error);
+                return Project.GiveOwnership(newOwner, out error);
             }
         }
 
@@ -496,7 +504,7 @@ namespace XTMF2.Editing
         /// <param name="toRestrict">The user to remove access to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RestrictAccess(User owner, User toRestrict, ref string error)
+        public bool RestrictAccess(User owner, User toRestrict, out CommandError error)
         {
             if (owner is null)
             {
@@ -510,15 +518,15 @@ namespace XTMF2.Editing
             {
                 if (!(owner.IsAdmin || owner == Project.Owner))
                 {
-                    error = "The owner must either be an administrator or the original owner of the project.";
+                    error = new CommandError("The owner must either be an administrator or the original owner of the project.", true);
                     return false;
                 }
                 if (toRestrict == Project.Owner)
                 {
-                    error = "You can not restrict access to the owner of a project.";
+                    error = new CommandError("You can not restrict access to the owner of a project.");
                     return false;
                 }
-                return Project.RemoveAdditionalUser(toRestrict, ref error);
+                return Project.RemoveAdditionalUser(toRestrict, out error);
             }
         }
 
@@ -531,7 +539,8 @@ namespace XTMF2.Editing
         /// <param name="header">A resulting header for the newly imported model system.</param>
         /// <param name="error">The error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ImportModelSystem(User user, string modelSystemFilePath, string modelSystemName, out ModelSystemHeader header, ref string error)
+        public bool ImportModelSystem(User user, string modelSystemFilePath, string modelSystemName, 
+            out ModelSystemHeader header, out CommandError error)
         {
             header = null;
             if (user is null)
@@ -555,28 +564,28 @@ namespace XTMF2.Editing
                 {
                     if (!HasAccess(user))
                     {
-                        error = "The user that issued the command does not have access to this project.";
+                        error = new CommandError("The user that issued the command does not have access to this project.", true);
                         return false;
                     }
                     if(Project.ContainsModelSystem(modelSystemName))
                     {
-                        error = "A model system with that name already exists!";
+                        error = new CommandError("A model system with that name already exists!");
                         return false;
                     }
-                    if(!ModelSystemFile.LoadModelSystemFile(modelSystemFilePath, out var msf, ref error))
+                    if(!ModelSystemFile.LoadModelSystemFile(modelSystemFilePath, out var msf, out error))
                     {
                         return false;
                     }
-                    return Project.AddModelSystemFromModelSystemFile(modelSystemName, msf, out header, ref error);
+                    return Project.AddModelSystemFromModelSystemFile(modelSystemName, msf, out header, out error);
                 }
             }
             catch (InvalidDataException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
             }
             catch (IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
             }
             return false;
         }
@@ -588,7 +597,7 @@ namespace XTMF2.Editing
         /// <param name="fullName">The path to where to store runs.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SetCustomRunDirectory(User user, string fullName, ref string error)
+        public bool SetCustomRunDirectory(User user, string fullName, out CommandError error)
         {
             if (user is null)
             {
@@ -597,17 +606,17 @@ namespace XTMF2.Editing
 
             if (string.IsNullOrWhiteSpace(fullName))
             {
-                error = $"A non-blank directory is expected.";
+                error = new CommandError($"A non-blank directory is expected.");
                 return false;
             }
             lock(_sessionLock)
             {
                 if(!Project.CanAccess(user))
                 {
-                    error = "The user does not have access to this project.";
+                    error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
-                return Project.SetCustomRunsDirectory(fullName, ref error);
+                return Project.SetCustomRunsDirectory(fullName, out error);
             }
         }
 
@@ -617,7 +626,7 @@ namespace XTMF2.Editing
         /// <param name="user">The user issuing the command.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ResetCustomRunDirectory(User user, ref string error)
+        public bool ResetCustomRunDirectory(User user, out CommandError error)
         {
             if (user is null)
             {
@@ -627,10 +636,10 @@ namespace XTMF2.Editing
             {
                 if(!Project.CanAccess(user))
                 {
-                    error = "The user can not access this project.";
+                    error = new CommandError("The user can not access this project.", true);
                     return false;
                 }
-                return Project.ResetRunsDirectory(ref error);
+                return Project.ResetRunsDirectory(out error);
             }
         }
 
@@ -642,7 +651,7 @@ namespace XTMF2.Editing
         /// <param name="newName">The new name of the model system.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RenameModelSystem(User user, ModelSystemHeader modelSystem, string newName, ref string error)
+        public bool RenameModelSystem(User user, ModelSystemHeader modelSystem, string newName, out CommandError error)
         {
             if (user is null)
             {
@@ -654,17 +663,17 @@ namespace XTMF2.Editing
             }
             if (string.IsNullOrWhiteSpace(newName))
             {
-                error = "The name of the model system must not be blank.";
+                error = new CommandError("The name of the model system must not be blank.");
                 return false;
             }
             lock(_sessionLock)
             {
                 if(!Project.CanAccess(user))
                 {
-                    error = "The user can not access this project.";
+                    error = new CommandError("The user can not access this project.", true);
                     return false;
                 }
-                return Project.RenameModelSystem(modelSystem, newName, ref error);
+                return Project.RenameModelSystem(modelSystem, newName, out error);
             }
         }
     }

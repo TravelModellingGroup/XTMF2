@@ -28,10 +28,11 @@ namespace XTMF2.ModelSystemConstruct
     public sealed class SingleLink : Link
     {
         public Node Destination { get; internal set; }
-        public bool SetDestination(ModelSystemSession session, Node destination, ref string error)
+        public bool SetDestination(ModelSystemSession session, Node destination, out CommandError error)
         {
             Destination = destination;
             Notify(nameof(Destination));
+            error = null;
             return true;
         }
 

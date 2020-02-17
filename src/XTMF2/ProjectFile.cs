@@ -115,7 +115,7 @@ namespace XTMF2
         /// <param name="exportPath">The path to export the project to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        internal static bool ExportProject(ProjectSession projectSession, User user, string exportPath, ref string error)
+        internal static bool ExportProject(ProjectSession projectSession, User user, string exportPath, out CommandError error)
         {
             if (projectSession is null)
             {
@@ -135,7 +135,7 @@ namespace XTMF2
                 var headers = project.ModelSystems;
                 // Write meta-data
                 WriteMetaData(tempDirName, project, user, headers);
-                if (!WriteModelSystems(projectSession, tempDirName, user, headers, ref error))
+                if (!WriteModelSystems(projectSession, tempDirName, user, headers, out error))
                 {
                     return false;
                 }
@@ -145,7 +145,8 @@ namespace XTMF2
             }
             catch (IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
+                return false;
             }
             finally
             {
@@ -168,19 +169,19 @@ namespace XTMF2
                 }
 #pragma warning restore CA1031
             }
-            return false;
         }
 
         private static bool WriteModelSystems(ProjectSession projectSession, string tempDirName, User user,
-            ReadOnlyObservableCollection<ModelSystemHeader> headers, ref string error)
+            ReadOnlyObservableCollection<ModelSystemHeader> headers, out CommandError error)
         {
             for (int i = 0; i < headers.Count; i++)
             {
-                if (!ModelSystemFile.ExportModelSystem(projectSession, user, headers[i], System.IO.Path.Combine(tempDirName, $"{i}.xmsys"), ref error))
+                if (!ModelSystemFile.ExportModelSystem(projectSession, user, headers[i], System.IO.Path.Combine(tempDirName, $"{i}.xmsys"), out error))
                 {
                     return false;
                 }
             }
+            error = null;
             return true;
         }
 
@@ -220,38 +221,38 @@ namespace XTMF2
         /// <param name="project">The resulting project.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        internal static bool ImportProject(User owner, string name, string filePath, out Project project, ref string error)
+        internal static bool ImportProject(User owner, string name, string filePath, out Project project, out CommandError error)
         {
             project = null;
             try
             {
                 var projectFile = new ProjectFile(filePath);
                 using var archive = ZipFile.OpenRead(filePath);
-                if (!LoadMetaData(projectFile, archive, ref error))
+                if (!LoadMetaData(projectFile, archive, out error))
                 {
                     return false;
                 }
-                return Project.Load(projectFile, name, owner, out project, ref error);
+                return Project.Load(projectFile, name, owner, out project, out error);
             }
             catch(IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
             }
             catch(InvalidDataException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
             }
             return false;
         }
 
-        private static bool LoadMetaData(ProjectFile projectFile, ZipArchive archive, ref string error)
+        private static bool LoadMetaData(ProjectFile projectFile, ZipArchive archive, out CommandError error)
         {
             try
             {
                 var metaDataEntry = archive.GetEntry("metadata.json");
                 if(metaDataEntry is null)
                 {
-                    error = "There was no metadata entry in the project file!";
+                    error = new CommandError("There was no metadata entry in the project file!");
                     return false;
                 }
                 using var metaDataStream = metaDataEntry.Open();
@@ -300,7 +301,7 @@ namespace XTMF2
                         while(reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                         {
                             var path = reader.GetString();
-                            if(!ModelSystemFile.LoadModelSystemFile(archive, path, out var msf, ref error))
+                            if(!ModelSystemFile.LoadModelSystemFile(archive, path, out var msf, out error))
                             {
                                 return false;
                             }
@@ -308,15 +309,16 @@ namespace XTMF2
                         }
                     }
                 }
+                error = null;
                 return true;
             }
             catch (JsonException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
             }
             catch (IOException e)
             {
-                error = e.Message;
+                error = new CommandError(e.Message);
             }
             return false;
         }
