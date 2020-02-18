@@ -15,8 +15,8 @@ namespace XTMF2.Run
                 return;
             }
             List<string> dllsToLoad = new List<string>();
-            string error = null;
-            string runID = null;
+            string? error = null;
+            string? runID = null;
             for (int i = 0; i < args.Length; i++)
             {
                 switch (args[i].ToLowerInvariant())
@@ -50,7 +50,7 @@ namespace XTMF2.Run
                             Console.WriteLine("Expected a pipe name after getting a -namedPipe instruction!");
                             return;
                         }
-                        Stream toClient = null;
+                        Stream? toClient = null;
                         try
                         {
                             if (!CreateStreams.CreateNamedPipeClient(args[i], out toClient, ref error))

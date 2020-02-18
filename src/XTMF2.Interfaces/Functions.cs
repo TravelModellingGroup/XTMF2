@@ -74,7 +74,7 @@ namespace XTMF2
 
     public abstract class BaseAction : IAction
     {
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         public abstract void Invoke();
 
@@ -91,7 +91,7 @@ namespace XTMF2
 
     public abstract class BaseAction<Context> : IAction<Context>
     {
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         public abstract void Invoke(Context context);
 
@@ -108,7 +108,7 @@ namespace XTMF2
 
     public abstract class BaseEvent : IEvent
     {
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         public abstract void Invoke();
 
@@ -127,7 +127,7 @@ namespace XTMF2
 
     public abstract class BaseEvent<Context> : IEvent<Context>
     {
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         public abstract void Invoke(Context context);
 
