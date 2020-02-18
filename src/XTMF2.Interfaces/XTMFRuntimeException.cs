@@ -20,17 +20,21 @@ using System;
 
 namespace XTMF2
 {
-    public class XTMFRuntimeException : Exception
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1032:Implement standard exception constructors",
+        Justification = "This point of this error is to include the offending module, supplying alternatives that ignore " +
+        "the module parameter could lead to bad client code.")]
+    public sealed class XTMFRuntimeException : Exception
     {
 
-        public IModule FailingModule { get; private set; }
+        public IModule? FailingModule { get; private set; }
 
-        public XTMFRuntimeException(IModule module, string message)
+        public XTMFRuntimeException(IModule? module, string message)
+            :base(message)
         {
             FailingModule = module;
         }
 
-        public XTMFRuntimeException(IModule module, string message, Exception innerException) : base(message)
+        public XTMFRuntimeException(IModule? module, string message, Exception innerException) : base(message, innerException)
         {
             FailingModule = module;
         }

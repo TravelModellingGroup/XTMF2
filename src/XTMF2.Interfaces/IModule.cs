@@ -22,7 +22,7 @@ namespace XTMF2
 {
     public interface IModule
     {
-        string Name { get; set; }
+        string? Name { get; set; }
 
         bool RuntimeValidation(ref string error);
     }

@@ -25,7 +25,7 @@ namespace XTMF2
 
     public abstract class BaseModule : IModule
     {
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         public virtual bool RuntimeValidation(ref string error)
         {
@@ -40,7 +40,7 @@ namespace XTMF2
 
     public abstract class BaseFunction<Result> : IFunction<Result>
     {
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         public abstract Result Invoke();
 
@@ -57,7 +57,7 @@ namespace XTMF2
 
     public abstract class BaseFunction<Context, Result> : IFunction<Context, Result>
     {
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         public abstract Result Invoke(Context context);
 
