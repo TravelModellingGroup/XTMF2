@@ -28,17 +28,17 @@ namespace XTMF2
         /// <summary>
         /// The name to use when adding a new module of this type
         /// </summary>
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         /// <summary>
         /// The web link to use to access the documentation for this
         /// module.
         /// </summary>
-        public string DocumentationLink { get; set; }
+        public string? DocumentationLink { get; set; }
 
         /// <summary>
         /// A small description of the module
         /// </summary>
-        public string Description { get; set; }
+        public string? Description { get; set; }
     }
 }

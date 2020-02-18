@@ -23,9 +23,9 @@ using System.Text;
 namespace XTMF2
 {
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class ParameterAttribute : SubModuleAttribute
+    public sealed class ParameterAttribute : SubModuleAttribute
     {
-        public string DefaultValue { get; set; }
+        public string? DefaultValue { get; set; }
 
         public ParameterAttribute()
         {
