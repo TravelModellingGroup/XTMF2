@@ -25,6 +25,7 @@ using System.Text;
 using System.Text.Json;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.Repository;
 
 namespace XTMF2
 {
@@ -71,10 +72,11 @@ namespace XTMF2
         /// </summary>
         /// <param name="name">The unique name of the boundary</param>
         /// <param name="parent">The parent of the boundary</param>
-        public Boundary(string name, Boundary parent = null)
+        internal Boundary(string name, Boundary? parent = null)
         {
             Name = name;
             Parent = parent;
+            Description = string.Empty;
         }
 
         /// <summary>
@@ -83,6 +85,8 @@ namespace XTMF2
         internal Boundary(Boundary parent)
         {
             Parent = parent;
+            Name = string.Empty;
+            Description = string.Empty;
         }
 
         /// <summary>
@@ -99,7 +103,7 @@ namespace XTMF2
             return _Boundaries.Any(b => b == boundary || b.Contains(boundary));
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         /// <summary>
         /// Provides a readonly view of the locally contained modules.
@@ -129,7 +133,7 @@ namespace XTMF2
             }
         }
 
-        internal bool Validate(ref string moduleName, ref string error)
+        internal bool Validate(ref string? moduleName, ref string? error)
         {
             foreach(var module in _Modules)
             {
@@ -154,7 +158,7 @@ namespace XTMF2
         /// <returns>A dictionary mapping type to index.</returns>
         internal Dictionary<Type, int> GetUsedTypes()
         {
-            List<Type> GetUsedTypes(Boundary current, List<Type> included)
+            static List<Type> GetUsedTypes(Boundary current, List<Type> included)
             {
                 foreach (var module in current._Modules)
                 {
@@ -183,7 +187,7 @@ namespace XTMF2
         /// <param name="runtime">The XTMF runtime to run from.</param>
         /// <param name="error">An error message if the construction fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool ConstructModules(XTMFRuntime runtime, ref string error)
+        internal bool ConstructModules(XTMFRuntime runtime, ref string? error)
         {
             lock (_WriteLock)
             {
@@ -226,7 +230,7 @@ namespace XTMF2
         /// <param name="boundary">The resulting boundary.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool AddBoundary(string name, out Boundary boundary, out CommandError error)
+        internal bool AddBoundary(string name, out Boundary? boundary, out CommandError? error)
         {
             if (string.IsNullOrWhiteSpace(name))
             {
@@ -253,7 +257,7 @@ namespace XTMF2
         /// <param name="block">The resulting block</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool AddCommentBlock(string documentation, Rectangle position, out CommentBlock block, out CommandError error)
+        internal bool AddCommentBlock(string documentation, Rectangle position, out CommentBlock? block, out CommandError? error)
         {
             block = null;
             var _block = new CommentBlock(documentation, position);
@@ -265,7 +269,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddCommentBlock(CommentBlock block, out CommandError error)
+        internal bool AddCommentBlock(CommentBlock block, out CommandError? error)
         {
             if (block is null)
             {
@@ -284,7 +288,7 @@ namespace XTMF2
             }
         }
 
-        internal bool RemoveCommentBlock(CommentBlock block, out CommandError error)
+        internal bool RemoveCommentBlock(CommentBlock block, out CommandError? error)
         {
             if (block is null)
             {
@@ -326,7 +330,7 @@ namespace XTMF2
                     {
                         if (link is SingleLink sl)
                         {
-                            if (sl.Destination.ContainedWithin == boundary)
+                            if (sl.Destination!.ContainedWithin == boundary)
                             {
                                 ret.Add(link);
                             }
@@ -354,7 +358,7 @@ namespace XTMF2
         /// <param name="boundary"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        internal bool AddBoundary(Boundary boundary, out CommandError error)
+        internal bool AddBoundary(Boundary boundary, out CommandError? error)
         {
             if (_Boundaries.Contains(boundary))
             {
@@ -366,7 +370,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool RemoveBoundary(Boundary boundary, out CommandError error)
+        internal bool RemoveBoundary(Boundary boundary, out CommandError? error)
         {
             if (!_Boundaries.Remove(boundary))
             {
@@ -377,7 +381,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddStart(Start start, out CommandError error)
+        internal bool AddStart(Start start, out CommandError? error)
         { 
             if (_Starts.Contains(start))
             {
@@ -389,7 +393,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool ConstructLinks(ref string error)
+        internal bool ConstructLinks(ref string? error)
         {
             lock (_WriteLock)
             {
@@ -423,14 +427,14 @@ namespace XTMF2
             }
         }
 
-        private readonly Boundary Parent;
+        private readonly Boundary? Parent;
 
         public string FullPath
         {
             get
             {
                 Stack<Boundary> stack = new Stack<Boundary>();
-                var current = this;
+                Boundary? current = this;
                 while (current != null)
                 {
                     stack.Push(current);
@@ -452,7 +456,7 @@ namespace XTMF2
             }
         }
 
-        internal bool AddNode(Node node, out CommandError e)
+        internal bool AddNode(Node node, out CommandError? e)
         {
             if (_Modules.Contains(node))
             {
@@ -510,7 +514,7 @@ namespace XTMF2
             }
         }
 
-        internal bool RemoveNode(Node node, out CommandError error)
+        internal bool RemoveNode(Node node, out CommandError? error)
         {
             if (!_Modules.Remove(node))
             {
@@ -528,13 +532,13 @@ namespace XTMF2
         /// <param name="link">The returning link</param>
         /// <param name="e">An error message if one occurs</param>
         /// <returns>True if it was added again, false otherwise with message.</returns>
-        internal bool AddLink(Link link, out CommandError e)
+        internal bool AddLink(Link link, out CommandError? e)
         {
             if (link == null)
             {
                 throw new ArgumentNullException(nameof(link));
             }
-            if (link.Origin.ContainedWithin != this)
+            if (link.Origin!.ContainedWithin != this)
             {
                 e = new CommandError("This link is was not contained within this boundary!");
                 return false;
@@ -549,24 +553,30 @@ namespace XTMF2
             return true;
         }
 
-        private static bool FailWith(ref string error, string message)
+        private static bool FailWith(out string error, string message)
         {
             error = message;
             return false;
         }
 
-        internal bool Load(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
-            ref Utf8JsonReader reader, ref string error)
+        private static bool FailWith(out CommandError error, string message)
+        {
+            error = new CommandError(message);
+            return false;
+        }
+
+        internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
+            ref Utf8JsonReader reader, ref string? error)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
             {
-                return FailWith(ref error, "Unexpected token when reading boundary!");
+                return FailWith(out error, "Unexpected token when reading boundary!");
             }
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType != JsonTokenType.PropertyName && reader.TokenType != JsonTokenType.Comment)
                 {
-                    return FailWith(ref error, "Unexpected token when reading boundary!");
+                    return FailWith(out error, "Unexpected token when reading boundary!");
                 }
                 if(reader.ValueTextEquals(NameProperty))
                 {
@@ -582,32 +592,32 @@ namespace XTMF2
                 {
                     if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
                     {
-                        return FailWith(ref error, "Unexpected token when starting to read Starts for a boundary.");
+                        return FailWith(out error, "Unexpected token when starting to read Starts for a boundary.");
                     }
                     while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                     {
-                        if (!Start.Load(session, node, this, ref reader, out Start start, ref error))
+                        if (!Start.Load(modules, node, this, ref reader, out var start, ref error))
                         {
                             return false;
                         }
-                        _Starts.Add(start);
+                        _Starts.Add(start!);
                     }
                 }
                 else if(reader.ValueTextEquals(NodesProperty))
                 {
                     if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
                     {
-                        return FailWith(ref error, "Unexpected token when starting to read Nodes for a boundary.");
+                        return FailWith(out error, "Unexpected token when starting to read Nodes for a boundary.");
                     }
                     while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!Node.Load(session, typeLookup, node, this, ref reader, out Node mss, ref error))
+                            if (!Node.Load(modules, typeLookup, node, this, ref reader, out var mss, ref error))
                             {
                                 return false;
                             }
-                            _Modules.Add(mss);
+                            _Modules.Add(mss!);
                         }
                     }
                 }
@@ -615,14 +625,14 @@ namespace XTMF2
                 {
                     if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
                     {
-                        return FailWith(ref error, "Unexpected token when starting to read Modules for a boundary.");
+                        return FailWith(out error, "Unexpected token when starting to read Modules for a boundary.");
                     }
                     while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
                             var boundary = new Boundary(this);
-                            if (!boundary.Load(session, typeLookup, node, ref reader, ref error))
+                            if (!boundary.Load(modules, typeLookup, node, ref reader, ref error))
                             {
                                 return false;
                             }
@@ -633,17 +643,17 @@ namespace XTMF2
                 {
                     if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
                     {
-                        return FailWith(ref error, "Unexpected token when starting to read Links for a boundary.");
+                        return FailWith(out error, "Unexpected token when starting to read Links for a boundary.");
                     }
                     while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!Link.Create(session, node, ref reader, out var link, ref error))
+                            if (!Link.Create(modules, node, ref reader, out var link, ref error))
                             {
                                 return false;
                             }
-                            _Links.Add(link);
+                            _Links.Add(link!);
                         }
                     }
                 }
@@ -651,29 +661,29 @@ namespace XTMF2
                 {
                     if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
                     {
-                        return FailWith(ref error, "Unexpected token when starting to read Documentation Blocks for a boundary.");
+                        return FailWith(out error, "Unexpected token when starting to read Documentation Blocks for a boundary.");
                     }
                     while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!CommentBlock.Load(ref reader, out CommentBlock block, ref error))
+                            if (!CommentBlock.Load(ref reader, out var block, ref error))
                             {
                                 return false;
                             }
-                            _CommentBlocks.Add(block);
+                            _CommentBlocks.Add(block!);
                         }
                     }
                 }
                 else
                 {
-                    return FailWith(ref error, $"Unexpected value when reading boundary {reader.GetString()}");
+                    return FailWith(out error, $"Unexpected value when reading boundary {reader.GetString()}");
                 }
             }
             return true;
         }
 
-        internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link link, out CommandError error)
+        internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link? link, out CommandError? error)
         {
             switch (originHook.Cardinality)
             {
@@ -719,7 +729,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddLink(Node origin, NodeHook originHook, Node destination, Link link, out CommandError error)
+        internal bool AddLink(Node origin, NodeHook originHook, Node destination, Link link, out CommandError? error)
         {
             switch (originHook.Cardinality)
             {
@@ -750,7 +760,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool RemoveLink(Link link, out CommandError error)
+        internal bool RemoveLink(Link link, out CommandError? error)
         {
             if (!_Links.Remove(link))
             {
@@ -761,7 +771,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool SetName(string name, out CommandError error)
+        internal bool SetName(string name, out CommandError? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -780,7 +790,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool SetDescription(string description, out CommandError error)
+        internal bool SetDescription(string description, out CommandError? error)
         {
             error = null;
             Description = description;
@@ -788,7 +798,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool RemoveStart(Start start, out CommandError error)
+        internal bool RemoveStart(Start start, out CommandError? error)
         {
             if (!_Starts.Remove(start))
             {
@@ -799,7 +809,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddStart(ModelSystemSession session, string startName, out Start start, out CommandError error)
+        internal bool AddStart(ModelSystemSession session, string startName, out Start? start, out CommandError? error)
         {
             start = null;
             // ensure the name is unique between starting points
@@ -811,7 +821,7 @@ namespace XTMF2
                     return false;
                 }
             }
-            start = new Start(session, startName, this, null, new Rectangle(0, 0, 0, 0));
+            start = new Start(session.GetModuleRepository(), startName, this, string.Empty, new Rectangle(0, 0, 0, 0));
             _Starts.Add(start);
             error = null;
             return true;
@@ -825,7 +835,7 @@ namespace XTMF2
         /// <param name="start"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        internal bool AddStart(ModelSystemSession session, string startName, Start start, out CommandError error)
+        internal bool AddStart(ModelSystemSession session, string startName, Start start, out CommandError? error)
         {
             // ensure the name is unique between starting points
             foreach (var ms in _Starts)
@@ -841,15 +851,19 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddNode(ModelSystemSession session, string name, Type type, out Node node, out CommandError error)
+        internal bool AddNode(ModelSystemSession session, string name, Type type, out Node? node, out CommandError? error)
         {
             node = Node.Create(session, name, type, this);
+            if(node is null)
+            {
+                return FailWith(out error, $"Unable to create a node with the name {name} of type {type.FullName}!");
+            }
             _Modules.Add(node);
             error = null;
             return true;
         }
 
-        internal bool AddNode(ModelSystemSession session, string name, Type type, Node node, out CommandError error)
+        internal bool AddNode(ModelSystemSession session, string name, Type type, Node node, out CommandError? error)
         {
             _Modules.Add(node);
             error = null;

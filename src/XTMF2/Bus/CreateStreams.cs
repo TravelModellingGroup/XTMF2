@@ -34,7 +34,7 @@ namespace XTMF2.Bus
         /// <param name="stream">The resulting stream</param>
         /// <param name="error">An error message if there is an exception</param>
         /// <returns>True if successful, false with message otherwise</returns>
-        public static bool CreateNewNamedPipeHost(string name, out Stream stream, ref string error, Action createClient)
+        public static bool CreateNewNamedPipeHost(string name, out Stream? stream, ref string? error, Action createClient)
         {
             try
             {
@@ -68,7 +68,7 @@ namespace XTMF2.Bus
         /// <param name="stream">The resulting stream</param>
         /// <param name="error">An error message if there is a problem</param>
         /// <returns>True if successful, false with message otherwise</returns>
-        public static bool CreateNamedPipeClient(string name, out Stream stream, ref string error)
+        public static bool CreateNamedPipeClient(string name, out Stream? stream, ref string? error)
         {
             try
             {

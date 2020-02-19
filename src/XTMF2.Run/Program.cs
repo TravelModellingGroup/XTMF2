@@ -63,6 +63,11 @@ namespace XTMF2.Run
                                 Console.WriteLine("No runID was provided!");
                                 return;
                             }
+                            if(toClient == null)
+                            {
+                                Console.WriteLine("Unable to create a connection to the XTMF2.Client!");
+                                return;
+                            }
                             Run(runID, toClient, dllsToLoad);
                         }
                         finally

@@ -24,6 +24,6 @@ namespace XTMF2
     {
         string? Name { get; set; }
 
-        bool RuntimeValidation(ref string error);
+        bool RuntimeValidation(ref string? error);
     }
 }

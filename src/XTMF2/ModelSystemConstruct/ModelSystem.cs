@@ -25,6 +25,7 @@ using System.Linq;
 using System.ComponentModel;
 using XTMF2.Editing;
 using System.IO;
+using XTMF2.Repository;
 
 namespace XTMF2
 {
@@ -91,9 +92,9 @@ namespace XTMF2
         /// </summary>
         private readonly object _modelSystemLock = new object();
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
-        internal bool Save(ref string error)
+        internal bool Save(ref string? error)
         {
             lock (_modelSystemLock)
             {
@@ -116,7 +117,7 @@ namespace XTMF2
             }
         }
 
-        private bool Save(ref string error, Stream saveTo, bool leaveOpen)
+        private bool Save(ref string? error, Stream saveTo, bool leaveOpen)
         {
             try
             {
@@ -148,7 +149,7 @@ namespace XTMF2
         /// <param name="moduleName">The name of the module that is causing the validation error.</param>
         /// <param name="error">An error message if the validation fails.</param>
         /// <returns>True if the validation passes, false otherwise with an error message.</returns>
-        internal bool Validate(ref string moduleName, ref string error)
+        internal bool Validate(ref string? moduleName, ref string? error)
         {
             return GlobalBoundary.Validate(ref moduleName, ref error);
         }
@@ -159,7 +160,7 @@ namespace XTMF2
         /// <param name="runtime">The XTMF run time that we are executing within.</param>
         /// <param name="error">An error message if it can not be constructed.</param>
         /// <returns>True if it was created, false with message otherwise.</returns>
-        internal bool Construct(XTMFRuntime runtime, ref string error)
+        internal bool Construct(XTMFRuntime runtime, ref string? error)
         {
             return GlobalBoundary.ConstructModules(runtime, ref error)
                 && GlobalBoundary.ConstructLinks(ref error);
@@ -172,7 +173,7 @@ namespace XTMF2
         /// <param name="error">An error message if the save fails.</param>
         /// <param name="saveTo">The stream to save the data to.</param>
         /// <returns></returns>
-        internal bool Save(ref string error, Stream saveTo)
+        internal bool Save(ref string? error, Stream saveTo)
         {
             return Save(ref error, saveTo, true);
         }
@@ -218,21 +219,29 @@ namespace XTMF2
             }
         }
 
-        internal static bool Load(ProjectSession session, ModelSystemHeader modelSystemHeader, out ModelSystemSession msSession, out CommandError error)
+        internal static bool Load(string modelSystem, XTMFRuntime runtime, out ModelSystem? ms, ref string? error)
+        {
+            using var stream = new MemoryStream(Encoding.Unicode.GetBytes(modelSystem));
+            var header = ModelSystemHeader.CreateRunHeader(runtime);
+            ms = Load(stream, runtime.Modules, header, ref error);
+            return ms != null;
+        }
+
+        internal static bool Load(ProjectSession session, ModelSystemHeader modelSystemHeader, out ModelSystemSession? msSession, out CommandError? error)
         {
             // the parameters are have already been vetted
             var path = modelSystemHeader.ModelSystemPath;
             var info = new FileInfo(path);
-            string errorString = null;
+            string? errorString = null;
             error = null;
-            msSession = new ModelSystemSession(session, modelSystemHeader);
+            
             try
             {
-                ModelSystem ms;
+                ModelSystem? ms;
                 if(info.Exists)
                 {
                     using var rawStream = File.OpenRead(modelSystemHeader.ModelSystemPath);
-                    ms = Load(rawStream, msSession, modelSystemHeader, ref errorString);
+                    ms = Load(rawStream, session.GetModuleRepository(), modelSystemHeader, ref errorString);
                 }
                 else
                 {
@@ -245,27 +254,19 @@ namespace XTMF2
                     error = new CommandError(errorString ?? "Unable to create a model system session for the given header.");
                     return false;
                 }
-                msSession.ModelSystem = ms;
+                msSession = new ModelSystemSession(session, ms);
                 error = null;
                 return true;
             }
             catch (IOException e)
             {
                 error = new CommandError(e.Message);
+                msSession = null;
                 return false;
             }
         }
 
-        internal static bool Load(string modelSystem, XTMFRuntime runtime, out ModelSystem ms, ref string error)
-        {
-            using var stream = new MemoryStream(Encoding.Unicode.GetBytes(modelSystem));
-            var header = ModelSystemHeader.CreateRunHeader(runtime);
-            using var session = ModelSystemSession.CreateRunSession(ProjectSession.CreateRunSession(runtime), header);
-            ms = Load(stream, session, header, ref error);
-            return ms != null;
-        }
-
-        private static ModelSystem Load(Stream rawStream, ModelSystemSession session, ModelSystemHeader modelSystemHeader, ref string error)
+        private static ModelSystem? Load(Stream rawStream, ModuleRepository modules, ModelSystemHeader modelSystemHeader, ref string? error)
         {
             try
             {
@@ -288,7 +289,7 @@ namespace XTMF2
                         }
                         else if (reader.ValueTextEquals(BoundariesProperty))
                         {
-                            if (!LoadBoundaries(session, typeLookup, nodes, ref reader, modelSystem.GlobalBoundary, ref error))
+                            if (!LoadBoundaries(modules, typeLookup, nodes, ref reader, modelSystem.GlobalBoundary, ref error))
                             {
                                 return null;
                             }
@@ -314,38 +315,38 @@ namespace XTMF2
             return null;
         }
 
-        private static bool FailWith(ref string error, string message)
+        private static bool FailWith(out string error, string message)
         {
             error = message;
             return false;
         }
 
-        private static bool LoadTypes(Dictionary<int, Type> typeLookup, ref Utf8JsonReader reader, ref string error)
+        private static bool LoadTypes(Dictionary<int, Type> typeLookup, ref Utf8JsonReader reader, ref string? error)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
-                return FailWith(ref error, "Expected to read in an array of types!");
+                return FailWith(out error, "Expected to read in an array of types!");
             }
             while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
             {
-                string type = null;
+                string? type = null;
                 int index = -1;
                 if (reader.TokenType != JsonTokenType.StartObject)
                 {
-                    return FailWith(ref error, "Expected a start object token when starting to read in a type.");
+                    return FailWith(out error, "Expected a start object token when starting to read in a type.");
                 }
                 while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                 {
                     if (reader.TokenType != JsonTokenType.PropertyName)
                     {
-                        return FailWith(ref error, "Invalid index!");
+                        return FailWith(out error, "Invalid index!");
                     }
                     if(reader.ValueTextEquals(IndexProperty))
                     {
                         reader.Read();
                         if (reader.TokenType != JsonTokenType.Number)
                         {
-                            return FailWith(ref error, "While reading types we encountered an invalid index!");
+                            return FailWith(out error, "While reading types we encountered an invalid index!");
                         }
                         index = reader.GetInt32();
                     }
@@ -357,37 +358,37 @@ namespace XTMF2
                 }
                 if (type == null || index < 0)
                 {
-                    return FailWith(ref error, $"An invalid type entry was found!");
+                    return FailWith(out error, $"An invalid type entry was found!");
                 }
                 var trueType = Type.GetType(type);
                 if (trueType == null)
                 {
-                    return FailWith(ref error, $"Unable to find type {type}!");
+                    return FailWith(out error, $"Unable to find type {type}!");
                 }
                 if (typeLookup.ContainsKey(index))
                 {
-                    return FailWith(ref error, $"While reading types the index {index} was previously defined!");
+                    return FailWith(out error, $"While reading types the index {index} was previously defined!");
                 }
                 typeLookup.Add(index, trueType);
             }
             return true;
         }
 
-        private static bool LoadBoundaries(ModelSystemSession session, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
-            ref Utf8JsonReader reader, Boundary global, ref string error)
+        private static bool LoadBoundaries(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
+            ref Utf8JsonReader reader, Boundary global, ref string? error)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
-                return FailWith(ref error, "Expected to read an array when loading boundaries!");
+                return FailWith(out error, "Expected to read an array when loading boundaries!");
             }
-            if (!global.Load(session, typeLookup, nodes, ref reader, ref error))
+            if (!global.Load(modules, typeLookup, nodes, ref reader, ref error))
             {
                 return false;
             }
 
             if (!reader.Read() || reader.TokenType != JsonTokenType.EndArray)
             {
-                return FailWith(ref error, "Expected to only have one boundary defined in the root!");
+                return FailWith(out error, "Expected to only have one boundary defined in the root!");
             }
             return true;
         }

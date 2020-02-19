@@ -22,6 +22,7 @@ using System.Text;
 using System.Text.Json;
 using XTMF2.RuntimeModules;
 using XTMF2.Editing;
+using XTMF2.Repository;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -32,13 +33,13 @@ namespace XTMF2.ModelSystemConstruct
     /// </summary>
     public sealed class Start : Node
     {
-        public Start(ModelSystemSession session, string startName, Boundary boundary, string description, Rectangle point) : base(startName)
+        public Start(ModuleRepository modules, string startName, Boundary boundary, string description, Rectangle point) : base(startName)
         {
             ContainedWithin = boundary;
             Description = description;
             Location = point;
-            string error = null;
-            SetType(session, typeof(StartModule), ref error);
+            string? error = null;
+            SetType(modules, typeof(StartModule), ref error);
         }
 
         internal override void Save(ref int index, Dictionary<Node, int> moduleDictionary, Dictionary<Type, int> typeDictionary, Utf8JsonWriter writer)
@@ -53,30 +54,30 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteEndObject();
         }
 
-        private static bool FailWith(out Start start, ref string error, string message)
+        private static bool FailWith(out Start? start, out string error, string message)
         {
             start = null;
             error = message;
             return false;
         }
 
-        internal static bool Load(ModelSystemSession session, Dictionary<int, Node> nodes,
-            Boundary boundary, ref Utf8JsonReader reader, out Start start, ref string error)
+        internal static bool Load(ModuleRepository modules, Dictionary<int, Node> nodes,
+            Boundary boundary, ref Utf8JsonReader reader, out Start? start, ref string? error)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
             {
-                return FailWith(out start, ref error, "Invalid token when loading a start!");
+                return FailWith(out start, out error, "Invalid token when loading a start!");
             }
-            string name = null;
+            string? name = null;
             int index = -1;
             Rectangle point = new Rectangle();
-            string description = null;
+            string? description = null;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType == JsonTokenType.Comment) continue;
                 if (reader.TokenType != JsonTokenType.PropertyName)
                 {
-                    return FailWith(out start, ref error, "Invalid token when loading start");
+                    return FailWith(out start, out error, "Invalid token when loading start");
                 }
                 if(reader.ValueTextEquals(NameProperty))
                 {
@@ -105,18 +106,18 @@ namespace XTMF2.ModelSystemConstruct
                 }
                 else
                 {
-                    return FailWith(out start, ref error, $"Undefined parameter type {reader.GetString()} when loading a start!");
+                    return FailWith(out start, out error, $"Undefined parameter type {reader.GetString()} when loading a start!");
                 }
             }
             if (name == null)
             {
-                return FailWith(out start, ref error, "Undefined name for a start in boundary " + boundary.FullPath);
+                return FailWith(out start, out error, "Undefined name for a start in boundary " + boundary.FullPath);
             }
             if (nodes.ContainsKey(index))
             {
-                return FailWith(out start, ref error, $"Index {index} already exists!");
+                return FailWith(out start, out error, $"Index {index} already exists!");
             }
-            start = new Start(session, name, boundary, description, point)
+            start = new Start(modules, name, boundary, description ?? string.Empty, point)
             {
                 ContainedWithin = boundary
             };

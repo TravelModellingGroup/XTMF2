@@ -28,19 +28,26 @@ Description = "Provides functionality for synchronizing the writing of events to
     public sealed class Log : BaseAction<string>, IDisposable
     {
         [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.", Index = 0)]
-        public IFunction<WriteStream> LogStream;
+        public IFunction<WriteStream>? LogStream;
 
         private readonly object _writeLock = new object();
 
-        private StreamWriter _writer;
+        private StreamWriter? _writer;
 
         public override void Invoke(string message)
         {
             lock (_writeLock)
             {
-                if(_writer == null)
+                if(_writer is null)
                 {
-                    _writer = new StreamWriter(LogStream.Invoke(), Encoding.Unicode, 0x4000, false);
+                    if (LogStream?.Invoke() is WriteStream writeStream)
+                    {
+                        _writer = new StreamWriter(writeStream, Encoding.Unicode, 0x4000, false);
+                    }
+                    else
+                    {
+                        throw new XTMFRuntimeException(this, "Unable to create a write stream to store the log into!");
+                    }
                 }
                 // don't block while writing
                 _writer.WriteLineAsync(TimeStampMessage(message));

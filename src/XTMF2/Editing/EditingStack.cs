@@ -80,9 +80,9 @@ namespace XTMF2.Editing
         /// Get the top element off of the stack
         /// </summary>
         /// <returns>The top element, null if there is nothing.</returns>
-        public CommandBatch Pop()
+        public CommandBatch? Pop()
         {
-            if (TryPop(out CommandBatch result))
+            if (TryPop(out CommandBatch? result))
             {
                 return result;
             }
@@ -94,7 +94,7 @@ namespace XTMF2.Editing
         /// </summary>
         /// <param name="command">The command that was popped off the stack, null if it failed.</param>
         /// <returns>If the pop was successful</returns>
-        public bool TryPop(out CommandBatch command)
+        public bool TryPop(out CommandBatch? command)
         {
             lock (_DataLock)
             {

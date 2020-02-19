@@ -29,13 +29,13 @@ namespace XTMF2.Editing
         private readonly EditingStack _redo = new EditingStack(MaxCapacity);
         private readonly object _executionLock = new object();
 
-        public bool UndoCommands(out CommandError error)
+        public bool UndoCommands(out CommandError? error)
         {
             lock (_executionLock)
             {
                 if (_undo.TryPop(out var batch))
                 {
-                    if (batch.Undo(out error))
+                    if (batch!.Undo(out error))
                     {
                         _redo.Add(batch);
                         return true;
@@ -49,13 +49,13 @@ namespace XTMF2.Editing
             }
         }
 
-        public bool RedoCommands(out CommandError error)
+        public bool RedoCommands(out CommandError? error)
         {
             lock (_executionLock)
             {
                 if (_redo.TryPop(out var batch))
                 {
-                    if (batch.Redo(out error))
+                    if (batch!.Redo(out error))
                     {
                         _undo.Add(batch);
                         return true;

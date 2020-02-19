@@ -88,7 +88,7 @@ namespace XTMF2.Bus
         /// Signal to the host that the run failed in the validation step.
         /// </summary>
         /// <param name="error">The error message.</param>
-        internal void ModelRunFailedValidation(string error)
+        internal void ModelRunFailedValidation(string? error)
         {
             Write((writer) =>
             {
@@ -103,7 +103,7 @@ namespace XTMF2.Bus
         /// </summary>
         /// <param name="message">The message containing the error.</param>
         /// <param name="stackTrace">The stack trace from the time of the error.</param>
-        internal void ModelRunFailed(string message, string stackTrace)
+        internal void ModelRunFailed(string? message, string? stackTrace)
         {
             Write((writer) =>
             {
@@ -118,7 +118,7 @@ namespace XTMF2.Bus
         /// Report to the host the current status message.
         /// </summary>
         /// <param name="message">The current status message.</param>
-        internal void SendStatusMessage(string message)
+        internal void SendStatusMessage(string? message)
         {
             Write((writer) =>
             {

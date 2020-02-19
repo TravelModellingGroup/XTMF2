@@ -27,17 +27,17 @@ Description = "Combines the contexts as derived from First and Second and invoke
     public sealed class CombineContextAFromNoContext<Context1, Context2> : BaseAction
     {
         [SubModule(Name = "First", Required = true, Index = 0, Description = "The first context to use.")]
-        public IFunction<Context1> First;
+        public IFunction<Context1>? First;
 
         [SubModule(Name = "Second", Required = true, Index = 1, Description = "The second context to use.")]
-        public IFunction<Context2> Second;
+        public IFunction<Context2>? Second;
 
         [SubModule(Name = "To Invoke", Required = true, Index = 2, Description = "The module to invoke with the combined context.")]
-        public IAction<(Context1, Context2)> ToInvoke;
+        public IAction<(Context1, Context2)> ?ToInvoke;
         
         public override void Invoke()
         {
-            ToInvoke.Invoke((First.Invoke(), Second.Invoke()));
+            ToInvoke!.Invoke((First!.Invoke(), Second!.Invoke()));
         }
     }
 
@@ -46,13 +46,13 @@ Description = "Combines the contexts as derived from First and Second and invoke
     public sealed class CombineContextA<Context1, Context2> : BaseAction<Context1>
     {
         [SubModule(Name = "Second", Required = true, Index = 0, Description = "The second context to use.")]
-        public IFunction<Context2> Second;
+        public IFunction<Context2>? Second;
         [SubModule(Name = "To Invoke", Required = true, Index = 1, Description = "The module to invoke with the combined context.")]
-        public IAction<(Context1, Context2)> ToInvoke;
+        public IAction<(Context1, Context2)>? ToInvoke;
 
         public override void Invoke(Context1 context)
         {
-            ToInvoke.Invoke((context, Second.Invoke()));
+            ToInvoke!.Invoke((context, Second!.Invoke()));
         }
     }
 
@@ -61,13 +61,13 @@ Description = "Combines the contexts as derived from First and Second and invoke
     public sealed class CombineContextAFromContext<Context1, Context2> : BaseAction<Context1>
     {
         [SubModule(Name = "Second", Required = true, Index = 0, Description = "The second context to use.")]
-        public IFunction<Context1, Context2> Second;
+        public IFunction<Context1, Context2>? Second;
         [SubModule(Name = "To Invoke", Required = true, Index = 1, Description = "The module to invoke with the combined context.")]
-        public IAction<(Context1, Context2)> ToInvoke;
+        public IAction<(Context1, Context2)>? ToInvoke;
 
         public override void Invoke(Context1 context)
         {
-            ToInvoke.Invoke((context, Second.Invoke(context)));
+            ToInvoke!.Invoke((context, Second!.Invoke(context)));
         }
     }
 
@@ -76,17 +76,17 @@ Description = "Combines the contexts as derived from First and Second and invoke
     public sealed class CombineContextFFromNoContext<Context1, Context2, Return> : BaseFunction<Return>
     {
         [SubModule(Name = "First", Required = true, Index = 0, Description = "The first context to use.")]
-        public IFunction<Context1> First;
+        public IFunction<Context1>? First;
 
         [SubModule(Name = "Second", Required = true, Index = 1, Description = "The second context to use.")]
-        public IFunction<Context2> Second;
+        public IFunction<Context2>? Second;
 
         [SubModule(Name = "To Invoke", Required = true, Index = 2, Description = "The module to invoke with the combined context.")]
-        public IFunction<(Context1, Context2), Return> ToInvoke;
+        public IFunction<(Context1, Context2), Return>? ToInvoke;
 
         public override Return Invoke()
         {
-            return ToInvoke.Invoke((First.Invoke(), Second.Invoke()));
+            return ToInvoke!.Invoke((First!.Invoke(), Second!.Invoke()));
         }
     }
 
@@ -95,13 +95,13 @@ Description = "Combines the contexts as derived from First and Second and invoke
     public sealed class CombineContexF<Context1, Context2, Return> : BaseFunction<Context1, Return>
     {
         [SubModule(Name = "Second", Required = true, Index = 0, Description = "The second context to use.")]
-        public IFunction<Context2> Second;
+        public IFunction<Context2>? Second;
         [SubModule(Name = "To Invoke", Required = true, Index = 1, Description = "The module to invoke with the combined context.")]
-        public IFunction<(Context1, Context2), Return> ToInvoke;
+        public IFunction<(Context1, Context2), Return>? ToInvoke;
 
         public override Return Invoke(Context1 context)
         {
-            return ToInvoke.Invoke((context, Second.Invoke()));
+            return ToInvoke!.Invoke((context, Second!.Invoke()));
         }
     }
 
@@ -110,13 +110,13 @@ Description = "Combines the contexts as derived from First and Second and invoke
     public sealed class CombineContextFFromContext<Context1, Context2, Return> : BaseFunction<Context1, Return>
     {
         [SubModule(Name = "Second", Required = true, Index = 0, Description = "The second context to use.")]
-        public IFunction<Context1, Context2> Second;
+        public IFunction<Context1, Context2>? Second;
         [SubModule(Name = "To Invoke", Required = true, Index = 1, Description = "The module to invoke with the combined context.")]
-        public IFunction<(Context1, Context2), Return> ToInvoke;
+        public IFunction<(Context1, Context2), Return>? ToInvoke;
 
         public override Return Invoke(Context1 context)
         {
-            return ToInvoke.Invoke((context, Second.Invoke(context)));
+            return ToInvoke!.Invoke((context, Second!.Invoke(context)));
         }
     }
 }

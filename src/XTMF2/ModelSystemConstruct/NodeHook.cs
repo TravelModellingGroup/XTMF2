@@ -47,9 +47,9 @@ namespace XTMF2
         /// <summary>
         /// The default value of the parameter
         /// </summary>
-        public string DefaultValue;
+        public string? DefaultValue;
 
-        public NodeHook(string name, HookCardinality cardinality, int index, bool isParameter, string defaultValue)
+        public NodeHook(string name, HookCardinality cardinality, int index, bool isParameter, string? defaultValue)
         {
             Name = name;
             Cardinality = cardinality;
@@ -101,7 +101,7 @@ namespace XTMF2
     sealed class PropertyHook : NodeHook
     {
         readonly PropertyInfo Property;
-        public PropertyHook(string name, PropertyInfo property, bool required, int index, bool isParameter, string defaultValue)
+        public PropertyHook(string name, PropertyInfo property, bool required, int index, bool isParameter, string? defaultValue)
             : base(name, GetCardinality(property, required), index, isParameter, defaultValue)
         {
             Property = property;
@@ -116,7 +116,7 @@ namespace XTMF2
 
         internal override void CreateArray(IModule origin, int length)
         {
-            Property.SetValue(origin, Array.CreateInstance(Property.PropertyType.GetElementType(), length));
+            Property.SetValue(origin, Array.CreateInstance(Property.PropertyType.GetElementType()!, length));
         }
 
         internal override void Install(Node origin, Node destination, int index)
@@ -133,8 +133,10 @@ namespace XTMF2
                 case HookCardinality.AtLeastOne:
                     {
                         // the type is an array
-                        var data = (Array)Property.GetValue(origin.Module);
-                        data.SetValue(destination.Module, index);
+                        if (Property.GetValue(origin.Module) is Array data)
+                        {
+                            data.SetValue(destination.Module, index);
+                        }
                     }
                     break;
                 default:
@@ -149,7 +151,7 @@ namespace XTMF2
     sealed class FieldHook : NodeHook
     {
         readonly FieldInfo Field;
-        public FieldHook(string name, FieldInfo field, bool required, int index, bool isParameter, string defaultValue)
+        public FieldHook(string name, FieldInfo field, bool required, int index, bool isParameter, string? defaultValue)
             : base(name, GetCardinality(field, required), index, isParameter, defaultValue)
         {
             Field = field;
@@ -164,7 +166,7 @@ namespace XTMF2
 
         internal override void CreateArray(IModule origin, int length)
         {
-            Field.SetValue(origin, Array.CreateInstance(Field.FieldType.GetElementType(), length));
+            Field.SetValue(origin, Array.CreateInstance(Field.FieldType.GetElementType()!, length));
         }
 
         internal override void Install(Node origin, Node destination, int index)
@@ -181,8 +183,10 @@ namespace XTMF2
                 case HookCardinality.AtLeastOne:
                     {
                         // the type is an array
-                        var data = (Array)Field.GetValue(origin.Module);
-                        data.SetValue(destination.Module, index);
+                        if (Field.GetValue(origin.Module) is Array data)
+                        {
+                            data.SetValue(destination.Module, index);
+                        }
                     }
                     break;
                 default:

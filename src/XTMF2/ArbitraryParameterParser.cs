@@ -35,7 +35,7 @@ namespace XTMF2
         /// <param name="input">The string to parse</param>
         /// <param name="error">An error returned if we are unable to parse the string</param>
         /// <returns>Null if we are unable to parse it, otherwise an object of the given type</returns>
-        public static (bool Sucess, object Value) ArbitraryParameterParse(Type type, string input, ref string error)
+        public static (bool Sucess, object? Value) ArbitraryParameterParse(Type type, string input, ref string? error)
         {
             // strings are always just themselves
             if (type == null)
@@ -109,19 +109,19 @@ namespace XTMF2
         /// <param name="value">The value held as a string</param>
         /// <param name="error">Contains an error if this returns false</param>
         /// <returns>True if it is a value, false otherwise with a reason inside of error.</returns>
-        public static bool Check(Type type, string value, ref string error)
+        public static bool Check(Type type, string value, ref string? error)
         {
             return ArbitraryParameterParse(type, value, ref error).Sucess;
         }
 
-        private static (bool, object) ErrorTryParse(string input, ref string error, MethodInfo errorTryParse)
+        private static (bool, object?) ErrorTryParse(string input, ref string? error, MethodInfo errorTryParse)
         {
-            object output = null;
+            object? output = null;
             // ReSharper disable once ExpressionIsAlwaysNull
             var parameters = new[] { error, input, output };
             try
             {
-                if ((bool)errorTryParse.Invoke(null, parameters))
+                if ((bool?)errorTryParse.Invoke(null, parameters) == true)
                 {
                     // a fail appears
                     output = parameters[2];
@@ -146,9 +146,9 @@ namespace XTMF2
             return (false, null);
         }
 
-        private static (bool, object) RegularParse(string input, ref string error, MethodInfo regularParse)
+        private static (bool, object?) RegularParse(string input, ref string? error, MethodInfo regularParse)
         {
-            object output = null;
+            object? output = null;
             var parameters = new object[] { input };
             try
             {
@@ -169,14 +169,14 @@ namespace XTMF2
             }
         }
 
-        private static (bool, object) TryParse(string input, ref string error, MethodInfo errorTryParse)
+        private static (bool, object?) TryParse(string input, ref string? error, MethodInfo errorTryParse)
         {
-            object output = null;
+            object? output = null;
             // ReSharper disable once ExpressionIsAlwaysNull
             var parameters = new[] { input, output };
             try
             {
-                if ((bool)errorTryParse.Invoke(null, parameters))
+                if ((bool?)errorTryParse.Invoke(null, parameters) == true)
                 {
                     // a fail appears
                     output = parameters[1];

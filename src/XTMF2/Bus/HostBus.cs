@@ -100,7 +100,7 @@ namespace XTMF2.Bus
         /// This event is signalled when a client finishes running a model system.
         /// The parameter is the name of the completed model system.
         /// </summary>
-        public event EventHandler<string> ClientFinishedModelSystem;
+        public event EventHandler<string>? ClientFinishedModelSystem;
 
         /// <summary>
         /// Used to report that a model system has had a run error.
@@ -122,12 +122,12 @@ namespace XTMF2.Bus
         /// <summary>
         /// This event is signalled when a client runs into an error.
         /// </summary>
-        public event RunError ClientErrorWhenRunningModelSystem;
+        public event RunError? ClientErrorWhenRunningModelSystem;
 
         /// <summary>
         /// This event is triggered when the client has sent an update for the run's status message.
         /// </summary>
-        public event ClientStatusUpdate ClientReportedStatus;
+        public event ClientStatusUpdate? ClientReportedStatus;
 
         private static void IgnoreWarnings(Action toRun)
         {
@@ -215,7 +215,7 @@ namespace XTMF2.Bus
         /// <param name="id">The ID given to this model run.</param>
         /// <param name="error">An error message if there is an issue creating the model system.</param>
         /// <returns>True if the model system was sent</returns>
-        public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, out string id, out CommandError error)
+        public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, out string? id, out CommandError? error)
         {
             id = null;
             lock (_outLock)

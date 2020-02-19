@@ -28,17 +28,24 @@ Description = "Provides the ability to read a file from the path given to it via
     {
         [Parameter(DefaultValue = "true", Description = "True if the file should be checked at runtime to ensure that it exists.", Index=1,
             Name="Check File Exists At Run Start", Required = true)]
-        public IFunction<bool> CheckFileExistsAtRunStart;
+        public IFunction<bool>? CheckFileExistsAtRunStart;
 
         [Parameter(DefaultValue = "", Description = "The path to the file to load.", Index = 0,
             Name = "File Path", Required = true)]
-        public IFunction<string> FilePath;
+        public IFunction<string>? FilePath;
 
         public override ReadStream Invoke()
         {
             try
             {
-                return new ReadStream(File.OpenRead(FilePath.Invoke()));
+                if (FilePath?.Invoke() is string path)
+                {
+                    return new ReadStream(File.OpenRead(path));
+                }
+                else
+                {
+                    throw new XTMFRuntimeException(this, "No path was given to open a ReadStream from!");
+                }
             }
             catch(IOException e)
             {
@@ -46,14 +53,21 @@ Description = "Provides the ability to read a file from the path given to it via
             }
         }
 
-        public override bool RuntimeValidation(ref string error)
+        public override bool RuntimeValidation(ref string? error)
         {
             if(CheckFileExistsAtRunStart?.Invoke() == true)
             {
-                var filePath = FilePath.Invoke();
-                if (!File.Exists(filePath))
+                if (FilePath?.Invoke() is string filePath)
                 {
-                    error = $"The file '{filePath}' does not exist!";
+                    if (!File.Exists(filePath))
+                    {
+                        error = $"The file '{filePath}' does not exist!";
+                        return false;
+                    }
+                }
+                else
+                {
+
                     return false;
                 }
             }

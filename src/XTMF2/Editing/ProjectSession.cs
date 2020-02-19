@@ -94,7 +94,7 @@ namespace XTMF2.Editing
         /// <summary>
         /// The directory that is storing the results of model runs.
         /// </summary>
-        public string RunsDirectory => Project.RunsDirectory;
+        public string? RunsDirectory => Project.RunsDirectory;
 
         /// <summary>
         /// Increment the number of references to this project session.
@@ -138,10 +138,10 @@ namespace XTMF2.Editing
         /// and editing of a project.
         /// </summary>
         /// <param name="runtime">The XTMF runtime that this project is in.</param>
-        /// <param name="project">The project that will be edited.</param>
-        public ProjectSession(XTMFRuntime runtime, Project project)
+        /// <param name="project">The project that will be edited. Null if this project session is to execute a run.</param>
+        public ProjectSession(XTMFRuntime runtime, Project? project)
         {
-            Project = project;
+            Project = project!;
             _runtime = runtime;
         }
 
@@ -177,14 +177,14 @@ namespace XTMF2.Editing
         /// </summary>
         /// <param name="error">An error message if the save fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool Save(out CommandError error)
+        public bool Save(out CommandError? error)
         {
             lock (_sessionLock)
             {
-                string errorString = null;
+                string? errorString = null;
                 if(!Project.Save(ref errorString))
                 {
-                    error = new CommandError(errorString);
+                    error = new CommandError(errorString ?? "No error message was given when failed to save a project!");
                     return false;
                 }
                 error = null;
@@ -199,7 +199,7 @@ namespace XTMF2.Editing
         /// <param name="modelSystem">The resulting model system session</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool CreateNewModelSystem(User user, string modelSystemName, out ModelSystemHeader modelSystem, out CommandError error)
+        public bool CreateNewModelSystem(User user, string modelSystemName, out ModelSystemHeader? modelSystem, out CommandError? error)
         {
             modelSystem = null;
             if (!ProjectController.ValidateProjectName(modelSystemName, out error))
@@ -231,7 +231,7 @@ namespace XTMF2.Editing
         /// <param name="session">The resulting session.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, out ModelSystemSession session, out CommandError error)
+        public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, out ModelSystemSession? session, out CommandError? error)
         {
             if (user is null)
             {
@@ -258,7 +258,7 @@ namespace XTMF2.Editing
                 {
                     if (ModelSystem.Load(this, modelSystemHeader, out session, out error))
                     {
-                        _activeSessions.Add(modelSystemHeader, session);
+                        _activeSessions.Add(modelSystemHeader, session!);
                         Interlocked.Increment(ref _references);
                         return true;
                     }
@@ -280,7 +280,7 @@ namespace XTMF2.Editing
         /// <param name="modelSystem">The model system to remove.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RemoveModelSystem(User user, ModelSystemHeader modelSystem, out CommandError error)
+        public bool RemoveModelSystem(User user, ModelSystemHeader modelSystem, out CommandError? error)
         {
             if (user is null)
             {
@@ -330,7 +330,7 @@ namespace XTMF2.Editing
         /// <param name="exportPath">The file that the project will be saved as.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ExportProject(User user, string exportPath, out CommandError error)
+        public bool ExportProject(User user, string exportPath, out CommandError? error)
         {
             if (user is null)
             {
@@ -366,7 +366,7 @@ namespace XTMF2.Editing
         /// <param name="exportPath">The location to export the model system to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with error message.</returns>
-        public bool ExportModelSystem(User user, ModelSystemHeader modelSystemHeader, string exportPath, out CommandError error)
+        public bool ExportModelSystem(User user, ModelSystemHeader modelSystemHeader, string exportPath, out CommandError? error)
         {
             if (user is null)
             {
@@ -407,7 +407,7 @@ namespace XTMF2.Editing
         /// <param name="modelSystemHeader">The resulting model system header.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool GetModelSystemHeader(User user, string modelSystemName, out ModelSystemHeader modelSystemHeader, out CommandError error)
+        public bool GetModelSystemHeader(User user, string modelSystemName, out ModelSystemHeader? modelSystemHeader, out CommandError? error)
         {
             if (user is null)
             {
@@ -436,7 +436,7 @@ namespace XTMF2.Editing
         /// <param name="toSharWith">The person to share with</param>
         /// <param name="error">An error message if appropriate</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ShareWith(User doingShare, User toSharWith, out CommandError error)
+        public bool ShareWith(User doingShare, User toSharWith, out CommandError? error)
         {
             // test our arguments
             if (doingShare is null)
@@ -476,7 +476,7 @@ namespace XTMF2.Editing
         /// <param name="newOwner"></param>
         /// <param name="error"></param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SwitchOwner(User owner, User newOwner, out CommandError error)
+        public bool SwitchOwner(User owner, User newOwner, out CommandError? error)
         {
             if (owner is null)
             {
@@ -504,7 +504,7 @@ namespace XTMF2.Editing
         /// <param name="toRestrict">The user to remove access to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RestrictAccess(User owner, User toRestrict, out CommandError error)
+        public bool RestrictAccess(User owner, User toRestrict, out CommandError? error)
         {
             if (owner is null)
             {
@@ -540,7 +540,7 @@ namespace XTMF2.Editing
         /// <param name="error">The error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool ImportModelSystem(User user, string modelSystemFilePath, string modelSystemName, 
-            out ModelSystemHeader header, out CommandError error)
+            out ModelSystemHeader? header, out CommandError? error)
         {
             header = null;
             if (user is null)
@@ -576,7 +576,7 @@ namespace XTMF2.Editing
                     {
                         return false;
                     }
-                    return Project.AddModelSystemFromModelSystemFile(modelSystemName, msf, out header, out error);
+                    return Project.AddModelSystemFromModelSystemFile(modelSystemName, msf!, out header, out error);
                 }
             }
             catch (InvalidDataException e)
@@ -597,7 +597,7 @@ namespace XTMF2.Editing
         /// <param name="fullName">The path to where to store runs.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SetCustomRunDirectory(User user, string fullName, out CommandError error)
+        public bool SetCustomRunDirectory(User user, string fullName, out CommandError? error)
         {
             if (user is null)
             {
@@ -626,7 +626,7 @@ namespace XTMF2.Editing
         /// <param name="user">The user issuing the command.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ResetCustomRunDirectory(User user, out CommandError error)
+        public bool ResetCustomRunDirectory(User user, out CommandError? error)
         {
             if (user is null)
             {
@@ -651,7 +651,7 @@ namespace XTMF2.Editing
         /// <param name="newName">The new name of the model system.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RenameModelSystem(User user, ModelSystemHeader modelSystem, string newName, out CommandError error)
+        public bool RenameModelSystem(User user, ModelSystemHeader modelSystem, string newName, out CommandError? error)
         {
             if (user is null)
             {

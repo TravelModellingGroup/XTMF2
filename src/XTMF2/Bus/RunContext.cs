@@ -89,19 +89,19 @@ namespace XTMF2.Bus
             return true;
         }
 
-        private Stream CreateRunBusLocal(ClientBus clientBus)
+        private Stream? CreateRunBusLocal(ClientBus clientBus)
         {
             var pipeName = Guid.NewGuid().ToString();
-            string error = null;
-            Stream clientToRunStream = null;
+            string? error = null;
+            Stream? clientToRunStream = null;
             CreateStreams.CreateNewNamedPipeHost(pipeName, out clientToRunStream, ref error, () =>
             {
-                clientBus.StartProcessingRequestFromRun(ID, clientToRunStream);
+                clientBus.StartProcessingRequestFromRun(ID, clientToRunStream!);
                 if (CreateStreams.CreateNamedPipeClient(pipeName, out var runToClientStream, ref error))
                 {
                     Task.Factory.StartNew(() =>
                     {
-                        using var rb = new RunBus(ID, runToClientStream, true, _runtime);
+                        using var rb = new RunBus(ID, runToClientStream!, true, _runtime);
                         rb.ProcessRequests();
                     }, TaskCreationOptions.LongRunning);
                 }
@@ -112,12 +112,11 @@ namespace XTMF2.Bus
         private (Stream clientToRunStream, Process runProcess) CreateRunBusRemote(ClientBus clientBus)
         {
             var pipeName = Guid.NewGuid().ToString();
-            string error = null;
-            Stream clientToRunStream = null;
-            Process runProcess = null;
-            CreateStreams.CreateNewNamedPipeHost(pipeName, out clientToRunStream, ref error, () =>
+            string? error = null;
+            Process? runProcess = null;
+            CreateStreams.CreateNewNamedPipeHost(pipeName, out var clientToRunStream, ref error, () =>
             {
-                var path = Path.GetDirectoryName(typeof(ClientBus).GetTypeInfo().Assembly.Location);
+                var path = Path.GetDirectoryName(typeof(ClientBus).GetTypeInfo().Assembly.Location)!;
                 var startInfo = new ProcessStartInfo()
                 {
                     FileName = "dotnet",
@@ -132,8 +131,8 @@ namespace XTMF2.Bus
                 runProcess.EnableRaisingEvents = true;
                 runProcess.Start();
             });
-            clientBus.StartProcessingRequestFromRun(ID, clientToRunStream);
-            return (clientToRunStream, runProcess);
+            clientBus.StartProcessingRequestFromRun(ID, clientToRunStream!);
+            return (clientToRunStream!, runProcess!);
         }
 
         private string GetExtraDlls(ClientBus client)

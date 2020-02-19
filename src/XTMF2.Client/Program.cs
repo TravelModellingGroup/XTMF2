@@ -73,6 +73,11 @@ namespace XTMF2.Client
                                 Console.WriteLine("Error creating run client\r\n" + error);
                                 return;
                             }
+                            if(serverStream == null)
+                            {
+                                Console.WriteLine("Unable to create a connection to the host!");
+                                return;
+                            }
                             RunClient(serverStream, dllsToLoad);
                         }
                         finally

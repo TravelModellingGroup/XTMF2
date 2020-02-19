@@ -59,16 +59,16 @@ namespace XTMF2.Repository
         /// <param name="error">A message containing a description of the error</param>
         /// <param name="ret">The returned project</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool CreateNew(string path, string name, User owner, out Project ret, out CommandError error)
+        internal bool CreateNew(string name, User owner, out Project? ret, out CommandError? error)
         {
-            if (!Project.New(owner, name, null, out ret, out error))
+            if (!Project.New(owner, name, string.Empty, out ret, out error))
             {
                 return false;
             }
-            string errorString = null;
-            if(!Add(ret, ref errorString))
+            string? errorString = null;
+            if(!Add(ret!, ref errorString))
             {
-                error = new CommandError(errorString);
+                error = new CommandError(errorString ?? "Unknown error when adding a project to the project repository.");
                 return false;
             }
             return true;
@@ -82,14 +82,14 @@ namespace XTMF2.Repository
         /// <param name="project">The resulting project.</param>
         /// <param name="error">An error message if the undo fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool GetProject(User user, string projectName, out Project project, out CommandError error)
+        internal bool GetProject(User user, string projectName, out Project? project, out CommandError? error)
         {
             if (user == null)
             {
                 throw new ArgumentNullException(nameof(user));
             }
             project = null;
-            var possibleProjects = _Store.Where(p => p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase)).OrderBy(p => p.Owner == user);
+            var possibleProjects = _Store.Where(p => p.Name!.Equals(projectName, StringComparison.OrdinalIgnoreCase)).OrderBy(p => p.Owner == user);
             if (!possibleProjects.Any())
             {
                 error = new CommandError($"Unable to find a project with the name {projectName}");

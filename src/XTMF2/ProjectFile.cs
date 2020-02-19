@@ -68,17 +68,17 @@ namespace XTMF2
         /// <summary>
         /// The name of the project that was exported
         /// </summary>
-        public string Name { get; private set; }
+        public string Name { get; private set; } = string.Empty;
 
         /// <summary>
         /// The description of the project that was exported
         /// </summary>
-        public string Description { get; private set; }
+        public string Description { get; private set; } = string.Empty;
 
         /// <summary>
         /// The name of the user that exported the project.
         /// </summary>
-        public string ExportedBy { get; private set; }
+        public string ExportedBy { get; private set; } = string.Empty;
 
         /// <summary>
         /// The time that the project was exported.
@@ -115,7 +115,7 @@ namespace XTMF2
         /// <param name="exportPath">The path to export the project to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        internal static bool ExportProject(ProjectSession projectSession, User user, string exportPath, out CommandError error)
+        internal static bool ExportProject(ProjectSession projectSession, User user, string exportPath, out CommandError? error)
         {
             if (projectSession is null)
             {
@@ -172,7 +172,7 @@ namespace XTMF2
         }
 
         private static bool WriteModelSystems(ProjectSession projectSession, string tempDirName, User user,
-            ReadOnlyObservableCollection<ModelSystemHeader> headers, out CommandError error)
+            ReadOnlyObservableCollection<ModelSystemHeader> headers, out CommandError? error)
         {
             for (int i = 0; i < headers.Count; i++)
             {
@@ -221,7 +221,7 @@ namespace XTMF2
         /// <param name="project">The resulting project.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        internal static bool ImportProject(User owner, string name, string filePath, out Project project, out CommandError error)
+        internal static bool ImportProject(User owner, string name, string filePath, out Project? project, out CommandError? error)
         {
             project = null;
             try
@@ -245,7 +245,7 @@ namespace XTMF2
             return false;
         }
 
-        private static bool LoadMetaData(ProjectFile projectFile, ZipArchive archive, out CommandError error)
+        private static bool LoadMetaData(ProjectFile projectFile, ZipArchive archive, out CommandError? error)
         {
             try
             {
@@ -305,7 +305,7 @@ namespace XTMF2
                             {
                                 return false;
                             }
-                            projectFile._modelSystemFiles.Add(msf);
+                            projectFile._modelSystemFiles.Add(msf!);
                         }
                     }
                 }

@@ -28,11 +28,11 @@ Description = "Converts the result of a function to the expected type from the c
         where Original : ConvertTo
     {
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
-        public IFunction<Original> ToInvoke;
+        public IFunction<Original>? ToInvoke;
 
         public override ConvertTo Invoke()
         {
-            return ToInvoke.Invoke();
+            return ToInvoke!.Invoke();
         }
     }
 
@@ -42,11 +42,11 @@ Description = "Converts the result of a function to the expected type from the c
         where Original : ConvertTo
     {
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
-        public IFunction<Context, Original> ToInvoke;
+        public IFunction<Context, Original>? ToInvoke;
 
         public override ConvertTo Invoke(Context context)
         {
-            return ToInvoke.Invoke(context);
+            return ToInvoke!.Invoke(context);
         }
     }
 
@@ -56,11 +56,11 @@ Description = "Converts the result of a function to the expected type from the c
         where Original : ConvertTo
     {
         [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
-        public IAction<ConvertTo> ToInvoke;
+        public IAction<ConvertTo>? ToInvoke;
 
         public override void Invoke(Original context)
         {
-            ToInvoke.Invoke(context);
+            ToInvoke!.Invoke(context);
         }
     }
 }

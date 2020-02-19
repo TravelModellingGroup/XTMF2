@@ -57,11 +57,16 @@ namespace XTMF2.Configuration
         /// </summary>
         /// <param name="runtime">The runtime to bind to.</param>
         /// <param name="fullPath">Optional, the path to the system configuration.</param>
-        public SystemConfiguration(XTMFRuntime runtime, string fullPath = null)
+        public SystemConfiguration(XTMFRuntime runtime, string? fullPath = null)
         {
             CreateDirectory(DefaultUserDirectory =
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "XTMF2", "Users"));
-            LoadTypes();
+            Modules = new ModuleRepository();
+            Types = new TypeRepository();
+            // Load the entry assembly for types
+            LoadAssembly(Assembly.GetEntryAssembly()!);
+            // Load the baked in XTMF2 modules
+            LoadAssembly(typeof(SystemConfiguration).GetTypeInfo().Assembly);
         }
 
         private void CreateDirectory(string directoryName)
@@ -83,16 +88,6 @@ namespace XTMF2.Configuration
             LoadAssembly(AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath));
         }
 
-        private void LoadTypes()
-        {
-            Modules = new ModuleRepository();
-            Types = new TypeRepository();
-            // Load the entry assembly for types
-            LoadAssembly(Assembly.GetEntryAssembly());
-            // Load the baked in XTMF2 modules
-            LoadAssembly(typeof(SystemConfiguration).GetTypeInfo().Assembly);
-        }
-
         /// <summary>
         /// Load the types of the given assembly
         /// </summary>
@@ -105,7 +100,7 @@ namespace XTMF2.Configuration
             }
             Parallel.ForEach(assembly.ExportedTypes, (Type t) =>
             {
-                string error = null;
+                string? error = null;
                 Modules.AddIfModuleType(t);
                 Types.Add(t, ref error);
             });

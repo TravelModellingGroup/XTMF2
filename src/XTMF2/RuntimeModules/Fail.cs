@@ -27,7 +27,7 @@ namespace XTMF2.RuntimeModules
     public sealed class FailA : BaseAction
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<string> Message;
+        public IFunction<string>? Message;
 
         public override void Invoke()
         {
@@ -40,7 +40,7 @@ namespace XTMF2.RuntimeModules
     public sealed class FailA<Context> : BaseAction<Context>
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<string> Message;
+        public IFunction<string>? Message;
 
         public override void Invoke(Context context)
         {
@@ -53,7 +53,7 @@ namespace XTMF2.RuntimeModules
     public sealed class FailWithContextA<Context> : BaseAction<Context>
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<Context, string> Message;
+        public IFunction<Context, string>? Message;
 
         public override void Invoke(Context context)
         {
@@ -66,7 +66,7 @@ namespace XTMF2.RuntimeModules
     public sealed class FailF<Return> : BaseFunction<Return>
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<string> Message;
+        public IFunction<string>? Message;
 
         public override Return Invoke()
         {
@@ -79,7 +79,7 @@ namespace XTMF2.RuntimeModules
     public sealed class FailF<Context, Return> : BaseFunction<Context, Return>
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<string> Message;
+        public IFunction<string>? Message;
 
         public override Return Invoke(Context context)
         {
@@ -92,7 +92,7 @@ namespace XTMF2.RuntimeModules
     public sealed class FailWithContextF<Context, Return> : BaseFunction<Context, Return>
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<Context, string> Message;
+        public IFunction<Context, string>? Message;
 
         public override Return Invoke(Context context)
         {

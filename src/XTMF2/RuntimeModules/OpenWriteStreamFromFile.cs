@@ -30,11 +30,11 @@ Description = "Provides a WriteStream to the given file name from context.")]
 
         [Parameter(DefaultValue = "", Description = "The path to the file to load.", Index = 0,
             Name = "File Path", Required = true)]
-        public IFunction<string> FilePath;
+        public IFunction<string>? FilePath;
 
         public override WriteStream Invoke()
         {
-            var context = FilePath?.Invoke();
+            var context = FilePath!.Invoke();
             if(String.IsNullOrWhiteSpace(context))
             {
                 throw new XTMFRuntimeException(this, "The provided file path was empty!");

@@ -72,7 +72,7 @@ namespace XTMF2.Controllers
         /// <param name="session">An editing session for this newly created project.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool CreateNewProject(User owner, string name, out ProjectSession session, out CommandError error)
+        public bool CreateNewProject(User owner, string name, out ProjectSession? session, out CommandError? error)
         {
             if (owner is null)
             {
@@ -83,7 +83,6 @@ namespace XTMF2.Controllers
             {
                 return false;
             }
-            var path = GetPath(owner, name);
             lock (_controllerLock)
             {
                 if (owner.OwnsProjectWithName(name))
@@ -91,12 +90,12 @@ namespace XTMF2.Controllers
                     error = new CommandError("A project with that name already exists!");
                     return false;
                 }
-                if (!_projects.CreateNew(path, name, owner, out Project p, out error))
+                if (!_projects.CreateNew(name, owner, out var p, out error))
                 {
                     return false;
                 }
-                owner.AddedUserToProject(p);
-                session = GetSession(p);
+                owner.AddedUserToProject(p!);
+                session = GetSession(p!);
                 return true;
             }
         }
@@ -110,7 +109,7 @@ namespace XTMF2.Controllers
         /// <param name="session">An editing session for the imported project.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool ImportProjectFile(User owner, string name, string filePath, out ProjectSession session, out CommandError error)
+        public bool ImportProjectFile(User owner, string name, string filePath, out ProjectSession? session, out CommandError? error)
         {
             session = null;
             if (owner is null)
@@ -139,19 +138,19 @@ namespace XTMF2.Controllers
                     error = new CommandError("The user already has project with that name!");
                     return false;
                 }
-                if(!ProjectFile.ImportProject(owner, name, filePath, out Project project, out error))
+                if(!ProjectFile.ImportProject(owner, name, filePath, out var project, out error))
                 {
                     return false;
                 }
-                string errorString = null;
-                if(!_projects.Add(project, ref errorString))
+                string? errorString = null;
+                if(!_projects.Add(project!, ref errorString))
                 {
-                    project.Delete(out var _);
-                    error = new CommandError(errorString);
+                    project!.Delete(out var _);
+                    error = new CommandError(errorString!);
                     return false;
                 }
-                owner.AddedUserToProject(project);
-                session = GetSession(project);
+                owner.AddedUserToProject(project!);
+                session = GetSession(project!);
                 return true;
             }
         }
@@ -164,7 +163,7 @@ namespace XTMF2.Controllers
         /// <param name="session">The resulting project session.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool GetProjectSession(User user, Project project, out ProjectSession session, out CommandError error)
+        public bool GetProjectSession(User user, Project project, out ProjectSession? session, out CommandError? error)
         {
             if (user == null)
             {
@@ -193,9 +192,9 @@ namespace XTMF2.Controllers
         /// Should only be called by system configuration.
         /// </summary>
         /// <returns>List of projects that failed to load an reason why</returns>
-        private List<(string Path, string Error)> LoadProjects(XTMFRuntime runtime)
+        private List<(string Path, string? Error)> LoadProjects(XTMFRuntime runtime)
         {
-            var errors = new List<(string Path, string Error)>();
+            var errors = new List<(string Path, string? Error)>();
             var allUsers = runtime.UserController.Users;
             // go through all users and scan their directory for projects
             foreach (var user in allUsers)
@@ -207,10 +206,10 @@ namespace XTMF2.Controllers
                     var projectFile = subDir.GetFiles().FirstOrDefault(f => f.Name == "Project.xpjt");
                     if (projectFile != null)
                     {
-                        string error = null;
+                        string? error = null;
                         if (Project.Load(runtime.UserController, projectFile.FullName, out Project project, ref error))
                         {
-                            _projects.Add(project, ref error);
+                            _projects.Add(project!, ref error);
                         }
                         else
                         {
@@ -232,7 +231,7 @@ namespace XTMF2.Controllers
         /// <param name="project">The resulting project reference.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool GetProject(string userName, string projectName, out Project project, out CommandError error)
+        public bool GetProject(string userName, string projectName, out Project? project, out CommandError? error)
         {
             if (String.IsNullOrWhiteSpace(userName))
             {
@@ -262,7 +261,7 @@ namespace XTMF2.Controllers
         /// <param name="project">The resulting project reference.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool GetProject(User user, string projectName, out Project project, out CommandError error)
+        public bool GetProject(User user, string projectName, out Project? project, out CommandError? error)
         {
             if(user == null)
             {
@@ -286,7 +285,7 @@ namespace XTMF2.Controllers
         /// <param name="projectName">The name of the project to delete.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool DeleteProject(User user, string projectName, out CommandError error)
+        public bool DeleteProject(User user, string projectName, out CommandError? error)
         {
             if (user == null)
             {
@@ -298,7 +297,7 @@ namespace XTMF2.Controllers
             }
             lock (_controllerLock)
             {
-                var project = GetProjects(user).FirstOrDefault(p => p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase));
+                var project = GetProjects(user).FirstOrDefault(p => p.Name!.Equals(projectName, StringComparison.OrdinalIgnoreCase));
                 if (project == null)
                 {
                     error = new CommandError($"User does not have a project called {projectName}!");
@@ -315,7 +314,7 @@ namespace XTMF2.Controllers
         /// <param name="project">The project to delete.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool DeleteProject(User owner, Project project, out CommandError error)
+        public bool DeleteProject(User owner, Project project, out CommandError? error)
         {
             if (owner == null)
             {
@@ -377,7 +376,7 @@ namespace XTMF2.Controllers
         /// <param name="name">The name to validate</param>
         /// <param name="error">A description of why the name was invalid.</param>
         /// <returns>If the validation allows this project name.</returns>
-        public static bool ValidateProjectName(string name, ref string error)
+        public static bool ValidateProjectName(string name, ref string? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -399,7 +398,7 @@ namespace XTMF2.Controllers
         /// <param name="name">The name to validate</param>
         /// <param name="error">A description of why the name was invalid.</param>
         /// <returns>If the validation allows this project name.</returns>
-        public static bool ValidateProjectName(string name, out CommandError error)
+        public static bool ValidateProjectName(string name, out CommandError? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -428,7 +427,7 @@ namespace XTMF2.Controllers
         /// <param name="newProjectName"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        public bool RenameProject(User user, Project project, string newProjectName, out CommandError error)
+        public bool RenameProject(User user, Project project, string newProjectName, out CommandError? error)
         {
             if (user is null)
             {

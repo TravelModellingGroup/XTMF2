@@ -26,7 +26,9 @@ namespace XTMF2.RuntimeModules
     Description = "Provides the ability to have a value in a model system.")]
     public class BasicParameter<T> : BaseFunction<T>
     {
+#pragma warning disable CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
         public T Value;
+#pragma warning restore CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
 
         public override T Invoke()
         {

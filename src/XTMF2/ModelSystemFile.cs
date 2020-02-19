@@ -69,17 +69,17 @@ namespace XTMF2
         /// <summary>
         /// The name of the model system that was exported
         /// </summary>
-        public string Name { get; private set; }
+        public string Name { get; private set; } = string.Empty;
 
         /// <summary>
         /// The description of the model system that was exported
         /// </summary>
-        public string Description { get; private set; }
+        public string Description { get; private set; } = string.Empty;
 
         /// <summary>
         /// The name of the user that exported the model system.
         /// </summary>
-        public string ExportedBy { get; private set; }
+        public string ExportedBy { get; private set; } = string.Empty;
 
         /// <summary>
         /// The time that the model system was exported.
@@ -101,7 +101,7 @@ namespace XTMF2
         /// <summary>
         /// The project file archive containing this model system file.
         /// </summary>
-        private readonly ZipArchive _archive;
+        private readonly ZipArchive? _archive;
 
         /// <summary>
         /// Checks if the model system file is contained within a project file.
@@ -118,7 +118,7 @@ namespace XTMF2
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         internal static bool ExportModelSystem(ProjectSession projectSession, User user,
-            ModelSystemHeader modelSystemHeader, string exportPath, out CommandError error)
+            ModelSystemHeader modelSystemHeader, string exportPath, out CommandError? error)
         {
             var tempDirName = string.Empty;
             try
@@ -188,7 +188,7 @@ namespace XTMF2
         /// <param name="msf">The resulting model system file, null if the operation fails.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
-        internal static bool LoadModelSystemFile(string filePath, out ModelSystemFile msf, out CommandError error)
+        internal static bool LoadModelSystemFile(string filePath, out ModelSystemFile? msf, out CommandError? error)
         {
             msf = null;
             var toReturn = new ModelSystemFile(filePath);
@@ -217,7 +217,7 @@ namespace XTMF2
         /// <param name="msf">The resulting model system file.</param>
         /// <param name="error">An error message if loading the model system file fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        internal static bool LoadModelSystemFile(ZipArchive archive, string path, out ModelSystemFile msf, out CommandError error)
+        internal static bool LoadModelSystemFile(ZipArchive archive, string path, out ModelSystemFile? msf, out CommandError? error)
         {
             msf = null;
             try
@@ -244,7 +244,7 @@ namespace XTMF2
             }
         }
 
-        private static bool LoadModelSystemFile(ModelSystemFile toReturn, Stream stream, out CommandError error)
+        private static bool LoadModelSystemFile(ModelSystemFile toReturn, Stream stream, out CommandError? error)
         {
             var archive = new ZipArchive(stream, ZipArchiveMode.Read);
             var entry = archive.GetEntry(MetaDataFilePath);
@@ -400,12 +400,12 @@ namespace XTMF2
         /// <param name="modelSystemPath">The path to try to save the model system to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        internal bool ExtractModelSystemTo(string modelSystemPath, out CommandError error)
+        internal bool ExtractModelSystemTo(string modelSystemPath, out CommandError? error)
         {
             try
             {
                 using var archive = 
-                    IsContainedInProjectFile ? 
+                    _archive != null ? 
                       new ZipArchive(_archive.GetEntry(Path).Open(), ZipArchiveMode.Read, false)
                     : ZipFile.OpenRead(Path);
                 var entry = archive.GetEntry(ModelSystemFilePath);
