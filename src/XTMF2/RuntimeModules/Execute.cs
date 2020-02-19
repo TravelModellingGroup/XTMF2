@@ -28,16 +28,16 @@ Description = "Provides a way to execute a series of actions in order, optionall
     public class Execute : BaseAction
     {
         [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false, Index = 0)]
-        public IFunction<bool> ParallelExecution;
+        public IFunction<bool>? ParallelExecution;
 
         [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
-        public IFunction<int> Iterations;
+        public IFunction<int>? Iterations;
 
         [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2)]
-        public ISetableValue<int> CurrentIteration;
+        public ISetableValue<int>? CurrentIteration;
 
         [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 3)]
-        public IAction[] ToInvoke;
+        public IAction[]? ToInvoke;
 
         public override void Invoke()
         {
@@ -59,7 +59,7 @@ Description = "Provides a way to execute a series of actions in order, optionall
                 for (int iteration = 0; iteration < iterations; iteration++)
                 {
                     CurrentIteration?.Set(iteration);
-                    foreach (var module in ToInvoke)
+                    foreach (var module in ToInvoke!)
                     {
                         module?.Invoke();
                     }
@@ -73,16 +73,16 @@ Description = "Provides a way to execute a series of actions in order, optionall
     public class Execute<Context> : BaseAction<Context>
     {
         [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false, Index = 0)]
-        public IFunction<bool> ParallelExecution;
+        public IFunction<bool>? ParallelExecution;
 
         [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
-        public IFunction<int> Iterations;
+        public IFunction<int>? Iterations;
 
         [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2)]
-        public ISetableValue<int> CurrentIteration;
+        public ISetableValue<int>? CurrentIteration;
 
         [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 3)]
-        public IAction<Context>[] ToInvoke;
+        public IAction<Context>[]? ToInvoke;
 
         public override void Invoke(Context context)
         {
@@ -104,7 +104,7 @@ Description = "Provides a way to execute a series of actions in order, optionall
                 for (int iteration = 0; iteration < iterations; iteration++)
                 {
                     CurrentIteration?.Set(iteration);
-                    foreach (var module in ToInvoke)
+                    foreach (var module in ToInvoke!)
                     {
                         module?.Invoke(context);
                     }

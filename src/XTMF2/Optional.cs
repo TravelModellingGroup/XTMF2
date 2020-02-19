@@ -26,7 +26,7 @@ namespace XTMF2
     {
         public bool HasReference => _HasReference;
         private bool _HasReference;
-        private T _Reference;
+        private T? _Reference;
 
         private Optional()
         {
@@ -63,7 +63,7 @@ namespace XTMF2
             {
                 throw new InvalidOperationException("No reference is available.");
             }
-            return _Reference;
+            return _Reference!;
         }
 
         public static explicit operator T(Optional<T> us)

@@ -37,7 +37,7 @@ namespace XTMF2
         public bool HasError { get; private set; }
 
 
-        public string Error
+        public string? Error
         {
             get
             {
@@ -51,11 +51,11 @@ namespace XTMF2
             }
         }
 
-        public string ErrorMessage { get; private set; }
+        public string? ErrorMessage { get; private set; }
 
-        public string ErrorStackTrace { get; private set; }
+        public string? ErrorStackTrace { get; private set; }
 
-        public string ErrorModuleName { get; private set; }
+        public string? ErrorModuleName { get; private set; }
 
         public string RunDirectory { get; private set; }
 
@@ -153,7 +153,7 @@ namespace XTMF2
         /// <param name="error">The error that should be stored.</param>
         internal static void WriteError(string runDirectory, Exception error)
         {
-            while(error is AggregateException)
+            while(error is AggregateException && error.InnerException != null)
             {
                 error = error.InnerException;
             }
@@ -177,15 +177,15 @@ namespace XTMF2
         /// <param name="runDirectory">The directory that the run was executed in.</param>
         /// <param name="moduleName">The name of the module that had the error.</param>
         /// <param name="errorMessage">A description of the error.</param>
-        internal static void WriteValidationError(string runDirectory, string moduleName, string errorMessage)
+        internal static void WriteValidationError(string runDirectory, string? moduleName, string? errorMessage)
         {
             using var stream = File.OpenWrite(Path.Combine(runDirectory, ResultsFile));
             using var writer = new Utf8JsonWriter(stream);
             writer.WriteStartObject();
             writer.WriteBoolean(nameof(Completed), false);
-            writer.WriteString(nameof(ErrorMessage), errorMessage);           
+            writer.WriteString(nameof(ErrorMessage), errorMessage ?? string.Empty);           
             writer.WriteString(nameof(ErrorModuleName),
-                moduleName ?? String.Empty);
+                moduleName ?? string.Empty);
             writer.WriteEndObject();
         }
     }

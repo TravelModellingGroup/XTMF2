@@ -105,7 +105,7 @@ namespace XTMF2
         {
             lock (_projectLock)
             {
-                return _availableProjects.Any(p => p.Owner == this && p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                return _availableProjects.Any(p => p.Owner == this && p.Name!.Equals(name, StringComparison.OrdinalIgnoreCase));
             }
         }
 
@@ -129,9 +129,9 @@ namespace XTMF2
         /// <param name="user">The resulting user</param>
         /// <param name="error">An error message in case of failure.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal static bool Load(string userFile, out User user, ref string error)
+        internal static bool Load(string userFile, out User? user, ref string? error)
         {
-            string userName = null;
+            string? userName = null;
             bool admin = false;
             try
             {
@@ -166,7 +166,7 @@ namespace XTMF2
                 error = "The user file failed to contain a user name!";
                 return false;
             }
-            user = new User(Path.GetDirectoryName(userFile), userName, admin);
+            user = new User(Path.GetDirectoryName(userFile)!, userName, admin);
             return true;
         }
 
@@ -175,7 +175,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="error">The error message in case of failure.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool Save(out CommandError error)
+        internal bool Save(out CommandError? error)
         {
             var temp = Path.GetTempFileName();
             try

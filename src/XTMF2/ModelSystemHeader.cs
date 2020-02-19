@@ -34,23 +34,25 @@ namespace XTMF2
     /// </summary>
     public sealed class ModelSystemHeader : INotifyPropertyChanged
     {
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         public string Name { get; private set; }
         public string Description { get; private set; }
 
-        private readonly Project Project;
-        internal string ModelSystemPath => Path.Combine(Project.ProjectDirectory, "ModelSystems", Name + ".xmsys");
+        private readonly Project? _project;
+        internal string ModelSystemPath => Path.Combine(_project?.ProjectDirectory ?? 
+            throw new InvalidOperationException("Unable to get the model system path when using a model system header for a run."),
+            "ModelSystems", Name + ".xmsys");
 
 
-        internal ModelSystemHeader(Project project, string name, string description = null)
+        internal ModelSystemHeader(Project? project, string name, string? description = null)
         {
-            Project = project;
+            _project = project;
             Name = name;
-            Description = description;
+            Description = description ?? string.Empty;
         }
 
-        public bool SetName(string name, out CommandError error)
+        public bool SetName(string name, out CommandError? error)
         {
             try
             {
@@ -71,7 +73,7 @@ namespace XTMF2
             }
         }
 
-        public bool SetDescription(ProjectSession session, string description, out CommandError error)
+        public bool SetDescription(ProjectSession session, string description, out CommandError? error)
         {
             Description = description;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
@@ -98,7 +100,7 @@ namespace XTMF2
             {
                 throw new ArgumentException(nameof(reader), "Is not processing a model system header!");
             }
-            string name = null, description = null;
+            string? name = null, description = null;
             while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if(reader.TokenType == JsonTokenType.PropertyName)
@@ -115,7 +117,7 @@ namespace XTMF2
                     }
                 }
             }
-            return new ModelSystemHeader(project, name, description);
+            return new ModelSystemHeader(project, name ?? "Unnamed", description);
         }
 
         internal static ModelSystemHeader CreateRunHeader(XTMFRuntime runtime)

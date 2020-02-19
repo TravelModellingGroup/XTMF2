@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2020 University of Toronto
 
     This file is part of XTMF2.
 
@@ -57,7 +57,7 @@ namespace XTMF2.Repository
         /// <summary>
         /// Create a new repository
         /// </summary>
-        public Repository()
+        protected Repository()
         {
             lock (StoreLock)
             {
@@ -71,7 +71,7 @@ namespace XTMF2.Repository
         /// <param name="toAdd">The data to add.</param>
         /// <param name="error">An error message if the operation fails</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        public bool Add(T toAdd, ref string error)
+        public bool Add(T toAdd, ref string? error)
         {
             // Ensure the data is not null
             if (toAdd is object o && o == null)
@@ -96,7 +96,7 @@ namespace XTMF2.Repository
         /// <param name="data">The data to validate</param>
         /// <param name="error">An error message explaining why the data is invalid.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        protected virtual bool ValidateInput(T data, ref string error)
+        protected virtual bool ValidateInput(T data, ref string? error)
         {
             return true;
         }

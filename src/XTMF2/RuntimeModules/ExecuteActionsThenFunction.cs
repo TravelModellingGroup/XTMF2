@@ -28,17 +28,17 @@ Description = "Allows you to execute actions before calling a function.  This al
     public class ExecuteActionsThenFunction<Return> : BaseFunction<Return>
     {
         [SubModule(Index = 0, Name = "Invoke First", Description = "Actions to invoke before invoking the function.")]
-        public IAction[] InvokeFirst;
+        public IAction[]? InvokeFirst;
 
         [Parameter(Index = 1, Name = "Invoke Actions in Parallel", Description = "Should the actions be invoked in parallel?", DefaultValue = "false")]
-        public IFunction<bool> InvokeActionsInParallel;
+        public IFunction<bool>? InvokeActionsInParallel;
 
         [SubModule(Index = 2, Required = true, Name = "End With", Description = "The function to invoke and return the value of.")]
-        public IFunction<Return> EndWith;
+        public IFunction<Return>? EndWith;
 
         public override Return Invoke()
         {
-            if (InvokeActionsInParallel.Invoke())
+            if (InvokeActionsInParallel!.Invoke())
             {
                 Parallel.ForEach(InvokeFirst, (module) =>
                 {
@@ -47,12 +47,12 @@ Description = "Allows you to execute actions before calling a function.  This al
             }
             else
             {
-                foreach (var module in InvokeFirst)
+                foreach (var module in InvokeFirst!)
                 {
                     module.Invoke();
                 }
             }
-            return EndWith.Invoke();
+            return EndWith!.Invoke();
         }
     }
 }

@@ -27,18 +27,18 @@ Description = "Writes the provided mess to the log and then invokes the next ste
     public class WriteToLogF<Return> : BaseFunction<Return>
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IAction<string> Log;
+        public IAction<string>? Log;
 
         [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
-        public IFunction<Return> ToInvoke;
+        public IFunction<Return>? ToInvoke;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<string> Message;
+        public IFunction<string>? Message;
 
         public override Return Invoke()
         {
-            Log.Invoke(Message.Invoke());
-            return ToInvoke.Invoke();
+            Log!.Invoke(Message!.Invoke());
+            return ToInvoke!.Invoke();
         }
     }
 
@@ -47,18 +47,18 @@ Description = "Writes the provided mess to the log and then invokes the next ste
     public class WriteToLogF<Context, Return> : BaseFunction<Context, Return>
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IAction<string> Log;
+        public IAction<string>? Log;
 
         [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
-        public IFunction<Context, Return> ToInvoke;
+        public IFunction<Context, Return>? ToInvoke;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<string> Message;
+        public IFunction<string>? Message;
 
         public override Return Invoke(Context context)
         {
-            Log.Invoke(Message.Invoke());
-            return ToInvoke.Invoke(context);
+            Log!.Invoke(Message!.Invoke());
+            return ToInvoke!.Invoke(context);
         }
     }
 
@@ -67,18 +67,18 @@ Description = "Writes the provided mess to the log and then invokes the next ste
     public class WriteToLogBasedOnContextF<Context, Return> : BaseFunction<Context, Return>
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IAction<string> Log;
+        public IAction<string>? Log;
 
         [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
-        public IFunction<Context, Return> ToInvoke;
+        public IFunction<Context, Return>? ToInvoke;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<Context, string> Message;
+        public IFunction<Context, string>? Message;
 
         public override Return Invoke(Context context)
         {
-            Log.Invoke(Message.Invoke(context));
-            return ToInvoke.Invoke(context);
+            Log!.Invoke(Message!.Invoke(context));
+            return ToInvoke!.Invoke(context);
         }
     }
 
@@ -87,18 +87,18 @@ Description = "Writes the provided mess to the log and then invokes the next ste
     public class WriteToLogA : BaseAction
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IAction<string> Log;
+        public IAction<string>? Log;
 
         [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
-        public IAction ToInvoke;
+        public IAction? ToInvoke;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<string> Message;
+        public IFunction<string>? Message;
 
         public override void Invoke()
         {
-            Log.Invoke(Message.Invoke());
-            ToInvoke.Invoke();
+            Log!.Invoke(Message!.Invoke());
+            ToInvoke!.Invoke();
         }
     }
 
@@ -107,18 +107,18 @@ Description = "Writes the provided mess to the log and then invokes the next ste
     public class WriteToLogA<Context> : BaseAction<Context>
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IAction<string> Log;
+        public IAction<string>? Log;
 
         [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
-        public IAction<Context> ToInvoke;
+        public IAction<Context>? ToInvoke;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<string> Message;
+        public IFunction<string>? Message;
 
         public override void Invoke(Context context)
         {
-            Log.Invoke(Message.Invoke());
-            ToInvoke.Invoke(context);
+            Log!.Invoke(Message!.Invoke());
+            ToInvoke!.Invoke(context);
         }
     }
 
@@ -127,18 +127,18 @@ Description = "Writes the provided mess to the log and then invokes the next ste
     public class WriteToLogBasedOnContextA<Context> : BaseAction<Context>
     {
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IAction<string> Log;
+        public IAction<string>? Log;
 
         [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
-        public IAction<Context> ToInvoke;
+        public IAction<Context>? ToInvoke;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<Context, string> Message;
+        public IFunction<Context, string>? Message;
 
         public override void Invoke(Context context)
         {
-            Log.Invoke(Message.Invoke(context));
-            ToInvoke.Invoke(context);
+            Log!.Invoke(Message!.Invoke(context));
+            ToInvoke!.Invoke(context);
         }
     }
 }

@@ -30,7 +30,7 @@ Description = "A starting point for a model system.")]
     public sealed class StartModule : BaseAction
     {
         [SubModule(Name = "ToExecute", Description = "The node to invoke when executing this start.", Index = 0)]
-        public IAction ToExecute;
+        public IAction? ToExecute;
 
         public override void Invoke()
         {

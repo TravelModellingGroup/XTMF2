@@ -48,7 +48,7 @@ namespace XTMF2.Editing
         /// </summary>
         public bool UnauthorizedUser { get; }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             return obj is CommandError error &&
                    Message == error.Message &&

@@ -43,7 +43,7 @@ namespace XTMF2.ModelSystemConstruct
         public ReadOnlyObservableCollection<Node> Destinations =>
             new ReadOnlyObservableCollection<Node>(_Destinations);
 
-        internal bool AddDestination(Node destination, out CommandError error)
+        internal bool AddDestination(Node destination, out CommandError? error)
         {
             _Destinations.Add(destination);
             error = null;
@@ -59,8 +59,8 @@ namespace XTMF2.ModelSystemConstruct
         internal override void Save(Dictionary<Node, int> moduleDictionary, Utf8JsonWriter writer)
         {
             writer.WriteStartObject();
-            writer.WriteNumber(OriginProperty, moduleDictionary[Origin]);
-            writer.WriteString(HookProperty, OriginHook.Name);
+            writer.WriteNumber(OriginProperty, moduleDictionary[Origin!]);
+            writer.WriteString(HookProperty, OriginHook!.Name);
             writer.WritePropertyName(DestinationProperty);
             writer.WriteStartArray();
             foreach (var dest in _Destinations)
@@ -75,10 +75,10 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteEndObject();
         }
 
-        internal override bool Construct(ref string error)
+        internal override bool Construct(ref string? error)
         {
             var moduleCount = _Destinations.Count(d => !d.IsDisabled);
-            if(OriginHook.Cardinality == HookCardinality.AtLeastOne)
+            if(OriginHook!.Cardinality == HookCardinality.AtLeastOne)
             {
                 if (moduleCount <= 0)
                 {
@@ -93,19 +93,19 @@ namespace XTMF2.ModelSystemConstruct
             }
             if(!IsDisabled)
             {
-                OriginHook.CreateArray(Origin.Module, moduleCount);
+                OriginHook!.CreateArray(Origin!.Module!, moduleCount);
                 int index = 0;
                 for (int i = 0; i < _Destinations.Count; i++)
                 {
                     if (!_Destinations[i].IsDisabled)
                     {
-                        OriginHook.Install(Origin, _Destinations[i], index++);
+                        OriginHook.Install(Origin!, _Destinations[i], index++);
                     }
                 }
             }
             else
             {
-                OriginHook.CreateArray(Origin.Module, 0);
+                OriginHook!.CreateArray(Origin!.Module!, 0);
             }
             return true;
         }

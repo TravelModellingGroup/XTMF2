@@ -27,18 +27,18 @@ Description = "Provides the ability to specify a directory path recursively.")]
     public sealed class DirectoryPath : BaseFunction<string>
     {
         [SubModule(Required = false, Name = "Parent", Description = "Optional parent directory", Index = 0)]
-        public DirectoryPath Parent;
+        public DirectoryPath? Parent;
 
         [Parameter(Name = "Name", DefaultValue = "directoryName", Description = "The path to add to the Parent path", Index = 1)]
-        public IFunction<string> Path;
+        public IFunction<string>? Path;
 
         public override string Invoke()
         {
             if(Parent != null)
             {
-                return System.IO.Path.Combine(Parent.Invoke(), Path.Invoke());
+                return System.IO.Path.Combine(Parent.Invoke(), Path!.Invoke());
             }
-            return Path.Invoke();
+            return Path!.Invoke();
         }
     }
 }

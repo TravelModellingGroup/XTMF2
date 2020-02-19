@@ -9,6 +9,7 @@
     <Authors>James Vaughan, Brendan Reilly, Luna Xi</Authors>
     <Description>eXtensible Travel Modelling Framework</Description>
     <RepositoryType>https://github.com/TravelModellingGroup/XTMF2.git</RepositoryType>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>

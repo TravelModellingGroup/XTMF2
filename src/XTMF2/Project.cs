@@ -43,33 +43,33 @@ namespace XTMF2
         private const string AdditionalUsersProperty = "AdditionalUsers";
         private const string CustomRunDirectoryProperty = "CustomRunDirectory";
 
-        public string Name { get; private set; }
-        public string Description { get; private set; }
-        public string ProjectFilePath { get; private set; }
-        public string ProjectDirectory => Path.GetDirectoryName(ProjectFilePath);
-        public User Owner { get; private set; }
+        public string? Name { get; private set; }
+        public string? Description { get; private set; }
+        public string? ProjectFilePath { get; private set; }
+        public string? ProjectDirectory => Path.GetDirectoryName(ProjectFilePath);
+        public User? Owner { get; private set; }
         public ReadOnlyCollection<User> AdditionalUsers => new ReadOnlyCollection<User>(_AdditionalUsers);
         ObservableCollection<User> _AdditionalUsers = new ObservableCollection<User>();
         ObservableCollection<ModelSystemHeader> _ModelSystems = new ObservableCollection<ModelSystemHeader>();
         public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => new ReadOnlyObservableCollection<ModelSystemHeader>(_ModelSystems);
 
-        public string RunsDirectory => HasCustomRunDirectory ? _customRunDirectory : DefaultRunDirectory;
-        private string DefaultRunDirectory => Path.Combine(ProjectDirectory, "Runs");
+        public string? RunsDirectory => HasCustomRunDirectory && _customRunDirectory != null ? _customRunDirectory : DefaultRunDirectory;
+        private string? DefaultRunDirectory => Path.Combine(ProjectDirectory!, "Runs");
 
         public bool HasCustomRunDirectory => !(_customRunDirectory is null);
 
-        private string _customRunDirectory = null;
+        private string? _customRunDirectory = null;
 
-        private object ProjectLock = new object();
+        private readonly object _projectLock = new object();
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         private Project()
         {
 
         }
 
-        internal static bool Load(UserController userController, string filePath, out Project project, ref string error)
+        internal static bool Load(UserController userController, string filePath, out Project project, ref string? error)
         {
             project = new Project()
             {
@@ -89,7 +89,7 @@ namespace XTMF2
                                 reader.Read();
                                 project.Name = reader.GetString();
                             }
-                            else if(reader.ValueTextEquals(DescriptionProperty))
+                            else if (reader.ValueTextEquals(DescriptionProperty))
                             {
                                 reader.Read();
                                 project.Description = reader.GetString();
@@ -128,7 +128,7 @@ namespace XTMF2
                                     user.AddedUserToProject(project);
                                 }
                             }
-                            else if(reader.ValueTextEquals(CustomRunDirectoryProperty))
+                            else if (reader.ValueTextEquals(CustomRunDirectoryProperty))
                             {
                                 reader.Read();
                                 if (reader.TokenType == JsonTokenType.String)
@@ -161,10 +161,10 @@ namespace XTMF2
             return false;
         }
 
-        internal static bool Load(ProjectFile projectFile, string projectName, User owner, out Project project, out CommandError error)
+        internal static bool Load(ProjectFile projectFile, string projectName, User owner, out Project? project, out CommandError? error)
         {
             bool deleteProject = true;
-            Project toReturn = null;
+            Project? toReturn = null;
             try
             {
                 project = null;
@@ -174,7 +174,7 @@ namespace XTMF2
                 }
                 foreach (var msf in projectFile.ModelSystems)
                 {
-                    if (!toReturn.AddModelSystemFromModelSystemFile(msf.Name, msf, out var _, out error))
+                    if (!toReturn!.AddModelSystemFromModelSystemFile(msf.Name, msf, out var _, out error))
                     {
                         return false;
                     }
@@ -185,7 +185,7 @@ namespace XTMF2
             }
             finally
             {
-                if(deleteProject && !(toReturn is null))
+                if (deleteProject && !(toReturn is null))
                 {
                     toReturn.Delete(out error);
                 }
@@ -196,7 +196,7 @@ namespace XTMF2
         /// Delete the project.  This should only be called from the project controller
         /// unless the project has never been added to the project controller.
         /// </summary>
-        internal bool Delete(out CommandError error)
+        internal bool Delete(out CommandError? error)
         {
             try
             {
@@ -208,14 +208,14 @@ namespace XTMF2
                 error = null;
                 return true;
             }
-            catch(IOException e)
+            catch (IOException e)
             {
                 error = new CommandError(e.Message);
                 return false;
             }
         }
 
-        internal bool GetModelSystemHeader(string modelSystemName, out ModelSystemHeader modelSystemHeader, out CommandError error)
+        internal bool GetModelSystemHeader(string modelSystemName, out ModelSystemHeader? modelSystemHeader, out CommandError? error)
         {
             modelSystemHeader = _ModelSystems.FirstOrDefault(msh => msh.Name.Equals(modelSystemName, StringComparison.OrdinalIgnoreCase));
             if (modelSystemHeader == null)
@@ -237,12 +237,12 @@ namespace XTMF2
             return _ModelSystems.Any(ms => ms.Name.Equals(modelSystemName, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static bool SaveOrError(Project project, out CommandError error)
+        private static bool SaveOrError(Project project, out CommandError? error)
         {
-            string errorString = null;
+            string? errorString = null;
             if (!project.Save(ref errorString))
             {
-                error = new CommandError(errorString);
+                error = new CommandError(errorString ?? $"Unknown error when trying to save the project {project.Name}!");
                 return false;
             }
             else
@@ -252,16 +252,16 @@ namespace XTMF2
             }
         }
 
-        private bool SaveOrError(out CommandError error)
+        private bool SaveOrError(out CommandError? error)
         {
             return SaveOrError(this, out error);
         }
 
-        internal bool GiveOwnership(User newOwner, out CommandError error)
+        internal bool GiveOwnership(User newOwner, out CommandError? error)
         {
-            lock (ProjectLock)
+            lock (_projectLock)
             {
-                var previousOwner = Owner;
+                var previousOwner = Owner!;
                 Owner = newOwner;
                 previousOwner.RemovedUserForProject(this);
                 // update the references to this project
@@ -277,9 +277,9 @@ namespace XTMF2
             }
         }
 
-        internal bool AddAdditionalUser(User toShareWith, out CommandError error)
+        internal bool AddAdditionalUser(User toShareWith, out CommandError? error)
         {
-            lock (ProjectLock)
+            lock (_projectLock)
             {
                 if (_AdditionalUsers.Contains(toShareWith))
                 {
@@ -292,9 +292,9 @@ namespace XTMF2
             }
         }
 
-        internal bool RemoveAdditionalUser(User toRemove, out CommandError error)
+        internal bool RemoveAdditionalUser(User toRemove, out CommandError? error)
         {
-            lock (ProjectLock)
+            lock (_projectLock)
             {
                 if (!_AdditionalUsers.Contains(toRemove))
                 {
@@ -307,7 +307,7 @@ namespace XTMF2
             }
         }
 
-        internal static bool New(User owner, string name, string description, out Project project, out CommandError error)
+        internal static bool New(User owner, string name, string description, out Project? project, out CommandError? error)
         {
             project = new Project()
             {
@@ -336,42 +336,40 @@ namespace XTMF2
         /// </summary>
         /// <param name="error"></param>
         /// <returns></returns>
-        internal bool Save(ref string error)
+        internal bool Save(ref string? error)
         {
             var temp = Path.GetTempFileName();
             try
             {
                 using (var tempFile = File.Create(temp))
                 {
-                    using (var writer = new Utf8JsonWriter(tempFile))
+                    using var writer = new Utf8JsonWriter(tempFile);
+                    writer.WriteStartObject();
+                    writer.WriteString(NameProperty, Name);
+                    writer.WriteString(DescriptionProperty, Description);
+                    writer.WriteString(OwnerProperty, Owner!.UserName);
+                    if (_AdditionalUsers.Count > 0)
                     {
-                        writer.WriteStartObject();
-                        writer.WriteString(NameProperty, Name);
-                        writer.WriteString(DescriptionProperty, Description);
-                        writer.WriteString(OwnerProperty, Owner.UserName);
-                        if (_AdditionalUsers.Count > 0)
-                        {
-                            writer.WritePropertyName(AdditionalUsersProperty);
-                            writer.WriteStartArray();
-                            foreach (var user in _AdditionalUsers)
-                            {
-                                writer.WriteStringValue(user.UserName);
-                            }
-                            writer.WriteEndArray();
-                        }
-                        writer.WritePropertyName(ModelSystemHeadersProperty);
+                        writer.WritePropertyName(AdditionalUsersProperty);
                         writer.WriteStartArray();
-                        foreach (var ms in ModelSystems)
+                        foreach (var user in _AdditionalUsers)
                         {
-                            ms.Save(writer);
+                            writer.WriteStringValue(user.UserName);
                         }
                         writer.WriteEndArray();
-                        if(HasCustomRunDirectory)
-                        {
-                            writer.WriteString(CustomRunDirectoryProperty, _customRunDirectory);
-                        }
-                        writer.WriteEndObject();
                     }
+                    writer.WritePropertyName(ModelSystemHeadersProperty);
+                    writer.WriteStartArray();
+                    foreach (var ms in ModelSystems)
+                    {
+                        ms.Save(writer);
+                    }
+                    writer.WriteEndArray();
+                    if (HasCustomRunDirectory)
+                    {
+                        writer.WriteString(CustomRunDirectoryProperty, _customRunDirectory);
+                    }
+                    writer.WriteEndObject();
                 }
                 File.Copy(temp, ProjectFilePath, true);
                 return true;
@@ -408,7 +406,7 @@ namespace XTMF2
 
 
 
-        internal bool SetName(string name, out CommandError error)
+        internal bool SetName(string name, out CommandError? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -418,21 +416,22 @@ namespace XTMF2
             var oldName = Name;
             try
             {
+                var userPath = Owner!.UserPath;
                 var dir = new DirectoryInfo(ProjectDirectory);
-                dir.MoveTo(Path.Combine(Owner.UserPath, name));
+                dir.MoveTo(Path.Combine(userPath, name));
                 Name = name;
-                ProjectFilePath = Path.Combine(Owner.UserPath, name, ProjectFile);
+                ProjectFilePath = Path.Combine(userPath, name, ProjectFile);
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
                 return SaveOrError(out error);
             }
-            catch(IOException e)
+            catch (IOException e)
             {
                 error = new CommandError(e.Message);
                 return false;
             }
         }
 
-        internal bool SetDescription(ProjectSession session, string description, out CommandError error)
+        internal bool SetDescription(ProjectSession session, string description, out CommandError? error)
         {
             Description = description;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
@@ -440,7 +439,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool Remove(ProjectSession session, ModelSystemHeader modelSystemHeader, out CommandError error)
+        internal bool Remove(ProjectSession session, ModelSystemHeader modelSystemHeader, out CommandError? error)
         {
             if (modelSystemHeader == null)
             {
@@ -454,7 +453,7 @@ namespace XTMF2
             return false;
         }
 
-        internal bool Add(ProjectSession session, ModelSystemHeader modelSystemHeader, out CommandError error)
+        internal bool Add(ProjectSession session, ModelSystemHeader modelSystemHeader, out CommandError? error)
         {
             if (modelSystemHeader == null)
             {
@@ -464,9 +463,9 @@ namespace XTMF2
             return SaveOrError(out error);
         }
 
-        internal bool RenameModelSystem(ModelSystemHeader modelSystem, string newName, out CommandError error)
+        internal bool RenameModelSystem(ModelSystemHeader modelSystem, string newName, out CommandError? error)
         {
-            if(_ModelSystems.Any(ms => newName.Equals(ms.Name, StringComparison.InvariantCultureIgnoreCase)))
+            if (_ModelSystems.Any(ms => newName.Equals(ms.Name, StringComparison.InvariantCultureIgnoreCase)))
             {
                 error = new CommandError($"A model system with the name '{newName}' already exists in the project.");
                 return false;
@@ -483,7 +482,7 @@ namespace XTMF2
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
         internal bool AddModelSystemFromModelSystemFile(string modelSystemName,
-            ModelSystemFile msf, out ModelSystemHeader header, out CommandError error)
+            ModelSystemFile msf, out ModelSystemHeader? header, out CommandError? error)
         {
             header = null;
             if (msf is null)
@@ -505,7 +504,7 @@ namespace XTMF2
             return SaveOrError(out error);
         }
 
-        internal bool SetCustomRunsDirectory(string runDirectory, out CommandError error)
+        internal bool SetCustomRunsDirectory(string runDirectory, out CommandError? error)
         {
             var alreadyCustom = HasCustomRunDirectory;
             try
@@ -517,7 +516,7 @@ namespace XTMF2
                     dir.Create();
                 }
             }
-            catch(IOException e)
+            catch (IOException e)
             {
                 error = new CommandError($"Unable to use '{runDirectory}' for the custom runs directory. {e.Message}");
                 return false;
@@ -531,7 +530,7 @@ namespace XTMF2
             return SaveOrError(out error);
         }
 
-        internal bool ResetRunsDirectory(out CommandError error)
+        internal bool ResetRunsDirectory(out CommandError? error)
         {
             var alreadyCustom = HasCustomRunDirectory;
             try

@@ -36,7 +36,7 @@ namespace XTMF2.ModelSystemConstruct
         private const string HeightProperty = "Height";
         private const string CommentProperty = "Comment";
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         /// <summary>
         /// Construct a new comments block
@@ -45,8 +45,8 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="location"></param>
         public CommentBlock(string comment, Rectangle location)
         {
-            Comment = comment;
-            Location = location;
+            _comment = comment;
+            _location = location;
         }
 
         /// <summary>
@@ -98,7 +98,7 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteEndObject();
         }
 
-        internal static bool Load(ref Utf8JsonReader reader, out CommentBlock block, ref string error)
+        internal static bool Load(ref Utf8JsonReader reader, out CommentBlock? block, ref string? error)
         {
             float x = 0, y = 0, width = 0, height = 0;
             string comment = "No comment";

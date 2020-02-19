@@ -44,7 +44,7 @@ namespace XTMF2
 
         public abstract Result Invoke();
 
-        public virtual bool RuntimeValidation(ref string error)
+        public virtual bool RuntimeValidation(ref string? error)
         {
             return true;
         }

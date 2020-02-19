@@ -39,7 +39,7 @@ namespace XTMF2.Bus
         /// <summary>
         /// The processed representation of the model system.
         /// </summary>
-        private ModelSystem _modelSystem;
+        private ModelSystem? _modelSystem;
 
         /// <summary>
         /// A reference to the XTMFRuntime that will execute the model system.
@@ -84,9 +84,9 @@ namespace XTMF2.Bus
         /// </summary>
         /// <param name="error">An error message if the model system is invalid.</param>
         /// <returns>True if the model system is valid, false otherwise with an error message.</returns>
-        private bool ValidateModelSystem(ref string error)
+        private bool ValidateModelSystem(ref string? error)
         {
-            string moduleName = null;
+            string? moduleName = null;
             // Make sure that we are able to actually construct the directory
             try
             {
@@ -103,9 +103,9 @@ namespace XTMF2.Bus
                 error = "Unable to convert model system data into a string!";
                 return false;
             }
-            if (!ModelSystem.Load(modelSystemAsString, _runtime, out ModelSystem ms, ref error)
-                || !ms.Construct(_runtime, ref error)
-                || !ms.Validate(ref moduleName, ref error))
+            if (!ModelSystem.Load(modelSystemAsString, _runtime, out var ms, ref error)
+                || !ms!.Construct(_runtime, ref error)
+                || !ms!.Validate(ref moduleName, ref error))
             {
                 RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, error);
                 return false;
@@ -121,9 +121,13 @@ namespace XTMF2.Bus
             return true;
         }
 
-        private bool GetStart(List<string> startPath, out Start start, ref string error)
+        private bool GetStart(List<string> startPath, out Start? start, ref string? error)
         {
             start = null;
+            if (_modelSystem == null)
+            {
+                throw new InvalidOperationException("The model system must be constructed before trying to get the name of a start!");
+            }
             if (startPath.Count == 0)
             {
                 error = "No start path was defined!";
@@ -173,10 +177,11 @@ namespace XTMF2.Bus
         /// <param name="error">The error message if the run fails.</param>
         /// <param name="stackTrace">The stack trace at the point of the error if the run fails.</param>
         /// <returns>True if the run succeeds, false otherwise with an error message and a stack trace.</returns>
-        public RunError StartRun()
+        public RunError? StartRun()
         {
-            string error = null, moduleName = null, stackTrace = string.Empty;
-            if (!ValidateModelSystem(ref error) || !GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error))
+            string? error = null, moduleName = null, stackTrace = string.Empty;
+            if (!ValidateModelSystem(ref error) || !GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error)
+                || startingMss == null)
             {
                 return new RunError(RunErrorType.Validation, error, moduleName, stackTrace);
             }
@@ -189,7 +194,14 @@ namespace XTMF2.Bus
                     RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, error);
                     return new RunError(RunErrorType.Runtime, error, moduleName, stackTrace);
                 }
-                ((IAction)startingMss.Module).Invoke();
+                if(startingMss.Module is IAction modelStart)
+                {
+                    modelStart.Invoke();
+                }
+                else
+                {
+                    return new RunError(RunErrorType.Runtime, "Unable to invoking the starting module!", startingMss.Module?.Name ?? "Unknown module", string.Empty);
+                }
                 RunResults.WriteRunCompleted(_currentWorkingDirectory);
             }
             catch (Exception e)
@@ -202,7 +214,7 @@ namespace XTMF2.Bus
                 stackTrace = e.StackTrace;
                 RunResults.WriteError(_currentWorkingDirectory, e);
                 return new RunError(RunErrorType.Runtime, error, 
-                    e is XTMFRuntimeException xtmfError ? xtmfError.FailingModule.Name : null, stackTrace);
+                    e is XTMFRuntimeException xtmfError ? xtmfError.FailingModule?.Name ?? "Unknown module" : null, stackTrace);
             }
             finally
             {
@@ -212,11 +224,11 @@ namespace XTMF2.Bus
             return null;
         }
 
-        private bool RuntimeValidation(ref string moduleName, ref string errorMessage)
+        private bool RuntimeValidation(ref string? moduleName, ref string? errorMessage)
         {
             Stack<Boundary> toProcess = new Stack<Boundary>();
-            toProcess.Push(_modelSystem.GlobalBoundary);
-            while (toProcess.TryPop(out Boundary current))
+            toProcess.Push(_modelSystem!.GlobalBoundary);
+            while (toProcess.TryPop(out Boundary? current))
             {
                 foreach (var child in current.Boundaries)
                 {

@@ -50,7 +50,7 @@ namespace XTMF2
         /// <summary>
         /// The currently executing RunBus
         /// </summary>
-        public RunBus RunBus { get; internal set; }
+        public RunBus? RunBus { get; internal set; }
 
         /// <summary>
         /// The users in the system.  Ensure you dereference the
@@ -69,7 +69,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="config">Optionally a custom configuration</param>
         /// <returns>A new XTMF Runtime</returns>
-        public static XTMFRuntime CreateRuntime(SystemConfiguration config = null)
+        public static XTMFRuntime CreateRuntime(SystemConfiguration? config = null)
         {
             return new XTMFRuntime(config);
         }
@@ -78,7 +78,7 @@ namespace XTMF2
         /// Create a new instance of XTMF
         /// </summary>
         /// <param name="config">An alternative configuration to load</param>
-        private XTMFRuntime(SystemConfiguration config = null)
+        private XTMFRuntime(SystemConfiguration? config = null)
         {
             // if no configuration is given we need to load the default configuration
             SystemConfiguration = config ?? new SystemConfiguration(this);

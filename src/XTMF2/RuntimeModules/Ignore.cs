@@ -28,11 +28,11 @@ Description = "Ignore the result of a function call.  This allows you to call fu
     public class IgnoreResult<FuncReturn> : BaseAction
     {
         [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true, Index = 0)]
-        public IFunction<FuncReturn> ToExecute;
+        public IFunction<FuncReturn>? ToExecute;
 
         public override void Invoke()
         {
-            ToExecute.Invoke();
+            ToExecute!.Invoke();
         }
     }
 
@@ -41,11 +41,11 @@ Description = "Ignore the result of a function call.  This allows you to call fu
     public class IgnoreResult<Context, FuncReturn> : BaseAction<Context>
     {
         [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true, Index = 0)]
-        public IFunction<Context, FuncReturn> ToExecute;
+        public IFunction<Context, FuncReturn>? ToExecute;
 
         public override void Invoke(Context context)
         {
-            ToExecute.Invoke(context);
+            ToExecute!.Invoke(context);
         }
     }
 
@@ -54,11 +54,11 @@ Description = "Ignore the context of a function call.  This allows you to call f
     public class IgnoreContext<Context> : BaseAction<Context>
     {
         [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true, Index = 0)]
-        public IAction ToInvoke;
+        public IAction? ToInvoke;
 
         public override void Invoke(Context context)
         {
-            ToInvoke.Invoke();
+            ToInvoke!.Invoke();
         }
     }
 
@@ -67,11 +67,11 @@ Description = "Ignore the context of a function call.  This allows you to call f
     public class IgnoreContext<Context,Return> : BaseFunction<Context,Return>
     {
         [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true, Index = 0)]
-        public IFunction<Return> ToInvoke;
+        public IFunction<Return>? ToInvoke;
 
         public override Return Invoke(Context context)
         {
-            return ToInvoke.Invoke();
+            return ToInvoke!.Invoke();
         }
     }
 }

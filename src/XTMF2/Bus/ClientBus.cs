@@ -55,7 +55,7 @@ namespace XTMF2.Bus
         /// <param name="serverStream">A stream that connects to the host.</param>
         /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
         /// <param name="runtime">The XTMFRuntime to work within.</param>
-        public ClientBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string> extraDlls = null)
+        public ClientBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string>? extraDlls = null)
         {
             Runtime = runtime;
             _runScheduler = new Scheduler(this);
@@ -210,7 +210,7 @@ namespace XTMF2.Bus
         /// <param name="context">The run that failed.</param>
         /// <param name="message">The message containing the error.</param>
         /// <param name="stackTrace">The stack trace from the time of the error.</param>
-        internal void ModelRunFailed(string runId, string message, string stackTrace)
+        internal void ModelRunFailed(string runId, string? message, string? stackTrace)
         {
             Write((writer) =>
             {
@@ -225,7 +225,7 @@ namespace XTMF2.Bus
         /// Report to the host the current status message.
         /// </summary>
         /// <param name="message">The current status message.</param>
-        internal void SendStatusMessage(string runId, string message)
+        internal void SendStatusMessage(string runId, string? message)
         {
             Write((writer) =>
             {

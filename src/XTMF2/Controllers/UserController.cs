@@ -29,7 +29,7 @@ namespace XTMF2.Controllers
 {
     public sealed class UserController
     {
-        private ObservableCollection<User> _Users;
+        private ObservableCollection<User> _users = new ObservableCollection<User>();
 
         private XTMFRuntime Runtime;
         private SystemConfiguration SystemConfiguration => Runtime.SystemConfiguration;
@@ -41,7 +41,7 @@ namespace XTMF2.Controllers
         /// The users in the system.  Ensure you dereference the
         /// observable interface if you share this with other objects.
         /// </summary>
-        public ReadOnlyObservableCollection<User> Users => new ReadOnlyObservableCollection<User>(_Users);
+        public ReadOnlyObservableCollection<User> Users => new ReadOnlyObservableCollection<User>(_users);
 
         /// <summary>
         /// Create a new user with the given name.  Names must be unique.
@@ -51,7 +51,7 @@ namespace XTMF2.Controllers
         /// <param name="user">The resulting user, null if the operation fails.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool CreateNew(string userName, bool admin, out User user, out CommandError error)
+        public bool CreateNew(string userName, bool admin, out User? user, out CommandError? error)
         {
             user = null;
             if (!ValidateUserName(userName))
@@ -62,12 +62,12 @@ namespace XTMF2.Controllers
             lock (UserLock)
             {
                 //ensure there is no other user with the same name
-                if(_Users.Any(u => u.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase)))
+                if(_users.Any(u => u.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase)))
                 {
                     error = new CommandError("A user with this name already exists.");
                     return false;
                 }
-                _Users.Add(user = new User(GetUserPath(userName), userName, admin));
+                _users.Add(user = new User(GetUserPath(userName), userName, admin));
                 return user.Save(out error);
             }
         }
@@ -85,7 +85,7 @@ namespace XTMF2.Controllers
             }
             lock (UserLock)
             {
-                var foundUser = _Users.FirstOrDefault(user => user.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
+                var foundUser = _users.FirstOrDefault(user => user.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
                 if (foundUser != null)
                 {
                     return Delete(foundUser);
@@ -118,7 +118,7 @@ namespace XTMF2.Controllers
                 {
                     projectController.DeleteProject(user, toDelete, out var error);
                 }
-                _Users.Remove(user);
+                _users.Remove(user);
                 // now remove all of the users files from the system.
                 var userDir = new DirectoryInfo(user.UserPath);
                 if(userDir.Exists)
@@ -152,7 +152,7 @@ namespace XTMF2.Controllers
         {
             lock (UserLock)
             {
-                return _Users.FirstOrDefault(user => user.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
+                return _users.FirstOrDefault(user => user.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
             }
         }
 
@@ -164,7 +164,6 @@ namespace XTMF2.Controllers
 
         private void LoadUsers()
         {
-            _Users = new ObservableCollection<User>();
             var usersDir = new DirectoryInfo(SystemConfiguration.DefaultUserDirectory);
             if (!usersDir.Exists)
             {
@@ -183,17 +182,17 @@ namespace XTMF2.Controllers
                         var userFile = potentialDir.GetFiles("User.xusr").FirstOrDefault();
                         if(userFile != null)
                         {
-                            string error = null;
+                            string? error = null;
                             if(User.Load(userFile.FullName, out var loadedUser, ref error))
                             {
-                                _Users.Add(loadedUser);
+                                _users.Add(loadedUser!);
                             }
                         }
                     }
                 }
             }
             // if we have no users create a default user
-            if(_Users.Count <= 0)
+            if(_users.Count <= 0)
             {
                 lock(UserLock)
                 {
@@ -207,7 +206,7 @@ namespace XTMF2.Controllers
             var userName = "local";
             // Create a new user by default
             var firstUser = new User(GetUserPath(userName), userName, true);
-            _Users.Add(firstUser);
+            _users.Add(firstUser);
             firstUser.Save(out var _);
             return;
         }

@@ -56,7 +56,7 @@ namespace XTMF2.Editing
         /// </summary>
         /// <param name="error">An error message if the undo fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        public bool Undo(out CommandError error)
+        public bool Undo(out CommandError? error)
         {
             foreach (var command in _Commands)
             {
@@ -76,7 +76,7 @@ namespace XTMF2.Editing
         /// </summary>
         /// <param name="error">An error message if the redo fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        public bool Redo(out CommandError error)
+        public bool Redo(out CommandError? error)
         {
             foreach (var command in _Commands)
             {

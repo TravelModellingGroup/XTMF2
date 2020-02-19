@@ -37,7 +37,7 @@ namespace XTMF2.Bus
         /// The currently executing RunContext.
         /// This property is null if there is nothing running.
         /// </summary>
-        public RunContext Current { get; private set; }
+        public RunContext? Current { get; private set; }
 
         /// <summary>
         /// Create a new Scheduler to process the given client bus.

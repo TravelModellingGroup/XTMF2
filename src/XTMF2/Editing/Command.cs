@@ -27,16 +27,16 @@ namespace XTMF2.Editing
     /// </summary>
     public sealed class Command
     {
-        internal Func<(bool Success, CommandError Error)> Undo;
-        internal Func<(bool Success, CommandError Error)> Redo;
+        internal Func<(bool Success, CommandError? Error)> Undo;
+        internal Func<(bool Success, CommandError? Error)> Redo;
         /// <summary>
         /// Create a new command with the given delegates
         /// </summary>
         /// <param name="Undo">The logic to undo the command.</param>
         /// <param name="Redo">The logic to redo the command.</param>
         public Command(
-            Func<(bool Success, CommandError Error)> Undo,
-            Func<(bool Success, CommandError Error)> Redo
+            Func<(bool Success, CommandError? Error)> Undo,
+            Func<(bool Success, CommandError? Error)> Redo
             )
         {
             if (Undo == null || Redo == null)

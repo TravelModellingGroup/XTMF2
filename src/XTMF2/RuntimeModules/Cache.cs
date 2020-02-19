@@ -28,15 +28,17 @@ namespace XTMF2.RuntimeModules
     {
         private readonly object _lock = new object();
 
+#pragma warning disable CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
         private T _cachedValue;
+#pragma warning restore CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
         private bool _initialized = false;
 
 
         [SubModule(Required = true, Name = "Source", Description = "Get the cached data", Index = 0)]
-        public IFunction<T> Source;
+        public IFunction<T>? Source;
 
         [SubModule(Required = true, Name = "Force Update", Description = "Invoke to force an update", Index = 1)]
-        public IEvent ForceUpdate;
+        public IEvent? ForceUpdate;
 
         public override T Invoke()
         {
@@ -44,15 +46,15 @@ namespace XTMF2.RuntimeModules
             {
                 if (!_initialized)
                 {
-                    _cachedValue = Source.Invoke();
+                    _cachedValue = Source!.Invoke();
                     _initialized = true;
                     GC.ReRegisterForFinalize(this);
                 }
-                return _cachedValue;
+                return _cachedValue!;
             }
         }
 
-        public override bool RuntimeValidation(ref string error)
+        public override bool RuntimeValidation(ref string? error)
         {
             ForceUpdate?.Register(() =>
             {
@@ -82,7 +84,7 @@ namespace XTMF2.RuntimeModules
                 {
                     disposable.Dispose();
                 }
-                _cachedValue = default;
+                _cachedValue = default!;
                 _initialized = false;
             }
         }

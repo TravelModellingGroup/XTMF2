@@ -24,6 +24,7 @@ using System.Text.Json;
 using XTMF2.Editing;
 using System.Linq;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.Repository;
 
 namespace XTMF2
 {
@@ -38,12 +39,12 @@ namespace XTMF2
         protected const string IndexProperty = "Index";
         protected const string DisabledProperty = "Disabled";
 
-        public Node Origin { get; internal set; }
-        public NodeHook OriginHook { get; internal set; }
+        public Node? Origin { get; internal set; }
+        public NodeHook? OriginHook { get; internal set; }
 
         public bool IsDisabled { get; private set; }
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         public bool SetOrigin(ModelSystemSession session, Node origin, NodeHook originHook, ref string error)
         {
@@ -65,22 +66,22 @@ namespace XTMF2
 
         internal abstract void Save(Dictionary<Node, int> moduleDictionary, Utf8JsonWriter writer);
         
-        private static bool FailWith(out Link link, ref string error, string message)
+        private static bool FailWith(out Link? link, out string error, string message)
         {
             link = null;
             error = message;
             return false;
         }
 
-        internal static bool Create(ModelSystemSession session, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, out Link link, ref string error)
+        internal static bool Create(ModuleRepository modules, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, out Link? link, ref string? error)
         {
             if(reader.TokenType != JsonTokenType.StartObject)
             {
-                return FailWith(out link, ref error, "Expected a start object when loading a link.");
+                return FailWith(out link, out error, "Expected a start object when loading a link.");
             }
-            Node origin = null, destination = null;
-            List<Node> destinations = null;
-            string hookName = null;
+            Node? origin = null, destination = null;
+            List<Node>? destinations = null;
+            string? hookName = null;
             bool disabled = false;
             int listIndex = 0;
             // read in the values
@@ -92,7 +93,7 @@ namespace XTMF2
                 }
                 if(reader.TokenType != JsonTokenType.PropertyName)
                 {
-                    return FailWith(out link, ref error, "Invalid token when loading a link.");
+                    return FailWith(out link, out error, "Invalid token when loading a link.");
                 }
                 if(reader.ValueTextEquals(OriginProperty))
                 {
@@ -109,7 +110,7 @@ namespace XTMF2
                 {
                     if (!reader.Read())
                     {
-                        return FailWith(out link, ref error, "No destination specified when loading a link!");
+                        return FailWith(out link, out error, "No destination specified when loading a link!");
                     }
                     switch (reader.TokenType)
                     {
@@ -143,26 +144,26 @@ namespace XTMF2
                 }
                 else
                 {
-                    return FailWith(out link, ref error, "Unknown parameter type when loading link " + reader.GetString());
+                    return FailWith(out link, out error, "Unknown parameter type when loading link " + reader.GetString());
                 }
             }
             // ensure all of the types were filled out
             if(origin == null)
             {
-                return FailWith(out link, ref error, "No origin specified on link!");
+                return FailWith(out link, out error, "No origin specified on link!");
             }
             if (hookName == null)
             {
-                return FailWith(out link, ref error, "No origin hook specified on link!");
+                return FailWith(out link, out error, "No origin hook specified on link!");
             }
             if (destination == null && destinations == null)
             {
-                return FailWith(out link, ref error, "No destination specified on link!");
+                return FailWith(out link, out error, "No destination specified on link!");
             }
-            var hook = session.GetModuleRepository()[origin.Type].Hooks?.FirstOrDefault(h => h.Name.Equals(hookName, StringComparison.OrdinalIgnoreCase));
+            var hook = modules[origin!.Type!].Hooks?.FirstOrDefault(h => h.Name.Equals(hookName, StringComparison.OrdinalIgnoreCase));
             if(hook == null)
             {
-                return FailWith(out link, ref error, "Unable to find a hook with the name " + hookName);
+                return FailWith(out link, out error, "Unable to find a hook with the name " + hookName);
             }
             if (destination != null)
             {
@@ -176,7 +177,7 @@ namespace XTMF2
             }
             else
             {
-                link = new MultiLink(destinations)
+                link = new MultiLink(destinations!)
                 {
                     Origin = origin,
                     OriginHook = hook,
@@ -186,9 +187,9 @@ namespace XTMF2
             return true;
         }
 
-        internal abstract bool Construct(ref string error);
+        internal abstract bool Construct(ref string? error);
 
-        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled, out CommandError error)
+        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled, out CommandError? error)
         {
             IsDisabled = disabled;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));

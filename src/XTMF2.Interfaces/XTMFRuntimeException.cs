@@ -28,13 +28,13 @@ namespace XTMF2
 
         public IModule? FailingModule { get; private set; }
 
-        public XTMFRuntimeException(IModule? module, string message)
+        public XTMFRuntimeException(IModule? module, string? message)
             :base(message)
         {
             FailingModule = module;
         }
 
-        public XTMFRuntimeException(IModule? module, string message, Exception innerException) : base(message, innerException)
+        public XTMFRuntimeException(IModule? module, string? message, Exception? innerException) : base(message, innerException)
         {
             FailingModule = module;
         }

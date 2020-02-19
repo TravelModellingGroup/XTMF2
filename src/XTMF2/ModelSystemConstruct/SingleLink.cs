@@ -27,8 +27,8 @@ namespace XTMF2.ModelSystemConstruct
 {
     public sealed class SingleLink : Link
     {
-        public Node Destination { get; internal set; }
-        public bool SetDestination(ModelSystemSession session, Node destination, out CommandError error)
+        public Node? Destination { get; internal set; }
+        public bool SetDestination(ModelSystemSession session, Node destination, out CommandError? error)
         {
             Destination = destination;
             Notify(nameof(Destination));
@@ -39,9 +39,9 @@ namespace XTMF2.ModelSystemConstruct
         internal override void Save(Dictionary<Node, int> moduleDictionary, Utf8JsonWriter writer)
         {
             writer.WriteStartObject();
-            writer.WriteNumber(OriginProperty, moduleDictionary[Origin]);
-            writer.WriteString(HookProperty, OriginHook.Name);
-            writer.WriteNumber(DestinationProperty, moduleDictionary[Destination]);
+            writer.WriteNumber(OriginProperty, moduleDictionary[Origin!]);
+            writer.WriteString(HookProperty, OriginHook!.Name);
+            writer.WriteNumber(DestinationProperty, moduleDictionary[Destination!]);
             if (IsDisabled)
             {
                 writer.WriteBoolean(DisabledProperty, true);
@@ -49,12 +49,12 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteEndObject();
         }
 
-        internal override bool Construct(ref string error)
+        internal override bool Construct(ref string? error)
         {
             // if not optional
-            if (OriginHook.Cardinality == HookCardinality.Single)
+            if (OriginHook!.Cardinality == HookCardinality.Single)
             {
-                if (Destination.IsDisabled)
+                if (Destination!.IsDisabled)
                 {
                     error = "A link destined for a disabled module was not optional.";
                     return false;
@@ -68,7 +68,7 @@ namespace XTMF2.ModelSystemConstruct
             if (!IsDisabled)
             {
                 // The index doesn't matter for this type
-                OriginHook.Install(Origin, Destination, 0);
+                OriginHook.Install(Origin!, Destination!, 0);
             }
             return true;
         }

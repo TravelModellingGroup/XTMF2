@@ -27,7 +27,7 @@ namespace XTMF2.Bus
     /// </summary>
     public sealed class RunError
     {
-        public RunError(RunErrorType type, string message, string moduleName, string stackTrace)
+        public RunError(RunErrorType type, string? message, string? moduleName, string? stackTrace)
         {
             Type = type;
             Message = message;
@@ -44,18 +44,18 @@ namespace XTMF2.Bus
         /// The name of the module that caused the error.
         /// This can be null.
         /// </summary>
-        public string ModuleName { get; private set; }
+        public string? ModuleName { get; private set; }
 
         /// <summary>
         /// A description of the error that occurred.
         /// </summary>
-        public string Message {get; private set;}
+        public string? Message {get; private set;}
 
         /// <summary>
         /// The stack trace for the error.
         /// The can be null.
         /// </summary>
-        public string StackTrace { get; private set; }
+        public string? StackTrace { get; private set; }
 
     }
 }
