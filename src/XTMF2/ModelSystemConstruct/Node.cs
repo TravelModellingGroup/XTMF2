@@ -38,7 +38,7 @@ namespace XTMF2
         /// <summary>
         /// The boundary that this node is contained within
         /// </summary>
-        public Boundary? ContainedWithin { get; protected set; }
+        public Boundary ContainedWithin { get; protected set; }
 
         protected const string NameProperty = "Name";
         protected const string DescriptionProperty = "Description";
@@ -55,12 +55,12 @@ namespace XTMF2
         /// Don't use this field as the setter
         /// will properly create the node hooks.
         /// </summary>
-        private Type? _Type;
+        private Type _type;
 
         /// <summary>
         /// The type that this will represent
         /// </summary>
-        public Type? Type => _Type;
+        public Type Type => _type;
 
         /// <summary>
         /// A parameter value to use if this is a parameter type
@@ -72,14 +72,14 @@ namespace XTMF2
         /// </summary>
         private void CreateNodeHooks(ModuleRepository repository)
         {
-            Hooks = repository[_Type!].Hooks;
+            Hooks = repository[_type!].Hooks;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Hooks)));
         }
 
         /// <summary>
         /// Get a readonly list of possible hooks to use to interface with other nodes.
         /// </summary>
-        public IReadOnlyList<NodeHook>? Hooks { get; private set; }
+        public IReadOnlyList<NodeHook> Hooks { get; private set; }
 
         /// <summary>
         /// The name of the node
@@ -154,18 +154,13 @@ namespace XTMF2
 
         internal bool Validate(ref string? moduleName, ref string? error)
         {
-            if(Hooks is null)
-            {
-                moduleName = Name;
-                return FailWith(out error, $"The NodeHooks were not defined for module {Name}!");
-            }
             foreach(var hook in Hooks)
             {
                 // if the 
                 if(hook.Cardinality == HookCardinality.Single
                    || hook.Cardinality == HookCardinality.AtLeastOne)
                 {
-                    if(!ContainedWithin!.Links.Any(l=> l.Origin == this && l.OriginHook == hook))
+                    if(!ContainedWithin.Links.Any(l=> l.Origin == this && l.OriginHook == hook))
                     {
                         moduleName = Name;
                         error = $"A required link was not assigned for the hook {hook.Name}!";
@@ -201,35 +196,35 @@ namespace XTMF2
         /// <returns>True if the operation was successful, false otherwise</returns>
         internal bool ConstructModule(XTMFRuntime runtime, ref string? error)
         {
-            if(_Type is null)
+            if(_type is null)
             {
                 return FailWith(out error, $"Unable to construct a module named {Name} without a type!");
             }
-            var typeInfo = _Type.GetTypeInfo();
+            var typeInfo = _type.GetTypeInfo();
             var module = (
                 typeInfo.GetConstructor(RuntimeConstructor)?.Invoke(new[] { runtime })
                 ?? typeInfo.GetConstructor(EmptyConstructor)?.Invoke(EmptyConstructor)) as IModule;
             if(!(module is IModule))
             {
-                return FailWith(out error, $"Unable to construct a module of type {_Type.GetTypeInfo().AssemblyQualifiedName}!");
+                return FailWith(out error, $"Unable to construct a module of type {_type.GetTypeInfo().AssemblyQualifiedName}!");
             }
             Module = module;
             Module.Name = Name;
-            if (_Type.IsConstructedGenericType && _Type.GetGenericTypeDefinition() == GenericParameter)
+            if (_type.IsConstructedGenericType && _type.GetGenericTypeDefinition() == GenericParameter)
             {
-                var paramType = _Type.GenericTypeArguments[0];
+                var paramType = _type.GenericTypeArguments[0];
                 var paramValue = ParameterValue ?? "";
                 var (Sucess, Value) = ArbitraryParameterParser.ArbitraryParameterParse(paramType, paramValue, ref error);
                 if (!Sucess)
                 {
                     return FailWith(out error, $"Unable to assign the value of {paramValue} to type {paramType.FullName}!");
                 }
-                if (!GenericValue.TryGetValue(_Type, out var info))
+                if (!GenericValue.TryGetValue(_type, out var info))
                 {
-                    info = _Type.GetRuntimeField("Value");
+                    info = _type.GetRuntimeField("Value");
                     if(info == null)
                     {
-                        return FailWith(out error, $"Unable find a field named 'Value' on type {_Type.FullName} in order to assign a value to it!");
+                        return FailWith(out error, $"Unable find a field named 'Value' on type {_type.FullName} in order to assign a value to it!");
                     }
                     GenericValue[paramType] = info;
                 }
@@ -264,9 +259,9 @@ namespace XTMF2
             {
                 return FailWith(out error, "The given type was null!");
             }
-            if (_Type != type)
+            if (_type != type)
             {
-                _Type = type;
+                _type = type;
                 CreateNodeHooks(modules);
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Type)));
             }
@@ -292,10 +287,15 @@ namespace XTMF2
         /// Create a new node with name only.
         /// Only invoke this if you are going to set the type explicitly right after.
         /// </summary>
+         
+        
         /// <param name="name">The name of the node</param>
-        protected Node(string name)
+        protected Node(string name, Type type, Boundary containedWithin, IReadOnlyList<NodeHook> hooks)
         {
             Name = name;
+            _type = type;
+            ContainedWithin = containedWithin;
+            Hooks = hooks;
         }
 
         /// <summary>
@@ -305,7 +305,7 @@ namespace XTMF2
         /// <returns>True if the operation was successful, false otherwise</returns>
         private static string GetName(Type type)
         {
-            return type?.Name ?? throw new ArgumentNullException(nameof(type));
+            return type.Name;
         }
 
         /// <summary>
@@ -353,7 +353,7 @@ namespace XTMF2
             writer.WriteStartObject();
             writer.WriteString(NameProperty, Name);
             writer.WriteString(DescriptionProperty, Description);
-            writer.WriteNumber(TypeProperty, typeDictionary[_Type!]);
+            writer.WriteNumber(TypeProperty, typeDictionary[_type!]);
             writer.WriteNumber(XProperty, Location.X);
             writer.WriteNumber(YProperty, Location.Y);
             writer.WriteNumber(WidthProperty, Location.Width);
@@ -382,7 +382,7 @@ namespace XTMF2
             int index = -1;
             bool disabled = false;
             Rectangle point = new Rectangle();
-            string? description = null;
+            string description = string.Empty;
             string? parameter = null;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
@@ -462,38 +462,34 @@ namespace XTMF2
             {
                 return FailWith(out mss, out error, $"Index {index} already exists!");
             }
-            mss = new Node(name)
+            if(type is null)
             {
-                Description = description ?? string.Empty,
+                return FailWith(out mss, out error, $"When trying to create a node {name} there was no type defined!");
+            }
+            (_, _, var hooks) = modules[type];
+            if(hooks == null)
+            {
+                return FailWith(out mss, out error, $"When trying to create a node {name} we were unable to find a hook for type {type.FullName}!");
+            }
+            mss = new Node(name, type, boundary, hooks)
+            {
                 Location = point,
-                ContainedWithin = boundary,
+                Description = description,
                 ParameterValue = parameter,
                 IsDisabled = disabled
             };
-            if(type is null)
-            {
-                return FailWith(out error, $"When trying to create a node {name} there was no type defined!");
-            }
-            if (!mss.SetType(modules, type, ref error))
-            {
-                return false;
-            }
             nodes.Add(index, mss);
             return true;
         }
 
         internal static Node? Create(ModelSystemSession session, string name, Type type, Boundary boundary)
         {
-            string? error = null;
-            var ret = new Node(name)
-            {
-                ContainedWithin = boundary
-            };
-            if (!ret.SetType(session.GetModuleRepository(), type, ref error))
+            (_, _, var hooks) = session.GetModuleRepository()[type];
+            if(hooks == null)
             {
                 return null;
             }
-            return ret;
+            return new Node(name, type, boundary, hooks);
         }
     }
 }

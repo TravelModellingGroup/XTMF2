@@ -689,12 +689,7 @@ namespace XTMF2
             {
                 case HookCardinality.Single:
                 case HookCardinality.SingleOptional:
-                    link = new SingleLink()
-                    {
-                        Origin = origin,
-                        OriginHook = originHook,
-                        Destination = destination
-                    };
+                    link = new SingleLink(origin, originHook, destination, false);
                     _Links.Add(link);
                     break;
                 default:
@@ -703,23 +698,17 @@ namespace XTMF2
                         if (previous != null)
                         {
                             link = previous;
+                            if(link is MultiLink ml)
+                            {
+                                if(!ml.AddDestination(destination, out error))
+                                {
+                                    return false;
+                                }
+                            }
                         }
                         else
                         {
-                            link = new MultiLink()
-                            {
-                                Origin = origin,
-                                OriginHook = originHook
-                            };
-                        }
-                        if (!((MultiLink)link).AddDestination(destination, out error))
-                        {
-                            link = null;
-                            return false;
-                        }
-                        // if we are successful and it didn't already exist add it to our list
-                        if (previous == null)
-                        {
+                            link = new MultiLink(origin, originHook, new List<Node>() { destination }, false);
                             _Links.Add(link);
                         }
                     }
