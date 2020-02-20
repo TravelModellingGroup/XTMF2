@@ -552,7 +552,7 @@ namespace XTMF2.Editing
                         return (boundary.RemoveStart(_start, out var e), e);
                     }, () =>
                     {
-                        return (boundary.AddStart(this, startName, _start, out var e), e);
+                        return (boundary.AddStart(startName, _start, out var e), e);
                     }));
                 }
                 return success;
@@ -627,8 +627,7 @@ namespace XTMF2.Editing
                     node = null;
                     return false;
                 }
-                bool success = boundary.AddNode(this, name, type, out node, out error);
-                if (success)
+                if (boundary.AddNode(GetModuleRepository(), name, type, out node, out error))
                 {
                     Node _node = node!;
                     Buffer.AddUndo(new Command(() =>
@@ -636,10 +635,14 @@ namespace XTMF2.Editing
                         return (boundary.RemoveNode(_node, out var e), e);
                     }, () =>
                     {
-                        return (boundary.AddNode(this, name, type, _node, out var e), e);
+                        return (boundary.AddNode(_node, out var e), e);
                     }));
+                    return true;
                 }
-                return success;
+                else
+                {
+                    return false;
+                }
             }
         }
 
@@ -674,7 +677,7 @@ namespace XTMF2.Editing
                     node = null;
                     return false;
                 }
-                bool success = boundary.AddNode(this, name, type, out node, out error);
+                bool success = boundary.AddNode(GetModuleRepository(), name, type, out node, out error);
                 if (success)
                 {
                     // now generate the children
@@ -706,14 +709,14 @@ namespace XTMF2.Editing
                         }
                     }
                     Add();
-                    Node _mss = node!;
+                    Node _node = node!;
                     Buffer.AddUndo(new Command(() =>
                     {
                         Remove();
-                        return (boundary.RemoveNode(_mss, out var e), e);
+                        return (boundary.RemoveNode(_node, out var e), e);
                     }, () =>
                     {
-                        if ((boundary.AddNode(this, name, type, _mss, out var e)))
+                        if ((boundary.AddNode(_node, out var e)))
                         {
                             Add();
                             return (true, null);
@@ -748,8 +751,8 @@ namespace XTMF2.Editing
                     var functionType = typeof(RuntimeModules.BasicParameter<>).MakeGenericType(genericParameters[0]);
                     if (type.IsAssignableFrom(functionType))
                     {
-                        var child = Node.Create(this, hook.Name, functionType, boundary);
-                        if (child?.SetParameterValue(this, hook.DefaultValue!, out var error) == true)
+                        var child = Node.Create(this.GetModuleRepository(), hook.Name, functionType, boundary);
+                        if (child?.SetParameterValue(hook.DefaultValue!, out var error) == true)
                         {
                             nodes.Add(child);
                             if (boundary.AddLink(baseNode, hook, child, out var link, out error))
@@ -979,14 +982,14 @@ namespace XTMF2.Editing
                     return false;
                 }
                 var previousValue = basicParameter.ParameterValue ?? string.Empty;
-                if (basicParameter.SetParameterValue(this, value, out error))
+                if (basicParameter.SetParameterValue(value, out error))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (basicParameter.SetParameterValue(this, previousValue, out var e), e);
+                        return (basicParameter.SetParameterValue(previousValue, out var e), e);
                     }, () =>
                     {
-                        return (basicParameter.SetParameterValue(this, value, out var e), e);
+                        return (basicParameter.SetParameterValue(value, out var e), e);
                     }));
                     return true;
                 }
@@ -1020,14 +1023,14 @@ namespace XTMF2.Editing
                     return false;
                 }
                 error = null;
-                if (node.SetDisabled(this, disabled, out error))
+                if (node.SetDisabled(disabled, out error))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (node.SetDisabled(this, !disabled, out var error), error);
+                        return (node.SetDisabled(!disabled, out var error), error);
                     }, () =>
                     {
-                        return (node.SetDisabled(this, disabled, out var error), error);
+                        return (node.SetDisabled(disabled, out var error), error);
                     }));
                     return true;
                 }
@@ -1060,14 +1063,14 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
-                if (link.SetDisabled(this, disabled, out error))
+                if (link.SetDisabled(disabled, out error))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (link.SetDisabled(this, !disabled, out var error), error);
+                        return (link.SetDisabled(!disabled, out var error), error);
                     }, () =>
                     {
-                        return (link.SetDisabled(this, disabled, out var error), error);
+                        return (link.SetDisabled(disabled, out var error), error);
                     }));
                     return true;
                 }
@@ -1207,15 +1210,15 @@ namespace XTMF2.Editing
                         if (_link is SingleLink sl)
                         {
                             var originalDestination = sl.Destination!;
-                            success = sl.SetDestination(this, destination, out error);
+                            success = sl.SetDestination(destination, out error);
                             if (success)
                             {
                                 Buffer.AddUndo(new Command(() =>
                                 {
-                                    return (sl.SetDestination(this, originalDestination, out var e), e);
+                                    return (sl.SetDestination(originalDestination, out var e), e);
                                 }, () =>
                                 {
-                                    return (sl.SetDestination(this, destination, out var e), e);
+                                    return (sl.SetDestination(destination, out var e), e);
                                 }
                                 ));
                             }

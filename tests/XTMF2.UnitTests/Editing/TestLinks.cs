@@ -356,26 +356,24 @@ namespace XTMF2.UnitTests.Editing
                 {
                     CommandError error = null;
                     bool success = false;
-                    using (SemaphoreSlim sim = new SemaphoreSlim(0))
+                    using var sim = new SemaphoreSlim(0);
+                    runBus.ClientFinishedModelSystem += (sender, e) =>
                     {
-                        runBus.ClientFinishedModelSystem += (sender, e) =>
-                        {
-                            success = true;
-                            sim.Release();
-                        };
-                        runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
-                        {
-                            error = new CommandError(e + "\r\n" + stack);
-                            sim.Release();
-                        };
-                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "Start", out var id, out error), error?.Message);
-                        // give the models system some time to complete
-                        if (!sim.Wait(2000))
-                        {
-                            Assert.Fail("The model system failed to execute in time!");
-                        }
-                        Assert.IsFalse(success, "The model system finished running instead of having a validation error!");
+                        success = true;
+                        sim.Release();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    {
+                        error = new CommandError(e + "\r\n" + stack);
+                        sim.Release();
+                    };
+                    Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "Start", out var id, out error), error?.Message);
+                    // give the models system some time to complete
+                    if (!sim.Wait(2000))
+                    {
+                        Assert.Fail("The model system failed to execute in time!");
                     }
+                    Assert.IsFalse(success, "The model system finished running instead of having a validation error!");
                 });
             });
         }
