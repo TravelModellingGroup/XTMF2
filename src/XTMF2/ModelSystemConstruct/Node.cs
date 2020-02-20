@@ -290,12 +290,13 @@ namespace XTMF2
          
         
         /// <param name="name">The name of the node</param>
-        protected Node(string name, Type type, Boundary containedWithin, IReadOnlyList<NodeHook> hooks)
+        protected Node(string name, Type type, Boundary containedWithin, IReadOnlyList<NodeHook> hooks, Rectangle location)
         {
             Name = name;
             _type = type;
             ContainedWithin = containedWithin;
             Hooks = hooks;
+            Location = location;
         }
 
         /// <summary>
@@ -461,7 +462,7 @@ namespace XTMF2
             {
                 return FailWith(out mss, out error, $"When trying to create a node {name} we were unable to find a hook for type {type.FullName}!");
             }
-            mss = new Node(name, type, boundary, hooks)
+            mss = new Node(name, type, boundary, hooks, point)
             {
                 Location = point,
                 Description = description,
@@ -472,14 +473,14 @@ namespace XTMF2
             return true;
         }
 
-        internal static Node? Create(ModuleRepository modules, string name, Type type, Boundary boundary)
+        internal static Node? Create(ModuleRepository modules, string name, Type type, Boundary boundary, Rectangle location)
         {
             (_, _, var hooks) = modules[type];
             if(hooks == null)
             {
                 return null;
             }
-            return new Node(name, type, boundary, hooks);
+            return new Node(name, type, boundary, hooks, location);
         }
     }
 }

@@ -165,8 +165,8 @@ namespace XTMF2.UnitTests
             using (session)
             {
                 var ms = session.ModelSystem;
-                Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, out error), error?.Message);
-                Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, out error), error?.Message);
+                Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, Rectangle.Hidden, out var start, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), Rectangle.Hidden, out var node, out error), error?.Message);
                 Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, out error), error?.Message);
                 Assert.IsTrue(session.Save(out error), error?.Message);
                 if (!(executeBeforeSessionClosed is null))

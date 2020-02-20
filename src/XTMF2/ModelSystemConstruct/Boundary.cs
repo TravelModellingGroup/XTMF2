@@ -798,7 +798,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddStart(ModelSystemSession session, string startName, out Start? start, out CommandError? error)
+        internal bool AddStart(ModelSystemSession session, string startName, Rectangle location, out Start? start, out CommandError? error)
         {
             start = null;
             // ensure the name is unique between starting points
@@ -810,7 +810,7 @@ namespace XTMF2
                     return false;
                 }
             }
-            start = new Start(session.GetModuleRepository(), startName, this, string.Empty, new Rectangle(0, 0, 0, 0));
+            start = new Start(session.GetModuleRepository(), startName, this, string.Empty, location);
             _Starts.Add(start);
             error = null;
             return true;
@@ -840,9 +840,9 @@ namespace XTMF2
             return true;
         }
 
-        internal bool AddNode(ModuleRepository modules, string name, Type type, out Node? node, out CommandError? error)
+        internal bool AddNode(ModuleRepository modules, string name, Type type, Rectangle location, out Node? node, out CommandError? error)
         {
-            node = Node.Create(modules, name, type, this);
+            node = Node.Create(modules, name, type, this, location);
             if(node is null)
             {
                 return FailWith(out error, $"Unable to create a node with the name {name} of type {type.FullName}!");

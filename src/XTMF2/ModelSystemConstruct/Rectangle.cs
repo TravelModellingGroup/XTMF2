@@ -24,6 +24,11 @@ namespace XTMF2
 {
     public readonly struct Rectangle
     {
+        /// <summary>
+        /// A rectangle that represents a node that will not be shown.
+        /// </summary>
+        public static Rectangle Hidden { get; } = new Rectangle(-1, -1, -1, -1);
+
         public Rectangle(float x, float y, float width = 80, float height = 50)
         {
             X = x;
