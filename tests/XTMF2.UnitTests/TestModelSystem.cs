@@ -73,8 +73,8 @@ namespace XTMF2.UnitTests
             {
                 CommandError error = null;
                 var globalBoundary = mSession.ModelSystem.GlobalBoundary;
-                Assert.IsTrue(mSession.AddModelSystemStart(user, globalBoundary, "Start", out Start start, out error), error?.Message);
-                Assert.IsFalse(mSession.AddModelSystemStart(user, globalBoundary, "Start", out Start start_, out error));
+                Assert.IsTrue(mSession.AddModelSystemStart(user, globalBoundary, "Start", Rectangle.Hidden, out Start start, out error), error?.Message);
+                Assert.IsFalse(mSession.AddModelSystemStart(user, globalBoundary, "Start", Rectangle.Hidden, out Start start_, out error));
             });
         }
 
@@ -161,7 +161,7 @@ namespace XTMF2.UnitTests
                 // initialization
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, out error), error?.Message);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, out var start, out error), error?.Message);
 
             }, (user, pSession, mSession) =>
             {
@@ -170,7 +170,7 @@ namespace XTMF2.UnitTests
                 CommandError error = null;
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 // we shouldn't be able to add another start with the same name in the same boundary
-                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, out error), error?.Message);
+                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, out var start, out error), error?.Message);
             });
         }
 
@@ -182,7 +182,7 @@ namespace XTMF2.UnitTests
                 // initialization
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, out error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), Rectangle.Hidden, out var mss, out error));
                 Assert.AreEqual("MyMSS", mss.Name);
             }, (user, pSession, mSession) =>
             {
@@ -200,8 +200,8 @@ namespace XTMF2.UnitTests
                 // initialization
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, out error));
-                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), Rectangle.Hidden, out var mss, out error));
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, out var start, out error), error?.Message);
                 Assert.AreEqual("MyMSS", mss.Name);
             }, (user, pSession, mSession) =>
             {
@@ -210,7 +210,7 @@ namespace XTMF2.UnitTests
                 var ms = mSession.ModelSystem;
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
-                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, out error), error?.Message);
+                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, out var start, out error), error?.Message);
             });
         }
 
@@ -222,8 +222,8 @@ namespace XTMF2.UnitTests
                 // initialization
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), out var mss, out error));
-                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), Rectangle.Hidden, out var mss, out error));
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, out var start, out error), error?.Message);
                 Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], mss, out var link, out error), error?.Message);
                 Assert.AreEqual("MyMSS", mss.Name);
             }, (user, pSession, mSession) =>
@@ -234,7 +234,8 @@ namespace XTMF2.UnitTests
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
-                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, out error), error?.Message);
+                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, 
+                    out var start, out error), error?.Message);
             });
         }
 
@@ -246,13 +247,13 @@ namespace XTMF2.UnitTests
                 // initialization
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, out error), error?.Message);
+                Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, out var start, out error), error?.Message);
 
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Execute", typeof(Execute), out var mss, out error));
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Ignore1", typeof(IgnoreResult<string>), out var ignore1, out error));
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Ignore2", typeof(IgnoreResult<string>), out var ignore2, out error));
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Ignore3", typeof(IgnoreResult<string>), out var ignore3, out error));
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Hello World", typeof(SimpleTestModule), out var hello, out error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Execute", typeof(Execute), Rectangle.Hidden, out var mss, out error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Ignore1", typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignore1, out error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Ignore2", typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignore2, out error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Ignore3", typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignore3, out error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Hello World", typeof(SimpleTestModule), Rectangle.Hidden, out var hello, out error));
 
 
                 Assert.IsTrue(mSession.AddLink(user, start, GetHook(start.Hooks, "ToExecute"), mss, out var link, out error), error?.Message);
@@ -281,7 +282,8 @@ namespace XTMF2.UnitTests
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreEqual(5, ms.GlobalBoundary.Modules.Count);
                 Assert.AreEqual(5, ms.GlobalBoundary.Links.Count);
-                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", out var start, out error), error?.Message);
+                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, 
+                    out var start, out error), error?.Message);
             });
         }
 
@@ -307,8 +309,9 @@ namespace XTMF2.UnitTests
                     using (session)
                     {
                         var ms = session.ModelSystem;
-                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, out error), error?.Message);
-                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, out error), error?.Message);
+                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, Rectangle.Hidden, out var start, out error), error?.Message);
+                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>),
+                            Rectangle.Hidden, out var node, out error), error?.Message);
                         Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, out error), error?.Message);
                         Assert.IsTrue(session.Save(out error), error?.Message);
                         Assert.IsFalse(project.ExportModelSystem(user, msHeader, tempFile.FullName, out error),
@@ -356,8 +359,8 @@ namespace XTMF2.UnitTests
                     using (session)
                     {
                         var ms = session.ModelSystem;
-                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, out error), error?.Message);
-                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, out error), error?.Message);
+                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, Rectangle.Hidden, out var start, out error), error?.Message);
+                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), Rectangle.Hidden, out var node, out error), error?.Message);
                         Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, out error), error?.Message);
                         Assert.IsTrue(session.Save(out error), error?.Message);
                     }
@@ -482,8 +485,8 @@ namespace XTMF2.UnitTests
                     using (session)
                     {
                         var ms = session.ModelSystem;
-                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, out error), error?.Message);
-                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, out error), error?.Message);
+                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, Rectangle.Hidden, out var start, out error), error?.Message);
+                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), Rectangle.Hidden, out var node, out error), error?.Message);
                         Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, out error), error?.Message);
                         Assert.IsTrue(session.Save(out error), error?.Message);
                     }
@@ -529,8 +532,8 @@ namespace XTMF2.UnitTests
                     using (session)
                     {
                         var ms = session.ModelSystem;
-                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, out var start, out error), error?.Message);
-                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), out var node, out error), error?.Message);
+                        Assert.IsTrue(session.AddModelSystemStart(user, ms.GlobalBoundary, startName, Rectangle.Hidden, out var start, out error), error?.Message);
+                        Assert.IsTrue(session.AddNode(user, ms.GlobalBoundary, nodeName, typeof(IgnoreResult<string>), Rectangle.Hidden, out var node, out error), error?.Message);
                         Assert.IsTrue(session.AddLink(user, start, TestHelper.GetHook(start.Hooks, "ToExecute"), node, out var link, out error), error?.Message);
                         Assert.IsTrue(session.Save(out error), error?.Message);
                     }
@@ -595,12 +598,12 @@ namespace XTMF2.UnitTests
                 }
                 finally
                 {
-                    if(Directory.Exists(tempDir.FullName))
+                    if (Directory.Exists(tempDir.FullName))
                     {
                         Directory.Delete(tempDir.FullName, true);
                     }
                     tempFile.Refresh();
-                    if(tempFile.Exists)
+                    if (tempFile.Exists)
                     {
                         tempFile.Delete();
                     }

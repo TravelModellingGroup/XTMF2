@@ -511,10 +511,11 @@ namespace XTMF2.Editing
         /// </summary>
         /// <param name="user">The user requesting to add the new start node.</param>
         /// <param name="startName">The name of the start element.  This must be unique in the model system.</param>
+        /// <param name="location">The location to put the start.</param>
         /// <param name="start">The newly created start node</param>
         /// <param name="error">A message describing why the start node was rejected.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
-        public bool AddModelSystemStart(User user, Boundary boundary, string startName, out Start? start, out CommandError? error)
+        public bool AddModelSystemStart(User user, Boundary boundary, string startName, Rectangle location, out Start? start, out CommandError? error)
         {
             if (user is null)
             {
@@ -543,7 +544,7 @@ namespace XTMF2.Editing
                     error = new CommandError("The passed in boundary is not part of the model system!");
                     return false;
                 }
-                var success = boundary.AddStart(this, startName, out start, out error);
+                var success = boundary.AddStart(this, startName, location, out start, out error);
                 if (success)
                 {
                     Start _start = start!;
@@ -606,10 +607,11 @@ namespace XTMF2.Editing
         /// <param name="boundary">The boundary that the new node will be created in.</param>
         /// <param name="name">The name to give to the new node.</param>
         /// <param name="type">The type of module to assign to the new node.</param>
+        /// <param name="location">The location to create the new node.</param>
         /// <param name="node">The resulting node if the operation succeeds, null if the operation fails.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
-        public bool AddNode(User user, Boundary boundary, string name, Type type, out Node? node, out CommandError? error)
+        public bool AddNode(User user, Boundary boundary, string name, Type type, Rectangle location, out Node? node, out CommandError? error)
         {
             if (user is null)
             {
@@ -627,7 +629,7 @@ namespace XTMF2.Editing
                     node = null;
                     return false;
                 }
-                if (boundary.AddNode(GetModuleRepository(), name, type, out node, out error))
+                if (boundary.AddNode(GetModuleRepository(), name, type, location, out node, out error))
                 {
                     Node _node = node!;
                     Buffer.AddUndo(new Command(() =>
@@ -658,7 +660,7 @@ namespace XTMF2.Editing
         /// <param name="error"></param>
         /// <returns></returns>
         public bool AddNodeGenerateParameters(User user, Boundary boundary, string name, Type type,
-            out Node? node, out List<Node>? children, out CommandError? error)
+            Rectangle location, out Node? node, out List<Node>? children, out CommandError? error)
         {
             if (user is null)
             {
@@ -677,7 +679,7 @@ namespace XTMF2.Editing
                     node = null;
                     return false;
                 }
-                bool success = boundary.AddNode(GetModuleRepository(), name, type, out node, out error);
+                bool success = boundary.AddNode(GetModuleRepository(), name, type, location, out node, out error);
                 if (success)
                 {
                     // now generate the children
@@ -751,7 +753,7 @@ namespace XTMF2.Editing
                     var functionType = typeof(RuntimeModules.BasicParameter<>).MakeGenericType(genericParameters[0]);
                     if (type.IsAssignableFrom(functionType))
                     {
-                        var child = Node.Create(this.GetModuleRepository(), hook.Name, functionType, boundary);
+                        var child = Node.Create(this.GetModuleRepository(), hook.Name, functionType, boundary, Rectangle.Hidden);
                         if (child?.SetParameterValue(hook.DefaultValue!, out var error) == true)
                         {
                             nodes.Add(child);

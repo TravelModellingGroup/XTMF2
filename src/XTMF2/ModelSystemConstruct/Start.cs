@@ -34,11 +34,10 @@ namespace XTMF2.ModelSystemConstruct
     public sealed class Start : Node
     {
         public Start(ModuleRepository modules, string startName, Boundary boundary, string description, Rectangle point) 
-            : base(startName, typeof(StartModule), boundary, modules[typeof(StartModule)].Hooks!)
+            : base(startName, typeof(StartModule), boundary, modules[typeof(StartModule)].Hooks!, point)
         {
             ContainedWithin = boundary;
             Description = description;
-            Location = point;
         }
 
         internal override void Save(ref int index, Dictionary<Node, int> moduleDictionary, Dictionary<Type, int> typeDictionary, Utf8JsonWriter writer)
