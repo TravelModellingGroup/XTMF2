@@ -30,14 +30,10 @@ namespace XTMF2.ModelSystemConstruct
     {
         private ObservableCollection<Node> _Destinations;
 
-        public MultiLink(List<Node> destinations)
+        public MultiLink(Node origin, NodeHook hook, List<Node> destinations, bool disabled)
+            : base(origin, hook, disabled)
         {
             _Destinations = new ObservableCollection<Node>(destinations);
-        }
-
-        public MultiLink()
-        {
-            _Destinations = new ObservableCollection<Node>();
         }
 
         public ReadOnlyObservableCollection<Node> Destinations =>

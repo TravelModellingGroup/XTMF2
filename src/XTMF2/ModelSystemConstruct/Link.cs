@@ -39,20 +39,18 @@ namespace XTMF2
         protected const string IndexProperty = "Index";
         protected const string DisabledProperty = "Disabled";
 
-        public Node? Origin { get; internal set; }
-        public NodeHook? OriginHook { get; internal set; }
+        public Node Origin { get; }
+        public NodeHook OriginHook { get; }
 
         public bool IsDisabled { get; private set; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        public bool SetOrigin(ModelSystemSession session, Node origin, NodeHook originHook, ref string error)
+        protected Link(Node origin, NodeHook hook, bool disabled)
         {
             Origin = origin;
-            OriginHook = originHook;
-            Notify(nameof(Origin));
-            Notify(nameof(OriginHook));
-            return true;
+            OriginHook = hook;
+            IsDisabled = disabled;
         }
 
         /// <summary>
@@ -167,22 +165,12 @@ namespace XTMF2
             }
             if (destination != null)
             {
-                link = new SingleLink()
-                {
-                    Origin = origin,
-                    OriginHook = hook,
-                    Destination = destination,
-                    IsDisabled = disabled
-                };
+                link = new SingleLink(origin, hook, destination, disabled);
             }
             else
             {
-                link = new MultiLink(destinations!)
-                {
-                    Origin = origin,
-                    OriginHook = hook,
-                    IsDisabled = disabled
-                };
+                // destinations can not be null if destination was.
+                link = new MultiLink(origin, hook, destinations!, disabled);
             }
             return true;
         }

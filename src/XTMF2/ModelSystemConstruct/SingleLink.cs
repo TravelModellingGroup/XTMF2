@@ -27,7 +27,14 @@ namespace XTMF2.ModelSystemConstruct
 {
     public sealed class SingleLink : Link
     {
-        public Node? Destination { get; internal set; }
+        public Node Destination { get; private set; }
+
+        public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled)
+            : base(origin, hook, disabled)
+        {
+            Destination = destination;
+        }
+
         public bool SetDestination(ModelSystemSession session, Node destination, out CommandError? error)
         {
             Destination = destination;
@@ -40,7 +47,7 @@ namespace XTMF2.ModelSystemConstruct
         {
             writer.WriteStartObject();
             writer.WriteNumber(OriginProperty, moduleDictionary[Origin!]);
-            writer.WriteString(HookProperty, OriginHook!.Name);
+            writer.WriteString(HookProperty, OriginHook.Name);
             writer.WriteNumber(DestinationProperty, moduleDictionary[Destination!]);
             if (IsDisabled)
             {
