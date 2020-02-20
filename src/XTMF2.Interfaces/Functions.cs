@@ -27,7 +27,7 @@ namespace XTMF2
     {
         public string? Name { get; set; }
 
-        public virtual bool RuntimeValidation(ref string error)
+        public virtual bool RuntimeValidation(ref string? error)
         {
             return true;
         }
@@ -61,7 +61,7 @@ namespace XTMF2
 
         public abstract Result Invoke(Context context);
 
-        public virtual bool RuntimeValidation(ref string error)
+        public virtual bool RuntimeValidation(ref string? error)
         {
             return true;
         }
@@ -78,7 +78,7 @@ namespace XTMF2
 
         public abstract void Invoke();
 
-        public virtual bool RuntimeValidation(ref string error)
+        public virtual bool RuntimeValidation(ref string? error)
         {
             return true;
         }
@@ -95,7 +95,7 @@ namespace XTMF2
 
         public abstract void Invoke(Context context);
 
-        public virtual bool RuntimeValidation(ref string error)
+        public virtual bool RuntimeValidation(ref string? error)
         {
             return true;
         }
@@ -114,7 +114,7 @@ namespace XTMF2
 
         public abstract void Register(Action module);
 
-        public virtual bool RuntimeValidation(ref string error)
+        public virtual bool RuntimeValidation(ref string? error)
         {
             return true;
         }
@@ -133,7 +133,7 @@ namespace XTMF2
 
         public abstract void Register(Action<Context> module);
 
-        public virtual bool RuntimeValidation(ref string error)
+        public virtual bool RuntimeValidation(ref string? error)
         {
             return true;
         }

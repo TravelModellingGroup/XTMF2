@@ -28,7 +28,7 @@ namespace XTMF2.ModelSystemConstruct
 {
     public sealed class MultiLink : Link
     {
-        private ObservableCollection<Node> _Destinations;
+        private readonly ObservableCollection<Node> _Destinations;
 
         public MultiLink(Node origin, NodeHook hook, List<Node> destinations, bool disabled)
             : base(origin, hook, disabled)

@@ -115,7 +115,7 @@ namespace XTMF2
         /// <param name="name">The name to change it to</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        public bool SetName(ModelSystemSession session, string name, out CommandError? error)
+        internal bool SetName(string name, out CommandError? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -134,7 +134,7 @@ namespace XTMF2
         /// <param name="value">The value to change the parameter to.</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        public bool SetParameterValue(ModelSystemSession sesson, string value, out CommandError? error)
+        internal bool SetParameterValue(string value, out CommandError? error)
         {
             // ensure that the value is allowed
             if (Type == null)
@@ -181,7 +181,7 @@ namespace XTMF2
         /// </summary>
         public bool IsDisabled { get; private set; }
 
-        private static readonly Type[] EmptyConstructor = new Type[] { };
+        private static readonly Type[] EmptyConstructor = Array.Empty<Type>();
 
         private static readonly Type[] RuntimeConstructor = new Type[] { typeof(XTMFRuntime) };
 
@@ -240,7 +240,7 @@ namespace XTMF2
         /// <param name="description">The description to change to</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        public bool SetDescription(ModelSystemSession session, string description, ref string error)
+        internal bool SetDescription(string description)
         {
             Description = description;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
@@ -275,7 +275,7 @@ namespace XTMF2
         /// <param name="modelSystemSession">The model system session</param>
         /// <param name="disabled"></param>
         /// <returns></returns>
-        internal bool SetDisabled(ModelSystemSession modelSystemSession, bool disabled, out CommandError? error)
+        internal bool SetDisabled(bool disabled, out CommandError? error)
         {
             IsDisabled = disabled;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
@@ -296,16 +296,6 @@ namespace XTMF2
             _type = type;
             ContainedWithin = containedWithin;
             Hooks = hooks;
-        }
-
-        /// <summary>
-        /// Get a default name from the type
-        /// </summary>
-        /// <param name="type">The type to derive the name from</param>
-        /// <returns>True if the operation was successful, false otherwise</returns>
-        private static string GetName(Type type)
-        {
-            return type.Name;
         }
 
         /// <summary>
@@ -482,9 +472,9 @@ namespace XTMF2
             return true;
         }
 
-        internal static Node? Create(ModelSystemSession session, string name, Type type, Boundary boundary)
+        internal static Node? Create(ModuleRepository modules, string name, Type type, Boundary boundary)
         {
-            (_, _, var hooks) = session.GetModuleRepository()[type];
+            (_, _, var hooks) = modules[type];
             if(hooks == null)
             {
                 return null;

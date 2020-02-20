@@ -35,7 +35,7 @@ namespace XTMF2.ModelSystemConstruct
             Destination = destination;
         }
 
-        public bool SetDestination(ModelSystemSession session, Node destination, out CommandError? error)
+        internal bool SetDestination(Node destination, out CommandError? error)
         {
             Destination = destination;
             Notify(nameof(Destination));

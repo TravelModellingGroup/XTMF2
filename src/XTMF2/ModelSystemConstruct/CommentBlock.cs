@@ -67,7 +67,7 @@ namespace XTMF2.ModelSystemConstruct
         public Rectangle Location
         {
             get => _location;
-            set
+            internal set
             {
                 _location = value;
                 Notify(nameof(Location));
@@ -80,7 +80,7 @@ namespace XTMF2.ModelSystemConstruct
         public string Comment
         {
             get => _comment;
-            set
+            internal set
             {
                 _comment = value;
                 Notify(nameof(Comment));
@@ -112,33 +112,55 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     if (reader.ValueTextEquals(XProperty))
                     {
-                        reader.Read();
+                        if(!reader.Read() || reader.TokenType != JsonTokenType.Number)
+                        {
+                            return FailWith(out block, out error, $"The x coordinate of the comment block was not a number!");
+                        }
                         x = reader.GetSingle();
                     }
                     else if (reader.ValueTextEquals(YProperty))
                     {
-                        reader.Read();
+                        if (!reader.Read() || reader.TokenType != JsonTokenType.Number)
+                        {
+                            return FailWith(out block, out error, $"The y coordinate of the comment block was not a number!");
+                        }
                         y = reader.GetSingle();
                     }
                     else if (reader.ValueTextEquals(WidthProperty))
                     {
-                        reader.Read();
+                        if (!reader.Read() || reader.TokenType != JsonTokenType.Number)
+                        {
+                            return FailWith(out block, out error, $"The width of the comment block was not a number!");
+                        }
                         width = reader.GetSingle();
                     }
                     else if (reader.ValueTextEquals(HeightProperty))
                     {
-                        reader.Read();
+                        if (!reader.Read() || reader.TokenType != JsonTokenType.Number)
+                        {
+                            return FailWith(out block, out error, $"The height of the comment block was not a number!");
+                        }
                         height = reader.GetSingle();
                     }
                     else if (reader.ValueTextEquals(CommentProperty))
                     {
-                        reader.Read();
+                        if (!reader.Read() || reader.TokenType != JsonTokenType.String)
+                        {
+                            return FailWith(out block, out error, $"The comment of the comment block was not a string!");
+                        }
                         comment = reader.GetString();
                     }
                 }
             }
             block = new CommentBlock(comment, new Rectangle(x, y, width, height));
             return true;
+        }
+
+        private static bool FailWith(out CommentBlock? block, out string error, string message)
+        {
+            block = null;
+            error = message;
+            return false;
         }
     }
 }
