@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2020 University of Toronto
 
     This file is part of XTMF2.
 
@@ -18,17 +18,18 @@
 */
 using System;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace XTMF2
 {
     public sealed class ReadStream : Stream
     {
-        private Stream BaseStream;
+        private readonly Stream _baseStream;
 
         internal ReadStream(Stream baseStream)
         {
-            BaseStream = baseStream ?? throw new ArgumentNullException(nameof(baseStream));
-            if(!baseStream.CanRead)
+            _baseStream = baseStream ?? throw new ArgumentNullException(nameof(baseStream));
+            if (!baseStream.CanRead)
             {
                 throw new InvalidDataException("Unable to create a ReadStream from a stream that can not read!");
             }
@@ -36,27 +37,51 @@ namespace XTMF2
 
         public override bool CanRead => true;
 
-        public override bool CanSeek => BaseStream.CanSeek;
+        public override bool CanSeek => _baseStream.CanSeek;
 
         public override bool CanWrite => false;
 
-        public override long Length => BaseStream.Length;
+        public override long Length => _baseStream.Length;
 
-        public override long Position { get => BaseStream.Position; set => BaseStream.Position = value; }
+        public override long Position { get => _baseStream.Position; set => _baseStream.Position = value; }
+
+        private object _sync = new object();
 
         public override void Flush()
         {
-            BaseStream.Flush();
+            lock (_sync)
+            {
+                _baseStream.Flush();
+            }
         }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            return BaseStream.Read(buffer, offset, count);
+            lock (_sync)
+            {
+                return _baseStream.Read(buffer, offset, count);
+            }
+        }
+
+        public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback callback, object state)
+        {
+            lock (_sync)
+            {
+                return _baseStream.BeginRead(buffer, offset, count, callback, state);
+            }
         }
 
         public override long Seek(long offset, SeekOrigin origin)
         {
-            return BaseStream.Seek(offset, origin);
+            lock (_sync)
+            {
+                return _baseStream.Seek(offset, origin);
+            }
+        }
+
+        public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback callback, object state)
+        {
+            throw new InvalidOperationException("Unable to write to a ReadStream.");
         }
 
         public override void SetLength(long value)
@@ -69,10 +94,34 @@ namespace XTMF2
             throw new InvalidOperationException("Unable to write to a ReadStream");
         }
 
+        public override ValueTask DisposeAsync()
+        {
+            lock (_sync)
+            {
+                var ret = _baseStream.DisposeAsync();
+                Dispose(true);
+                return ret;
+            }
+        }
+
+        public override void Close()
+        {
+            Dispose(true);
+        }
+
         protected override void Dispose(bool disposing)
         {
-            base.Dispose(disposing);
-            BaseStream.Dispose();
+            lock (_sync)
+            {
+                try
+                {
+                    _baseStream.Close();
+                }
+                finally
+                {
+                    base.Dispose(disposing);
+                }
+            }
         }
     }
 }
