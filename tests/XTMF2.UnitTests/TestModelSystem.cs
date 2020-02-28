@@ -27,6 +27,7 @@ using XTMF2.UnitTests.Modules;
 using XTMF2.RuntimeModules;
 using static XTMF2.UnitTests.TestHelper;
 using XTMF2.Editing;
+using System.Text;
 
 namespace XTMF2.UnitTests
 {
@@ -234,7 +235,7 @@ namespace XTMF2.UnitTests
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
                 Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
-                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, 
+                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden,
                     out var start, out error), error?.Message);
             });
         }
@@ -282,7 +283,7 @@ namespace XTMF2.UnitTests
                 Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
                 Assert.AreEqual(5, ms.GlobalBoundary.Modules.Count);
                 Assert.AreEqual(5, ms.GlobalBoundary.Links.Count);
-                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, 
+                Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden,
                     out var start, out error), error?.Message);
             });
         }
@@ -503,6 +504,50 @@ namespace XTMF2.UnitTests
                     {
                         tempFile.Delete();
                     }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void ImportGivenModelSystem()
+        {
+            var modelSystemString = @"{""Types"":[{""Index"":0,""Type"":""XTMF2.UnitTests.Modules.SimpleTestModule, XTMF2.UnitTests, Version = 1.0.0.0, Culture = neutral, PublicKeyToken = null""}],""Boundaries"":[{""Name"":""global"",""Description"":"""",""Starts"":[{""Name"":""TestStart"",""Description"":"""",""Index"":0,""X"":10,""Y"":10}],""Nodes"":[{""Name"":""TestNode1"",""Description"":"""",""Type"":0,""X"":10,""Y"":10,""Width"":100,""Height"":100,""Index"":1}],""Boundaries"":[{""Name"":""TestBoundary1"",""Description"":"""",""Starts"":[],""Nodes"":[{""Name"":""TestNode2"",""Description"":"""",""Type"":0,""X"":10,""Y"":10,""Width"":100,""Height"":100,""Index"":2}],""Boundaries"":[],""Links"":[],""CommentBlocks"":[]}],""Links"":[{""Origin"":0,""Hook"":""ToExecute"",""Destination"":1}],""CommentBlocks"":[]}]}";
+            var metadata = @"{""Name"":""MyMS""}";
+            var runtime = XTMFRuntime.CreateRuntime();
+            var controller = runtime.ProjectController;
+            void Write(string fileName, string text)
+            {
+                using var stream = File.OpenWrite(fileName);
+                stream.Write(Encoding.UTF8.GetBytes(text).AsSpan());
+            }
+            TestHelper.RunInProjectContext(nameof(ImportGivenModelSystem), (user, project) =>
+            {
+                var tempDirName = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "XTMF-" + Guid.NewGuid());
+                var exportPath = Path.GetTempFileName();
+                try
+                {
+                    
+                    CommandError error;
+                    Directory.CreateDirectory(tempDirName);
+                    Write(Path.Combine(tempDirName, "ModelSystem.xmsys"), modelSystemString);
+                    Write(Path.Combine(tempDirName, "metadata.json"), metadata);
+                    // The destination can not exist before we create the archive.
+                    File.Delete(exportPath);
+                    ZipFile.CreateFromDirectory(tempDirName, exportPath);
+                    Assert.IsTrue(project.ImportModelSystem(user, exportPath, "TestModelSystem", out ModelSystemHeader importedHeader, out error), error?.Message);
+                    Assert.IsTrue(project.EditModelSystem(user, importedHeader, out var modelSystemSession, out error).UsingIf(modelSystemSession, () =>
+                     {
+                         // If we get here then the model system session successfully loaded this test model system.
+                     }), error?.Message);
+                }
+                finally
+                {
+                    try
+                    {
+                        Directory.Delete(tempDirName);
+                        File.Delete(exportPath);
+                    }
+                    catch (IOException) { }
                 }
             });
         }

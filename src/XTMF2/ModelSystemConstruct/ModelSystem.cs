@@ -381,7 +381,7 @@ namespace XTMF2
             {
                 return FailWith(out error, "Expected to read an array when loading boundaries!");
             }
-            if (!global.Load(modules, typeLookup, nodes, ref reader, ref error))
+            if (!reader.Read() || !global.Load(modules, typeLookup, nodes, ref reader, ref error))
             {
                 return false;
             }
