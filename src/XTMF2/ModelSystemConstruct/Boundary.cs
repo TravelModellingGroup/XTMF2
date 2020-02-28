@@ -568,7 +568,7 @@ namespace XTMF2
         internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
             ref Utf8JsonReader reader, ref string? error)
         {
-            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+            if (reader.TokenType != JsonTokenType.StartObject)
             {
                 return FailWith(out error, "Unexpected token when reading boundary!");
             }
