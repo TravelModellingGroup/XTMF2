@@ -45,7 +45,7 @@ namespace XTMF2
 
         public override long Position { get => _baseStream.Position; set => _baseStream.Position = value; }
 
-        private object _sync = new object();
+        private readonly object _sync = new object();
 
         public override void Flush()
         {
@@ -63,7 +63,7 @@ namespace XTMF2
             }
         }
 
-        public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback callback, object state)
+        public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback callback, object? state)
         {
             lock (_sync)
             {
@@ -79,7 +79,7 @@ namespace XTMF2
             }
         }
 
-        public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback callback, object state)
+        public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback callback, object? state)
         {
             throw new InvalidOperationException("Unable to write to a ReadStream.");
         }

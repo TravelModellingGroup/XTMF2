@@ -23,7 +23,7 @@ namespace XTMF2
 {
     public sealed class WriteStream : Stream
     {
-        private Stream BaseStream;
+        private readonly Stream BaseStream;
 
         internal WriteStream(Stream baseStream)
         {
