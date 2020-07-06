@@ -705,7 +705,7 @@ namespace XTMF2.Editing
                         {
                             boundary.RemoveLink(link, out e);
                         }
-                        foreach (var child in localChildren)
+                        foreach (var child in localChildren!)
                         {
                             boundary.RemoveNode(child, out e);
                         }
@@ -880,14 +880,17 @@ namespace XTMF2.Editing
                     void AddParameters()
                     {
                         CommandError? e;
-                        foreach (var (basicParameterNode, basicParameterLink) in basicParameters)
+                        if (boundary is object)
                         {
-                            boundary.AddNode(basicParameterNode, out e);
-                            boundary.AddLink(basicParameterLink, out e);
-                        }
-                        foreach (var p in advancedParameters)
-                        {
-                            boundary.AddLink(p, out e);
+                            foreach (var (basicParameterNode, basicParameterLink) in basicParameters!)
+                            {
+                                boundary.AddNode(basicParameterNode, out e);
+                                boundary.AddLink(basicParameterLink, out e);
+                            }
+                            foreach (var p in advancedParameters!)
+                            {
+                                boundary.AddLink(p, out e);
+                            }
                         }
                     }
                     RemoveParameters();
