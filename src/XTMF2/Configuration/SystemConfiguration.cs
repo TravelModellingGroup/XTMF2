@@ -27,6 +27,7 @@ using System.Threading.Tasks;
 using XTMF2.Editing;
 using XTMF2.Repository;
 using System.Runtime.Loader;
+using System.Linq;
 
 namespace XTMF2.Configuration
 {
@@ -87,6 +88,35 @@ namespace XTMF2.Configuration
             var fullPath = Path.GetFullPath(path);
             LoadAssembly(AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath));
         }
+
+        /// <summary>
+        /// Load the assemblies from the given directory into the system's configuration.
+        /// </summary>
+        /// <param name="path">The directory to load the assemblies from.</param>
+        /// <param name="exclusionFile">A text file containing the assemblies to not load.</param>
+        public void LoadAssemblies(string path, string? exclusionFile = null)
+        {
+            var exludedDlls = exclusionFile is null ? new List<string>() : File.ReadLines(exclusionFile).ToList();
+            LoadAssemblies(path, exludedDlls);
+        }
+
+        /// <summary>
+        /// Load the assemblies from the given directory into the system's configuration.
+        /// </summary>
+        /// <param name="path">The directory to load the assemblies from.</param>
+        /// <param name="toExclude">A list of DLL files to exclude from loading.</param>
+        public void LoadAssemblies(string path, List<string> toExclude)
+        {
+            var dirInfo = new DirectoryInfo(path);
+            foreach (var dllFile in dirInfo.EnumerateFiles("*.dll"))
+            {
+                if (!toExclude.Contains(dllFile.Name))
+                {
+                    LoadAssembly(AssemblyLoadContext.Default.LoadFromAssemblyPath(dllFile.FullName));
+                }
+            }
+        }
+
 
         /// <summary>
         /// Load the types of the given assembly
