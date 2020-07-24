@@ -1,18 +1,14 @@
 ﻿/*
     Copyright 2017-2018 University of Toronto
-
     This file is part of XTMF2.
-
     XTMF2 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
     XTMF2 is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -154,13 +150,13 @@ namespace XTMF2
 
         internal bool Validate(ref string? moduleName, ref string? error)
         {
-            foreach(var hook in Hooks)
+            foreach (var hook in Hooks)
             {
                 // if the 
-                if(hook.Cardinality == HookCardinality.Single
+                if (hook.Cardinality == HookCardinality.Single
                    || hook.Cardinality == HookCardinality.AtLeastOne)
                 {
-                    if(!ContainedWithin.Links.Any(l=> l.Origin == this && l.OriginHook == hook))
+                    if (!ContainedWithin.Links.Any(l => l.Origin == this && l.OriginHook == hook))
                     {
                         moduleName = Name;
                         error = $"A required link was not assigned for the hook {hook.Name}!";
@@ -196,7 +192,7 @@ namespace XTMF2
         /// <returns>True if the operation was successful, false otherwise</returns>
         internal bool ConstructModule(XTMFRuntime runtime, ref string? error)
         {
-            if(_type is null)
+            if (_type is null)
             {
                 return FailWith(out error, $"Unable to construct a module named {Name} without a type!");
             }
@@ -204,7 +200,7 @@ namespace XTMF2
             var module = (
                 typeInfo.GetConstructor(RuntimeConstructor)?.Invoke(new[] { runtime })
                 ?? typeInfo.GetConstructor(EmptyConstructor)?.Invoke(EmptyConstructor)) as IModule;
-            if(!(module is IModule))
+            if (!(module is IModule))
             {
                 return FailWith(out error, $"Unable to construct a module of type {_type.GetTypeInfo().AssemblyQualifiedName}!");
             }
@@ -222,7 +218,7 @@ namespace XTMF2
                 if (!GenericValue.TryGetValue(_type, out var info))
                 {
                     info = _type.GetRuntimeField("Value");
-                    if(info == null)
+                    if (info == null)
                     {
                         return FailWith(out error, $"Unable find a field named 'Value' on type {_type.FullName} in order to assign a value to it!");
                     }
@@ -287,8 +283,6 @@ namespace XTMF2
         /// Create a new node with name only.
         /// Only invoke this if you are going to set the type explicitly right after.
         /// </summary>
-         
-        
         /// <param name="name">The name of the node</param>
         protected Node(string name, Type type, Boundary containedWithin, IReadOnlyList<NodeHook> hooks, Rectangle location)
         {
@@ -354,7 +348,7 @@ namespace XTMF2
             {
                 writer.WriteString(ParameterProperty, ParameterValue);
             }
-            if(IsDisabled)
+            if (IsDisabled)
             {
                 writer.WriteBoolean(DisabledProperty, true);
             }
@@ -382,17 +376,17 @@ namespace XTMF2
                 {
                     return FailWith(out mss, out error, "Invalid token when loading start");
                 }
-                if(reader.ValueTextEquals(NameProperty))
+                if (reader.ValueTextEquals(NameProperty))
                 {
                     reader.Read();
                     name = reader.GetString();
                 }
-                else if(reader.ValueTextEquals(DescriptionProperty))
+                else if (reader.ValueTextEquals(DescriptionProperty))
                 {
                     reader.Read();
                     description = reader.GetString() ?? string.Empty;
                 }
-                else if(reader.ValueTextEquals(XProperty))
+                else if (reader.ValueTextEquals(XProperty))
                 {
                     reader.Read();
                     point = new Rectangle(reader.GetSingle(), point.Y, point.Width, point.Height);
@@ -412,12 +406,12 @@ namespace XTMF2
                     reader.Read();
                     point = new Rectangle(point.X, point.Y, point.Width, reader.GetSingle());
                 }
-                else if(reader.ValueTextEquals(IndexProperty))
+                else if (reader.ValueTextEquals(IndexProperty))
                 {
                     reader.Read();
                     index = reader.GetInt32();
                 }
-                else if(reader.ValueTextEquals(TypeProperty))
+                else if (reader.ValueTextEquals(TypeProperty))
                 {
                     reader.Read();
                     var typeIndex = reader.GetInt32();
@@ -426,12 +420,12 @@ namespace XTMF2
                         return FailWith(out mss, out error, $"Invalid type index {typeIndex}!");
                     }
                 }
-                else if(reader.ValueTextEquals(ParameterProperty))
+                else if (reader.ValueTextEquals(ParameterProperty))
                 {
                     reader.Read();
                     parameter = reader.GetString() ?? string.Empty;
                 }
-                else if(reader.ValueTextEquals(DisabledProperty))
+                else if (reader.ValueTextEquals(DisabledProperty))
                 {
                     reader.Read();
                     disabled = reader.GetBoolean();
@@ -445,7 +439,7 @@ namespace XTMF2
             {
                 return FailWith(out mss, out error, "Undefined name for a start in boundary " + boundary.FullPath);
             }
-            if(index < 0)
+            if (index < 0)
             {
                 return FailWith(out mss, out error, $"While loading {boundary.FullPath}.{name} we were unable to parse a valid index!");
             }
@@ -453,12 +447,12 @@ namespace XTMF2
             {
                 return FailWith(out mss, out error, $"Index {index} already exists!");
             }
-            if(type is null)
+            if (type is null)
             {
                 return FailWith(out mss, out error, $"When trying to create a node {name} there was no type defined!");
             }
             (_, _, var hooks) = modules[type];
-            if(hooks == null)
+            if (hooks == null)
             {
                 return FailWith(out mss, out error, $"When trying to create a node {name} we were unable to find a hook for type {type.FullName}!");
             }
@@ -476,7 +470,7 @@ namespace XTMF2
         internal static Node? Create(ModuleRepository modules, string name, Type type, Boundary boundary, Rectangle location)
         {
             (_, _, var hooks) = modules[type];
-            if(hooks == null)
+            if (hooks == null)
             {
                 return null;
             }

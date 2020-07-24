@@ -1,18 +1,14 @@
 ﻿/*
     Copyright 2017-2020 University of Toronto
-
     This file is part of XTMF2.
-
     XTMF2 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
     XTMF2 is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -96,12 +92,12 @@ namespace XTMF2.Editing
                 if (boundary.SetName(name, out error))
                 {
                     Buffer.AddUndo(new Command(() =>
-                   {
-                       return (boundary.SetName(oldName, out var e), e);
-                   }, () =>
-                   {
-                       return (boundary.SetName(name, out var e), e);
-                   }));
+                    {
+                        return (boundary.SetName(oldName, out var e), e);
+                    }, () =>
+                    {
+                        return (boundary.SetName(name, out var e), e);
+                    }));
                     return true;
                 }
                 return false;
@@ -377,14 +373,14 @@ namespace XTMF2.Editing
                 var oldComment = commentBlock.Comment;
                 commentBlock.Comment = newText;
                 Buffer.AddUndo(new Command(() =>
-              {
-                  commentBlock.Comment = oldComment;
-                  return (true, null);
-              }, () =>
-              {
-                  commentBlock.Comment = newText;
-                  return (true, null);
-              }));
+                {
+                    commentBlock.Comment = oldComment;
+                    return (true, null);
+                }, () =>
+                {
+                    commentBlock.Comment = newText;
+                    return (true, null);
+                }));
                 error = null;
                 return true;
             }
@@ -718,7 +714,7 @@ namespace XTMF2.Editing
                         return (boundary.RemoveNode(_node, out var e), e);
                     }, () =>
                     {
-                        if ((boundary.AddNode(_node, out var e)))
+                        if (boundary.AddNode(_node, out var e))
                         {
                             Add();
                             return (true, null);
@@ -733,7 +729,7 @@ namespace XTMF2.Editing
         private (List<Node> children, List<Link> links) GetChidren(Node baseNode, Boundary boundary)
         {
             var t = baseNode.Type;
-            
+
             var nodes = new List<Node>();
             var links = new List<Link>();
             // If the type of the node is null then there are no children nor links.
@@ -931,7 +927,7 @@ namespace XTMF2.Editing
 
             lock (_sessionLock)
             {
-                if (!(_session.HasAccess(user)))
+                if (!_session.HasAccess(user))
                 {
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
@@ -1044,13 +1040,13 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
-        /// 
+        /// Set if the given link should be disabled.
         /// </summary>
-        /// <param name="user"></param>
-        /// <param name="link"></param>
-        /// <param name="disabled"></param>
-        /// <param name="error"></param>
-        /// <returns></returns>
+        /// <param name="user">The user issuing the command</param>
+        /// <param name="link">The link to operate on.</param>
+        /// <param name="disabled">If it should be disabled (true) or not (false).</param>
+        /// <param name="error">An error message explaining why the operation failed.</param>
+        /// <returns>True if the operation completed successfully, false otherwise.</returns>
         public bool SetLinkDisabled(User user, Link link, bool disabled, out CommandError? error)
         {
             if (user is null)
@@ -1083,7 +1079,6 @@ namespace XTMF2.Editing
             }
         }
 
-
         /// <summary>
         /// Save the model system
         /// </summary>
@@ -1094,7 +1089,7 @@ namespace XTMF2.Editing
             lock (_sessionLock)
             {
                 string? errorString = null;
-                if(!ModelSystem.Save(ref errorString))
+                if (!ModelSystem.Save(ref errorString))
                 {
                     error = new CommandError(errorString ?? "No error message given when failing to save the model system!");
                     return false;
@@ -1115,7 +1110,7 @@ namespace XTMF2.Editing
             lock (_sessionLock)
             {
                 string? errorString = null;
-                if(!ModelSystem.Save(ref errorString, saveTo))
+                if (!ModelSystem.Save(ref errorString, saveTo))
                 {
                     error = new CommandError(errorString ?? "No error message given when failing to save the model system!");
                     return false;
@@ -1153,12 +1148,12 @@ namespace XTMF2.Editing
                 if (boundary.RemoveLink(link, out error))
                 {
                     Buffer.AddUndo(new Command(() =>
-                   {
-                       return (boundary.AddLink(link, out var e), e);
-                   }, () =>
-                   {
-                       return (boundary.RemoveLink(link, out var e), e);
-                   }));
+                    {
+                        return (boundary.AddLink(link, out var e), e);
+                    }, () =>
+                    {
+                        return (boundary.RemoveLink(link, out var e), e);
+                    }));
                     return true;
                 }
                 else
