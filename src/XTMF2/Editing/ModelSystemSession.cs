@@ -714,7 +714,7 @@ namespace XTMF2.Editing
                         return (boundary.RemoveNode(_node, out var e), e);
                     }, () =>
                     {
-                        if ((boundary.AddNode(_node, out var e)))
+                        if (boundary.AddNode(_node, out var e))
                         {
                             Add();
                             return (true, null);
@@ -927,7 +927,7 @@ namespace XTMF2.Editing
 
             lock (_sessionLock)
             {
-                if (!(_session.HasAccess(user)))
+                if (!_session.HasAccess(user))
                 {
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
@@ -1040,13 +1040,13 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
-        /// 
+        /// Set if the given link should be disabled.
         /// </summary>
-        /// <param name="user"></param>
-        /// <param name="link"></param>
-        /// <param name="disabled"></param>
-        /// <param name="error"></param>
-        /// <returns></returns>
+        /// <param name="user">The user issuing the command</param>
+        /// <param name="link">The link to operate on.</param>
+        /// <param name="disabled">If it should be disabled (true) or not (false).</param>
+        /// <param name="error">An error message explaining why the operation failed.</param>
+        /// <returns>True if the operation completed successfully, false otherwise.</returns>
         public bool SetLinkDisabled(User user, Link link, bool disabled, out CommandError? error)
         {
             if (user is null)
@@ -1078,7 +1078,6 @@ namespace XTMF2.Editing
                 return false;
             }
         }
-
 
         /// <summary>
         /// Save the model system

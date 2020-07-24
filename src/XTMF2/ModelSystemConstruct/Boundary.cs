@@ -245,7 +245,7 @@ namespace XTMF2
                 error = new CommandError("The name already exists in this boundary!");
                 return false;
             }
-            _Boundaries.Add((boundary = new Boundary(name, this)));
+            _Boundaries.Add(boundary = new Boundary(name, this));
             error = null;
             return true;
         }
@@ -353,7 +353,7 @@ namespace XTMF2
         }
 
         /// <summary>
-        /// Add a boundary 
+        /// Add a boundary
         /// </summary>
         /// <param name="boundary"></param>
         /// <param name="error"></param>
@@ -382,7 +382,7 @@ namespace XTMF2
         }
 
         internal bool AddStart(Start start, out CommandError? error)
-        { 
+        {
             if (_Starts.Contains(start))
             {
                 error = new CommandError("The start already exists in the boundary!");
