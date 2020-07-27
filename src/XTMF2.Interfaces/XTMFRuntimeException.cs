@@ -23,7 +23,7 @@ namespace XTMF2
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1032:Implement standard exception constructors",
         Justification = "This point of this error is to include the offending module, supplying alternatives that ignore " +
         "the module parameter could lead to bad client code.")]
-    public sealed class XTMFRuntimeException : Exception
+    public class XTMFRuntimeException : Exception
     {
 
         public IModule? FailingModule { get; private set; }
