@@ -516,6 +516,11 @@ namespace XTMF2
                     dir.Create();
                 }
             }
+            catch (ArgumentException e)
+            {
+                error = new CommandError($"Unable to use '{runDirectory}' for the custom runs directory. {e.Message}");
+                return false;
+            }
             catch (IOException e)
             {
                 error = new CommandError($"Unable to use '{runDirectory}' for the custom runs directory. {e.Message}");
