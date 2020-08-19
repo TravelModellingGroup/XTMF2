@@ -463,8 +463,8 @@ namespace XTMF2.UnitTests
             {
                 CommandError error = null;
                 var initialDirectory = project.RunsDirectory;
-                const string anInvalidPath = ":?!@#://#%$^&|";
-                Assert.IsFalse(project.SetCustomRunDirectory(user, anInvalidPath, out error), "An invalid path was able to be set.");
+                var invalidCharacters = Path.GetInvalidFileNameChars();
+                Assert.IsFalse(project.SetCustomRunDirectory(user, new string(invalidCharacters), out error), "An invalid path was able to be set.");
                 Assert.AreEqual(initialDirectory, project.RunsDirectory);
             });
         }
