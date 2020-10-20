@@ -39,7 +39,7 @@ namespace XTMF2.Editing
         /// <summary>
         /// The project that is being edited.
         /// </summary>
-        public Project Project { get; private set; }
+        public Project Project { get; }
 
         /// <summary>
         /// The link to the XTMFRuntime
@@ -95,6 +95,11 @@ namespace XTMF2.Editing
         /// The directory that is storing the results of model runs.
         /// </summary>
         public string? RunsDirectory => Project.RunsDirectory;
+
+        /// <summary>
+        /// Additional directories to search for previous runs.
+        /// </summary>
+        public ReadOnlyObservableCollection<string> AdditionalPreviousRunDirectories => Project.AdditionalPreviousRunDirectories;
 
         /// <summary>
         /// Increment the number of references to this project session.
@@ -182,7 +187,7 @@ namespace XTMF2.Editing
             lock (_sessionLock)
             {
                 string? errorString = null;
-                if(!Project.Save(ref errorString))
+                if (!Project.Save(ref errorString))
                 {
                     error = new CommandError(errorString ?? "No error message was given when failed to save a project!");
                     return false;
@@ -208,7 +213,7 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
-                if(!Project.CanAccess(user))
+                if (!Project.CanAccess(user))
                 {
                     error = new CommandError("The user does not have access to this project!", true);
                     return false;
@@ -294,18 +299,18 @@ namespace XTMF2.Editing
 
             lock (_sessionLock)
             {
-                if(Project.Owner != user)
+                if (Project.Owner != user)
                 {
                     error = new CommandError("You can not remove a model system that you are not the owner of.", true);
                     return false;
                 }
-                if(_activeSessions.ContainsKey(modelSystem))
+                if (_activeSessions.ContainsKey(modelSystem))
                 {
                     error = new CommandError("You can not remove a model system that is currently being edited!");
                     return false;
                 }
                 var modelSystemFile = modelSystem.ModelSystemPath;
-                if(!Project.Remove(this, modelSystem, out error))
+                if (!Project.Remove(this, modelSystem, out error))
                 {
                     return false;
                 }
@@ -316,7 +321,6 @@ namespace XTMF2.Editing
 #pragma warning disable CA1031 // If the model system file is already gone, then the operation actually succeeded.
                 catch (IOException)
                 {
-
                 }
 #pragma warning restore CA1031 // Do not catch general exception types
                 return true;
@@ -342,14 +346,14 @@ namespace XTMF2.Editing
                 throw new ArgumentException("message", nameof(exportPath));
             }
 
-            lock(_sessionLock)
+            lock (_sessionLock)
             {
-                if(!Project.CanAccess(user))
+                if (!Project.CanAccess(user))
                 {
                     error = new CommandError("The user does not have access to the project.", true);
                     return false;
                 }
-                if(_activeSessions.Count > 0)
+                if (_activeSessions.Count > 0)
                 {
                     error = new CommandError("The project is currently being edited and can not be exported.");
                     return false;
@@ -539,7 +543,7 @@ namespace XTMF2.Editing
         /// <param name="header">A resulting header for the newly imported model system.</param>
         /// <param name="error">The error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ImportModelSystem(User user, string modelSystemFilePath, string modelSystemName, 
+        public bool ImportModelSystem(User user, string modelSystemFilePath, string modelSystemName,
             out ModelSystemHeader? header, out CommandError? error)
         {
             header = null;
@@ -567,12 +571,12 @@ namespace XTMF2.Editing
                         error = new CommandError("The user that issued the command does not have access to this project.", true);
                         return false;
                     }
-                    if(Project.ContainsModelSystem(modelSystemName))
+                    if (Project.ContainsModelSystem(modelSystemName))
                     {
                         error = new CommandError("A model system with that name already exists!");
                         return false;
                     }
-                    if(!ModelSystemFile.LoadModelSystemFile(modelSystemFilePath, out var msf, out error))
+                    if (!ModelSystemFile.LoadModelSystemFile(modelSystemFilePath, out var msf, out error))
                     {
                         return false;
                     }
@@ -606,12 +610,12 @@ namespace XTMF2.Editing
 
             if (string.IsNullOrWhiteSpace(fullName))
             {
-                error = new CommandError($"A non-blank directory is expected.");
+                error = new CommandError("A non-blank directory is expected.");
                 return false;
             }
-            lock(_sessionLock)
+            lock (_sessionLock)
             {
-                if(!Project.CanAccess(user))
+                if (!Project.CanAccess(user))
                 {
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
@@ -634,7 +638,7 @@ namespace XTMF2.Editing
             }
             lock (_sessionLock)
             {
-                if(!Project.CanAccess(user))
+                if (!Project.CanAccess(user))
                 {
                     error = new CommandError("The user can not access this project.", true);
                     return false;
@@ -647,7 +651,7 @@ namespace XTMF2.Editing
         /// Rename a model system.  The model system can not be currently
         /// being edited.
         /// </summary>
-        /// <param name="user">The use issuing the command.</param>
+        /// <param name="user">The user issuing the command.</param>
         /// <param name="newName">The new name of the model system.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
@@ -666,14 +670,72 @@ namespace XTMF2.Editing
                 error = new CommandError("The name of the model system must not be blank.");
                 return false;
             }
-            lock(_sessionLock)
+            lock (_sessionLock)
             {
-                if(!Project.CanAccess(user))
+                if (!Project.CanAccess(user))
                 {
                     error = new CommandError("The user can not access this project.", true);
                     return false;
                 }
                 return Project.RenameModelSystem(modelSystem, newName, out error);
+            }
+        }
+
+        /// <summary>
+        /// Add a new path to search for past runs.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="pastRunDirectoryPath">The path to add.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool AddAdditionalPastRunDirectory(User user, string pastRunDirectoryPath, out CommandError? error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (String.IsNullOrWhiteSpace(pastRunDirectoryPath))
+            {
+                error = new CommandError("The additional past run directory path was invalid.");
+                return false;
+            }
+            lock (_sessionLock)
+            {
+                if (!Project.CanAccess(user))
+                {
+                    error = new CommandError("The user can not access this project.", true);
+                    return false;
+                }
+                return Project.AddAlternativePastRunDirectory(pastRunDirectoryPath, out error);
+            }
+        }
+
+        /// <summary>
+        /// Remove the path from searches for past runs.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="pastRunDirectoryPath">The path to add.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool RemoveAdditionalPastRunDirectory(User user, string pastRunDirectoryPath, out CommandError? error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+            if (String.IsNullOrWhiteSpace(pastRunDirectoryPath))
+            {
+                error = new CommandError("The additional past run directory path was invalid.");
+                return false;
+            }
+            lock (_sessionLock)
+            {
+                if (!Project.CanAccess(user))
+                {
+                    error = new CommandError("The user can not access this project.", true);
+                    return false;
+                }
+                return Project.RemoveAlternativePastRunDirectory(pastRunDirectoryPath, out error);
             }
         }
     }

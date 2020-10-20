@@ -42,6 +42,7 @@ namespace XTMF2
         private const string OwnerProperty = "Owner";
         private const string AdditionalUsersProperty = "AdditionalUsers";
         private const string CustomRunDirectoryProperty = "CustomRunDirectory";
+        private const string AlternativeRunDirectories = "AlternativeRunDirectories";
 
         public string? Name { get; private set; }
         public string? Description { get; private set; }
@@ -49,9 +50,13 @@ namespace XTMF2
         public string? ProjectDirectory => Path.GetDirectoryName(ProjectFilePath);
         public User? Owner { get; private set; }
         public ReadOnlyCollection<User> AdditionalUsers => new ReadOnlyCollection<User>(_AdditionalUsers);
-        ObservableCollection<User> _AdditionalUsers = new ObservableCollection<User>();
-        ObservableCollection<ModelSystemHeader> _ModelSystems = new ObservableCollection<ModelSystemHeader>();
+        private readonly ObservableCollection<User> _AdditionalUsers = new ObservableCollection<User>();
+        private readonly ObservableCollection<ModelSystemHeader> _ModelSystems = new ObservableCollection<ModelSystemHeader>();
+
         public ReadOnlyObservableCollection<ModelSystemHeader> ModelSystems => new ReadOnlyObservableCollection<ModelSystemHeader>(_ModelSystems);
+
+        private readonly ObservableCollection<string> _additionalPreviousRunDirectories = new ObservableCollection<string>();
+        public ReadOnlyObservableCollection<string> AdditionalPreviousRunDirectories => new ReadOnlyObservableCollection<string>(_additionalPreviousRunDirectories);
 
         public string? RunsDirectory => HasCustomRunDirectory && _customRunDirectory != null ? _customRunDirectory : DefaultRunDirectory;
         private string? DefaultRunDirectory => Path.Combine(ProjectDirectory!, "Runs");
@@ -66,7 +71,6 @@ namespace XTMF2
 
         private Project()
         {
-
         }
 
         internal static bool Load(UserController userController, string filePath, out Project project, ref string? error)
@@ -134,6 +138,20 @@ namespace XTMF2
                                 if (reader.TokenType == JsonTokenType.String)
                                 {
                                     project._customRunDirectory = reader.GetString();
+                                }
+                            }
+                            else if (reader.ValueTextEquals(AlternativeRunDirectories))
+                            {
+                                reader.Read();
+                                if (reader.TokenType == JsonTokenType.StartArray)
+                                {
+                                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                                    {
+                                        if (reader.TokenType == JsonTokenType.String)
+                                        {
+                                            project._additionalPreviousRunDirectories.Add(reader.GetString());
+                                        }
+                                    }
                                 }
                             }
                             else
@@ -319,7 +337,6 @@ namespace XTMF2
             return SaveOrError(project, out error);
         }
 
-
         private static string GetPath(User owner, string name)
         {
             var dir = Path.Combine(owner.UserPath, name);
@@ -358,8 +375,7 @@ namespace XTMF2
                         }
                         writer.WriteEndArray();
                     }
-                    writer.WritePropertyName(ModelSystemHeadersProperty);
-                    writer.WriteStartArray();
+                    writer.WriteStartArray(ModelSystemHeadersProperty);
                     foreach (var ms in ModelSystems)
                     {
                         ms.Save(writer);
@@ -368,6 +384,15 @@ namespace XTMF2
                     if (HasCustomRunDirectory)
                     {
                         writer.WriteString(CustomRunDirectoryProperty, _customRunDirectory);
+                    }
+                    if (_additionalPreviousRunDirectories.Count > 0)
+                    {
+                        writer.WriteStartArray(AlternativeRunDirectories);
+                        foreach (var path in _additionalPreviousRunDirectories)
+                        {
+                            writer.WriteStringValue(path);
+                        }
+                        writer.WriteEndArray();
                     }
                     writer.WriteEndObject();
                 }
@@ -403,8 +428,6 @@ namespace XTMF2
             }
             return user == Owner || _AdditionalUsers.Contains(user);
         }
-
-
 
         internal bool SetName(string name, out CommandError? error)
         {
@@ -502,6 +525,56 @@ namespace XTMF2
             _ModelSystems.Add(tempHeader);
             header = tempHeader;
             return SaveOrError(out error);
+        }
+
+        internal bool AddAlternativePastRunDirectory(string pastRunDirectory, out CommandError? error)
+        {
+            error = null;
+            if (string.IsNullOrWhiteSpace(pastRunDirectory))
+            {
+                error = new CommandError("Invalid Past Run Directory");
+                return false;
+            }
+            try
+            {
+                // Make sure that we can actually use this directory
+                var dir = new DirectoryInfo(pastRunDirectory);
+                if (!dir.Exists)
+                {
+                    error = new CommandError($"The alternative run directory '{pastRunDirectory}' does not exist!");
+                    return false;
+                }
+            }
+            catch (ArgumentException e)
+            {
+                error = new CommandError($"Unable to add '{pastRunDirectory}' for the alternative past runs directory. {e.Message}");
+                return false;
+            }
+            catch (IOException e)
+            {
+                error = new CommandError($"Unable to add '{pastRunDirectory}' for the alternative past runs directory. {e.Message}");
+                return false;
+            }
+            _additionalPreviousRunDirectories.Add(pastRunDirectory);
+            return true;
+        }
+
+        internal bool RemoveAlternativePastRunDirectory(string pastRunDirectory, out CommandError? error)
+        {
+            error = null;
+            if (string.IsNullOrWhiteSpace(pastRunDirectory))
+            {
+                error = new CommandError("Invalid Past Run Directory");
+                return false;
+            }
+            var index = _additionalPreviousRunDirectories.IndexOf(pastRunDirectory);
+            if (index < 0)
+            {
+                error = new CommandError($"Unable to find a past run directory '{pastRunDirectory}' to remove!");
+                return false;
+            }
+            _additionalPreviousRunDirectories.RemoveAt(index);
+            return true;
         }
 
         internal bool SetCustomRunsDirectory(string runDirectory, out CommandError? error)

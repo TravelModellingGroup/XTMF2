@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017-2019 University of Toronto
+    Copyright 2017-2020 University of Toronto
 
     This file is part of XTMF2.
 
@@ -74,7 +74,7 @@ namespace XTMF2.UnitTests
         {
             var runtime = XTMFRuntime.CreateRuntime();
             var controller = runtime.ProjectController;
-            string projectName = "Test";
+            const string projectName = "Test";
             CommandError error = null;
             var localUser = TestHelper.GetTestUser(runtime);
             // delete the project just in case it survived
@@ -143,7 +143,6 @@ namespace XTMF2.UnitTests
             {
                 project = session.Project;
                 Assert.IsTrue(session.ShareWith(localUser, newUser, out error), error?.Message);
-
             }), "Unable to create project");
             Assert.IsTrue(controller.GetProjectSession(newUser, project, out var session2, out error).UsingIf(session2, () =>
             {
@@ -156,9 +155,9 @@ namespace XTMF2.UnitTests
 
         private static void CreateModelSystem(User user, ProjectSession project, string msName, string description, Action executeBeforeSessionClosed)
         {
-            CommandError error = null;
-            var startName = "MyStart";
-            var nodeName = "MyNode";
+            CommandError error;
+            const string startName = "MyStart";
+            const string nodeName = "MyNode";
             Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, out error), error?.Message);
             Assert.IsTrue(msHeader.SetDescription(project, description, out error), error?.Message);
             Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, out error), error?.Message);
@@ -210,8 +209,8 @@ namespace XTMF2.UnitTests
             TestHelper.RunInProjectContext("ExportProjectSingleModelSystem", (user, project) =>
             {
                 CommandError error = null;
-                var msName = "MSToExport";
-                var description = "A test model system.";
+                const string msName = "MSToExport";
+                const string description = "A test model system.";
                 var tempFile = new FileInfo(Path.GetTempFileName());
                 try
                 {
@@ -245,8 +244,8 @@ namespace XTMF2.UnitTests
             TestHelper.RunInProjectContext("ExportProjectMultipleModelSystems", (user, project) =>
             {
                 CommandError error = null;
-                var msName = "MSToExport";
-                var description = "A test model system.";
+                const string msName = "MSToExport";
+                const string description = "A test model system.";
 
                 var tempFile = new FileInfo(Path.GetTempFileName());
                 try
@@ -420,7 +419,6 @@ namespace XTMF2.UnitTests
                         Assert.AreEqual(0, modelSystems.Count);
                     }
                     Assert.IsTrue(user.AvailableProjects.Any(p => p.Name == ImportedModelSystemName), "The imported project was not available to use user.");
-
                 }
                 finally
                 {
@@ -504,12 +502,139 @@ namespace XTMF2.UnitTests
                 const string msName = "RemoveMe";
                 CommandError error = null;
                 Assert.IsTrue(project.CreateNewModelSystem(user, msName, out var msHeader, out error), error?.Message);
-                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, out error).UsingIf(session, ()=>
+                Assert.IsTrue(project.EditModelSystem(user, msHeader, out var session, out error).UsingIf(session, () =>
                 {
                     Assert.IsFalse(project.RemoveModelSystem(user, msHeader, out error), "A model system was able to be removed while it was being edited!");
                 }), error?.Message);
                 Assert.IsTrue(project.RemoveModelSystem(user, msHeader, out error), error?.Message);
             });
+        }
+
+        [TestMethod]
+        public void AddAdditionalPastRunDirectory()
+        {
+            TestHelper.RunInProjectContext("AddAdditionalPastRunDirectory", (User user, ProjectSession project) =>
+            {
+                string path = Path.GetTempPath();
+                CommandError error = null;
+                var previousRunDirectories = project.AdditionalPreviousRunDirectories;
+                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
+                Assert.AreEqual(1, previousRunDirectories.Count, "The previous runs did not include the new path!");
+                Assert.AreEqual(path, previousRunDirectories[0], "The path is not the same!");
+            });
+        }
+
+        [TestMethod]
+        public void AddAdditionalPastRunDirectory_Null()
+        {
+            TestHelper.RunInProjectContext("AddAdditionalPastRunDirectory_Null", (User user, ProjectSession project) =>
+            {
+                var previousRunDirectories = project.AdditionalPreviousRunDirectories;
+                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsFalse(project.AddAdditionalPastRunDirectory(user, null, out CommandError error),
+                    "The add operation succeeded even though it should have failed!");
+                Assert.AreEqual(0, previousRunDirectories.Count, "The invalid previous run directory was added!");
+            });
+        }
+
+        [TestMethod]
+        public void AddAdditionalPastRunDirectory_EmptyString()
+        {
+            TestHelper.RunInProjectContext("AddAdditionalPastRunDirectory_EmptyString", (User user, ProjectSession project) =>
+            {
+                var previousRunDirectories = project.AdditionalPreviousRunDirectories;
+                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsFalse(project.AddAdditionalPastRunDirectory(user, String.Empty, out CommandError error),
+                    "The add operation succeeded even though it should have failed!");
+                Assert.AreEqual(0, previousRunDirectories.Count, "The invalid previous run directory was added!");
+            });
+        }
+
+        [TestMethod]
+        public void RemoveAdditionalPastRunDirectory()
+        {
+            TestHelper.RunInProjectContext("AddAdditionalPastRunDirectory", (User user, ProjectSession project) =>
+            {
+                string path = Path.GetTempPath();
+                CommandError error = null;
+                var previousRunDirectories = project.AdditionalPreviousRunDirectories;
+                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
+                Assert.AreEqual(1, previousRunDirectories.Count, "The previous runs did not include the new path!");
+                Assert.AreEqual(path, previousRunDirectories[0], "The path is not the same!");
+                Assert.IsTrue(project.RemoveAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
+                Assert.AreEqual(0, previousRunDirectories.Count, "The previous run directory was not removed!");
+            });
+        }
+
+        [TestMethod]
+        public void RemoveAdditionalPastRunDirectory_Null()
+        {
+            TestHelper.RunInProjectContext("RemoveAdditionalPastRunDirectory_Null", (User user, ProjectSession project) =>
+            {
+                string path = Path.GetTempPath();
+                CommandError error = null;
+                var previousRunDirectories = project.AdditionalPreviousRunDirectories;
+                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
+                Assert.IsFalse(project.RemoveAdditionalPastRunDirectory(user, null, out error),
+                    "The remove operation succeeded even though it should have failed!");
+                Assert.AreEqual(1, previousRunDirectories.Count, "The previous run directory was removed!");
+            });
+        }
+
+        [TestMethod]
+        public void RemoveAdditionalPastRunDirectory_EmptyString()
+        {
+            TestHelper.RunInProjectContext("RemoveAdditionalPastRunDirectory_EmptyString", (User user, ProjectSession project) =>
+            {
+                string path = Path.GetTempPath();
+                CommandError error = null;
+                var previousRunDirectories = project.AdditionalPreviousRunDirectories;
+                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
+                Assert.IsFalse(project.RemoveAdditionalPastRunDirectory(user, String.Empty, out error),
+                    "The remove operation succeeded even though it should have failed!");
+                Assert.AreEqual(1, previousRunDirectories.Count, "The previous run directory was removed!");
+            });
+        }
+
+        [TestMethod]
+        public void RemoveAdditionalPastRunDirectory_NonExistent()
+        {
+            TestHelper.RunInProjectContext("RemoveAdditionalPastRunDirectory_NonExistent", (User user, ProjectSession project) =>
+            {
+                string path = Path.GetTempPath();
+                CommandError error = null;
+                var previousRunDirectories = project.AdditionalPreviousRunDirectories;
+                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
+                Assert.IsFalse(project.RemoveAdditionalPastRunDirectory(user, path + "a", out error),
+                    "The remove operation succeeded even though it should have failed!");
+                Assert.AreEqual(1, previousRunDirectories.Count, "The previous run directory was removed!");
+            });
+        }
+
+        [TestMethod]
+        public void AdditionalRunDirectoryPersistance()
+        {
+            string path = Path.GetTempPath();
+            TestHelper.RunInProjectContext("AdditionalRunDirectoryPersistance",
+                (user, project) =>
+             {
+                 CommandError error = null;
+                 var previousRunDirectories = project.AdditionalPreviousRunDirectories;
+                 Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                 Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
+                 Assert.AreEqual(1, previousRunDirectories.Count, "The previous runs did not include the new path!");
+                 Assert.AreEqual(path, previousRunDirectories[0], "The path is not the same!");
+             }, (user, project) =>
+             {
+                 var previousRunDirectories = project.AdditionalPreviousRunDirectories;
+                 Assert.AreEqual(1, previousRunDirectories.Count, "The number of past run directories is wrong after reloading!");
+                 Assert.AreEqual(path, previousRunDirectories[0], "The path is not the same after reloading!");
+             });
         }
     }
 }
