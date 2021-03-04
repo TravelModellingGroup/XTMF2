@@ -40,7 +40,7 @@ Description = "Allows you to execute actions before calling a function.  This al
         {
             if (InvokeActionsInParallel!.Invoke())
             {
-                Parallel.ForEach(InvokeFirst, (module) =>
+                Parallel.ForEach(InvokeFirst!, (module) =>
                 {
                     module.Invoke();
                 });

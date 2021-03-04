@@ -148,7 +148,7 @@ namespace XTMF2.Controllers
         /// </summary>
         /// <param name="userName">The name of the user to get the reference for.</param>
         /// <returns>A reference to the user to find.  Null if the user does not exist.</returns>
-        public User GetUserByName(string userName)
+        public User? GetUserByName(string userName)
         {
             lock (UserLock)
             {

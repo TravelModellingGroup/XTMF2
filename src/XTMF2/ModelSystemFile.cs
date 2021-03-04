@@ -286,7 +286,7 @@ namespace XTMF2
                             error = new CommandError("Expected a string token after reading a Name property!");
                             return false;
                         }
-                        toReturn.Name = reader.GetString();
+                        toReturn.Name = reader.GetString()!;
                     }
                     else if (reader.ValueTextEquals(PropertyDescription))
                     {
@@ -300,7 +300,7 @@ namespace XTMF2
                             error = new CommandError("Expected a string token after reading a Description property!");
                             return false;
                         }
-                        toReturn.Description = reader.GetString();
+                        toReturn.Description = reader.GetString()!;
                     }
                     else if (reader.ValueTextEquals(PropertyExportedOn))
                     {
@@ -334,7 +334,7 @@ namespace XTMF2
                             error = new CommandError("Expected a string token after reading a ExportedBy property!");
                             return false;
                         }
-                        toReturn.ExportedBy = reader.GetString();
+                        toReturn.ExportedBy = reader.GetString()!;
                     }
                     else if (reader.ValueTextEquals(PropertyVersionMajor))
                     {
@@ -406,7 +406,7 @@ namespace XTMF2
             {
                 using var archive = 
                     _archive != null ? 
-                      new ZipArchive(_archive.GetEntry(Path).Open(), ZipArchiveMode.Read, false)
+                      new ZipArchive(_archive.GetEntry(Path)!.Open(), ZipArchiveMode.Read, false)
                     : ZipFile.OpenRead(Path);
                 var entry = archive.GetEntry(ModelSystemFilePath);
                 if(entry is null)
@@ -419,6 +419,11 @@ namespace XTMF2
                 if(!destinationPath.Exists)
                 {
                     var dir = destinationPath.Directory;
+                    if (dir is null)
+                    {
+                        error = new CommandError($"The model system path '{modelSystemPath}' is invalid!");
+                        return false;
+                    }
                     if(!dir.Exists)
                     {
                         dir.Create();

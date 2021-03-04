@@ -1205,7 +1205,7 @@ namespace XTMF2.Editing
                 if (originHook.Cardinality == HookCardinality.Single
                     || originHook.Cardinality == HookCardinality.SingleOptional)
                 {
-                    if (origin.GetLink(originHook, out Link _link))
+                    if (origin.GetLink(originHook, out Link? _link))
                     {
                         if (_link is SingleLink sl)
                         {

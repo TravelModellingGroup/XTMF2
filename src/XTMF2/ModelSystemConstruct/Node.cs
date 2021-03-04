@@ -325,7 +325,7 @@ namespace XTMF2
             return false;
         }
 
-        internal bool GetLink(NodeHook hook, out Link link)
+        internal bool GetLink(NodeHook hook, out Link? link)
         {
             return (link = (from l in ContainedWithin!.Links
                             where l.Origin == this && l.OriginHook == hook

@@ -48,7 +48,7 @@ Description = "Provides a way to execute a series of actions in order, optionall
                 for (int iteration = 0; iteration < iterations; iteration++)
                 {
                     CurrentIteration?.Set(iteration);
-                    Parallel.ForEach(ToInvoke, (action) =>
+                    Parallel.ForEach(ToInvoke!, (action) =>
                     {
                         action?.Invoke();
                     });
@@ -93,7 +93,7 @@ Description = "Provides a way to execute a series of actions in order, optionall
                 for (int iteration = 0; iteration < iterations; iteration++)
                 {
                     CurrentIteration?.Set(iteration);
-                    Parallel.ForEach(ToInvoke, (action) =>
+                    Parallel.ForEach(ToInvoke!, (action) =>
                     {
                         action?.Invoke(context);
                     });

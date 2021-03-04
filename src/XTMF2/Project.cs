@@ -114,7 +114,12 @@ namespace XTMF2
                             else if (reader.ValueTextEquals(OwnerProperty))
                             {
                                 reader.Read();
-                                var user = userController.GetUserByName(reader.GetString());
+                                if (reader.TokenType != JsonTokenType.String)
+                                {
+                                    error = "We expected a string token but found a " + Enum.GetName(typeof(JsonTokenType), reader.TokenType);
+                                    return false;
+                                }
+                                var user = userController.GetUserByName(reader.GetString()!);
                                 project.Owner = user;
                                 user?.AddedUserToProject(project);
                             }
@@ -127,9 +132,18 @@ namespace XTMF2
                                 }
                                 while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                                 {
-                                    var user = userController.GetUserByName(reader.GetString());
-                                    project._AdditionalUsers.Add(user);
-                                    user.AddedUserToProject(project);
+                                    if (reader.TokenType != JsonTokenType.String)
+                                    {
+                                        error = "We expected a string token but found a " + Enum.GetName(typeof(JsonTokenType), reader.TokenType);
+                                        return false;
+                                    }
+                                    var user = userController.GetUserByName(reader.GetString()!);
+                                    // If we are unable to find the user, silently ignore.
+                                    if(!(user is null))
+                                    {
+                                        project._AdditionalUsers.Add(user);
+                                        user.AddedUserToProject(project);
+                                    }
                                 }
                             }
                             else if (reader.ValueTextEquals(CustomRunDirectoryProperty))
@@ -137,7 +151,7 @@ namespace XTMF2
                                 reader.Read();
                                 if (reader.TokenType == JsonTokenType.String)
                                 {
-                                    project._customRunDirectory = reader.GetString();
+                                    project._customRunDirectory = reader.GetString()!;
                                 }
                             }
                             else if (reader.ValueTextEquals(AlternativeRunDirectories))
@@ -149,7 +163,7 @@ namespace XTMF2
                                     {
                                         if (reader.TokenType == JsonTokenType.String)
                                         {
-                                            project._additionalPreviousRunDirectories.Add(reader.GetString());
+                                            project._additionalPreviousRunDirectories.Add(reader.GetString()!);
                                         }
                                     }
                                 }
@@ -218,7 +232,7 @@ namespace XTMF2
         {
             try
             {
-                var directory = new DirectoryInfo(ProjectDirectory);
+                var directory = new DirectoryInfo(ProjectDirectory!);
                 if (directory.Exists)
                 {
                     directory.Delete(true);
@@ -396,7 +410,7 @@ namespace XTMF2
                     }
                     writer.WriteEndObject();
                 }
-                File.Copy(temp, ProjectFilePath, true);
+                File.Copy(temp, ProjectFilePath!, true);
                 return true;
             }
             catch (IOException e)
@@ -440,7 +454,7 @@ namespace XTMF2
             try
             {
                 var userPath = Owner!.UserPath;
-                var dir = new DirectoryInfo(ProjectDirectory);
+                var dir = new DirectoryInfo(ProjectDirectory!);
                 dir.MoveTo(Path.Combine(userPath, name));
                 Name = name;
                 ProjectFilePath = Path.Combine(userPath, name, ProjectFile);
@@ -614,7 +628,7 @@ namespace XTMF2
             try
             {
                 // Make sure that we can actually use this directory
-                var dir = new DirectoryInfo(DefaultRunDirectory);
+                var dir = new DirectoryInfo(DefaultRunDirectory!);
                 if (!dir.Exists)
                 {
                     dir.Create();

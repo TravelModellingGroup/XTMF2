@@ -45,11 +45,11 @@ namespace XTMF2
             GlobalBoundary = new Boundary(GlobalBoundaryName);
         }
 
-        private void Header_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        private void Header_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if(sender is ModelSystemHeader header)
+            if (sender is ModelSystemHeader header)
             {
-                switch(e.PropertyName)
+                switch (e.PropertyName)
                 {
                     case nameof(Name):
                         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
@@ -102,6 +102,11 @@ namespace XTMF2
                 {
                     var fileInfo = new FileInfo(Header.ModelSystemPath);
                     var dir = fileInfo.Directory;
+                    if (dir is null)
+                    {
+                        error = $"The provided path '{Header.ModelSystemPath}' was invalid!";
+                        return false;
+                    }
                     if (!dir.Exists)
                     {
                         dir.Create();
@@ -136,7 +141,7 @@ namespace XTMF2
             }
             finally
             {
-                if(!leaveOpen)
+                if (!leaveOpen)
                 {
                     saveTo.Dispose();
                 }
@@ -234,11 +239,11 @@ namespace XTMF2
             var info = new FileInfo(path);
             string? errorString = null;
             error = null;
-            
+
             try
             {
                 ModelSystem? ms;
-                if(info.Exists)
+                if (info.Exists)
                 {
                     using var rawStream = File.OpenRead(modelSystemHeader.ModelSystemPath);
                     ms = Load(rawStream, session.GetModuleRepository(), modelSystemHeader, ref errorString);
@@ -341,7 +346,7 @@ namespace XTMF2
                     {
                         return FailWith(out error, "Invalid index!");
                     }
-                    if(reader.ValueTextEquals(IndexProperty))
+                    if (reader.ValueTextEquals(IndexProperty))
                     {
                         reader.Read();
                         if (reader.TokenType != JsonTokenType.Number)
@@ -350,7 +355,7 @@ namespace XTMF2
                         }
                         index = reader.GetInt32();
                     }
-                    else if(reader.ValueTextEquals(TypeProperty))
+                    else if (reader.ValueTextEquals(TypeProperty))
                     {
                         reader.Read();
                         type = reader.GetString();

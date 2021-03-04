@@ -59,7 +59,7 @@ namespace XTMF2
                 var file = new FileInfo(ModelSystemPath);
                 if (file.Exists)
                 {
-                    file.MoveTo(Path.Combine(file.DirectoryName, name + ".xmsys"));
+                    file.MoveTo(Path.Combine(file.DirectoryName!, name + ".xmsys"));
                 }
                 Name = name;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));

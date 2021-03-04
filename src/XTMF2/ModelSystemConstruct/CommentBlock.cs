@@ -112,7 +112,7 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     if (reader.ValueTextEquals(XProperty))
                     {
-                        if(!reader.Read() || reader.TokenType != JsonTokenType.Number)
+                        if (!reader.Read() || reader.TokenType != JsonTokenType.Number)
                         {
                             return FailWith(out block, out error, $"The x coordinate of the comment block was not a number!");
                         }
@@ -148,7 +148,12 @@ namespace XTMF2.ModelSystemConstruct
                         {
                             return FailWith(out block, out error, $"The comment of the comment block was not a string!");
                         }
-                        comment = reader.GetString();
+                        var temp = reader.GetString();
+                        if (temp is null)
+                        {
+                            return FailWith(out block, out error, "Unable to read the Name property!");
+                        }
+                        comment = temp;
                     }
                 }
             }
