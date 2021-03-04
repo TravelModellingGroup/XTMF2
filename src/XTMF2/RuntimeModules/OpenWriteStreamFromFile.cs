@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017-2019 University of Toronto
+    Copyright 2017-2021 University of Toronto
 
     This file is part of XTMF2.
 
@@ -43,6 +43,10 @@ Description = "Provides a WriteStream to the given file name from context.")]
             {
                 FileInfo f = new FileInfo(context);
                 var dir = f.Directory;
+                if(dir is null)
+                {
+                    throw new XTMFRuntimeException(this, $"The provided file path is not a valid file path!");
+                }
                 if (!dir.Exists)
                 {
                     dir.Create();

@@ -135,16 +135,16 @@ namespace XTMF2
 
         internal bool Validate(ref string? moduleName, ref string? error)
         {
-            foreach(var module in _Modules)
+            foreach (var module in _Modules)
             {
-                if(!module.Validate(ref moduleName, ref error))
+                if (!module.Validate(ref moduleName, ref error))
                 {
                     return false;
                 }
             }
-            foreach(var children in _Boundaries)
+            foreach (var children in _Boundaries)
             {
-                if(!children.Validate(ref moduleName, ref error))
+                if (!children.Validate(ref moduleName, ref error))
                 {
                     return false;
                 }
@@ -578,17 +578,29 @@ namespace XTMF2
                 {
                     return FailWith(out error, "Unexpected token when reading boundary!");
                 }
-                if(reader.ValueTextEquals(NameProperty))
+                if (reader.ValueTextEquals(NameProperty))
                 {
                     reader.Read();
-                    Name = reader.GetString();
+                    var temp = reader.GetString();
+                    if (temp is null)
+                    {
+                        error = "Unable to read the Name property!";
+                        return false;
+                    }
+                    Name = temp;
                 }
-                else if(reader.ValueTextEquals(DescriptionProperty))
+                else if (reader.ValueTextEquals(DescriptionProperty))
                 {
                     reader.Read();
-                    Description = reader.GetString();
+                    var temp = reader.GetString();
+                    if (temp is null)
+                    {
+                        error = "Unable to read the Description property!";
+                        return false;
+                    }
+                    Description = temp;
                 }
-                else if(reader.ValueTextEquals(StartsProperty))
+                else if (reader.ValueTextEquals(StartsProperty))
                 {
                     if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
                     {
@@ -603,7 +615,7 @@ namespace XTMF2
                         _Starts.Add(start!);
                     }
                 }
-                else if(reader.ValueTextEquals(NodesProperty))
+                else if (reader.ValueTextEquals(NodesProperty))
                 {
                     if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
                     {
@@ -621,7 +633,7 @@ namespace XTMF2
                         }
                     }
                 }
-                else if(reader.ValueTextEquals(BoundariesProperty))
+                else if (reader.ValueTextEquals(BoundariesProperty))
                 {
                     if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
                     {
@@ -698,9 +710,9 @@ namespace XTMF2
                         if (previous != null)
                         {
                             link = previous;
-                            if(link is MultiLink ml)
+                            if (link is MultiLink ml)
                             {
-                                if(!ml.AddDestination(destination, out error))
+                                if (!ml.AddDestination(destination, out error))
                                 {
                                     return false;
                                 }
@@ -843,7 +855,7 @@ namespace XTMF2
         internal bool AddNode(ModuleRepository modules, string name, Type type, Rectangle location, out Node? node, out CommandError? error)
         {
             node = Node.Create(modules, name, type, this, location);
-            if(node is null)
+            if (node is null)
             {
                 return FailWith(out error, $"Unable to create a node with the name {name} of type {type.FullName}!");
             }

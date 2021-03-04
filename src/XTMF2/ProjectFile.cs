@@ -234,11 +234,11 @@ namespace XTMF2
                 }
                 return Project.Load(projectFile, name, owner, out project, out error);
             }
-            catch(IOException e)
+            catch (IOException e)
             {
                 error = new CommandError(e.Message);
             }
-            catch(InvalidDataException e)
+            catch (InvalidDataException e)
             {
                 error = new CommandError(e.Message);
             }
@@ -250,7 +250,7 @@ namespace XTMF2
             try
             {
                 var metaDataEntry = archive.GetEntry("metadata.json");
-                if(metaDataEntry is null)
+                if (metaDataEntry is null)
                 {
                     error = new CommandError("There was no metadata entry in the project file!");
                     return false;
@@ -259,33 +259,51 @@ namespace XTMF2
                 using var backingStream = new MemoryStream();
                 metaDataStream.CopyTo(backingStream);
                 var reader = new Utf8JsonReader(backingStream.GetBuffer().AsSpan(0, (int)backingStream.Length));
-                while(reader.Read())
+                while (reader.Read())
                 {
-                    if(reader.TokenType != JsonTokenType.PropertyName)
+                    if (reader.TokenType != JsonTokenType.PropertyName)
                     {
                         continue;
                     }
-                    if(reader.ValueTextEquals(PropertyName))
+                    if (reader.ValueTextEquals(PropertyName))
                     {
                         reader.Read();
-                        projectFile.Name = reader.GetString();
+                        var temp = reader.GetString();
+                        if (temp is null)
+                        {
+                            error = new CommandError("Unable to read the name of the model system!");
+                            return false;
+                        }
+                        projectFile.Name = temp;
                     }
-                    else if(reader.ValueTextEquals(PropertyDescription))
+                    else if (reader.ValueTextEquals(PropertyDescription))
                     {
                         reader.Read();
-                        projectFile.Description = reader.GetString();
+                        var temp = reader.GetString();
+                        if (temp is null)
+                        {
+                            error = new CommandError("Unable to read the description of the model system!");
+                            return false;
+                        }
+                        projectFile.Description = temp;
                     }
-                    else if(reader.ValueTextEquals(PropertyExportedOn))
+                    else if (reader.ValueTextEquals(PropertyExportedOn))
                     {
                         reader.Read();
                         projectFile.ExportedOn = reader.GetDateTime();
                     }
-                    else if(reader.ValueTextEquals(PropertyExportedBy))
+                    else if (reader.ValueTextEquals(PropertyExportedBy))
                     {
                         reader.Read();
-                        projectFile.ExportedBy = reader.GetString();
+                        var temp = reader.GetString();
+                        if (temp is null)
+                        {
+                            error = new CommandError("Unable to read the ExportedBy property of the model system!");
+                            return false;
+                        }
+                        projectFile.ExportedBy = temp;
                     }
-                    else if(reader.ValueTextEquals(PropertyVersionMajor))
+                    else if (reader.ValueTextEquals(PropertyVersionMajor))
                     {
                         reader.Read();
                         projectFile._majorVersion = reader.GetInt32();
@@ -295,13 +313,18 @@ namespace XTMF2
                         reader.Read();
                         projectFile._minorVersion = reader.GetInt32();
                     }
-                    else if(reader.ValueTextEquals(PropertyModelSystems))
+                    else if (reader.ValueTextEquals(PropertyModelSystems))
                     {
                         reader.Read();
-                        while(reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                         {
                             var path = reader.GetString();
-                            if(!ModelSystemFile.LoadModelSystemFile(archive, path, out var msf, out error))
+                            if (path is null)
+                            {
+                                error = new CommandError("Unable to read the path to the model system!");
+                                return false;
+                            }
+                            if (!ModelSystemFile.LoadModelSystemFile(archive, path, out var msf, out error))
                             {
                                 return false;
                             }
