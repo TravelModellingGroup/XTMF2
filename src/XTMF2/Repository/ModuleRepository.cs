@@ -52,7 +52,7 @@ namespace XTMF2.Repository
         }
 
         /// <summary>
-        /// Add the given type to the module repository if it it comes implements
+        /// Add the given type to the module repository if it implements
         /// the IModule interface.
         /// </summary>
         /// <param name="type">The type to add.</param>

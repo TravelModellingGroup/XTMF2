@@ -19,6 +19,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using XTMF2.Editing;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.UnitTests.Editing
 {

@@ -24,7 +24,7 @@ using System.Collections.Concurrent;
 using System.Linq;
 using XTMF2.Repository;
 
-namespace XTMF2
+namespace XTMF2.ModelSystemConstruct
 {
     /// <summary>
     /// The basic building block of a model system

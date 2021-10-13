@@ -1264,6 +1264,111 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Add a new function template to a boundary.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="boundary">The boundary that the function template is being added to.</param>
+        /// <param name="functionTemplateName">The name of the function template. This must be not null or whitespace.</param>
+        /// <param name="rectangle"></param>
+        /// <param name="functionTemplate"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentNullException"></exception>
+        /// <exception cref="ArgumentException"></exception>
+        public bool AddFunctionTemplate(User user, Boundary boundary, string functionTemplateName, out FunctionTemplate? functionTemplate, out CommandError? error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (boundary is null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+
+            error = null;
+            functionTemplate = null;
+
+            if (string.IsNullOrWhiteSpace(functionTemplateName))
+            {
+                error = new CommandError($"You can not add a function template with an empty name!");
+                return false;
+            }
+            lock(_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (!boundary.AddFunctionTemplate(functionTemplateName, out var template, out error))
+                {
+                    return false;
+                }
+                functionTemplate = template!;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    return (boundary.RemoveFunctionTemplate(template!, out var error), error);
+                }, () =>
+                {
+                    return (boundary.AddFunctionTemplate(template!, out var error), error);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Remove the given function template from the boundary.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="boundary">The boundary that the function template is being added to.</param>
+        /// <param name="functionTemplate"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentNullException"></exception>
+        /// <exception cref="ArgumentException"></exception>
+        public bool RemoveFunctionTemplate(User user, Boundary boundary, FunctionTemplate functionTemplate, out CommandError? error)
+        {
+            if (user is null)
+            {
+                throw new ArgumentNullException(nameof(user));
+            }
+
+            if (boundary is null)
+            {
+                throw new ArgumentNullException(nameof(boundary));
+            }
+
+            if (functionTemplate is null)
+            {
+                throw new ArgumentNullException(nameof(functionTemplate));
+            }
+
+            error = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (!boundary.RemoveFunctionTemplate(functionTemplate, out error))
+                {
+                    return false;
+                }
+                Buffer.AddUndo(new Command(() =>
+                {
+                    return (boundary.AddFunctionTemplate(functionTemplate, out var error), error);
+                }, () =>
+                {
+                    return (boundary.RemoveFunctionTemplate(functionTemplate, out var error), error);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Create a model system session to use for a run
         /// </summary>
         /// <param name="runtime">The XTMF runtime the run will occur in</param>

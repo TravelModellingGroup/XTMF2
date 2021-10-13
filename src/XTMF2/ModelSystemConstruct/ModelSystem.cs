@@ -26,6 +26,7 @@ using System.ComponentModel;
 using XTMF2.Editing;
 using System.IO;
 using XTMF2.Repository;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2
 {
