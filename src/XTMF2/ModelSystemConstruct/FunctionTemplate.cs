@@ -93,11 +93,11 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="modules">The repository of modules.</param>
         /// <param name="typeLookup">A lookup from index to type.</param>
         /// <param name="node">A reference from node index to node object.</param>
-        /// <param name="reader"></param>
-        /// <param name="parent"></param>
-        /// <param name="template"></param>
-        /// <param name="error"></param>
-        /// <returns></returns>
+        /// <param name="reader">The reader to use for parsing the FunctionTemplate and its children.</param>
+        /// <param name="parent">The boundary that contains this function template.</param>
+        /// <param name="template">The function template that was created by loading the file.</param>
+        /// <param name="error">An error message if we failed to load the function template or its children.</param>
+        /// <returns>True if the operation succeeded, false otherwise with an error message.</returns>
         internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
             ref Utf8JsonReader reader, Boundary parent, out FunctionTemplate? template, ref string? error)
         {

@@ -1269,12 +1269,10 @@ namespace XTMF2.Editing
         /// <param name="user">The user issuing the command.</param>
         /// <param name="boundary">The boundary that the function template is being added to.</param>
         /// <param name="functionTemplateName">The name of the function template. This must be not null or whitespace.</param>
-        /// <param name="rectangle"></param>
-        /// <param name="functionTemplate"></param>
-        /// <param name="error"></param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentNullException"></exception>
-        /// <exception cref="ArgumentException"></exception>
+        /// <param name="functionTemplate">The newly created functionTemplate if successful, null otherwise.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if the user or boundary are null.</exception>
         public bool AddFunctionTemplate(User user, Boundary boundary, string functionTemplateName, out FunctionTemplate? functionTemplate, out CommandError? error)
         {
             if (user is null)
@@ -1323,11 +1321,10 @@ namespace XTMF2.Editing
         /// </summary>
         /// <param name="user">The user issuing the command.</param>
         /// <param name="boundary">The boundary that the function template is being added to.</param>
-        /// <param name="functionTemplate"></param>
-        /// <param name="error"></param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentNullException"></exception>
-        /// <exception cref="ArgumentException"></exception>
+        /// <param name="functionTemplate">The function template to remove from the given boundary.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if the user, boundary, or function template are null.</exception>
         public bool RemoveFunctionTemplate(User user, Boundary boundary, FunctionTemplate functionTemplate, out CommandError? error)
         {
             if (user is null)
