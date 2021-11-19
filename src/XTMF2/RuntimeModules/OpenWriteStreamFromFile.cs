@@ -51,7 +51,7 @@ Description = "Provides a WriteStream to the given file name from context.")]
                 {
                     dir.Create();
                 }
-                return new WriteStream(File.OpenWrite(context));
+                return new WriteStream(File.Open(context, FileMode.Create, FileAccess.Write));
             }
             catch(IOException e)
             {
