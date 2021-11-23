@@ -23,6 +23,7 @@ using System.Text.Json;
 using XTMF2.RuntimeModules;
 using XTMF2.Editing;
 using XTMF2.Repository;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -60,7 +61,7 @@ namespace XTMF2.ModelSystemConstruct
         }
 
         internal static bool Load(ModuleRepository modules, Dictionary<int, Node> nodes,
-            Boundary boundary, ref Utf8JsonReader reader, out Start? start, ref string? error)
+            Boundary boundary, ref Utf8JsonReader reader, [NotNullWhen(true)] out Start? start, [NotNullWhen(false)] ref string? error)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
             {

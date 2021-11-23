@@ -48,6 +48,30 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        public void CreateNewOrGet()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var controller = runtime.ProjectController;
+            CommandError error = null;
+            var localUser = TestHelper.GetTestUser(runtime);
+            // delete the project in case it has survived.
+            controller.DeleteProject(localUser, "Test", out error);
+            Assert.IsTrue(controller.CreateNewOrGet(localUser, "Test", out var session, out error).UsingIf(session, () =>
+            {
+                var project = session.Project;
+                Assert.AreEqual("Test", project.Name);
+                Assert.AreEqual(localUser, project.Owner);
+            }), "Unable to create project");
+
+            Assert.IsTrue(controller.CreateNewOrGet(localUser, "Test", out session, out error).UsingIf(session, () =>
+            {
+
+            }), "Unable to get the project the second time.");
+            Assert.IsTrue(controller.DeleteProject(localUser, "Test", out error));
+            Assert.IsFalse(controller.DeleteProject(localUser, "Test", out error));
+        }
+
+        [TestMethod]
         public void RenameProject()
         {
             var runtime = XTMFRuntime.CreateRuntime();

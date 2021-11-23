@@ -27,6 +27,7 @@ using XTMF2.Editing;
 using System.IO;
 using XTMF2.Repository;
 using XTMF2.ModelSystemConstruct;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2
 {
@@ -225,7 +226,7 @@ namespace XTMF2
             }
         }
 
-        internal static bool Load(string modelSystem, XTMFRuntime runtime, out ModelSystem? ms, ref string? error)
+        internal static bool Load(string modelSystem, XTMFRuntime runtime, [NotNullWhen(true)] out ModelSystem? ms, [NotNullWhen(false)] ref string? error)
         {
             using var stream = new MemoryStream(Encoding.Unicode.GetBytes(modelSystem));
             var header = ModelSystemHeader.CreateRunHeader(runtime);
@@ -233,7 +234,7 @@ namespace XTMF2
             return ms != null;
         }
 
-        internal static bool Load(ProjectSession session, ModelSystemHeader modelSystemHeader, out ModelSystemSession? msSession, out CommandError? error)
+        internal static bool Load(ProjectSession session, ModelSystemHeader modelSystemHeader, [NotNullWhen(true)] out ModelSystemSession? msSession, [NotNullWhen(false)] out CommandError? error)
         {
             // the parameters are have already been vetted
             var path = modelSystemHeader.ModelSystemPath;
@@ -272,7 +273,7 @@ namespace XTMF2
             }
         }
 
-        private static ModelSystem? Load(Stream rawStream, ModuleRepository modules, ModelSystemHeader modelSystemHeader, ref string? error)
+        private static ModelSystem? Load(Stream rawStream, ModuleRepository modules, ModelSystemHeader modelSystemHeader, [NotNullWhen(false)] ref string? error)
         {
             try
             {
@@ -327,7 +328,7 @@ namespace XTMF2
             return false;
         }
 
-        private static bool LoadTypes(Dictionary<int, Type> typeLookup, ref Utf8JsonReader reader, ref string? error)
+        private static bool LoadTypes(Dictionary<int, Type> typeLookup, ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
@@ -381,13 +382,19 @@ namespace XTMF2
         }
 
         private static bool LoadBoundaries(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
-            ref Utf8JsonReader reader, Boundary global, ref string? error)
+            ref Utf8JsonReader reader, Boundary global, [NotNullWhen(false)] ref string? error)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
                 return FailWith(out error, "Expected to read an array when loading boundaries!");
             }
-            if (!reader.Read() || !global.Load(modules, typeLookup, nodes, ref reader, ref error))
+
+            if (!reader.Read())
+            {
+                return FailWith(out error, "Unexpected end of file when loading boundaries!");
+            }
+
+            if(!global.Load(modules, typeLookup, nodes, ref reader, ref error))
             {
                 return false;
             }

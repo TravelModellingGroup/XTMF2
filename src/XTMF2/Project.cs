@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017 University of Toronto
+    Copyright 2017-2021 University of Toronto
 
     This file is part of XTMF2.
 
@@ -26,6 +26,7 @@ using XTMF2.Editing;
 using XTMF2.Controllers;
 using System.Linq;
 using System.Text.Json;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2
 {
@@ -73,7 +74,7 @@ namespace XTMF2
         {
         }
 
-        internal static bool Load(UserController userController, string filePath, out Project project, ref string? error)
+        internal static bool Load(UserController userController, string filePath, [NotNullWhen(true)] out Project? project, [NotNullWhen(false)] ref string? error)
         {
             project = new Project()
             {
@@ -193,7 +194,7 @@ namespace XTMF2
             return false;
         }
 
-        internal static bool Load(ProjectFile projectFile, string projectName, User owner, out Project? project, out CommandError? error)
+        internal static bool Load(ProjectFile projectFile, string projectName, User owner, [NotNullWhen(true)] out Project? project, [NotNullWhen(false)] out CommandError? error)
         {
             bool deleteProject = true;
             Project? toReturn = null;
@@ -217,9 +218,10 @@ namespace XTMF2
             }
             finally
             {
-                if (deleteProject && !(toReturn is null))
+                if (deleteProject && (toReturn is not null))
                 {
-                    toReturn.Delete(out error);
+                    // If we fail when deleting the project it is alright.
+                    toReturn.Delete(out var _);
                 }
             }
         }
@@ -228,7 +230,7 @@ namespace XTMF2
         /// Delete the project.  This should only be called from the project controller
         /// unless the project has never been added to the project controller.
         /// </summary>
-        internal bool Delete(out CommandError? error)
+        internal bool Delete([NotNullWhen(false)] out CommandError? error)
         {
             try
             {
@@ -247,7 +249,7 @@ namespace XTMF2
             }
         }
 
-        internal bool GetModelSystemHeader(string modelSystemName, out ModelSystemHeader? modelSystemHeader, out CommandError? error)
+        internal bool GetModelSystemHeader(string modelSystemName, [NotNullWhen(true)] out ModelSystemHeader? modelSystemHeader, [NotNullWhen(false)] out CommandError? error)
         {
             modelSystemHeader = _ModelSystems.FirstOrDefault(msh => msh.Name.Equals(modelSystemName, StringComparison.OrdinalIgnoreCase));
             if (modelSystemHeader == null)
@@ -269,7 +271,7 @@ namespace XTMF2
             return _ModelSystems.Any(ms => ms.Name.Equals(modelSystemName, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static bool SaveOrError(Project project, out CommandError? error)
+        private static bool SaveOrError(Project project, [NotNullWhen(false)] out CommandError? error)
         {
             string? errorString = null;
             if (!project.Save(ref errorString))
@@ -284,12 +286,12 @@ namespace XTMF2
             }
         }
 
-        private bool SaveOrError(out CommandError? error)
+        private bool SaveOrError([NotNullWhen(false)] out CommandError? error)
         {
             return SaveOrError(this, out error);
         }
 
-        internal bool GiveOwnership(User newOwner, out CommandError? error)
+        internal bool GiveOwnership(User newOwner, [NotNullWhen(false)] out CommandError? error)
         {
             lock (_projectLock)
             {
@@ -309,7 +311,7 @@ namespace XTMF2
             }
         }
 
-        internal bool AddAdditionalUser(User toShareWith, out CommandError? error)
+        internal bool AddAdditionalUser(User toShareWith, [NotNullWhen(false)] out CommandError? error)
         {
             lock (_projectLock)
             {
@@ -324,7 +326,7 @@ namespace XTMF2
             }
         }
 
-        internal bool RemoveAdditionalUser(User toRemove, out CommandError? error)
+        internal bool RemoveAdditionalUser(User toRemove, [NotNullWhen(false)] out CommandError? error)
         {
             lock (_projectLock)
             {
@@ -339,7 +341,7 @@ namespace XTMF2
             }
         }
 
-        internal static bool New(User owner, string name, string description, out Project? project, out CommandError? error)
+        internal static bool New(User owner, string name, string description, [NotNullWhen(true)] out Project? project, [NotNullWhen(false)] out CommandError? error)
         {
             project = new Project()
             {
@@ -367,7 +369,7 @@ namespace XTMF2
         /// </summary>
         /// <param name="error"></param>
         /// <returns></returns>
-        internal bool Save(ref string? error)
+        internal bool Save([NotNullWhen(false)] ref string? error)
         {
             var temp = Path.GetTempFileName();
             try
@@ -443,7 +445,7 @@ namespace XTMF2
             return user == Owner || _AdditionalUsers.Contains(user);
         }
 
-        internal bool SetName(string name, out CommandError? error)
+        internal bool SetName(string name, [NotNullWhen(false)] out CommandError? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -468,7 +470,7 @@ namespace XTMF2
             }
         }
 
-        internal bool SetDescription(ProjectSession session, string description, out CommandError? error)
+        internal bool SetDescription(ProjectSession session, string description, [NotNullWhen(false)] out CommandError? error)
         {
             Description = description;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
@@ -476,7 +478,7 @@ namespace XTMF2
             return true;
         }
 
-        internal bool Remove(ProjectSession session, ModelSystemHeader modelSystemHeader, out CommandError? error)
+        internal bool Remove(ProjectSession session, ModelSystemHeader modelSystemHeader, [NotNullWhen(false)] out CommandError? error)
         {
             if (modelSystemHeader == null)
             {
@@ -490,7 +492,7 @@ namespace XTMF2
             return false;
         }
 
-        internal bool Add(ProjectSession session, ModelSystemHeader modelSystemHeader, out CommandError? error)
+        internal bool Add(ProjectSession session, ModelSystemHeader modelSystemHeader, [NotNullWhen(false)] out CommandError? error)
         {
             if (modelSystemHeader == null)
             {
@@ -500,7 +502,7 @@ namespace XTMF2
             return SaveOrError(out error);
         }
 
-        internal bool RenameModelSystem(ModelSystemHeader modelSystem, string newName, out CommandError? error)
+        internal bool RenameModelSystem(ModelSystemHeader modelSystem, string newName, [NotNullWhen(false)] out CommandError? error)
         {
             if (_ModelSystems.Any(ms => newName.Equals(ms.Name, StringComparison.InvariantCultureIgnoreCase)))
             {
@@ -519,7 +521,7 @@ namespace XTMF2
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
         internal bool AddModelSystemFromModelSystemFile(string modelSystemName,
-            ModelSystemFile msf, out ModelSystemHeader? header, out CommandError? error)
+            ModelSystemFile msf, [NotNullWhen(true)] out ModelSystemHeader? header, [NotNullWhen(false)] out CommandError? error)
         {
             header = null;
             if (msf is null)

@@ -28,6 +28,7 @@ using XTMF2.Repository;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.Editing
 {
@@ -180,7 +181,7 @@ namespace XTMF2.Editing
         /// </summary>
         /// <param name="error">An error message if the save fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool Save(out CommandError? error)
+        public bool Save([NotNullWhen(false)] out CommandError? error)
         {
             lock (_sessionLock)
             {
@@ -202,7 +203,7 @@ namespace XTMF2.Editing
         /// <param name="modelSystem">The resulting model system session</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool CreateNewModelSystem(User user, string modelSystemName, out ModelSystemHeader? modelSystem, out CommandError? error)
+        public bool CreateNewModelSystem(User user, string modelSystemName, [NotNullWhen(true)] out ModelSystemHeader? modelSystem, [NotNullWhen(false)] out CommandError? error)
         {
             modelSystem = null;
             if (!ProjectController.ValidateProjectName(modelSystemName, out error))
@@ -227,6 +228,39 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Create a new model system with the given name.  The name must be unique.
+        /// </summary>
+        /// <param name="modelSystemName">The name of the model system (must be unique within the project).</param>
+        /// <param name="modelSystem">The resulting model system session</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool CreateOrGetModelSystem(User user, string modelSystemName, [NotNullWhen(true)] out ModelSystemHeader? modelSystem, [NotNullWhen(false)] out CommandError? error)
+        {
+            modelSystem = null;
+            if (!ProjectController.ValidateProjectName(modelSystemName, out error))
+            {
+                return false;
+            }
+            lock (_sessionLock)
+            {
+                if (!Project.CanAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project!", true);
+                    return false;
+                }
+                if(Project.GetModelSystemHeader(modelSystemName, out modelSystem, out error))
+                {
+                    return true;
+                }
+                else
+                {
+                    modelSystem = new ModelSystemHeader(Project, modelSystemName);
+                    return Project.Add(this, modelSystem, out error);
+                }
+            }
+        }
+
+        /// <summary>
         /// Create a model system session allowing for the editing of a model system.
         /// </summary>
         /// <param name="user">The user that is requesting access.</param>
@@ -234,7 +268,7 @@ namespace XTMF2.Editing
         /// <param name="session">The resulting session.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, out ModelSystemSession? session, out CommandError? error)
+        public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, [NotNullWhen(true)] out ModelSystemSession? session, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(modelSystemHeader);
@@ -278,7 +312,7 @@ namespace XTMF2.Editing
         /// <param name="modelSystem">The model system to remove.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RemoveModelSystem(User user, ModelSystemHeader modelSystem, out CommandError? error)
+        public bool RemoveModelSystem(User user, ModelSystemHeader modelSystem, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(modelSystem);
@@ -320,7 +354,7 @@ namespace XTMF2.Editing
         /// <param name="exportPath">The file that the project will be saved as.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ExportProject(User user, string exportPath, out CommandError? error)
+        public bool ExportProject(User user, string exportPath, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             Helper.ThrowIfNullOrWhitespace(exportPath);
@@ -349,7 +383,7 @@ namespace XTMF2.Editing
         /// <param name="exportPath">The location to export the model system to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with error message.</returns>
-        public bool ExportModelSystem(User user, ModelSystemHeader modelSystemHeader, string exportPath, out CommandError? error)
+        public bool ExportModelSystem(User user, ModelSystemHeader modelSystemHeader, string exportPath, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(modelSystemHeader);
@@ -383,7 +417,7 @@ namespace XTMF2.Editing
         /// <param name="modelSystemHeader">The resulting model system header.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool GetModelSystemHeader(User user, string modelSystemName, out ModelSystemHeader? modelSystemHeader, out CommandError? error)
+        public bool GetModelSystemHeader(User user, string modelSystemName, [NotNullWhen(true)] out ModelSystemHeader? modelSystemHeader, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             Helper.ThrowIfNullOrWhitespace(modelSystemName);
@@ -407,7 +441,7 @@ namespace XTMF2.Editing
         /// <param name="toShareWith">The person to share with</param>
         /// <param name="error">An error message if appropriate</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ShareWith(User doingShare, User toShareWith, out CommandError? error)
+        public bool ShareWith(User doingShare, User toShareWith, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(doingShare);
             ArgumentNullException.ThrowIfNull(toShareWith);
@@ -441,7 +475,7 @@ namespace XTMF2.Editing
         /// <param name="newOwner"></param>
         /// <param name="error"></param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SwitchOwner(User owner, User newOwner, out CommandError? error)
+        public bool SwitchOwner(User owner, User newOwner, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(owner);
             ArgumentNullException.ThrowIfNull(newOwner);
@@ -464,7 +498,7 @@ namespace XTMF2.Editing
         /// <param name="toRestrict">The user to remove access to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RestrictAccess(User owner, User toRestrict, out CommandError? error)
+        public bool RestrictAccess(User owner, User toRestrict, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(owner);
             ArgumentNullException.ThrowIfNull(toRestrict);
@@ -495,7 +529,7 @@ namespace XTMF2.Editing
         /// <param name="error">The error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool ImportModelSystem(User user, string modelSystemFilePath, string modelSystemName,
-            out ModelSystemHeader? header, out CommandError? error)
+            [NotNullWhen(true)] out ModelSystemHeader? header, [NotNullWhen(false)] out CommandError? error)
         {
             header = null;
             ArgumentNullException.ThrowIfNull(user);
@@ -542,7 +576,7 @@ namespace XTMF2.Editing
         /// <param name="fullName">The path to where to store runs.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SetCustomRunDirectory(User user, string fullName, out CommandError? error)
+        public bool SetCustomRunDirectory(User user, string fullName, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
 
@@ -568,7 +602,7 @@ namespace XTMF2.Editing
         /// <param name="user">The user issuing the command.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ResetCustomRunDirectory(User user, out CommandError? error)
+        public bool ResetCustomRunDirectory(User user, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
 
@@ -591,7 +625,7 @@ namespace XTMF2.Editing
         /// <param name="newName">The new name of the model system.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RenameModelSystem(User user, ModelSystemHeader modelSystem, string newName, out CommandError? error)
+        public bool RenameModelSystem(User user, ModelSystemHeader modelSystem, string newName, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(modelSystem);
@@ -619,7 +653,7 @@ namespace XTMF2.Editing
         /// <param name="pastRunDirectoryPath">The path to add.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool AddAdditionalPastRunDirectory(User user, string pastRunDirectoryPath, out CommandError? error)
+        public bool AddAdditionalPastRunDirectory(User user, string pastRunDirectoryPath, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
 
@@ -646,7 +680,7 @@ namespace XTMF2.Editing
         /// <param name="pastRunDirectoryPath">The path to add.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RemoveAdditionalPastRunDirectory(User user, string pastRunDirectoryPath, out CommandError? error)
+        public bool RemoveAdditionalPastRunDirectory(User user, string pastRunDirectoryPath, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
 

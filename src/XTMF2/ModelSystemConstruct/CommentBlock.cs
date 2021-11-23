@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using XTMF2.Editing;
@@ -98,7 +99,7 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteEndObject();
         }
 
-        internal static bool Load(ref Utf8JsonReader reader, out CommentBlock? block, ref string? error)
+        internal static bool Load(ref Utf8JsonReader reader, [NotNullWhen(true)] out CommentBlock? block, [NotNullWhen(false)] ref string? error)
         {
             float x = 0, y = 0, width = 0, height = 0;
             string comment = "No comment";
