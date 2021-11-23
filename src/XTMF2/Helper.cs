@@ -18,6 +18,7 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace XTMF2
@@ -36,7 +37,7 @@ namespace XTMF2
         public static bool UsingIf<T>(this bool callResult, T disposable, Action disposableToExecuteOnSuccess)
             where T : IDisposable
         {
-            if(callResult)
+            if (callResult)
             {
                 using (disposable)
                 {
@@ -59,6 +60,20 @@ namespace XTMF2
             else
             {
                 onFailure();
+            }
+        }
+
+        /// <summary>
+        /// Throw an exception is the string is null empty or whitespace
+        /// </summary>
+        /// <param name="argument">The string to test.</param>
+        /// <param name="paramName">The name of the parameter. Automatically set to the name of the argument.</param>
+        /// <exception cref="ArgumentNullException">Thrown if the argument is null, empty, or only contains whitespace.</exception>
+        public static void ThrowIfNullOrWhitespace(string? argument, [CallerArgumentExpression("argument")] string? paramName = null)
+        {
+            if (string.IsNullOrWhiteSpace(argument))
+            {
+                throw new ArgumentNullException(paramName);
             }
         }
     }

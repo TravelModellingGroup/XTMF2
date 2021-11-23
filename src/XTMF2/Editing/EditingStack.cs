@@ -58,10 +58,7 @@ namespace XTMF2.Editing
         /// <exception cref="ArgumentNullException">The item may not be null.</exception>
         public void Add(CommandBatch item)
         {
-            if (item == null)
-            {
-                throw new ArgumentNullException(nameof(item));
-            }
+            ArgumentNullException.ThrowIfNull(item);
 
             lock (_DataLock)
             {
@@ -130,10 +127,7 @@ namespace XTMF2.Editing
         /// <exception cref="ArgumentNullException">The item may not be null.</exception>
         public bool Contains(CommandBatch item)
         {
-            if (item == null)
-            {
-                throw new ArgumentNullException(nameof(item));
-            }
+            ArgumentNullException.ThrowIfNull(item);
 
             lock (_DataLock)
             {
@@ -159,10 +153,8 @@ namespace XTMF2.Editing
         /// <exception cref="ArgumentOutOfRangeException">The array must be able to store all elements otherwise this error will be thrown.</exception>
         public void CopyTo(CommandBatch[] array, int arrayIndex)
         {
-            if(array == null)
-            {
-                throw new ArgumentNullException(nameof(array));
-            }
+            ArgumentNullException.ThrowIfNull(array);
+
             lock (_DataLock)
             {
                 if(array.Length - arrayIndex < Count)

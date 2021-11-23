@@ -117,14 +117,8 @@ namespace XTMF2
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
         internal static bool ExportProject(ProjectSession projectSession, User user, string exportPath, out CommandError? error)
         {
-            if (projectSession is null)
-            {
-                throw new ArgumentNullException(nameof(projectSession));
-            }
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(projectSession);
+            ArgumentNullException.ThrowIfNull(user);
 
             var project = projectSession.Project;
             // we need this declared outside of the
