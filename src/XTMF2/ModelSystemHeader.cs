@@ -122,10 +122,7 @@ namespace XTMF2
 
         internal static ModelSystemHeader CreateRunHeader(XTMFRuntime runtime)
         {
-            return new ModelSystemHeader(null, "Run")
-            {
-                
-            };
+            return new ModelSystemHeader(null, "Run");
         }
     }
 }

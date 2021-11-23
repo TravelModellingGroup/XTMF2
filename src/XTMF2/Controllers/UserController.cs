@@ -79,10 +79,8 @@ namespace XTMF2.Controllers
         /// <returns>If the delete succeeds</returns>
         public bool Delete(string userName)
         {
-            if (userName == null)
-            {
-                throw new ArgumentNullException(nameof(userName));
-            }
+            Helper.ThrowIfNullOrWhitespace(userName);
+
             lock (UserLock)
             {
                 var foundUser = _users.FirstOrDefault(user => user.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
@@ -101,14 +99,11 @@ namespace XTMF2.Controllers
         /// <returns>True if the user was deleted</returns>
         public bool Delete(User user)
         {
-            if(user == null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+
             var projectController = ProjectController;
             lock (UserLock)
             {
-
                 var userProjects = user.AvailableProjects;
                 // make a copy of the projects to avoid altering a list
                 // that is being enumerated

@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017-2020 University of Toronto
+    Copyright 2017-2021 University of Toronto
     This file is part of XTMF2.
     XTMF2 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -68,14 +68,9 @@ namespace XTMF2.Editing
         public bool SetBoundaryName(User user, Boundary boundary, string name, out CommandError? error)
         {
             error = null;
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (boundary is null)
-            {
-                throw new ArgumentNullException(nameof(boundary));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+
             if (String.IsNullOrWhiteSpace(name))
             {
                 error = new CommandError("A boundary requires a unique name");
@@ -114,14 +109,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
         public bool SetBoundaryDescription(User user, Boundary boundary, string description, out CommandError? error)
         {
-            if (user == null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (boundary == null)
-            {
-                throw new ArgumentNullException(nameof(boundary));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -157,14 +147,9 @@ namespace XTMF2.Editing
         public bool AddBoundary(User user, Boundary parentBoundary, string name, out Boundary? boundary, out CommandError? error)
         {
             boundary = null;
-            if (user == null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (parentBoundary == null)
-            {
-                throw new ArgumentNullException(nameof(parentBoundary));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(parentBoundary);
+
             if (String.IsNullOrWhiteSpace(name))
             {
                 error = new CommandError("A boundary requires a unique name");
@@ -205,14 +190,9 @@ namespace XTMF2.Editing
             out CommandError? error)
         {
             block = null;
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (boundary is null)
-            {
-                throw new ArgumentNullException(nameof(boundary));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+
             if (String.IsNullOrWhiteSpace(comment))
             {
                 error = new CommandError("There was no comment to store.");
@@ -259,20 +239,10 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
         public bool RemoveCommentBlock(User user, Boundary boundary, CommentBlock block, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+            ArgumentNullException.ThrowIfNull(block);
 
-            if (boundary is null)
-            {
-                throw new ArgumentNullException(nameof(boundary));
-            }
-
-            if (block is null)
-            {
-                throw new ArgumentNullException(nameof(block));
-            }
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -305,15 +275,8 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool SetCommentBlockLocation(User user, CommentBlock commentBlock, Rectangle newLocation, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-
-            if (commentBlock is null)
-            {
-                throw new ArgumentNullException(nameof(commentBlock));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(commentBlock);
 
             lock (_sessionLock)
             {
@@ -348,15 +311,8 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool SetCommentBlockText(User user, CommentBlock commentBlock, string newText, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-
-            if (commentBlock is null)
-            {
-                throw new ArgumentNullException(nameof(commentBlock));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(commentBlock);
 
             if (string.IsNullOrEmpty(newText))
             {
@@ -396,18 +352,10 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
         public bool RemoveBoundary(User user, Boundary parentBoundary, Boundary boundary, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (parentBoundary is null)
-            {
-                throw new ArgumentNullException(nameof(parentBoundary));
-            }
-            if (boundary is null)
-            {
-                throw new ArgumentNullException(nameof(boundary));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(parentBoundary);
+            ArgumentNullException.ThrowIfNull(boundary);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -513,14 +461,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise.</returns>
         public bool AddModelSystemStart(User user, Boundary boundary, string startName, Rectangle location, out Start? start, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (boundary is null)
-            {
-                throw new ArgumentNullException(nameof(boundary));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+
             const string badStartName = "The start name must be unique within the model system and not empty.";
             start = null;
             if (String.IsNullOrWhiteSpace(startName))
@@ -565,14 +508,9 @@ namespace XTMF2.Editing
         /// <returns></returns>
         public bool RemoveStart(User user, Start start, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (start is null)
-            {
-                throw new ArgumentNullException(nameof(start));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(start);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -609,14 +547,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
         public bool AddNode(User user, Boundary boundary, string name, Type type, Rectangle location, out Node? node, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (boundary is null)
-            {
-                throw new ArgumentNullException(nameof(boundary));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -658,14 +591,9 @@ namespace XTMF2.Editing
         public bool AddNodeGenerateParameters(User user, Boundary boundary, string name, Type type,
             Rectangle location, out Node? node, out List<Node>? children, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (boundary is null)
-            {
-                throw new ArgumentNullException(nameof(boundary));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+
             children = null;
             lock (_sessionLock)
             {
@@ -778,14 +706,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RemoveNode(User user, Node node, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (node is null)
-            {
-                throw new ArgumentNullException(nameof(node));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(node);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -818,14 +741,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, False with an error message otherwise.</returns>
         public bool RemoveNodeGenerateParameters(User user, Node node, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (node is null)
-            {
-                throw new ArgumentNullException(nameof(node));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(node);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -915,15 +833,8 @@ namespace XTMF2.Editing
 
         public bool SetNodeLocation(User user, Node mss, Rectangle newLocation, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-
-            if (mss is null)
-            {
-                throw new ArgumentNullException(nameof(mss));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(mss);
 
             lock (_sessionLock)
             {
@@ -967,14 +878,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool SetParameterValue(User user, Node basicParameter, string value, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (basicParameter is null)
-            {
-                throw new ArgumentNullException(nameof(basicParameter));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(basicParameter);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -1008,14 +914,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation completed successfully, false otherwise.</returns>
         public bool SetNodeDisabled(User user, Node node, bool disabled, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (node is null)
-            {
-                throw new ArgumentNullException(nameof(node));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(node);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -1049,14 +950,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation completed successfully, false otherwise.</returns>
         public bool SetLinkDisabled(User user, Link link, bool disabled, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (link is null)
-            {
-                throw new ArgumentNullException(nameof(link));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(link);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -1129,14 +1025,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RemoveLink(User user, Link link, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (link is null)
-            {
-                throw new ArgumentNullException(nameof(link));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(link);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -1176,22 +1067,10 @@ namespace XTMF2.Editing
         public bool AddLink(User user, Node origin, NodeHook originHook,
             Node destination, out Link? link, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (origin is null)
-            {
-                throw new ArgumentNullException(nameof(origin));
-            }
-            if (originHook is null)
-            {
-                throw new ArgumentNullException(nameof(originHook));
-            }
-            if (destination is null)
-            {
-                throw new ArgumentNullException(nameof(destination));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(origin);
+            ArgumentNullException.ThrowIfNull(originHook);
+            ArgumentNullException.ThrowIfNull(destination);
             link = null;
 
             lock (_sessionLock)
@@ -1275,16 +1154,8 @@ namespace XTMF2.Editing
         /// <exception cref="ArgumentNullException">Thrown if the user or boundary are null.</exception>
         public bool AddFunctionTemplate(User user, Boundary boundary, string functionTemplateName, out FunctionTemplate? functionTemplate, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-
-            if (boundary is null)
-            {
-                throw new ArgumentNullException(nameof(boundary));
-            }
-
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
             error = null;
             functionTemplate = null;
 
@@ -1327,22 +1198,11 @@ namespace XTMF2.Editing
         /// <exception cref="ArgumentNullException">Thrown if the user, boundary, or function template are null.</exception>
         public bool RemoveFunctionTemplate(User user, Boundary boundary, FunctionTemplate functionTemplate, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-
-            if (boundary is null)
-            {
-                throw new ArgumentNullException(nameof(boundary));
-            }
-
-            if (functionTemplate is null)
-            {
-                throw new ArgumentNullException(nameof(functionTemplate));
-            }
-
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+            ArgumentNullException.ThrowIfNull(functionTemplate);
             error = null;
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -1383,10 +1243,8 @@ namespace XTMF2.Editing
         /// <returns>True if the undo succeeds, false otherwise with an error message.</returns>
         public bool Undo(User user, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -1406,10 +1264,7 @@ namespace XTMF2.Editing
         /// <returns>True if the redo succeeds, false otherwise with an error message.</returns>
         public bool Redo(User user, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
 
             if (!_session.HasAccess(user))
             {
@@ -1429,15 +1284,10 @@ namespace XTMF2.Editing
         /// <returns>True if successful, false otherwise with error message.</returns>
         public bool RemoveLinkDestination(User user, Link multiLink, int index, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (multiLink is null)
-            {
-                throw new ArgumentNullException(nameof(multiLink));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(multiLink);
             error = null;
+
             if (multiLink is MultiLink ml)
             {
                 lock (_sessionLock)

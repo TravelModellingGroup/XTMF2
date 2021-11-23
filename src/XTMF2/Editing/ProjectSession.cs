@@ -118,10 +118,8 @@ namespace XTMF2.Editing
         /// <returns>True if the user has access to the project, false otherwise.</returns>
         internal bool HasAccess(User user)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+
             lock (_sessionLock)
             {
                 return Project.CanAccess(user);
@@ -238,14 +236,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, out ModelSystemSession? session, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (modelSystemHeader is null)
-            {
-                throw new ArgumentNullException(nameof(modelSystemHeader));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(modelSystemHeader);
+
             session = null;
             lock (_sessionLock)
             {
@@ -287,15 +280,8 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RemoveModelSystem(User user, ModelSystemHeader modelSystem, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-
-            if (modelSystem is null)
-            {
-                throw new ArgumentNullException(nameof(modelSystem));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(modelSystem);
 
             lock (_sessionLock)
             {
@@ -336,15 +322,8 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool ExportProject(User user, string exportPath, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-
-            if (string.IsNullOrWhiteSpace(exportPath))
-            {
-                throw new ArgumentException("message", nameof(exportPath));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            Helper.ThrowIfNullOrWhitespace(exportPath);
 
             lock (_sessionLock)
             {
@@ -372,15 +351,8 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with error message.</returns>
         public bool ExportModelSystem(User user, ModelSystemHeader modelSystemHeader, string exportPath, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-
-            if (modelSystemHeader is null)
-            {
-                throw new ArgumentNullException(nameof(modelSystemHeader));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(modelSystemHeader);
 
             if (string.IsNullOrWhiteSpace(exportPath))
             {
@@ -413,14 +385,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool GetModelSystemHeader(User user, string modelSystemName, out ModelSystemHeader? modelSystemHeader, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (String.IsNullOrWhiteSpace(modelSystemName))
-            {
-                throw new ArgumentNullException(nameof(modelSystemName));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            Helper.ThrowIfNullOrWhitespace(modelSystemName);
+
             lock (_sessionLock)
             {
                 if (!Project.CanAccess(user))
@@ -437,20 +404,14 @@ namespace XTMF2.Editing
         /// Share the project with the given user
         /// </summary>
         /// <param name="doingShare">The user that is issuing the share command</param>
-        /// <param name="toSharWith">The person to share with</param>
+        /// <param name="toShareWith">The person to share with</param>
         /// <param name="error">An error message if appropriate</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ShareWith(User doingShare, User toSharWith, out CommandError? error)
+        public bool ShareWith(User doingShare, User toShareWith, out CommandError? error)
         {
-            // test our arguments
-            if (doingShare is null)
-            {
-                throw new ArgumentNullException(nameof(doingShare));
-            }
-            if (toSharWith is null)
-            {
-                throw new ArgumentNullException(nameof(doingShare));
-            }
+            ArgumentNullException.ThrowIfNull(doingShare);
+            ArgumentNullException.ThrowIfNull(toShareWith);
+
             lock (_sessionLock)
             {
                 if (!(doingShare.IsAdmin || doingShare == Project.Owner))
@@ -459,7 +420,7 @@ namespace XTMF2.Editing
                     return false;
                 }
                 // now that we know that we can do the share
-                return Project.AddAdditionalUser(toSharWith, out error);
+                return Project.AddAdditionalUser(toShareWith, out error);
             }
         }
 
@@ -482,14 +443,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool SwitchOwner(User owner, User newOwner, out CommandError? error)
         {
-            if (owner is null)
-            {
-                throw new ArgumentNullException(nameof(owner));
-            }
-            if (newOwner is null)
-            {
-                throw new ArgumentNullException(nameof(newOwner));
-            }
+            ArgumentNullException.ThrowIfNull(owner);
+            ArgumentNullException.ThrowIfNull(newOwner);
+
             lock (_sessionLock)
             {
                 if (!(owner.IsAdmin || owner == Project.Owner))
@@ -510,14 +466,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RestrictAccess(User owner, User toRestrict, out CommandError? error)
         {
-            if (owner is null)
-            {
-                throw new ArgumentNullException(nameof(owner));
-            }
-            if (toRestrict is null)
-            {
-                throw new ArgumentNullException(nameof(toRestrict));
-            }
+            ArgumentNullException.ThrowIfNull(owner);
+            ArgumentNullException.ThrowIfNull(toRestrict);
+
             lock (_sessionLock)
             {
                 if (!(owner.IsAdmin || owner == Project.Owner))
@@ -547,20 +498,10 @@ namespace XTMF2.Editing
             out ModelSystemHeader? header, out CommandError? error)
         {
             header = null;
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            Helper.ThrowIfNullOrWhitespace(modelSystemFilePath);
+            Helper.ThrowIfNullOrWhitespace(modelSystemName);
 
-            if (string.IsNullOrWhiteSpace(modelSystemFilePath))
-            {
-                throw new ArgumentException(nameof(modelSystemFilePath));
-            }
-
-            if (string.IsNullOrWhiteSpace(modelSystemName))
-            {
-                throw new ArgumentException(nameof(modelSystemName));
-            }
             try
             {
                 using var archive = ZipFile.OpenRead(modelSystemFilePath);
@@ -603,10 +544,7 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool SetCustomRunDirectory(User user, string fullName, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
 
             if (string.IsNullOrWhiteSpace(fullName))
             {
@@ -632,10 +570,8 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool ResetCustomRunDirectory(User user, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+
             lock (_sessionLock)
             {
                 if (!Project.CanAccess(user))
@@ -657,14 +593,9 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RenameModelSystem(User user, ModelSystemHeader modelSystem, string newName, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
-            if (modelSystem is null)
-            {
-                throw new ArgumentNullException(nameof(modelSystem));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(modelSystem);
+
             if (string.IsNullOrWhiteSpace(newName))
             {
                 error = new CommandError("The name of the model system must not be blank.");
@@ -690,10 +621,8 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool AddAdditionalPastRunDirectory(User user, string pastRunDirectoryPath, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+
             if (String.IsNullOrWhiteSpace(pastRunDirectoryPath))
             {
                 error = new CommandError("The additional past run directory path was invalid.");
@@ -719,10 +648,8 @@ namespace XTMF2.Editing
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool RemoveAdditionalPastRunDirectory(User user, string pastRunDirectoryPath, out CommandError? error)
         {
-            if (user is null)
-            {
-                throw new ArgumentNullException(nameof(user));
-            }
+            ArgumentNullException.ThrowIfNull(user);
+
             if (String.IsNullOrWhiteSpace(pastRunDirectoryPath))
             {
                 error = new CommandError("The additional past run directory path was invalid.");
