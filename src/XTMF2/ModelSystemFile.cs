@@ -24,6 +24,7 @@ using System.IO.Compression;
 using XTMF2.Editing;
 using System.IO;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2
 {
@@ -106,7 +107,7 @@ namespace XTMF2
         /// <summary>
         /// Checks if the model system file is contained within a project file.
         /// </summary>
-        public bool IsContainedInProjectFile => !(_archive is null);
+        public bool IsContainedInProjectFile => _archive is not null;
 
         /// <summary>
         /// Export the model system to the given path.
@@ -118,7 +119,7 @@ namespace XTMF2
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         internal static bool ExportModelSystem(ProjectSession projectSession, User user,
-            ModelSystemHeader modelSystemHeader, string exportPath, out CommandError? error)
+            ModelSystemHeader modelSystemHeader, string exportPath, [NotNullWhen(false)] out CommandError? error)
         {
             var tempDirName = string.Empty;
             try
@@ -188,7 +189,7 @@ namespace XTMF2
         /// <param name="msf">The resulting model system file, null if the operation fails.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
-        internal static bool LoadModelSystemFile(string filePath, out ModelSystemFile? msf, out CommandError? error)
+        internal static bool LoadModelSystemFile(string filePath, [NotNullWhen(true)] out ModelSystemFile? msf, [NotNullWhen(false)] out CommandError? error)
         {
             msf = null;
             var toReturn = new ModelSystemFile(filePath);
@@ -217,7 +218,7 @@ namespace XTMF2
         /// <param name="msf">The resulting model system file.</param>
         /// <param name="error">An error message if loading the model system file fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        internal static bool LoadModelSystemFile(ZipArchive archive, string path, out ModelSystemFile? msf, out CommandError? error)
+        internal static bool LoadModelSystemFile(ZipArchive archive, string path, [NotNullWhen(true)] out ModelSystemFile? msf, [NotNullWhen(false)] out CommandError? error)
         {
             msf = null;
             try
@@ -244,7 +245,7 @@ namespace XTMF2
             }
         }
 
-        private static bool LoadModelSystemFile(ModelSystemFile toReturn, Stream stream, out CommandError? error)
+        private static bool LoadModelSystemFile(ModelSystemFile toReturn, Stream stream, [NotNullWhen(false)] out CommandError? error)
         {
             var archive = new ZipArchive(stream, ZipArchiveMode.Read);
             var entry = archive.GetEntry(MetaDataFilePath);
@@ -400,7 +401,7 @@ namespace XTMF2
         /// <param name="modelSystemPath">The path to try to save the model system to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        internal bool ExtractModelSystemTo(string modelSystemPath, out CommandError? error)
+        internal bool ExtractModelSystemTo(string modelSystemPath, [NotNullWhen(false)] out CommandError? error)
         {
             try
             {

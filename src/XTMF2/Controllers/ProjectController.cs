@@ -24,6 +24,7 @@ using System.Text;
 using XTMF2.Repository;
 using System.Linq;
 using XTMF2.Editing;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.Controllers
 {
@@ -72,7 +73,7 @@ namespace XTMF2.Controllers
         /// <param name="session">An editing session for this newly created project.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool CreateNewProject(User owner, string name, out ProjectSession? session, out CommandError? error)
+        public bool CreateNewProject(User owner, string name, [NotNullWhen(true)] out ProjectSession? session, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(owner);
             Helper.ThrowIfNullOrWhitespace(name);
@@ -100,6 +101,41 @@ namespace XTMF2.Controllers
         }
 
         /// <summary>
+        /// Creates or gets a new project given a string for the name of the project.
+        /// </summary>
+        /// <param name="owner">The user that owns the project.</param>
+        /// <param name="name">The name of the project.</param>
+        /// <param name="session">An editing session for this newly created project.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool CreateNewOrGet(User owner, string name, [NotNullWhen(true)] out ProjectSession? session, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(owner);
+            Helper.ThrowIfNullOrWhitespace(name);
+
+            session = null;
+            if (!ValidateProjectName(name, out error))
+            {
+                return false;
+            }
+            lock (_controllerLock)
+            {
+                var userProjects = _projects.GetAvailableForUser(owner);
+                var p = userProjects.FirstOrDefault(project => project.Name!.Equals(name, StringComparison.OrdinalIgnoreCase));
+                if (p is null)
+                {
+                    if (!_projects.CreateNew(name, owner, out p, out error))
+                    {
+                        return false;
+                    }
+                    owner.AddedUserToProject(p!);
+                }
+                session = GetSession(p!);
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Import a project file.
         /// </summary>
         /// <param name="owner">The user that will own this project.</param>
@@ -108,7 +144,7 @@ namespace XTMF2.Controllers
         /// <param name="session">An editing session for the imported project.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool ImportProjectFile(User owner, string name, string filePath, out ProjectSession? session, out CommandError? error)
+        public bool ImportProjectFile(User owner, string name, string filePath, [NotNullWhen(true)] out ProjectSession? session, [NotNullWhen(false)] out CommandError? error)
         {
             session = null;
             ArgumentNullException.ThrowIfNull(owner);            
@@ -159,7 +195,7 @@ namespace XTMF2.Controllers
         /// <param name="session">The resulting project session.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool GetProjectSession(User user, Project project, out ProjectSession? session, out CommandError? error)
+        public bool GetProjectSession(User user, Project project, [NotNullWhen(true)] out ProjectSession? session, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(project);
@@ -198,9 +234,9 @@ namespace XTMF2.Controllers
                     if (projectFile != null)
                     {
                         string? error = null;
-                        if (Project.Load(runtime.UserController, projectFile.FullName, out Project project, ref error))
+                        if (Project.Load(runtime.UserController, projectFile.FullName, out Project? project, ref error))
                         {
-                            _projects.Add(project!, ref error);
+                            _projects.Add(project, ref error);
                         }
                         else
                         {
@@ -222,7 +258,7 @@ namespace XTMF2.Controllers
         /// <param name="project">The resulting project reference.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool GetProject(string userName, string projectName, out Project? project, out CommandError? error)
+        public bool GetProject(string userName, string projectName, [NotNullWhen(true)] out Project? project, [NotNullWhen(false)] out CommandError? error)
         {
             Helper.ThrowIfNullOrWhitespace(userName);
             Helper.ThrowIfNullOrWhitespace(projectName);
@@ -247,7 +283,7 @@ namespace XTMF2.Controllers
         /// <param name="project">The resulting project reference.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool GetProject(User user, string projectName, out Project? project, out CommandError? error)
+        public bool GetProject(User user, string projectName, [NotNullWhen(true)] out Project? project, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             Helper.ThrowIfNullOrWhitespace(projectName);
@@ -266,7 +302,7 @@ namespace XTMF2.Controllers
         /// <param name="projectName">The name of the project to delete.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool DeleteProject(User user, string projectName, out CommandError? error)
+        public bool DeleteProject(User user, string projectName, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             Helper.ThrowIfNullOrWhitespace(projectName);
@@ -290,7 +326,7 @@ namespace XTMF2.Controllers
         /// <param name="project">The project to delete.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation completes successfully, false otherwise with an error message.</returns>
-        public bool DeleteProject(User owner, Project project, out CommandError? error)
+        public bool DeleteProject(User owner, Project project, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(owner);
             ArgumentNullException.ThrowIfNull(project);
@@ -316,15 +352,10 @@ namespace XTMF2.Controllers
         {
             var project = projectSession.Project;
             // The project will be null if we are running the model system.
-            if (!(project is null))
+            if (project is not null)
             {
                 _activeSessions.Remove(project);
             }
-        }
-
-        private string GetPath(User owner, string name)
-        {
-            return Path.Combine(owner.UserPath, name);
         }
 
         private ProjectSession GetSession(Project project)
@@ -347,7 +378,7 @@ namespace XTMF2.Controllers
         /// <param name="name">The name to validate</param>
         /// <param name="error">A description of why the name was invalid.</param>
         /// <returns>If the validation allows this project name.</returns>
-        public static bool ValidateProjectName(string name, ref string? error)
+        public static bool ValidateProjectName(string name, [NotNullWhen(false)] ref string? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -369,7 +400,7 @@ namespace XTMF2.Controllers
         /// <param name="name">The name to validate</param>
         /// <param name="error">A description of why the name was invalid.</param>
         /// <returns>If the validation allows this project name.</returns>
-        public static bool ValidateProjectName(string name, out CommandError? error)
+        public static bool ValidateProjectName(string name, [NotNullWhen(false)] out CommandError? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -398,7 +429,7 @@ namespace XTMF2.Controllers
         /// <param name="newProjectName"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        public bool RenameProject(User user, Project project, string newProjectName, out CommandError? error)
+        public bool RenameProject(User user, Project project, string newProjectName, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
 

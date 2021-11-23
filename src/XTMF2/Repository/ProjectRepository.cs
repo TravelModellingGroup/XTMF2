@@ -22,6 +22,7 @@ using System.Collections.ObjectModel;
 using System.Text;
 using System.Linq;
 using XTMF2.Editing;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.Repository
 {
@@ -59,7 +60,7 @@ namespace XTMF2.Repository
         /// <param name="error">A message containing a description of the error</param>
         /// <param name="ret">The returned project</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool CreateNew(string name, User owner, out Project? ret, out CommandError? error)
+        internal bool CreateNew(string name, User owner, [NotNullWhen(true)] out Project? ret, [NotNullWhen(false)] out CommandError? error)
         {
             if (!Project.New(owner, name, string.Empty, out ret, out error))
             {

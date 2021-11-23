@@ -46,6 +46,23 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        public void CreateUserOrGet()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            CommandError error = null;
+            const string userName = "NewUser";
+            // ensure the user doesn't exist before we start
+            userController.Delete(userName);
+            Assert.IsTrue(userController.CreateOrGet(userName, false, out var user, out error));
+            Assert.IsNull(error);
+            Assert.IsTrue(userController.CreateOrGet(userName, false, out var secondUser, out error));
+            Assert.IsNotNull(user);
+            Assert.AreSame(user, secondUser);
+            Assert.IsTrue(userController.Delete(user));
+        }
+
+        [TestMethod]
         public void UserPersistance()
         {
             //ensure that a user can survive between different XTMF sessions

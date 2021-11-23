@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -633,7 +634,7 @@ namespace XTMF2.ModelSystemConstruct
         
 
         internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
-            ref Utf8JsonReader reader, ref string? error)
+            ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
             {

@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
@@ -215,7 +216,7 @@ namespace XTMF2
         /// <param name="project">The resulting project.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        internal static bool ImportProject(User owner, string name, string filePath, out Project? project, out CommandError? error)
+        internal static bool ImportProject(User owner, string name, string filePath, [NotNullWhen(true)] out Project? project, [NotNullWhen(false)] out CommandError? error)
         {
             project = null;
             try
@@ -239,7 +240,7 @@ namespace XTMF2
             return false;
         }
 
-        private static bool LoadMetaData(ProjectFile projectFile, ZipArchive archive, out CommandError? error)
+        private static bool LoadMetaData(ProjectFile projectFile, ZipArchive archive, [NotNullWhen(false)] out CommandError? error)
         {
             try
             {

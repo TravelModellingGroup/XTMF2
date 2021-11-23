@@ -25,6 +25,7 @@ using XTMF2.Editing;
 using System.Linq;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.Repository;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2
 {
@@ -71,7 +72,7 @@ namespace XTMF2
             return false;
         }
 
-        internal static bool Create(ModuleRepository modules, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, out Link? link, ref string? error)
+        internal static bool Create(ModuleRepository modules, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, [NotNullWhen(true)] out Link? link, [NotNullWhen(false)] ref string? error)
         {
             if(reader.TokenType != JsonTokenType.StartObject)
             {

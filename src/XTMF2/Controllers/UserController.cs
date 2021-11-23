@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -51,9 +52,11 @@ namespace XTMF2.Controllers
         /// <param name="user">The resulting user, null if the operation fails.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool CreateNew(string userName, bool admin, out User? user, out CommandError? error)
+        public bool CreateNew(string userName, bool admin, [NotNullWhen(true)] out User? user, [NotNullWhen(false)] out CommandError? error)
         {
+            Helper.ThrowIfNullOrWhitespace(userName);
             user = null;
+
             if (!ValidateUserName(userName))
             {
                 error = new CommandError("Invalid name for a user.");
@@ -62,13 +65,48 @@ namespace XTMF2.Controllers
             lock (UserLock)
             {
                 //ensure there is no other user with the same name
-                if(_users.Any(u => u.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase)))
+                if (_users.Any(u => u.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase)))
                 {
                     error = new CommandError("A user with this name already exists.");
                     return false;
                 }
                 _users.Add(user = new User(GetUserPath(userName), userName, admin));
                 return user.Save(out error);
+            }
+        }
+
+        /// <summary>
+        /// Creates a user with the given name or gets the value
+        /// </summary>
+        /// <param name="userName">The name to create the user with.</param>
+        /// <param name="admin">Should the user have administrative permissions.</param>
+        /// <param name="user">The resulting user, null if the operation fails.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the user was either created or retrieved.  False otherwise with an error message.</returns>
+        public bool CreateOrGet(string userName, bool admin, [NotNullWhen(true)] out User? user, [NotNullWhen(false)] out CommandError? error)
+        {
+            Helper.ThrowIfNullOrWhitespace(userName);
+            user = null;
+            error = null;
+
+            if (!ValidateUserName(userName))
+            {
+                error = new CommandError("Invalid name for a user.");
+                return false;
+            }
+            lock (UserLock)
+            {
+                // Try to get the user first, if not create a new one.
+                user = _users.FirstOrDefault(u => u.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase));
+                if (user is not null)
+                {
+                    return true;
+                }
+                else
+                {
+                    _users.Add(user = new User(GetUserPath(userName), userName, admin));
+                    return user.Save(out error);
+                }
             }
         }
 
@@ -108,15 +146,15 @@ namespace XTMF2.Controllers
                 // make a copy of the projects to avoid altering a list
                 // that is being enumerated
                 foreach (var toDelete in (from p in userProjects
-                                        where user == p.Owner
-                                        select p ).ToList())
+                                          where user == p.Owner
+                                          select p).ToList())
                 {
                     projectController.DeleteProject(user, toDelete, out var error);
                 }
                 _users.Remove(user);
                 // now remove all of the users files from the system.
                 var userDir = new DirectoryInfo(user.UserPath);
-                if(userDir.Exists)
+                if (userDir.Exists)
                 {
                     userDir.Delete(true);
                 }
@@ -172,13 +210,13 @@ namespace XTMF2.Controllers
                 // if the directory exists load it
                 lock (UserLock)
                 {
-                    foreach(var potentialDir in usersDir.GetDirectories())
+                    foreach (var potentialDir in usersDir.GetDirectories())
                     {
                         var userFile = potentialDir.GetFiles("User.xusr").FirstOrDefault();
-                        if(userFile != null)
+                        if (userFile != null)
                         {
                             string? error = null;
-                            if(User.Load(userFile.FullName, out var loadedUser, ref error))
+                            if (User.Load(userFile.FullName, out var loadedUser, ref error))
                             {
                                 _users.Add(loadedUser!);
                             }
@@ -187,9 +225,9 @@ namespace XTMF2.Controllers
                 }
             }
             // if we have no users create a default user
-            if(_users.Count <= 0)
+            if (_users.Count <= 0)
             {
-                lock(UserLock)
+                lock (UserLock)
                 {
                     CreateInitialUser();
                 }

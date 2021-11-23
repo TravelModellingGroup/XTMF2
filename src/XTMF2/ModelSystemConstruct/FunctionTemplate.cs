@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using XTMF2.Editing;
@@ -99,7 +100,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="error">An error message if we failed to load the function template or its children.</param>
         /// <returns>True if the operation succeeded, false otherwise with an error message.</returns>
         internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
-            ref Utf8JsonReader reader, Boundary parent, out FunctionTemplate? template, ref string? error)
+            ref Utf8JsonReader reader, Boundary parent, [NotNullWhen(true)] out FunctionTemplate? template, [NotNullWhen(false)] ref string? error)
         {
             template = null;
             string? name = null;

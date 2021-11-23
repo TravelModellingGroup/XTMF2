@@ -68,6 +68,30 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        public void CreateModelSystemOrGet()
+        {
+            var runtime = XTMFRuntime.CreateRuntime();
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            CommandError error = null;
+            const string userName = "NewUser";
+            const string projectName = "TestProject";
+            const string modelSystemName = "ModelSystem1";
+            // clear out the user if possible
+            userController.Delete(userName);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error), error?.Message);
+            Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, out error).UsingIf(session, () =>
+            {
+                Assert.IsTrue(session.CreateOrGetModelSystem(user, modelSystemName, out var modelSystemHeader, out error), error?.Message);
+                Assert.IsTrue(session.CreateOrGetModelSystem(user, modelSystemName, out var modelSystemHeader2, out error), error?.Message);
+                Assert.AreSame(modelSystemHeader, modelSystemHeader2);
+                Assert.IsTrue(session.Save(out error));
+            }), error?.Message);
+            //cleanup
+            userController.Delete(user);
+        }
+
+        [TestMethod]
         public void GetModelSystemSession()
         {
             RunInModelSystemContext("GetModelSystemSession", (user, pSession, mSession) =>
