@@ -29,7 +29,7 @@ namespace XTMF2.Bus
     internal sealed class Scheduler : IDisposable
     {
         private readonly ConcurrentQueue<RunContext> _ToRun = new ConcurrentQueue<RunContext>();
-        private readonly ClientBus _Bus;
+        private readonly RunServerBus _Bus;
         private readonly CancellationTokenSource _CancelExecutionEngine;
         private readonly SemaphoreSlim _RunsToGo = new SemaphoreSlim(0);
 
@@ -43,7 +43,7 @@ namespace XTMF2.Bus
         /// Create a new Scheduler to process the given client bus.
         /// </summary>
         /// <param name="bus">The bus to listen to.</param>
-        public Scheduler(ClientBus bus)
+        public Scheduler(RunServerBus bus)
         {
             _Bus = bus;
             _CancelExecutionEngine = new CancellationTokenSource();
