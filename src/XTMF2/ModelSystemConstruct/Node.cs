@@ -62,7 +62,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <summary>
         /// A parameter value to use if this is a parameter type
         /// </summary>
-        public string? ParameterValue { get; private set; }
+        public ParameterExpression? ParameterValue { get; private set; }
 
         /// <summary>
         /// Create the hooks for the node
@@ -131,7 +131,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="value">The value to change the parameter to.</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        internal bool SetParameterValue(string value, out CommandError? error)
+        internal bool SetParameterValue(ParameterExpression? value, out CommandError? error)
         {
             // ensure that the value is allowed
             if (Type == null)
@@ -139,9 +139,12 @@ namespace XTMF2.ModelSystemConstruct
                 return FailWith(out error, "Unable to set the parameter value of a node that lacks a type!");
             }
             string? errorString = null;
-            if (!ArbitraryParameterParser.Check(Type.GenericTypeArguments[0], value, ref errorString))
+            if (value is not null)
             {
-                return FailWith(out error, $"Unable to create a parse the value {value} for type {Type.GenericTypeArguments[0].FullName}!");
+                if (value.IsCompatible(Type.GenericTypeArguments[0], ref errorString))
+                {
+                    return FailWith(out error, $"Unable to create a parse the value {value} for type {Type.GenericTypeArguments[0].FullName}!");
+                }
             }
             ParameterValue = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ParameterValue)));
@@ -210,22 +213,20 @@ namespace XTMF2.ModelSystemConstruct
             if (_type.IsConstructedGenericType && _type.GetGenericTypeDefinition() == GenericParameter)
             {
                 var paramType = _type.GenericTypeArguments[0];
-                var paramValue = ParameterValue ?? "";
-                var (Sucess, Value) = ArbitraryParameterParser.ArbitraryParameterParse(paramType, paramValue, ref error);
-                if (!Sucess)
+                var paramValue = ParameterValue?.GetValue(paramType, ref error);
+                if (paramValue is not null)
                 {
-                    return FailWith(out error, $"Unable to assign the value of {paramValue} to type {paramType.FullName}!");
-                }
-                if (!GenericValue.TryGetValue(_type, out var info))
-                {
-                    info = _type.GetRuntimeField("Value");
-                    if (info == null)
+                    if (!GenericValue.TryGetValue(_type, out var info))
                     {
-                        return FailWith(out error, $"Unable find a field named 'Value' on type {_type.FullName} in order to assign a value to it!");
+                        info = _type.GetRuntimeField("Value");
+                        if (info == null)
+                        {
+                            return FailWith(out error, $"Unable find a field named 'Value' on type {_type.FullName} in order to assign a value to it!");
+                        }
+                        GenericValue[paramType] = info;
                     }
-                    GenericValue[paramType] = info;
+                    info.SetValue(Module, paramValue);
                 }
-                info.SetValue(Module, Value);
             }
             error = null;
             return true;
@@ -345,9 +346,9 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteNumber(WidthProperty, Location.Width);
             writer.WriteNumber(HeightProperty, Location.Height);
             writer.WriteNumber(IndexProperty, index++);
-            if (!String.IsNullOrEmpty(ParameterValue))
+            if (ParameterValue is not null)
             {
-                writer.WriteString(ParameterProperty, ParameterValue);
+                writer.WriteString(ParameterProperty, ParameterValue.GetRepresentation());
             }
             if (IsDisabled)
             {
@@ -369,7 +370,7 @@ namespace XTMF2.ModelSystemConstruct
             bool disabled = false;
             Rectangle point = new Rectangle();
             string description = string.Empty;
-            string? parameter = null;
+            ParameterExpression? parameter = null;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType == JsonTokenType.Comment) continue;
@@ -424,7 +425,7 @@ namespace XTMF2.ModelSystemConstruct
                 else if (reader.ValueTextEquals(ParameterProperty))
                 {
                     reader.Read();
-                    parameter = reader.GetString() ?? string.Empty;
+                    parameter = ParameterExpression.CreateParameter(reader.GetString() ?? string.Empty);
                 }
                 else if (reader.ValueTextEquals(DisabledProperty))
                 {

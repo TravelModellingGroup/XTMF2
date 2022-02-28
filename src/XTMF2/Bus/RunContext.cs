@@ -89,7 +89,7 @@ namespace XTMF2.Bus
             return true;
         }
 
-        private Stream? CreateRunBusLocal(ClientBus clientBus)
+        private Stream? CreateRunBusLocal(RunServerBus clientBus)
         {
             var pipeName = Guid.NewGuid().ToString();
             string? error = null;
@@ -109,14 +109,14 @@ namespace XTMF2.Bus
             return clientToRunStream;
         }
 
-        private (Stream clientToRunStream, Process runProcess) CreateRunBusRemote(ClientBus clientBus)
+        private (Stream clientToRunStream, Process runProcess) CreateRunBusRemote(RunServerBus clientBus)
         {
             var pipeName = Guid.NewGuid().ToString();
             string? error = null;
             Process? runProcess = null;
             CreateStreams.CreateNewNamedPipeHost(pipeName, out var clientToRunStream, ref error, () =>
             {
-                var path = Path.GetDirectoryName(typeof(ClientBus).GetTypeInfo().Assembly.Location)!;
+                var path = Path.GetDirectoryName(typeof(RunServerBus).GetTypeInfo().Assembly.Location)!;
                 var startInfo = new ProcessStartInfo()
                 {
                     FileName = "dotnet",
@@ -135,7 +135,7 @@ namespace XTMF2.Bus
             return (clientToRunStream!, runProcess!);
         }
 
-        private string GetExtraDlls(ClientBus client)
+        private string GetExtraDlls(RunServerBus client)
         {
             var builder = new StringBuilder();
             foreach (var dll in client.ExtraDlls)
@@ -148,7 +148,7 @@ namespace XTMF2.Bus
         }
 
 
-        public void RunInNewProcess(ClientBus client)
+        public void RunInNewProcess(RunServerBus client)
         {
             (Stream stream, Process runProcess) = CreateRunBusRemote(client);
             using var writer = new BinaryWriter(stream, Encoding.UTF8, false);
@@ -162,7 +162,7 @@ namespace XTMF2.Bus
             runProcess.WaitForExit();
         }
 
-        public void RunInCurrentProcess(ClientBus client)
+        public void RunInCurrentProcess(RunServerBus client)
         {
             using var stream = CreateRunBusLocal(client);
             new Run(ID, _modelSystem, StartToExecute, _runtime, _currentWorkingDirectory).StartRun();

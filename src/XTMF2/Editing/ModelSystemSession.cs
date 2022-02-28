@@ -678,7 +678,8 @@ namespace XTMF2.Editing
                     if (type.IsAssignableFrom(functionType))
                     {
                         var child = Node.Create(this.GetModuleRepository(), hook.Name, functionType, boundary, Rectangle.Hidden);
-                        if (child?.SetParameterValue(hook.DefaultValue!, out var error) == true)
+                        
+                        if (child?.SetParameterValue(ParameterExpression.CreateParameter(hook.DefaultValue!), out var error) == true)
                         {
                             nodes.Add(child);
                             if (boundary.AddLink(baseNode, hook, child, out var link, out error))
@@ -888,15 +889,16 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
-                var previousValue = basicParameter.ParameterValue ?? string.Empty;
-                if (basicParameter.SetParameterValue(value, out error))
+                var previousValue = basicParameter.ParameterValue;
+                var newValue = ParameterExpression.CreateParameter(value);
+                if (basicParameter.SetParameterValue(newValue, out error))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (basicParameter.SetParameterValue(previousValue, out var e), e);
+                        return (basicParameter.SetParameterValue(previousValue!, out var e), e);
                     }, () =>
                     {
-                        return (basicParameter.SetParameterValue(value, out var e), e);
+                        return (basicParameter.SetParameterValue(newValue, out var e), e);
                     }));
                     return true;
                 }
