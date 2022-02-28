@@ -6,10 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="..\..\src\XTMF2.Client\bin\$(Configuration)\$(TargetFramework)\XTMF2.Client.deps.json" Link="XTMF2.Client.deps.json">
+    <Content Include="..\..\src\XTMF2.Client\bin\$(Configuration)\$(TargetFramework)\XTMF2.RunServer.deps.json" Link="XTMF2.Client.deps.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\src\XTMF2.Client\bin\$(Configuration)\$(TargetFramework)\XTMF2.Client.runtimeconfig.json" Link="XTMF2.Client.runtimeconfig.json">
+    <Content Include="..\..\src\XTMF2.Client\bin\$(Configuration)\$(TargetFramework)\XTMF2.RunServer.runtimeconfig.json" Link="XTMF2.Client.runtimeconfig.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="..\..\src\XTMF2.Run\bin\$(Configuration)\$(TargetFramework)\XTMF2.Run.deps.json" Link="XTMF2.Run.deps.json">
