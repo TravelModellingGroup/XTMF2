@@ -51,7 +51,7 @@ namespace XTMF2.RuntimeModules
         /// <param name="error"></param>
         /// <exception cref="XTMFRuntimeException">The requested error message.</exception>
         [DoesNotReturn]
-        public void Throw(string error)
+        private void Throw(string error)
         {
             throw new XTMFRuntimeException(this, error);
         }
@@ -61,7 +61,7 @@ namespace XTMF2.RuntimeModules
         /// </summary>
         /// <exception cref="XTMFRuntimeException"></exception>
         [DoesNotReturn]
-        public void ThrowGotNull()
+        private void ThrowGotNull()
         {
             throw new XTMFRuntimeException(this, $"Unable to get a {typeof(T).FullName} value from expression '{Expression.Representation}'!");
         }
