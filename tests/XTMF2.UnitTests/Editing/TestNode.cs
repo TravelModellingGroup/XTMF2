@@ -295,7 +295,7 @@ namespace XTMF2.UnitTests.Editing
                     {
                         found = true;
                         Assert.AreEqual(typeof(BasicParameter<string>), modules[i].Type, "The automatically generated parameter was not of type BasicParameter<string>!");
-                        Assert.AreEqual("Hello World", modules[i].ParameterValue.GetRepresentation(), "The default value of the parameter was not 'Hello World'!");
+                        Assert.AreEqual("Hello World", modules[i].ParameterValue.Representation, "The default value of the parameter was not 'Hello World'!");
                         break;
                     }
                 }
@@ -383,7 +383,7 @@ namespace XTMF2.UnitTests.Editing
                     {
                         found = true;
                         Assert.AreEqual(typeof(BasicParameter<string>), modules[i].Type, "The automatically generated parameter was not of type BasicParameter<string>!");
-                        Assert.AreEqual("Hello World", modules[i].ParameterValue.GetRepresentation(), "The default value of the parameter was not 'Hello World'!");
+                        Assert.AreEqual("Hello World", modules[i].ParameterValue.Representation, "The default value of the parameter was not 'Hello World'!");
                         break;
                     }
                 }
@@ -429,7 +429,7 @@ namespace XTMF2.UnitTests.Editing
                     {
                         found = true;
                         Assert.AreEqual(typeof(BasicParameter<string>), modules[i].Type, "The automatically generated parameter was not of type BasicParameter<string>!");
-                        Assert.AreEqual("Hello World", modules[i].ParameterValue.GetRepresentation(), "The default value of the parameter was not 'Hello World'!");
+                        Assert.AreEqual("Hello World", modules[i].ParameterValue.Representation, "The default value of the parameter was not 'Hello World'!");
                         break;
                     }
                 }
@@ -495,7 +495,7 @@ namespace XTMF2.UnitTests.Editing
                 Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), Rectangle.Hidden,
                     out var basicParameter, out error2), error2?.Message);
                 Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, parameterValue, out error2), error2?.Message);
-                Assert.AreEqual(parameterValue, basicParameter.ParameterValue.GetRepresentation(), "The value of the parameter was not set correctly."); 
+                Assert.AreEqual(parameterValue, basicParameter.ParameterValue.Representation, "The value of the parameter was not set correctly."); 
             });
         }
 
@@ -517,10 +517,10 @@ namespace XTMF2.UnitTests.Editing
                 Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), Rectangle.Hidden,
                     out var basicParameter, out error2), error2?.Message);
                 Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, parameterValue, out error2), error2?.Message);
-                Assert.AreEqual(parameterValue, basicParameter.ParameterValue.GetRepresentation(), "The value of the parameter was not set correctly.");
+                Assert.AreEqual(parameterValue, basicParameter.ParameterValue.Representation, "The value of the parameter was not set correctly.");
 
                 Assert.IsFalse(msSession.SetParameterValue(unauthorizedUser, basicParameter, badParameterValue, out error2), error2?.Message);
-                Assert.AreEqual(parameterValue, basicParameter.ParameterValue.GetRepresentation(), "The unauthorized user changed the parameter's value!");
+                Assert.AreEqual(parameterValue, basicParameter.ParameterValue.Representation, "The unauthorized user changed the parameter's value!");
             });
         }
 

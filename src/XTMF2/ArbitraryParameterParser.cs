@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace XTMF2
@@ -109,9 +110,9 @@ namespace XTMF2
         /// <param name="value">The value held as a string</param>
         /// <param name="error">Contains an error if this returns false</param>
         /// <returns>True if it is a value, false otherwise with a reason inside of error.</returns>
-        public static bool Check(Type type, string value, ref string? error)
+        public static bool Check(Type type, string value, [NotNullWhen(false)] ref string? error)
         {
-            return ArbitraryParameterParse(type, value, ref error).Sucess;
+           return ArbitraryParameterParse(type, value, ref error).Sucess;
         }
 
         private static (bool, object?) ErrorTryParse(string input, ref string? error, MethodInfo errorTryParse)
