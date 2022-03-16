@@ -25,7 +25,7 @@ public class Expression
 {
     private readonly string _expression;
 
-    private Expression(string expression)
+    public Expression(string expression)
     {
         _expression = expression;
     }
@@ -45,8 +45,32 @@ public class Expression
         return false;
     }
 
+    /// <summary>
+    /// Evaluate the expression and return the value.
+    /// </summary>
+    /// <param name="nodes">The nodes required to evaluate the expression.</param>
+    /// <param name="value">The returned object from the evaluation, null if the expression can not be evaluated.</param>
+    /// <param name="error">An error</param>
+    /// <returns>True if the expression was evaluated correctly.</returns>
+    public bool Evaluate(IList<Node> nodes, [NotNullWhen(true)]out object? value, [NotNullWhen(false)] ref string? error)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Gets the string representation of the expression.
+    /// </summary>
+    /// <returns>The string representation of the expression.</returns>
     public string AsString()
     {
         return _expression;
+    }
+
+    /// <summary>
+    /// The type that the expression will evaluate to.
+    /// </summary>
+    public Type Type
+    {
+        get => throw new NotImplementedException();
     }
 }

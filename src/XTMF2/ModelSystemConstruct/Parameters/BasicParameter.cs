@@ -13,6 +13,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.ModelSystemConstruct.Parameters;
 
@@ -36,15 +37,15 @@ internal class BasicParameter : ParameterExpression
     }
 
     /// <inheritdoc/>
-    public override string GetRepresentation()
+    public override string Representation
     {
-        return _value;
+        get => _value;
     }
 
     /// <inheritdoc/>
-    internal override bool IsCompatible(Type type, ref string? errorString)
+    internal override bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString)
     {
-        return !ArbitraryParameterParser.Check(type, _value, ref errorString);
+        return ArbitraryParameterParser.Check(type, _value, ref errorString);
     }
 
     internal override object GetValue(Type type, ref string? errorString)

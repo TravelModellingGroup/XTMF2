@@ -46,6 +46,7 @@ namespace XTMF2.ModelSystemConstruct
         protected const string HeightProperty = "Height";
         protected const string IndexProperty = "Index";
         protected const string ParameterProperty = "Parameter";
+        protected const string ParameterExpressionProperty = "ParameterExpression";
         protected const string DisabledProperty = "Disabled";
 
         /// <summary>
@@ -141,7 +142,7 @@ namespace XTMF2.ModelSystemConstruct
             string? errorString = null;
             if (value is not null)
             {
-                if (value.IsCompatible(Type.GenericTypeArguments[0], ref errorString))
+                if (!value.IsCompatible(Type.GenericTypeArguments[0], ref errorString))
                 {
                     return FailWith(out error, $"Unable to create a parse the value {value} for type {Type.GenericTypeArguments[0].FullName}!");
                 }
@@ -348,7 +349,7 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteNumber(IndexProperty, index++);
             if (ParameterValue is not null)
             {
-                writer.WriteString(ParameterProperty, ParameterValue.GetRepresentation());
+                writer.WriteString(ParameterProperty, ParameterValue.Representation);
             }
             if (IsDisabled)
             {
@@ -426,6 +427,11 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     reader.Read();
                     parameter = ParameterExpression.CreateParameter(reader.GetString() ?? string.Empty);
+                }
+                else if(reader.ValueTextEquals(ParameterExpressionProperty))
+                {
+                    reader.Read();
+                    parameter = ParameterExpression.CreateParameter(new Expression(reader.GetString() ?? string.Empty));
                 }
                 else if (reader.ValueTextEquals(DisabledProperty))
                 {

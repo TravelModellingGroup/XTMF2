@@ -13,6 +13,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.ModelSystemConstruct.Parameters;
 
@@ -25,14 +26,9 @@ internal class ScriptedParameter : ParameterExpression
         _expression = expression;
     }
 
-    public override string GetRepresentation()
+    public override string Representation
     {
-        return _expression.AsString();
-    }
-
-    public override string? ToString()
-    {
-        return base.ToString();
+        get => _expression.AsString();
     }
 
     internal override object GetValue(Type type, ref string? errorString)
@@ -40,8 +36,8 @@ internal class ScriptedParameter : ParameterExpression
         throw new NotImplementedException();
     }
 
-    internal override bool IsCompatible(Type type, ref string? errorString)
+    internal override bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString)
     {
-        throw new NotImplementedException();
+        return type.IsAssignableFrom(_expression.Type);
     }
 }

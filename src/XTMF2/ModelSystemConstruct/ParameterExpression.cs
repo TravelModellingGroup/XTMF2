@@ -13,6 +13,8 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using XTMF2.ModelSystemConstruct.Parameters;
 
 namespace XTMF2.ModelSystemConstruct;
@@ -20,44 +22,57 @@ namespace XTMF2.ModelSystemConstruct;
 /// <summary>
 /// This class provides the interface for a Node to contain a value.
 /// </summary>
-public abstract class ParameterExpression
+public abstract class ParameterExpression : INotifyPropertyChanged
 {
-
     /// <summary>
     /// Checks to see if this parameter is capable of being converted into the given type.
     /// </summary>
     /// <param name="type">The type to be converted to.</param>
     /// <param name="errorString">The error message of why the operation failed, null if it succeeds.</param>
     /// <returns>True if the type can be converted, false with error message if not.</returns>
-    internal abstract bool IsCompatible(Type type, ref string? errorString);
+    internal abstract bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString);
 
     /// <summary>
-    /// 
+    /// Tries to convert the parameter expression to the given type.
     /// </summary>
     /// <param name="type">The type to try to extract.</param>
     /// <param name="errorString">An error message if the extraction fails.</param>
-    /// <returns></returns>
-    internal abstract object GetValue(Type type, ref string? errorString);
+    /// <returns>An object of the given type, or null with an error message if it fails.</returns>
+    internal abstract object? GetValue(Type type, ref string? errorString);
 
     /// <summary>
     /// Gets a string based representation of the parameter
     /// </summary>
-    /// <returns></returns>
-    public abstract string GetRepresentation();
+    public abstract string Representation { get; }
 
     /// <summary>
     /// Creates a parameter from a string value
     /// </summary>
     /// <param name="value">The string value of the parameter.</param>
-    /// <returns></returns>
+    /// <returns>A new parameter using the value.</returns>
     internal static ParameterExpression CreateParameter(string value)
     {
         return new BasicParameter(value);
     }
-
     
+    /// <summary>
+    /// Create a new parameter using the expression.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <returns>A new parameter using the expression.</returns>
     internal static ParameterExpression CreateParameter(Expression expression)
     {
         return new ScriptedParameter(expression);
+    }
+
+    /// <inheritdoc/>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>
+    /// Update any GUI following this parameter letting it know the value changed.
+    /// </summary>
+    protected void InvokeRepresentationChanged()
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Representation)));
     }
 }
