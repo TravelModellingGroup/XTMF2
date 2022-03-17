@@ -147,7 +147,45 @@ public class TestLiterals
         }
         else
         {
-            Assert.Fail("The result is not an integer!");
+            Assert.Fail("The result is not a string!");
+        }
+    }
+
+    [TestMethod]
+    public void TestWhitespaceBeforeStringLiteral()
+    {
+        string error = null;
+        var text = " \"12345.6\"";
+        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
+        Assert.IsNotNull(expression);
+        Assert.AreEqual(typeof(string), expression.Type);
+        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
+        if (result is string strResult)
+        {
+            Assert.AreEqual("12345.6", strResult);
+        }
+        else
+        {
+            Assert.Fail("The result is not a string!");
+        }
+    }
+
+    [TestMethod]
+    public void TestWhitespaceAfterStringLiteral()
+    {
+        string error = null;
+        var text = "\"12345.6\" ";
+        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
+        Assert.IsNotNull(expression);
+        Assert.AreEqual(typeof(string), expression.Type);
+        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
+        if (result is string strResult)
+        {
+            Assert.AreEqual("12345.6", strResult);
+        }
+        else
+        {
+            Assert.Fail("The result is not a string!");
         }
     }
 
@@ -157,6 +195,6 @@ public class TestLiterals
         TestInvalidScript("\"No final quote");
         TestInvalidScript("Text before quote \"");
         TestInvalidScript("\"Text\" Text after quote");
-        TestInvalidScript("Text after quote \"Text\"");
+        TestInvalidScript("Text before quote \"Text\"");
     }
 }

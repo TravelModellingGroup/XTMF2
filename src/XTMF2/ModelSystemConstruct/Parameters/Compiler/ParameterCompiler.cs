@@ -67,7 +67,8 @@ public static class ParameterCompiler
 
     private static bool Compile(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
     {
-        if( GetVariable(nodes, text, offset, out expression)
+        if(GetBracket(nodes, text, offset, out expression)
+            || GetVariable(nodes, text, offset, out expression)
             || GetStringLiteral(text, offset, out expression)
             || GetBooleanLiteral(text, offset, out expression)  
             || GetIntegerLiteral(text, offset, out expression)
@@ -79,6 +80,59 @@ public static class ParameterCompiler
         UnableToInterpret(text, offset);
         // This will never actually be executed
         return false; 
+    }
+
+    private static bool GetBracket(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        var span = text.Span;
+        int bracketCount = 0;
+        int first = -1;
+        int second = -1;
+        expression = null;
+        for (int i = 0; i < span.Length; i++)
+        {
+            if(span[i] == '(')
+            {
+                if (first < 0)
+                {
+                    first = i;
+                }
+                bracketCount++;
+            }
+            else if(span[i] == ')')
+            {
+                bracketCount--;
+                if(bracketCount < 0)
+                {
+                    throw new CompilerException("Unmatched close bracket found!", offset + i);
+                }
+                if(bracketCount == 0)
+                {
+                    second = i;
+                    break;
+                }
+            }
+            // If we come across a non-bracket non-white-space character before our bracket opens
+            else if(first < 0 && !char.IsWhiteSpace(span[i]))
+            {
+                return false;
+            }
+        }
+        if(first == -1)
+        {
+            return false;
+        }
+        if (second == -1)
+        {
+            throw new CompilerException("Unmatched bracket found!", offset + first);
+        }
+        // If there is anything after the second quote this is an invalid string literal.
+        if (IndexOfFirstNonWhiteSpace(span[(second + 1)..]) >= 0)
+        {
+            return false;
+        }
+        // Optimize out the bracket
+        return Compile(nodes, text.Slice(first + 1, second - first - 1), offset + first + 1, out expression);
     }
 
     private static bool GetVariable(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
@@ -118,7 +172,7 @@ public static class ParameterCompiler
         var span = text.Span;
         expression = null;
         int first = span.IndexOf('"');
-        if(first == -1)
+        if(first == -1 || first != IndexOfFirstNonWhiteSpace(span))
         {
             return false;
         }
@@ -129,7 +183,7 @@ public static class ParameterCompiler
         }
         // If there is anything after the second quote this is an invalid string literal.
         // +2 skips the ending quote
-        if(IndexOfFirstNonWhiteSpace(span[(second + 2)..]) >= 0)
+        if(IndexOfFirstNonWhiteSpace(span[(second + first + 2)..]) >= 0)
         {
             return false;
         }
