@@ -679,7 +679,7 @@ namespace XTMF2.Editing
                     {
                         var child = Node.Create(this.GetModuleRepository(), hook.Name, functionType, boundary, Rectangle.Hidden);
                         
-                        if (child?.SetParameterValue(ParameterExpression.CreateParameter(hook.DefaultValue!), out var error) == true)
+                        if (child?.SetParameterValue(ParameterExpression.CreateParameter(hook.DefaultValue!, genericParameters[0]), out var error) == true)
                         {
                             nodes.Add(child);
                             if (boundary.AddLink(baseNode, hook, child, out var link, out error))
@@ -890,7 +890,7 @@ namespace XTMF2.Editing
                     return false;
                 }
                 var previousValue = basicParameter.ParameterValue;
-                var newValue = ParameterExpression.CreateParameter(value);
+                var newValue = ParameterExpression.CreateParameter(value, basicParameter.Type.GetGenericArguments()[0]);
                 if (basicParameter.SetParameterValue(newValue, out error))
                 {
                     Buffer.AddUndo(new Command(() =>

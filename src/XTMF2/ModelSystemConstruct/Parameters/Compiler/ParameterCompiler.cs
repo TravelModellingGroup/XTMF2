@@ -34,7 +34,7 @@ public static class ParameterCompiler
     /// <returns>True if the expression was evaluated correctly.</returns>
     public static bool Evaluate(IModule module, Expression expression, [NotNullWhen(true)] out object? value, [NotNullWhen(false)] ref string? error)
     {
-        var result = expression.GetResult();
+        var result = expression.GetResult(module);
         if (result.TryGetResult(out value, ref error))
         {
             return true;
@@ -67,7 +67,8 @@ public static class ParameterCompiler
 
     private static bool Compile(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
     {
-        if(GetStringLiteral(text, offset, out expression)
+        if( GetVariable(nodes, text, offset, out expression)
+            || GetStringLiteral(text, offset, out expression)
             || GetBooleanLiteral(text, offset, out expression)  
             || GetIntegerLiteral(text, offset, out expression)
             || GetFloatingPointLiteral(text, offset, out expression)
@@ -78,6 +79,38 @@ public static class ParameterCompiler
         UnableToInterpret(text, offset);
         // This will never actually be executed
         return false; 
+    }
+
+    private static bool GetVariable(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = null;
+        var span = text.Span;
+        var start = IndexOfFirstNonWhiteSpace(span);
+        var end = start;
+        for (; end < span.Length; end++)
+        {
+            if (char.IsWhiteSpace(span[end]))
+            {
+                break;
+            }
+        }
+        // If there was nothing here or if we find any non-white space characters after the end of our variable name
+        if (end == start
+            || (end < span.Length && IndexOfFirstNonWhiteSpace(span[end..]) >= 0))
+        {
+            return false;
+        }
+        var innerText = text[start..end];
+        var node = nodes.FirstOrDefault(n => innerText.Span.Equals(n.Name.AsSpan(), StringComparison.InvariantCulture));
+        if (node is not null)
+        {
+            expression = Variable.CreateVariableForNode(node, innerText, offset + start);
+            return true;
+        }
+        else
+        {
+            return false;
+        }
     }
 
     private static bool GetStringLiteral(ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)

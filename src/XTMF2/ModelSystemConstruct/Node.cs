@@ -426,7 +426,7 @@ namespace XTMF2.ModelSystemConstruct
                 else if (reader.ValueTextEquals(ParameterProperty))
                 {
                     reader.Read();
-                    parameter = ParameterExpression.CreateParameter(reader.GetString() ?? string.Empty);
+                    parameter = ParameterExpression.CreateParameter(reader.GetString() ?? string.Empty, typeof(string));
                 }
                 else if(reader.ValueTextEquals(ParameterExpressionProperty))
                 {

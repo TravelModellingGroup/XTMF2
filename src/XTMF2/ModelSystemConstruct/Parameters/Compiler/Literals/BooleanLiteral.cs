@@ -33,7 +33,7 @@ internal sealed class BooleanLiteral : Literal
     public BooleanLiteral(ReadOnlyMemory<char> expression, int offset) : base(expression, offset) { }
 
     ///<inheritdoc/>
-    internal override Result GetResult()
+    internal override Result GetResult(IModule caller)
     {
         if(bool.TryParse(Text.Span, out bool result))
         {
