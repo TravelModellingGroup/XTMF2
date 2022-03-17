@@ -80,6 +80,7 @@ public static class ParameterCompiler
         // This will never actually be executed
         return false; 
     }
+
     private static bool GetVariable(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
     {
         expression = null;
