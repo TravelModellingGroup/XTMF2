@@ -27,13 +27,16 @@ internal class BasicParameter : ParameterExpression
     /// </summary>
     private string _value;
 
+    private readonly Type _type;
+
     /// <summary>
     /// Create a basic parameter
     /// </summary>
     /// <param name="value">The string value of the parameter.</param>
-    public BasicParameter(string value)
+    public BasicParameter(string value, Type type)
     {
         _value = value;
+        _type = type;
     }
 
     /// <inheritdoc/>
@@ -58,4 +61,6 @@ internal class BasicParameter : ParameterExpression
         }
         return false;
     }
+
+    public override Type Type => _type;
 }

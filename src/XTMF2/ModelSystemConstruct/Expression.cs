@@ -74,5 +74,6 @@ public abstract class Expression
     /// Gets a result with the literal's value.
     /// </summary>
     /// <returns>The result that this literal represents.</returns>
-    internal abstract Result GetResult();
+    /// <param name="caller">The module that is asking for this expression to be resolved.</param>
+    internal abstract Result GetResult(IModule caller);
 }

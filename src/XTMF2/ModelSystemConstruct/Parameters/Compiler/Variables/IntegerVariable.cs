@@ -21,30 +21,36 @@ using System;
 namespace XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
 /// <summary>
-/// Represents a float literal value
+/// This class represents a boolean value that can change during
+/// a model system run.
 /// </summary>
-internal sealed class FloatLiteral : Literal
+internal sealed class IntegerVariable : Variable
 {
     /// <summary>
-    /// Create a new float literal.
+    /// The node that backs this variable
     /// </summary>
-    /// <param name="expression"></param>
-    /// <param name="offset"></param>
-    public FloatLiteral(ReadOnlyMemory<char> expression, int offset) : base(expression, offset) { }
+    private readonly Node _backingNode;
 
-    ///<inheritdoc/>
-    internal override Result GetResult(IModule caller)
+    public IntegerVariable(ReadOnlyMemory<char> text, int offset, Node backingNode) : base(text, offset)
     {
-        if(float.TryParse(Text.Span, out var result))
-        {
-            return new FloatResult(result);
-        }
-        else
-        {
-            return new ErrorResult($"Unable to process float literal, \"{Text}\" starting at position {Offset}!", Type);
-        }
+        _backingNode = backingNode;
     }
 
-    ///<inheritdoc/>
-    public override Type Type => typeof(float);
+    public override Type Type => typeof(int);
+
+    internal override Result GetResult(IModule caller)
+    {
+        string? error = null;
+        var expression = _backingNode.ParameterValue;
+        if (expression is null || expression?.IsCompatible(typeof(int), ref error) != true)
+        {
+            return new ErrorResult(error ?? $"{_backingNode.Name} does not have an expression!", typeof(int));
+        }
+        var ret = expression.GetValue(caller, typeof(int), ref error);
+        if (ret is int b)
+        {
+            return new IntegerResult(b);
+        }
+        return new ErrorResult(error!, typeof(int));
+    }
 }

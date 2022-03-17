@@ -37,7 +37,7 @@ internal sealed class StringLiteral : Literal
     public override Type Type => typeof(string);
 
     ///<inheritdoc/>
-    internal override Result GetResult()
+    internal override Result GetResult(IModule caller)
     {
         return new StringResult(new string(Text.Span));
     }

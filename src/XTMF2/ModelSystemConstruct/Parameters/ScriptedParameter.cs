@@ -56,4 +56,6 @@ internal class ScriptedParameter : ParameterExpression
     {
         return $"Invalid types, expected {expected.FullName} however the expression returned {expressionType.FullName}!";
     }
+
+    public override Type Type => _expression.Type;
 }

@@ -33,7 +33,7 @@ internal sealed class IntegerLiteral : Literal
     public IntegerLiteral(ReadOnlyMemory<char> expression, int offset) : base(expression, offset) { }
 
     ///<inheritdoc/>
-    internal override Result GetResult()
+    internal override Result GetResult(IModule caller)
     {
         if(int.TryParse(Text.Span, out var result))
         {

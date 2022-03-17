@@ -47,13 +47,19 @@ public abstract class ParameterExpression : INotifyPropertyChanged
     public abstract string Representation { get; }
 
     /// <summary>
+    /// The type that this parameter expression will return.
+    /// </summary>
+    public abstract Type Type { get; }
+
+    /// <summary>
     /// Creates a parameter from a string value
     /// </summary>
     /// <param name="value">The string value of the parameter.</param>
+    /// <param name="type">The type of the parameter</param>
     /// <returns>A new parameter using the value.</returns>
-    internal static ParameterExpression CreateParameter(string value)
+    internal static ParameterExpression CreateParameter(string value, Type type)
     {
-        return new BasicParameter(value);
+        return new BasicParameter(value, type);
     }
     
     /// <summary>
