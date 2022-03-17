@@ -10,7 +10,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFiles", "SolutionFi
 		.github\workflows\blank.yml = .github\workflows\blank.yml
 		..\LICENSE = ..\LICENSE
 		README.md = README.md
-		XTMF2.vsdx = XTMF2.vsdx
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{9040CC77-712E-414D-8453-391F9F348218}"
