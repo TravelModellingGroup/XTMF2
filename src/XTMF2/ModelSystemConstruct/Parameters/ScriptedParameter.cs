@@ -14,6 +14,7 @@
 */
 using System;
 using System.Diagnostics.CodeAnalysis;
+using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
 namespace XTMF2.ModelSystemConstruct.Parameters;
 
@@ -28,16 +29,31 @@ internal class ScriptedParameter : ParameterExpression
 
     public override string Representation
     {
-        get => _expression.AsString();
+        get => new (_expression.AsString());
     }
 
-    internal override object GetValue(Type type, ref string? errorString)
+    internal override object? GetValue(IModule caller, Type type, ref string? errorString)
     {
-        throw new NotImplementedException();
+        if(_expression.Type != type)
+        {
+            errorString = ThrowInvalidTypes(type, _expression.Type);
+            return null;
+        }
+        if(ParameterCompiler.Evaluate(caller, _expression, out var ret, ref errorString))
+        {
+            return ret;
+        }
+        return null;
     }
 
     internal override bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString)
     {
         return type.IsAssignableFrom(_expression.Type);
+    }
+
+    
+    private static string ThrowInvalidTypes(Type expected, Type expressionType)
+    {
+        return $"Invalid types, expected {expected.FullName} however the expression returned {expressionType.FullName}!";
     }
 }

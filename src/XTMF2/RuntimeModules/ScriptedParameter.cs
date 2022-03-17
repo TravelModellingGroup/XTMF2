@@ -37,7 +37,7 @@ namespace XTMF2.RuntimeModules
             {
                 Throw(error);
             }
-            var ret = Expression.GetValue(typeof(T), ref error);
+            var ret = Expression.GetValue(this, typeof(T), ref error);
             if (ret is null)
             {
                 ThrowGotNull();

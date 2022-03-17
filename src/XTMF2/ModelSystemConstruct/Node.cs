@@ -24,6 +24,7 @@ using System.Collections.Concurrent;
 using System.Linq;
 using XTMF2.Repository;
 using System.Diagnostics.CodeAnalysis;
+using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -202,10 +203,9 @@ namespace XTMF2.ModelSystemConstruct
                 return FailWith(out error, $"Unable to construct a module named {Name} without a type!");
             }
             var typeInfo = _type.GetTypeInfo();
-            var module = (
+            if ((
                 typeInfo.GetConstructor(RuntimeConstructor)?.Invoke(new[] { runtime })
-                ?? typeInfo.GetConstructor(EmptyConstructor)?.Invoke(EmptyConstructor)) as IModule;
-            if (!(module is IModule))
+                ?? typeInfo.GetConstructor(EmptyConstructor)?.Invoke(EmptyConstructor)) is not IModule module)
             {
                 return FailWith(out error, $"Unable to construct a module of type {_type.GetTypeInfo().AssemblyQualifiedName}!");
             }
@@ -214,7 +214,7 @@ namespace XTMF2.ModelSystemConstruct
             if (_type.IsConstructedGenericType && _type.GetGenericTypeDefinition() == GenericParameter)
             {
                 var paramType = _type.GenericTypeArguments[0];
-                var paramValue = ParameterValue?.GetValue(paramType, ref error);
+                var paramValue = ParameterValue?.GetValue(module, paramType, ref error);
                 if (paramValue is not null)
                 {
                     if (!GenericValue.TryGetValue(_type, out var info))
@@ -431,7 +431,15 @@ namespace XTMF2.ModelSystemConstruct
                 else if(reader.ValueTextEquals(ParameterExpressionProperty))
                 {
                     reader.Read();
-                    parameter = ParameterExpression.CreateParameter(new Expression(reader.GetString() ?? string.Empty));
+                    var expressionString = reader.GetString() ?? string.Empty;
+                    if (ParameterCompiler.CreateExpression(null!, expressionString, out var expression, ref error))
+                    {
+                        parameter = ParameterExpression.CreateParameter(expression);
+                    }
+                    else
+                    {
+                        return FailWith(out mss, out error, $"Unable to process expression {expressionString}!\r\n{error}");
+                    }
                 }
                 else if (reader.ValueTextEquals(DisabledProperty))
                 {

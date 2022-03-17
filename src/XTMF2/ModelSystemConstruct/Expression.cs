@@ -15,62 +15,64 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
 namespace XTMF2.ModelSystemConstruct;
 
 /// <summary>
 /// This class represents a calculation
 /// </summary>
-public class Expression
+public abstract class Expression
 {
-    private readonly string _expression;
+    /// <summary>
+    /// The string representation of this expression.
+    /// </summary>
+    protected readonly ReadOnlyMemory<char> Text;
+    
+    /// <summary>
+    /// The offset into the full expression that this starts at.
+    /// </summary>
+    protected readonly int Offset;
 
-    public Expression(string expression)
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="offset"></param>
+    public Expression(string expression, int offset = 0)
     {
-        _expression = expression;
+        Text = expression.AsMemory();
+        Offset = offset;
     }
 
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="nodes"></param>
-    /// <param name="expresionText"></param>
-    /// <param name="expression"></param>
-    /// <param name="error"></param>
-    /// <returns></returns>
-    public bool CreateExpression(IList<Node> nodes, string expresionText, [NotNullWhen(true)] out Expression? expression, [NotNullWhen(false)] ref string? error)
+    /// <param name="expression">The text form of the expression that this represents.</param>
+    /// <param name="offset">The offset into the full expression that we start at.</param>
+    protected Expression(ReadOnlyMemory<char> expression, int offset)
     {
-        expression = null;
-        error = "Method not implemented!";
-        return false;
-    }
-
-    /// <summary>
-    /// Evaluate the expression and return the value.
-    /// </summary>
-    /// <param name="nodes">The nodes required to evaluate the expression.</param>
-    /// <param name="value">The returned object from the evaluation, null if the expression can not be evaluated.</param>
-    /// <param name="error">An error</param>
-    /// <returns>True if the expression was evaluated correctly.</returns>
-    public bool Evaluate(IList<Node> nodes, [NotNullWhen(true)]out object? value, [NotNullWhen(false)] ref string? error)
-    {
-        throw new NotImplementedException();
+        Text = expression;
+        Offset = offset;
     }
 
     /// <summary>
     /// Gets the string representation of the expression.
     /// </summary>
     /// <returns>The string representation of the expression.</returns>
-    public string AsString()
+    public ReadOnlySpan<char> AsString()
     {
-        return _expression;
+        return Text.Span;
     }
 
     /// <summary>
     /// The type that the expression will evaluate to.
     /// </summary>
-    public Type Type
-    {
-        get => throw new NotImplementedException();
-    }
+    public abstract Type Type { get; }
+
+    /// <summary>
+    /// Gets a result with the literal's value.
+    /// </summary>
+    /// <returns>The result that this literal represents.</returns>
+    internal abstract Result GetResult();
 }
