@@ -129,6 +129,55 @@ public class TestVariables
         });
     }
 
+    [TestMethod]
+    public void TestWhitespaceAroundVariable()
+    {
+        TestHelper.RunInModelSystemContext("TestWhitespaceAroundVariable", (User user, ProjectSession project, ModelSystemSession session) =>
+        {
+            string error = null;
+            var nodes = new List<Node>()
+            {
+                CreateNodeForVariable<string>(session, user, "myStringVariable", "12345.6")
+            };
+            var text = "  myStringVariable  ";
+            Assert.IsTrue(ParameterCompiler.CreateExpression(nodes, text, out var expression, ref error), $"Failed to compile {text}");
+            Assert.IsNotNull(expression);
+            Assert.AreEqual(typeof(string), expression.Type);
+            Assert.IsTrue(ParameterCompiler.Evaluate(null, expression, out var result, ref error), error);
+            if (result is string strResult)
+            {
+                Assert.AreEqual("12345.6", strResult);
+            }
+            else
+            {
+                Assert.Fail("The result is not a string!");
+            }
+        });
+    }
+
+    [TestMethod]
+    public void TestBadVariableNames()
+    {
+        TestHelper.RunInModelSystemContext("TestBadVariableNames", (User user, ProjectSession project, ModelSystemSession session) =>
+        {
+            string error = null;
+            var nodes = new List<Node>()
+            {
+                CreateNodeForVariable<string>(session, user, "myStringVariable", "12345.6")
+            };
+            TestFailToCompile(error, nodes, "myStringVariable asd");
+            TestFailToCompile(error, nodes, "asd myStringVariable");
+            TestFailToCompile(error, nodes, "wrongVariableName");
+        });
+    }
+
+    private static void TestFailToCompile(string error, List<Node> nodes, string text)
+    {
+        Assert.IsFalse(ParameterCompiler.CreateExpression(nodes, text, out var expression, ref error), $"Succeeded to compile bad code: {text}");
+        Assert.IsNull(expression);
+        Assert.IsNotNull(error);
+    }
+
     private static Node CreateNodeForVariable<T>(ModelSystemSession session, User user, string name, string value)
     {
         Assert.IsTrue(session.AddNode(user, session.ModelSystem.GlobalBoundary, name,
