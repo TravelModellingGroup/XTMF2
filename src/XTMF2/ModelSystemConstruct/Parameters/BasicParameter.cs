@@ -48,7 +48,7 @@ internal class BasicParameter : ParameterExpression
         return ArbitraryParameterParser.Check(type, _value, ref errorString);
     }
 
-    internal override object GetValue(Type type, ref string? errorString)
+    internal override object GetValue(IModule caller, Type type, ref string? errorString)
     {
         var (sucess, value) = ArbitraryParameterParser.ArbitraryParameterParse(type, _value, ref errorString);
         if (sucess)

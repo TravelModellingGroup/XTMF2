@@ -35,10 +35,11 @@ public abstract class ParameterExpression : INotifyPropertyChanged
     /// <summary>
     /// Tries to convert the parameter expression to the given type.
     /// </summary>
+    /// <param name="caller">The module that is requesting this parameter expression to be evaluated.</param>
     /// <param name="type">The type to try to extract.</param>
     /// <param name="errorString">An error message if the extraction fails.</param>
     /// <returns>An object of the given type, or null with an error message if it fails.</returns>
-    internal abstract object? GetValue(Type type, ref string? errorString);
+    internal abstract object? GetValue(IModule caller, Type type, ref string? errorString);
 
     /// <summary>
     /// Gets a string based representation of the parameter
