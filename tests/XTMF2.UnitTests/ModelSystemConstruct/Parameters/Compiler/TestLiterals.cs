@@ -21,16 +21,13 @@ using System.Collections.Generic;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
+using static XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler.TestCompilerHelper;
+
 namespace XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler;
 
 [TestClass]
 public class TestLiterals
 {
-    /// <summary>
-    /// Gives an empty set of nodes for use in the compiler.
-    /// </summary>
-    private static readonly List<Node> EmptyNodeList = new();
-
     [TestMethod]
     public void TestIntegerLiteral()
     {
@@ -53,7 +50,7 @@ public class TestLiterals
     [TestMethod]
     public void TestBadIntegerLiteral()
     {
-        TestInvalidScript("12345abc");
+        TestFails("12345abc");
     }
 
     [TestMethod]
@@ -78,24 +75,24 @@ public class TestLiterals
     [TestMethod]
     public void TestBadFloatLiteral()
     {
-        TestInvalidScript("1234abc.5");
-        TestInvalidScript("1234.5f");
-        TestInvalidScript("f1234.5");
-        TestInvalidScript("1234.5 f");
+        TestFails("1234abc.5");
+        TestFails("1234.5f");
+        TestFails("f1234.5");
+        TestFails("1234.5 f");
     }
 
     [TestMethod]
     public void TestBooleanLiteralTrue()
     {
-        TestBooleanLiteral("True", true);
-        TestBooleanLiteral("true", true);
+        TestBoolean("True", true);
+        TestBoolean("true", true);
     }
 
     [TestMethod]
     public void TestBooleanLiteralFalse()
     {
-        TestBooleanLiteral("False", false);
-        TestBooleanLiteral("false", false);
+        TestBoolean("False", false);
+        TestBoolean("false", false);
     }
 
     /// <summary>
@@ -118,18 +115,6 @@ public class TestLiterals
         {
             Assert.Fail("The result is not an bool!");
         }
-    }
-
-    /// <summary>
-    /// Make sure that the given script text fails to compile.
-    /// </summary>
-    /// <param name="text"></param>
-    private static void TestInvalidScript(string text)
-    {
-        string error = null;
-        Assert.IsFalse(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Invalid script was compiled: {text}");
-        Assert.IsNull(expression);
-        Assert.IsNotNull(error);
     }
 
     [TestMethod]
@@ -192,9 +177,9 @@ public class TestLiterals
     [TestMethod]
     public void TestBadStringLiteral()
     {
-        TestInvalidScript("\"No final quote");
-        TestInvalidScript("Text before quote \"");
-        TestInvalidScript("\"Text\" Text after quote");
-        TestInvalidScript("Text before quote \"Text\"");
+        TestFails("\"No final quote");
+        TestFails("Text before quote \"");
+        TestFails("\"Text\" Text after quote");
+        TestFails("Text before quote \"Text\"");
     }
 }

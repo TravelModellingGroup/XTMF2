@@ -67,7 +67,9 @@ public static class ParameterCompiler
 
     private static bool Compile(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
     {
-        if(GetBracket(nodes, text, offset, out expression)
+        if(
+            GetNot(nodes, text, offset, out expression)
+            || GetBracket(nodes, text, offset, out expression)
             || GetVariable(nodes, text, offset, out expression)
             || GetStringLiteral(text, offset, out expression)
             || GetBooleanLiteral(text, offset, out expression)  
@@ -80,6 +82,31 @@ public static class ParameterCompiler
         UnableToInterpret(text, offset);
         // This will never actually be executed
         return false; 
+    }
+
+    private static bool GetNot(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = null;
+        var span = text.Span;
+        var first = IndexOfFirstNonWhiteSpace(span);
+        if (first == -1)
+        { 
+            return false;
+        }
+        if(span[first] != '!')
+        {
+            return false;
+        }
+        if(!Compile(nodes, text[(first + 1)..], offset + first + 1, out var inner))
+        {
+            return false;
+        }
+        if(inner.Type != typeof(bool))
+        {
+            throw new CompilerException($"Invalid expression type {inner.Type.FullName} passed into Not Operator!", first + offset);
+        }
+        expression = new NotOperator(inner, text[first..], offset + first);
+        return true;
     }
 
     private static bool GetBracket(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
