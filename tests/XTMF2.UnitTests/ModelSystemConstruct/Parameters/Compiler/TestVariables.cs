@@ -20,6 +20,8 @@ using XTMF2.ModelSystemConstruct;
 using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 using XTMF2.RuntimeModules;
 
+using static XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler.TestCompilerHelper;
+
 namespace XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler;
 
 [TestClass]
@@ -160,30 +162,13 @@ public class TestVariables
     {
         TestHelper.RunInModelSystemContext("TestBadVariableNames", (User user, ProjectSession project, ModelSystemSession session) =>
         {
-            string error = null;
             var nodes = new List<Node>()
             {
                 CreateNodeForVariable<string>(session, user, "myStringVariable", "12345.6")
             };
-            TestFailToCompile(error, nodes, "myStringVariable asd");
-            TestFailToCompile(error, nodes, "asd myStringVariable");
-            TestFailToCompile(error, nodes, "wrongVariableName");
+            TestFails("myStringVariable asd", nodes);
+            TestFails("asd myStringVariable", nodes);
+            TestFails("wrongVariableName", nodes);
         });
-    }
-
-    private static void TestFailToCompile(string error, List<Node> nodes, string text)
-    {
-        Assert.IsFalse(ParameterCompiler.CreateExpression(nodes, text, out var expression, ref error), $"Succeeded to compile bad code: {text}");
-        Assert.IsNull(expression);
-        Assert.IsNotNull(error);
-    }
-
-    private static Node CreateNodeForVariable<T>(ModelSystemSession session, User user, string name, string value)
-    {
-        Assert.IsTrue(session.AddNode(user, session.ModelSystem.GlobalBoundary, name,
-            typeof(BasicParameter<T>),
-            new Rectangle(0, 0, 0, 0), out var node, out var error), error?.Message);
-        Assert.IsTrue(session.SetParameterValue(user, node, value, out error), error?.Message);
-        return node;
     }
 }
