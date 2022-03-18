@@ -29,10 +29,6 @@ namespace XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler;
 [TestClass]
 public class TestNotOperator
 {
-    /// <summary>
-    /// Gives an empty set of nodes for use in the compiler.
-    /// </summary>
-    private static readonly List<Node> EmptyNodeList = new();
 
     [TestMethod]
     public void TestNotTrue()
