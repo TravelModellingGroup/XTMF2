@@ -33,14 +33,14 @@ public class TestNotOperator
     [TestMethod]
     public void TestNotTrue()
     {
-        TestBoolean("!True", false);
+        TestExpression("!True", false);
     }
 
 
     [TestMethod]
     public void TestNotTrueInBrackets()
     {
-        TestBoolean("!(True)", false);
+        TestExpression("!(True)", false);
     }
 
     [TestMethod]
@@ -52,31 +52,31 @@ public class TestNotOperator
     [TestMethod]
     public void TestNotFalse()
     {
-        TestBoolean("!False", true);
+        TestExpression("!False", true);
     }
 
     [TestMethod]
     public void TestNotTrueWithSpace()
     {
-        TestBoolean("! True", false);
+        TestExpression("! True", false);
     }
 
     [TestMethod]
     public void TestNotFalseWithSpace()
     {
-        TestBoolean("! False", true);
+        TestExpression("! False", true);
     }
 
     [TestMethod]
     public void TestNotTrueWithSpaceBefore()
     {
-        TestBoolean(" !True", false);
+        TestExpression(" !True", false);
     }
 
     [TestMethod]
     public void TestNotTrueWithSpaceAfter()
     {
-        TestBoolean("!True ", false);
+        TestExpression("!True ", false);
     }
 
     [TestMethod]
@@ -106,7 +106,7 @@ public class TestNotOperator
             {
                 CreateNodeForVariable<bool>(session, user, "booleanVar", "true")
             };
-            TestBoolean("!booleanVar", false, nodes);
+            TestExpression("!booleanVar", false, nodes);
         });
     }
 
