@@ -712,7 +712,6 @@ public static class ParameterCompiler
     private static int IndexOfFirstOutsideOfBrackets(ReadOnlySpan<char> text, int start, char characterToFind)
     {
         int bracketCounter = 0;
-        int lastFound = -1;
         bool insideString = false;
         for (int i = start; i < text.Length; i++)
         {
