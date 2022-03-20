@@ -73,6 +73,18 @@ public class TestLiterals
     }
 
     [TestMethod]
+    public void TestStringLiteralMissingLeft()
+    {
+        TestFails("12345.6\"");
+    }
+
+    [TestMethod]
+    public void TestStringLiteralMissingRight()
+    {
+        TestFails("\"12345.6");
+    }
+
+    [TestMethod]
     public void TestWhitespaceBeforeStringLiteral()
     {
         TestExpression(" \"12345.6\"", "12345.6");

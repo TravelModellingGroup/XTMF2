@@ -105,7 +105,7 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfFirstOutsideOfBrackets(span, startOfCondition + 1, '?');
+        int operatorIndex = IndexOfFirstOutsideOfBrackets(span, startOfCondition, '?');
         // if there was no select we can exit
         if (operatorIndex <= -1)
         {
@@ -241,7 +241,7 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, '/');
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, '/');
         // if there was no plus we can exit
         if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
@@ -265,7 +265,7 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, '<');
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, '<');
         // if there was no plus we can exit
         if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
@@ -289,7 +289,7 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, "<=");
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, "<=");
         // if there was no plus we can exit
         if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
@@ -313,7 +313,7 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, '>');
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, '>');
         // if there was no plus we can exit
         if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
@@ -337,7 +337,7 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, ">=");
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, ">=");
         // if there was no plus we can exit
         if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
@@ -361,7 +361,7 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, "==");
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, "==");
         // if there was no plus we can exit
         if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
@@ -385,7 +385,7 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, "!=");
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, "!=");
         // if there was no plus we can exit
         if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {

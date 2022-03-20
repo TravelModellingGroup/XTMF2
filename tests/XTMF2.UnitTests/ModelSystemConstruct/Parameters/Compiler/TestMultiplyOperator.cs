@@ -70,4 +70,9 @@ public class TestMultiplyOperator
         TestFails("* 1");
     }
 
+    [TestMethod]
+    public void TestMultiplyInString()
+    {
+        TestExpression("\"1*2\"", "1*2");
+    }
 }

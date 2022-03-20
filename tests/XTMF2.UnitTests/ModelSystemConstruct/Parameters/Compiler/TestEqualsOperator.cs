@@ -63,4 +63,10 @@ public class TestEqualsOperator
     {
         TestFails("123 ==");
     }
+
+    [TestMethod]
+    public void TestEqualsInString()
+    {
+        TestExpression("\"true==false\"", "true==false");
+    }
 }

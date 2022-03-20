@@ -21,6 +21,8 @@ using System.Collections.Generic;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
+using static XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler.TestCompilerHelper;
+
 namespace XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler;
 
 [TestClass]
@@ -34,110 +36,71 @@ public class TestBracket
     [TestMethod]
     public void TestBracketIntegerLiteral()
     {
-        string error = null;
-        var text = "(12345)";
-        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
-        Assert.IsNotNull(expression);
-        Assert.AreEqual(typeof(int), expression.Type);
-        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is int intResult)
-        {
-            Assert.AreEqual(12345, intResult);
-        }
+        TestExpression("(12345)", 12345);
     }
 
     [TestMethod]
     public void TestWhitespaceBeforeBracketIntegerLiteral()
     {
-        string error = null;
-        var text = " (12345)";
-        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
-        Assert.IsNotNull(expression);
-        Assert.AreEqual(typeof(int), expression.Type);
-        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is int intResult)
-        {
-            Assert.AreEqual(12345, intResult);
-        }
+        TestExpression(" (12345)", 12345);
     }
 
     [TestMethod]
     public void TestWhitespaceAfterBracketIntegerLiteral()
     {
-        string error = null;
-        var text = "(12345) ";
-        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
-        Assert.IsNotNull(expression);
-        Assert.AreEqual(typeof(int), expression.Type);
-        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is int intResult)
-        {
-            Assert.AreEqual(12345, intResult);
-        }
+        TestExpression("(12345) ", 12345);
     }
 
     [TestMethod]
     public void TestDoubleBracketIntegerLiteral()
     {
-        string error = null;
-        var text = "((12345))";
-        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
-        Assert.IsNotNull(expression);
-        Assert.AreEqual(typeof(int), expression.Type);
-        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is int intResult)
-        {
-            Assert.AreEqual(12345, intResult);
-        }
+        TestExpression("((12345))", 12345);
     }
 
     [TestMethod]
     public void TestTooManyOpenBrackets()
     {
-        string error = null;
-        var text = "((12345)";
-        Assert.IsFalse(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Successfully compiled bad code: {text}");
-        Assert.IsNull(expression);
-        Assert.IsNotNull(error);
+        TestFails("((12345)");
     }
 
     [TestMethod]
     public void TestTooManyCloseBrackets()
     {
-        string error = null;
-        var text = "(12345))";
-        Assert.IsFalse(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Successfully compiled bad code: {text}");
-        Assert.IsNull(expression);
-        Assert.IsNotNull(error);
+        TestFails("(12345))");
     }
 
     [TestMethod]
     public void TestTextBeforeBracket()
     {
-        string error = null;
-        var text = "asd (12345)";
-        Assert.IsFalse(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Successfully compiled bad code: {text}");
-        Assert.IsNull(expression);
-        Assert.IsNotNull(error);
+        TestFails("asd (12345)");
     }
 
     [TestMethod]
     public void TestTextAfterBracket()
     {
-        string error = null;
-        var text = "(12345) asd";
-        Assert.IsFalse(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Successfully compiled bad code: {text}");
-        Assert.IsNull(expression);
-        Assert.IsNotNull(error);
+        TestFails("(12345) asd");
     }
 
     [TestMethod]
     public void TestCloseBracketFirst()
     {
-        string error = null;
-        var text = ")((12345)";
-        Assert.IsFalse(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Successfully compiled bad code: {text}");
-        Assert.IsNull(expression);
-        Assert.IsNotNull(error);
+        TestFails(")(12345)");
+    }
+    [TestMethod]
+    public void TestCloseBracketBeforeOpen()
+    {
+        TestFails(")(12345)(");
+    }
+
+    [TestMethod]
+    public void TestOpenBracketInString()
+    {
+        TestExpression("\"(\"", "(");
+    }
+
+    [TestMethod]
+    public void TestCloseBracketInString()
+    {
+        TestExpression("\")\"", ")");
     }
 }

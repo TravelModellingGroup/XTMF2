@@ -64,4 +64,9 @@ public class TestGreaterThanOperator
     {
         TestFails("123 >");
     }
+    [TestMethod]
+    public void TestGreaterThanInString()
+    {
+        TestExpression("\"1>2\"", "1>2");
+    }
 }

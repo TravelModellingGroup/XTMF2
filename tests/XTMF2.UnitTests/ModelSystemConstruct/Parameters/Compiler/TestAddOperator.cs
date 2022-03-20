@@ -105,4 +105,10 @@ public class TestAddOperator
     {
         TestFails("+ 1");
     }
+
+    [TestMethod]
+    public void TestAddInString()
+    {
+        TestExpression("\"1+2\"", "1+2");
+    }
 }

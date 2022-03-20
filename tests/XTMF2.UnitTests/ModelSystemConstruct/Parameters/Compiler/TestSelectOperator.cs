@@ -110,4 +110,18 @@ public class TestSelectOperator
     {
         TestFails("\"1.0\"?\"1.0\" \"2.0\"");
     }
+
+    [TestMethod]
+    public void TestNoSelectOperatorWithBreak()
+    {
+        TestFails("true 1 : 2");
+        TestFails("1:2");
+        TestFails(":");
+    }
+
+    [TestMethod]
+    public void TestConditionOperatorInString()
+    {
+        TestExpression("\"true?1:0\"", "true?1:0");
+    }
 }

@@ -63,4 +63,10 @@ public class TestNotEqualsOperator
     {
         TestFails("123 !=");
     }
+
+    [TestMethod]
+    public void TestNotEqualsInString()
+    {
+        TestExpression("\"true!=false\"", "true!=false");
+    }   
 }

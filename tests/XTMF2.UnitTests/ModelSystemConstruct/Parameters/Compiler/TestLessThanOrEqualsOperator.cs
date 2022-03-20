@@ -64,4 +64,10 @@ public class TestLessThanOrEqualsOperator
     {
         TestFails("123 <=");
     }
+
+    [TestMethod]
+    public void TestLessThanOrEqualsInString()
+    {
+        TestExpression("\"1<=2\"", "1<=2");
+    }
 }
