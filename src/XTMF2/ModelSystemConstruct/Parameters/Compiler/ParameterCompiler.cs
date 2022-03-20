@@ -70,6 +70,8 @@ public static class ParameterCompiler
     {
         if(
             GetSelect(nodes, text, offset, out expression)
+            || GetOr(nodes, text, offset, out expression)
+            || GetAnd(nodes, text, offset, out expression)
             || GetEquals(nodes, text, offset, out expression)
             || GetNotEquals(nodes, text, offset, out expression)
             || GetGreaterThanOrEqual(nodes, text, offset, out expression)
@@ -156,6 +158,54 @@ public static class ParameterCompiler
             return false;
         }
         expression = new SelectOperator(condition, lhs, rhs, text[startOfCondition..], startOfCondition + offset);
+        return true;
+    }
+
+    private static bool GetAnd(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = null;
+        var span = text.Span;
+        var startOfLHS = IndexOfFirstNonWhiteSpace(span);
+        if (startOfLHS < 0)
+        {
+            return false;
+        }
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, "&&");
+        // if there was no plus we can exit
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
+        {
+            return false;
+        }
+        if (!Compile(nodes, text.Slice(startOfLHS, operatorIndex - startOfLHS), offset + startOfLHS, out var lhs)
+            || !Compile(nodes, text[(operatorIndex + 2)..], offset + operatorIndex + 2, out var rhs))
+        {
+            return false;
+        }
+        expression = new AndOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset);
+        return true;
+    }
+
+    private static bool GetOr(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = null;
+        var span = text.Span;
+        var startOfLHS = IndexOfFirstNonWhiteSpace(span);
+        if (startOfLHS < 0)
+        {
+            return false;
+        }
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, "||");
+        // if there was no plus we can exit
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
+        {
+            return false;
+        }
+        if (!Compile(nodes, text.Slice(startOfLHS, operatorIndex - startOfLHS), offset + startOfLHS, out var lhs)
+            || !Compile(nodes, text[(operatorIndex + 2)..], offset + operatorIndex + 2, out var rhs))
+        {
+            return false;
+        }
+        expression = new OrOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset);
         return true;
     }
 
