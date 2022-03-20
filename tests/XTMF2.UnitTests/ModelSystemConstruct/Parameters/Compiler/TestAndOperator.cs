@@ -68,4 +68,10 @@ public class TestAndOperator
     {
         TestFails("\"1.0\"&&\"2.0\"");
     }
+
+    [TestMethod]
+    public void TestAndOutsideOfCompare()
+    {
+        TestExpression("true && false == false", true);
+    }
 }
