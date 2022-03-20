@@ -69,4 +69,32 @@ public class TestEqualsOperator
     {
         TestExpression("\"true==false\"", "true==false");
     }
+
+    [TestMethod]
+    public void TestEqualsAfterLessThan()
+    {
+        TestExpression("123 < 312 == true", true);
+        TestExpression("312 < 123 == true", false);
+    }
+
+    [TestMethod]
+    public void TestEqualsAfterLessThanOrEqualsThan()
+    {
+        TestExpression("123 <= 312 == true", true);
+        TestExpression("312 <= 123 == true", false);
+    }
+
+    [TestMethod]
+    public void TestEqualsAfterGreaterThan()
+    {
+        TestExpression("123 > 312 == true", false);
+        TestExpression("312 > 123 == true", true);
+    }
+
+    [TestMethod]
+    public void TestEqualsAfterGreaterThanOrEqualsThan()
+    {
+        TestExpression("123 >= 312 == true", false);
+        TestExpression("312 >= 123 == true", true);
+    }
 }

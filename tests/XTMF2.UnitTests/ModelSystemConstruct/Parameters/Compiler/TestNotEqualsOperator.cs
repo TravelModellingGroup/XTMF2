@@ -68,5 +68,33 @@ public class TestNotEqualsOperator
     public void TestNotEqualsInString()
     {
         TestExpression("\"true!=false\"", "true!=false");
-    }   
+    }
+
+    [TestMethod]
+    public void TestNotEqualsAfterLessThan()
+    {
+        TestExpression("123 < 312 != true", false);
+        TestExpression("312 < 123 != true", true);
+    }
+
+    [TestMethod]
+    public void TestNotEqualsAfterLessThanOrEqualsThan()
+    {
+        TestExpression("123 <= 312 != true", false);
+        TestExpression("312 <= 123 != true", true);
+    }
+
+    [TestMethod]
+    public void TestNotEqualsAfterGreaterThan()
+    {
+        TestExpression("123 > 312 != true", true);
+        TestExpression("312 > 123 != true", false);
+    }
+
+    [TestMethod]
+    public void TestNotEqualsAfterGreaterThanOrEqualsThan()
+    {
+        TestExpression("123 >= 312 != true", true);
+        TestExpression("312 >= 123 != true", false);
+    }
 }

@@ -74,4 +74,10 @@ public class TestOrOperator
     {
         TestFails("\"1.0\"||\"2.0\"");
     }
+
+    [TestMethod]
+    public void TestOrOutsideOfEquals()
+    {
+        TestExpression("false || true == false", false);
+    }
 }
