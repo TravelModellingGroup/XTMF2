@@ -69,7 +69,8 @@ public static class ParameterCompiler
     private static bool Compile(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
     {
         if(
-            GetEquals(nodes, text, offset, out expression)
+            GetSelect(nodes, text, offset, out expression)
+            || GetEquals(nodes, text, offset, out expression)
             || GetNotEquals(nodes, text, offset, out expression)
             || GetGreaterThanOrEqual(nodes, text, offset, out expression)
             || GetGreaterThan(nodes, text, offset, out expression)
@@ -95,6 +96,69 @@ public static class ParameterCompiler
         return false; 
     }
 
+    private static bool GetSelect(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = null;
+        var span = text.Span;
+        var startOfCondition = IndexOfFirstNonWhiteSpace(span);
+        if (startOfCondition < 0)
+        {
+            return false;
+        }
+        int operatorIndex = IndexOfFirstOutsideOfBrackets(span, startOfCondition + 1, '?');
+        // if there was no select we can exit
+        if (operatorIndex <= -1)
+        {
+            return false;
+        }
+        int breakIndex = -1;
+        // We start at 1 so that when we decrement this to zero we have our break.
+        int breakCount = 1;
+        bool insideString = false;
+        for (int i = operatorIndex + 1; i < span.Length; i++)
+        {
+            switch(span[i])
+            {
+                case '\"':
+                    insideString = !insideString;
+                    break;
+                case '?':
+                    if (!insideString)
+                    {
+                        breakCount++;
+                    }
+                    break;
+                case ':':
+                    if (!insideString)
+                    {
+                        breakCount--;
+                        if (breakCount == 0)
+                        {
+                            breakIndex = i;
+                        }
+                        if (breakCount < 0)
+                        {
+                            throw new CompilerException("There are an extra select break operator (:)!", offset + i);
+                        }
+                    }
+                    break;
+            }
+        }
+        if(breakIndex < 0)
+        {
+            throw new CompilerException("There is no matching select break operator (:) for select operator (?)!", operatorIndex + offset);
+        }
+
+        if (!Compile(nodes, text.Slice(startOfCondition, operatorIndex - startOfCondition), offset + startOfCondition, out var condition)
+            || !Compile(nodes, text.Slice(operatorIndex + 1, breakIndex - (operatorIndex + 1)), offset + operatorIndex + 1, out var lhs)
+            || !Compile(nodes, text[(breakIndex + 1)..], offset + breakIndex + 1, out var rhs))
+        {
+            return false;
+        }
+        expression = new SelectOperator(condition, lhs, rhs, text[startOfCondition..], startOfCondition + offset);
+        return true;
+    }
+
     private static bool GetAdd(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
     {
         expression = null;
@@ -104,9 +168,10 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, '+');
+        // You can't skip the start of the LHS in order to avoid quotes
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, '+');
         // if there was no plus we can exit
-        if(operatorIndex <= -1)
+        if(operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
             return false;
         }
@@ -128,9 +193,9 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, '-');
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, '-');
         // if there was no plus we can exit
-        if (operatorIndex <= -1)
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
             return false;
         }
@@ -152,9 +217,9 @@ public static class ParameterCompiler
         {
             return false;
         }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, '*');
+        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, '*');
         // if there was no plus we can exit
-        if (operatorIndex <= -1)
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
             return false;
         }
@@ -178,7 +243,7 @@ public static class ParameterCompiler
         }
         int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, '/');
         // if there was no plus we can exit
-        if (operatorIndex <= -1)
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
             return false;
         }
@@ -202,7 +267,7 @@ public static class ParameterCompiler
         }
         int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, '<');
         // if there was no plus we can exit
-        if (operatorIndex <= -1)
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
             return false;
         }
@@ -226,7 +291,7 @@ public static class ParameterCompiler
         }
         int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, "<=");
         // if there was no plus we can exit
-        if (operatorIndex <= -1)
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
             return false;
         }
@@ -250,7 +315,7 @@ public static class ParameterCompiler
         }
         int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, '>');
         // if there was no plus we can exit
-        if (operatorIndex <= -1)
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
             return false;
         }
@@ -274,7 +339,7 @@ public static class ParameterCompiler
         }
         int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, ">=");
         // if there was no plus we can exit
-        if (operatorIndex <= -1)
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
             return false;
         }
@@ -298,7 +363,7 @@ public static class ParameterCompiler
         }
         int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, "==");
         // if there was no plus we can exit
-        if (operatorIndex <= -1)
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
             return false;
         }
@@ -322,7 +387,7 @@ public static class ParameterCompiler
         }
         int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS + 1, "!=");
         // if there was no plus we can exit
-        if (operatorIndex <= -1)
+        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
         {
             return false;
         }
@@ -587,6 +652,41 @@ public static class ParameterCompiler
     }
 
     /// <summary>
+    /// Gets the first index starting at the given position that is not inside of a bracket where the character is found.
+    /// If the character does not exist, this will return negative one.
+    /// </summary>
+    /// <param name="text">The text to search.</param>
+    /// <param name="start">The position in the text to start searching.</param>
+    /// <param name="characterToFind">The character that we wish to find.</param>
+    /// <returns>The position the character is found, outside of brackets, or -1 if it is not found.</returns>
+    private static int IndexOfFirstOutsideOfBrackets(ReadOnlySpan<char> text, int start, char characterToFind)
+    {
+        int bracketCounter = 0;
+        int lastFound = -1;
+        bool insideString = false;
+        for (int i = start; i < text.Length; i++)
+        {
+            if (text[i] == '\"')
+            {
+                insideString = !insideString;
+            }
+            else if (!insideString && text[i] == '(')
+            {
+                bracketCounter++;
+            }
+            else if (!insideString && text[i] == ')')
+            {
+                bracketCounter--;
+            }
+            else if (!insideString && text[i] == characterToFind && bracketCounter == 0)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>
     /// Gets the last index starting at the given position that is not inside of a bracket where the character is found.
     /// If the character does not exist, this will return negative one.
     /// </summary>
@@ -598,17 +698,22 @@ public static class ParameterCompiler
     {
         int bracketCounter = 0;
         int lastFound = -1;
+        bool insideString = false;
         for (int i = start; i < text.Length; i++)
         {
-            if (text[i] == '(')
+            if(text[i] == '\"')
+            {
+                insideString = !insideString;
+            }
+            else if (!insideString && text[i] == '(')
             {
                 bracketCounter++;
             }
-            else if (text[i] == ')')
+            else if (!insideString && text[i] == ')')
             {
                 bracketCounter--;
             }
-            else if (text[i] == characterToFind && bracketCounter == 0)
+            else if (!insideString && text[i] == characterToFind && bracketCounter == 0)
             {
                 lastFound = i;
             }
@@ -629,17 +734,22 @@ public static class ParameterCompiler
         int bracketCounter = 0;
         int lastFound = -1;
         var firstCharacter = stringToFind[0];
+        bool insideString = false;
         for (int i = start; i < text.Length - stringToFind.Length; i++)
         {
-            if (text[i] == '(')
+            if (text[i] == '\"')
+            {
+                insideString = !insideString;
+            }
+            else if (!insideString && text[i] == '(')
             {
                 bracketCounter++;
             }
-            else if (text[i] == ')')
+            else if (!insideString && text[i] == ')')
             {
                 bracketCounter--;
             }
-            else if (bracketCounter == 0 && text[i] == firstCharacter)
+            else if (!insideString && bracketCounter == 0 && text[i] == firstCharacter)
             {
                 bool allMatch = true;
                 for (int j = 0; j < stringToFind.Length; j++)
@@ -662,15 +772,25 @@ public static class ParameterCompiler
     /// Detects
     /// </summary>
     /// <param name="expresionText"></param>
-    /// <exception cref="CompilerException"></exception>
+    /// <exception cref="CompilerException">Throws an exception if a miss-matched set of brackets or quotes are found.</exception>
     private static void ScanForInvalidBrackets(string expresionText)
     {
         int bracketCount = 0;
         int mostOutsideBracketIndex = -1;
+        int lastStringStart = -1;
         var span = expresionText.AsSpan();
+        bool insideString = false;
         for (int i = 0; i < span.Length; i++)
         {
-            if (span[i] == '(')
+            if (span[i] == '\"')
+            {
+                insideString = !insideString;
+                if(insideString)
+                {
+                    lastStringStart = i;
+                }
+            }
+            else if (!insideString && span[i] == '(')
             {
                 if (bracketCount == 0)
                 {
@@ -678,7 +798,7 @@ public static class ParameterCompiler
                 }
                 bracketCount++;
             }
-            else if (span[i] == ')')
+            else if (!insideString && span[i] == ')')
             {
                 bracketCount--;
                 if (bracketCount < 0)
@@ -690,6 +810,10 @@ public static class ParameterCompiler
         if (bracketCount > 0)
         {
             throw new CompilerException("Unmatched bracket found!", mostOutsideBracketIndex);
+        }
+        if(insideString)
+        {
+            throw new CompilerException("Unmatched quote for string literal!", lastStringStart);
         }
     }
 
