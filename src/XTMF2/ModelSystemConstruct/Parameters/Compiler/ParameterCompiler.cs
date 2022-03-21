@@ -661,9 +661,9 @@ public static class ParameterCompiler
     }
 
     /// <summary>
-    /// Detects
+    /// Detects if we have an invalid set of brackets at the start of the compilation phase.
     /// </summary>
-    /// <param name="expresionText"></param>
+    /// <param name="expresionText">The full text of the expression.</param>
     /// <exception cref="CompilerException">Throws an exception if a miss-matched set of brackets or quotes are found.</exception>
     private static void ScanForInvalidBrackets(string expresionText)
     {
