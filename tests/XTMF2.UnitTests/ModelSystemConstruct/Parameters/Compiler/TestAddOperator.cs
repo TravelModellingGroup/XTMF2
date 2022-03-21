@@ -26,81 +26,89 @@ using static XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler.TestCompil
 namespace XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler;
 
 [TestClass]
-public class TestBracket
+public class TestAddOperator
 {
-    /// <summary>
-    /// Gives an empty set of nodes for use in the compiler.
-    /// </summary>
-    private static readonly List<Node> EmptyNodeList = new();
-
     [TestMethod]
-    public void TestBracketIntegerLiteral()
+    public void TestAddInteger()
     {
-        TestExpression("(12345)", 12345);
+        TestExpression("123 + 312", 435);
     }
 
     [TestMethod]
-    public void TestWhitespaceBeforeBracketIntegerLiteral()
+    public void TestAddFloat()
     {
-        TestExpression(" (12345)", 12345);
+        TestExpression("123.0 + 312.0", 435.0f);
     }
 
     [TestMethod]
-    public void TestWhitespaceAfterBracketIntegerLiteral()
+    public void TestAddString()
     {
-        TestExpression("(12345) ", 12345);
+        TestExpression("\"1\" + \"2\"", "12");
     }
 
     [TestMethod]
-    public void TestDoubleBracketIntegerLiteral()
+    public void TestAddBoolean()
     {
-        TestExpression("((12345))", 12345);
+        TestFails("true + false");
     }
 
     [TestMethod]
-    public void TestTooManyOpenBrackets()
+    public void TestMultipleAddsInteger()
     {
-        TestFails("((12345)");
+        TestExpression("1 + 2 + 3", 6);
     }
 
     [TestMethod]
-    public void TestTooManyCloseBrackets()
+    public void TestAddMultipleString()
     {
-        TestFails("(12345))");
+        TestExpression("\"1\" + \"2\" + \"3\"", "123");
     }
 
     [TestMethod]
-    public void TestTextBeforeBracket()
+    public void TestMultipleAddsFloat()
     {
-        TestFails("asd (12345)");
+        TestExpression("1.0 + 2.0 + 3.0", 6.0f);
     }
 
     [TestMethod]
-    public void TestTextAfterBracket()
+    public void TestMultipleAddsBoolean()
     {
-        TestFails("(12345) asd");
+        TestFails("true + false  true");
     }
 
     [TestMethod]
-    public void TestCloseBracketFirst()
+    public void TestMultipleAddsSpacesOnSides()
     {
-        TestFails(")(12345)");
-    }
-    [TestMethod]
-    public void TestCloseBracketBeforeOpen()
-    {
-        TestFails(")(12345)(");
+        TestExpression("  1 + 2 + 3  ", 6);
     }
 
     [TestMethod]
-    public void TestOpenBracketInString()
+    public void TestAddExtraOnLeftFails()
     {
-        TestExpression("\"(\"", "(");
+        TestFails("asd 1 + 2");
     }
 
     [TestMethod]
-    public void TestCloseBracketInString()
+    public void TestAddExtraOnRightFails()
     {
-        TestExpression("\")\"", ")");
+        TestFails("1 + 2 asd");
+    }
+
+    [TestMethod]
+    public void TestAddAtEndFails()
+    {
+        TestFails("1 +");
+    }
+
+    [TestMethod]
+    public void TestAddAtStartFails()
+    {
+        TestFails("+ 1");
+    }
+
+    [TestMethod]
+    public void TestAddInString()
+    {
+        TestExpression("\"1+2\"", "1+2");
     }
 }

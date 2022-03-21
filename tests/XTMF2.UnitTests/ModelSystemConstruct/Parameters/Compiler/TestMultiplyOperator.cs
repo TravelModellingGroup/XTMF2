@@ -26,81 +26,53 @@ using static XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler.TestCompil
 namespace XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler;
 
 [TestClass]
-public class TestBracket
+public class TestMultiplyOperator
 {
-    /// <summary>
-    /// Gives an empty set of nodes for use in the compiler.
-    /// </summary>
-    private static readonly List<Node> EmptyNodeList = new();
-
     [TestMethod]
-    public void TestBracketIntegerLiteral()
+    public void TestMultiply()
     {
-        TestExpression("(12345)", 12345);
+        TestExpression("123 * 312", 38376);
     }
 
     [TestMethod]
-    public void TestWhitespaceBeforeBracketIntegerLiteral()
+    public void TestMultipleMultiplications()
     {
-        TestExpression(" (12345)", 12345);
+        TestExpression("1 * 2 * 3", 6);
     }
 
     [TestMethod]
-    public void TestWhitespaceAfterBracketIntegerLiteral()
+    public void TestMultipleMultiplicationsSpacesOnSides()
     {
-        TestExpression("(12345) ", 12345);
+        TestExpression("  1 * 2 * 3  ", 6);
     }
 
     [TestMethod]
-    public void TestDoubleBracketIntegerLiteral()
+    public void TestMultiplyExtraOnLeftFails()
     {
-        TestExpression("((12345))", 12345);
+        TestFails("asd 1 * 2");
     }
 
     [TestMethod]
-    public void TestTooManyOpenBrackets()
+    public void TestMultiplyExtraOnRightFails()
     {
-        TestFails("((12345)");
+        TestFails("1 * 2 asd");
     }
 
     [TestMethod]
-    public void TestTooManyCloseBrackets()
+    public void TestMultiplyAtEndFails()
     {
-        TestFails("(12345))");
+        TestFails("1 *");
     }
 
     [TestMethod]
-    public void TestTextBeforeBracket()
+    public void TestMultiplyAtStartFails()
     {
-        TestFails("asd (12345)");
+        TestFails("* 1");
     }
 
     [TestMethod]
-    public void TestTextAfterBracket()
+    public void TestMultiplyInString()
     {
-        TestFails("(12345) asd");
-    }
-
-    [TestMethod]
-    public void TestCloseBracketFirst()
-    {
-        TestFails(")(12345)");
-    }
-    [TestMethod]
-    public void TestCloseBracketBeforeOpen()
-    {
-        TestFails(")(12345)(");
-    }
-
-    [TestMethod]
-    public void TestOpenBracketInString()
-    {
-        TestExpression("\"(\"", "(");
-    }
-
-    [TestMethod]
-    public void TestCloseBracketInString()
-    {
-        TestExpression("\")\"", ")");
+        TestExpression("\"1*2\"", "1*2");
     }
 }

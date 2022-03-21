@@ -26,81 +26,75 @@ using static XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler.TestCompil
 namespace XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler;
 
 [TestClass]
-public class TestBracket
+public class TestEqualsOperator
 {
-    /// <summary>
-    /// Gives an empty set of nodes for use in the compiler.
-    /// </summary>
-    private static readonly List<Node> EmptyNodeList = new();
-
     [TestMethod]
-    public void TestBracketIntegerLiteral()
+    public void TestDifferentValue()
     {
-        TestExpression("(12345)", 12345);
+        TestExpression("123 == 312", false);
     }
 
     [TestMethod]
-    public void TestWhitespaceBeforeBracketIntegerLiteral()
+    public void TestSameValue()
     {
-        TestExpression(" (12345)", 12345);
+        TestExpression("123 == 123", true);
     }
 
     [TestMethod]
-    public void TestWhitespaceAfterBracketIntegerLiteral()
+    public void TestFailsTextOnLeft()
     {
-        TestExpression("(12345) ", 12345);
+        TestFails("asd 123 == 312");
     }
 
     [TestMethod]
-    public void TestDoubleBracketIntegerLiteral()
+    public void TesFailsTextOnRight()
     {
-        TestExpression("((12345))", 12345);
+        TestFails("123 == 312 asd");
     }
 
     [TestMethod]
-    public void TestTooManyOpenBrackets()
+    public void TestNothingOnLeftFails()
     {
-        TestFails("((12345)");
+        TestFails("== 123");
     }
 
     [TestMethod]
-    public void TestTooManyCloseBrackets()
+    public void TestNothingOnRightFails()
     {
-        TestFails("(12345))");
+        TestFails("123 ==");
     }
 
     [TestMethod]
-    public void TestTextBeforeBracket()
+    public void TestEqualsInString()
     {
-        TestFails("asd (12345)");
+        TestExpression("\"true==false\"", "true==false");
     }
 
     [TestMethod]
-    public void TestTextAfterBracket()
+    public void TestEqualsAfterLessThan()
     {
-        TestFails("(12345) asd");
+        TestExpression("123 < 312 == true", true);
+        TestExpression("312 < 123 == true", false);
     }
 
     [TestMethod]
-    public void TestCloseBracketFirst()
+    public void TestEqualsAfterLessThanOrEqualsThan()
     {
-        TestFails(")(12345)");
-    }
-    [TestMethod]
-    public void TestCloseBracketBeforeOpen()
-    {
-        TestFails(")(12345)(");
+        TestExpression("123 <= 312 == true", true);
+        TestExpression("312 <= 123 == true", false);
     }
 
     [TestMethod]
-    public void TestOpenBracketInString()
+    public void TestEqualsAfterGreaterThan()
     {
-        TestExpression("\"(\"", "(");
+        TestExpression("123 > 312 == true", false);
+        TestExpression("312 > 123 == true", true);
     }
 
     [TestMethod]
-    public void TestCloseBracketInString()
+    public void TestEqualsAfterGreaterThanOrEqualsThan()
     {
-        TestExpression("\")\"", ")");
+        TestExpression("123 >= 312 == true", false);
+        TestExpression("312 >= 123 == true", true);
     }
 }

@@ -55,9 +55,10 @@ public static class ParameterCompiler
         error = null;
         try
         {
+            ScanForInvalidBrackets(expresionText);
             return Compile(nodes, expresionText.AsMemory(), 0, out expression);
         }
-        catch(CompilerException exception)
+        catch (CompilerException exception)
         {
             error = exception.Message + $" Position: {exception.Position}";
             expression = null;
@@ -67,12 +68,25 @@ public static class ParameterCompiler
 
     private static bool Compile(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
     {
-        if(
-            GetNot(nodes, text, offset, out expression)
+        if (
+            GetSelect(nodes, text, offset, out expression)
+            || GetOr(nodes, text, offset, out expression)
+            || GetAnd(nodes, text, offset, out expression)
+            || GetEquals(nodes, text, offset, out expression)
+            || GetNotEquals(nodes, text, offset, out expression)
+            || GetGreaterThanOrEqual(nodes, text, offset, out expression)
+            || GetGreaterThan(nodes, text, offset, out expression)
+            || GetLessThanOrEqual(nodes, text, offset, out expression)
+            || GetLessThan(nodes, text, offset, out expression)
+            || GetAdd(nodes, text, offset, out expression)
+            || GetSubtract(nodes, text, offset, out expression)
+            || GetMultiply(nodes, text, offset, out expression)
+            || GetDivide(nodes, text, offset, out expression)
+            || GetNot(nodes, text, offset, out expression)
             || GetBracket(nodes, text, offset, out expression)
             || GetVariable(nodes, text, offset, out expression)
             || GetStringLiteral(text, offset, out expression)
-            || GetBooleanLiteral(text, offset, out expression)  
+            || GetBooleanLiteral(text, offset, out expression)
             || GetIntegerLiteral(text, offset, out expression)
             || GetFloatingPointLiteral(text, offset, out expression)
         )
@@ -81,7 +95,182 @@ public static class ParameterCompiler
         }
         UnableToInterpret(text, offset);
         // This will never actually be executed
-        return false; 
+        return false;
+    }
+
+    private static bool GetSelect(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = null;
+        var span = text.Span;
+        var startOfCondition = IndexOfFirstNonWhiteSpace(span);
+        if (startOfCondition < 0)
+        {
+            return false;
+        }
+        int operatorIndex = IndexOfFirstOutsideOfBrackets(span, startOfCondition, '?');
+        // if there was no select we can exit
+        if (operatorIndex <= -1)
+        {
+            return false;
+        }
+        int breakIndex = -1;
+        // We start at 1 so that when we decrement this to zero we have our break.
+        int breakCount = 1;
+        bool insideString = false;
+        for (int i = operatorIndex + 1; i < span.Length; i++)
+        {
+            switch (span[i])
+            {
+                case '\"':
+                    insideString = !insideString;
+                    break;
+                case '?':
+                    if (!insideString)
+                    {
+                        breakCount++;
+                    }
+                    break;
+                case ':':
+                    if (!insideString)
+                    {
+                        breakCount--;
+                        if (breakCount == 0)
+                        {
+                            breakIndex = i;
+                        }
+                        if (breakCount < 0)
+                        {
+                            throw new CompilerException("There are an extra select break operator (:)!", offset + i);
+                        }
+                    }
+                    break;
+            }
+        }
+        if (breakIndex < 0)
+        {
+            throw new CompilerException("There is no matching select break operator (:) for select operator (?)!", operatorIndex + offset);
+        }
+
+        if (!Compile(nodes, text.Slice(startOfCondition, operatorIndex - startOfCondition), offset + startOfCondition, out var condition)
+            || !Compile(nodes, text.Slice(operatorIndex + 1, breakIndex - (operatorIndex + 1)), offset + operatorIndex + 1, out var lhs)
+            || !Compile(nodes, text[(breakIndex + 1)..], offset + breakIndex + 1, out var rhs))
+        {
+            return false;
+        }
+        expression = new SelectOperator(condition, lhs, rhs, text[startOfCondition..], startOfCondition + offset);
+        return true;
+    }
+
+    private static bool GetAnd(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, "&&", out var startOfLHS, out var lhs, out var rhs) ?
+            new AndOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetOr(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, "||", out var startOfLHS, out var lhs, out var rhs) ?
+            new OrOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetAdd(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, '+', out var startOfLHS, out var lhs, out var rhs) ?
+            new AddOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetSubtract(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, '-', out var startOfLHS, out var lhs, out var rhs) ?
+            new SubtractOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetMultiply(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, '*', out var startOfLHS, out var lhs, out var rhs) ?
+            new MultiplyOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetDivide(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, '/', out var startOfLHS, out var lhs, out var rhs) ?
+            new DivideOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetLessThan(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, '<', out var startOfLHS, out var lhs, out var rhs) ?
+            new LessThanOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetLessThanOrEqual(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, "<=", out var startOfLHS, out var lhs, out var rhs) ?
+            new LessThanOrEqualOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetGreaterThan(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, '>', out var startOfLHS, out var lhs, out var rhs) ?
+            new GreaterThanOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetGreaterThanOrEqual(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, ">=", out var startOfLHS, out var lhs, out var rhs) ?
+            new GreaterThanOrEqualOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetEquals(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, "==", out var startOfLHS, out var lhs, out var rhs) ?
+            new EqualsOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetNotEquals(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, "!=", out var startOfLHS, out var lhs, out var rhs) ?
+            new NotEqualsOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetBinaryOperator(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, char operatorCharacter, out int startOfLHS, [NotNullWhen(true)] out Expression? lhs, [NotNullWhen(true)] out Expression? rhs)
+    {
+        lhs = null;
+        rhs = null;
+        var span = text.Span;
+        int operatorIndex;
+        startOfLHS = IndexOfFirstNonWhiteSpace(span);
+        return (startOfLHS >= 0
+            && (operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, operatorCharacter)) >= 0
+            && operatorIndex > startOfLHS
+            && Compile(nodes, text.Slice(startOfLHS, operatorIndex - startOfLHS), offset + startOfLHS, out lhs)
+            && Compile(nodes, text[(operatorIndex + 1)..], offset + operatorIndex + 1, out rhs));
+    }
+
+    private static bool GetBinaryOperator(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, string operatorCharacter, out int startOfLHS, [NotNullWhen(true)] out Expression? lhs, [NotNullWhen(true)] out Expression? rhs)
+    {
+        lhs = null;
+        rhs = null;
+        var span = text.Span;
+        int operatorIndex;
+        startOfLHS = IndexOfFirstNonWhiteSpace(span);
+        return (startOfLHS >= 0
+            && (operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, operatorCharacter)) >= 0
+            && operatorIndex > startOfLHS
+            && Compile(nodes, text.Slice(startOfLHS, operatorIndex - startOfLHS), offset + startOfLHS, out lhs)
+            && Compile(nodes, text[(operatorIndex + operatorCharacter.Length)..], offset + operatorIndex + operatorCharacter.Length, out rhs));
     }
 
     private static bool GetNot(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
@@ -89,19 +278,13 @@ public static class ParameterCompiler
         expression = null;
         var span = text.Span;
         var first = IndexOfFirstNonWhiteSpace(span);
-        if (first == -1)
-        { 
-            return false;
-        }
-        if(span[first] != '!')
+        if (first == -1
+            || span[first] != '!'
+            || !Compile(nodes, text[(first + 1)..], offset + first + 1, out var inner))
         {
             return false;
         }
-        if(!Compile(nodes, text[(first + 1)..], offset + first + 1, out var inner))
-        {
-            return false;
-        }
-        if(inner.Type != typeof(bool))
+        if (inner.Type != typeof(bool))
         {
             throw new CompilerException($"Invalid expression type {inner.Type.FullName} passed into Not Operator!", first + offset);
         }
@@ -118,7 +301,7 @@ public static class ParameterCompiler
         expression = null;
         for (int i = 0; i < span.Length; i++)
         {
-            if(span[i] == '(')
+            if (span[i] == '(')
             {
                 if (first < 0)
                 {
@@ -126,35 +309,23 @@ public static class ParameterCompiler
                 }
                 bracketCount++;
             }
-            else if(span[i] == ')')
+            else if (span[i] == ')')
             {
                 bracketCount--;
-                if(bracketCount < 0)
-                {
-                    throw new CompilerException("Unmatched close bracket found!", offset + i);
-                }
-                if(bracketCount == 0)
+                if (bracketCount == 0)
                 {
                     second = i;
                     break;
                 }
             }
             // If we come across a non-bracket non-white-space character before our bracket opens
-            else if(first < 0 && !char.IsWhiteSpace(span[i]))
+            else if (first < 0 && !char.IsWhiteSpace(span[i]))
             {
                 return false;
             }
         }
-        if(first == -1)
-        {
-            return false;
-        }
-        if (second == -1)
-        {
-            throw new CompilerException("Unmatched bracket found!", offset + first);
-        }
-        // If there is anything after the second quote this is an invalid string literal.
-        if (IndexOfFirstNonWhiteSpace(span[(second + 1)..]) >= 0)
+        if (first == -1
+            || IndexOfFirstNonWhiteSpace(span[(second + 1)..]) >= 0)
         {
             return false;
         }
@@ -167,6 +338,10 @@ public static class ParameterCompiler
         expression = null;
         var span = text.Span;
         var start = IndexOfFirstNonWhiteSpace(span);
+        if (start < 0)
+        {
+            return false;
+        }
         var end = start;
         for (; end < span.Length; end++)
         {
@@ -188,10 +363,7 @@ public static class ParameterCompiler
             expression = Variable.CreateVariableForNode(node, innerText, offset + start);
             return true;
         }
-        else
-        {
-            return false;
-        }
+        return false;
     }
 
     private static bool GetStringLiteral(ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
@@ -199,18 +371,14 @@ public static class ParameterCompiler
         var span = text.Span;
         expression = null;
         int first = span.IndexOf('"');
-        if(first == -1 || first != IndexOfFirstNonWhiteSpace(span))
+        if (first == -1 || first != IndexOfFirstNonWhiteSpace(span))
         {
             return false;
         }
         int second = span[(first + 1)..].IndexOf('"');
-        if(second == -1)
-        {
-            throw new CompilerException("Unmatched string quote found!", offset + first);
-        }
         // If there is anything after the second quote this is an invalid string literal.
         // +2 skips the ending quote
-        if(IndexOfFirstNonWhiteSpace(span[(second + first + 2)..]) >= 0)
+        if (IndexOfFirstNonWhiteSpace(span[(second + first + 2)..]) >= 0)
         {
             return false;
         }
@@ -223,6 +391,10 @@ public static class ParameterCompiler
         expression = null;
         var span = text.Span;
         var start = IndexOfFirstNonWhiteSpace(span);
+        if (start < 0)
+        {
+            return false;
+        }
         var end = start;
         for (; end < span.Length; end++)
         {
@@ -251,6 +423,10 @@ public static class ParameterCompiler
         expression = null;
         var span = text.Span;
         var start = IndexOfFirstNonWhiteSpace(span);
+        if (start < 0)
+        {
+            return false;
+        }
         var end = start;
         for (; end < span.Length; end++)
         {
@@ -274,16 +450,20 @@ public static class ParameterCompiler
         expression = null;
         var span = text.Span;
         var start = IndexOfFirstNonWhiteSpace(span);
+        if (start < 0)
+        {
+            return false;
+        }
         var end = start;
         for (; end < span.Length; end++)
         {
-            if(!(char.IsDigit(span[end]) || span[end] == '.'))
+            if (!(char.IsDigit(span[end]) || span[end] == '.'))
             {
                 break;
             }
         }
         // If there was nothing here or if we find any non-white space characters after the end of our number
-        if(end == start
+        if (end == start
             || (end < span.Length && IndexOfFirstNonWhiteSpace(span.Slice(end)) >= 0))
         {
             return false;
@@ -292,16 +472,186 @@ public static class ParameterCompiler
         return true;
     }
 
+    /// <summary>
+    /// Gets the first index of a non-white space character.
+    /// </summary>
+    /// <param name="text">The text to search*</param>
+    /// <returns>The index of the first non-white space character, or -1 if there are none.</returns>
     private static int IndexOfFirstNonWhiteSpace(ReadOnlySpan<char> text)
     {
         for (int i = 0; i < text.Length; i++)
         {
-            if(!char.IsWhiteSpace(text[i]))
+            if (!char.IsWhiteSpace(text[i]))
             {
                 return i;
             }
         }
         return -1;
+    }
+
+    /// <summary>
+    /// Gets the first index starting at the given position that is not inside of a bracket where the character is found.
+    /// If the character does not exist, this will return negative one.
+    /// </summary>
+    /// <param name="text">The text to search.</param>
+    /// <param name="start">The position in the text to start searching.</param>
+    /// <param name="characterToFind">The character that we wish to find.</param>
+    /// <returns>The position the character is found, outside of brackets, or -1 if it is not found.</returns>
+    private static int IndexOfFirstOutsideOfBrackets(ReadOnlySpan<char> text, int start, char characterToFind)
+    {
+        int bracketCounter = 0;
+        bool insideString = false;
+        for (int i = start; i < text.Length; i++)
+        {
+            if (text[i] == '\"')
+            {
+                insideString = !insideString;
+            }
+            else if (!insideString && text[i] == '(')
+            {
+                bracketCounter++;
+            }
+            else if (!insideString && text[i] == ')')
+            {
+                bracketCounter--;
+            }
+            else if (!insideString && text[i] == characterToFind && bracketCounter == 0)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Gets the last index starting at the given position that is not inside of a bracket where the character is found.
+    /// If the character does not exist, this will return negative one.
+    /// </summary>
+    /// <param name="text">The text to search.</param>
+    /// <param name="start">The position in the text to start searching.</param>
+    /// <param name="characterToFind">The character that we wish to find.</param>
+    /// <returns>The position the character is found, outside of brackets, or -1 if it is not found.</returns>
+    private static int IndexOfOutsideOfBrackets(ReadOnlySpan<char> text, int start, char characterToFind)
+    {
+        int bracketCounter = 0;
+        int lastFound = -1;
+        bool insideString = false;
+        for (int i = start; i < text.Length; i++)
+        {
+            if (text[i] == '\"')
+            {
+                insideString = !insideString;
+            }
+            else if (!insideString && text[i] == '(')
+            {
+                bracketCounter++;
+            }
+            else if (!insideString && text[i] == ')')
+            {
+                bracketCounter--;
+            }
+            else if (!insideString && text[i] == characterToFind && bracketCounter == 0)
+            {
+                lastFound = i;
+            }
+        }
+        return lastFound;
+    }
+
+    /// <summary>
+    /// Gets the last index starting at the given position that is not inside of a bracket where the character is found.
+    /// If the string does not exist, this will return negative one.
+    /// </summary>
+    /// <param name="text">The text to search.</param>
+    /// <param name="start">The position in the text to start searching.</param>
+    /// <param name="characterToFind">The character that we wish to find.</param>
+    /// <returns>The position the string is found, outside of brackets, or -1 if it is not found.</returns>
+    private static int IndexOfOutsideOfBrackets(ReadOnlySpan<char> text, int start, string stringToFind)
+    {
+        int bracketCounter = 0;
+        int lastFound = -1;
+        var firstCharacter = stringToFind[0];
+        bool insideString = false;
+        for (int i = start; i < text.Length - stringToFind.Length; i++)
+        {
+            if (text[i] == '\"')
+            {
+                insideString = !insideString;
+            }
+            else if (!insideString && text[i] == '(')
+            {
+                bracketCounter++;
+            }
+            else if (!insideString && text[i] == ')')
+            {
+                bracketCounter--;
+            }
+            else if (!insideString && bracketCounter == 0 && text[i] == firstCharacter)
+            {
+                bool allMatch = true;
+                for (int j = 0; j < stringToFind.Length; j++)
+                {
+                    if (text[i + j] != stringToFind[j])
+                    {
+                        allMatch = false;
+                    }
+                }
+                if (allMatch)
+                {
+                    lastFound = i;
+                }
+            }
+        }
+        return lastFound;
+    }
+
+    /// <summary>
+    /// Detects if we have an invalid set of brackets at the start of the compilation phase.
+    /// </summary>
+    /// <param name="expresionText">The full text of the expression.</param>
+    /// <exception cref="CompilerException">Throws an exception if a miss-matched set of brackets or quotes are found.</exception>
+    private static void ScanForInvalidBrackets(string expresionText)
+    {
+        int bracketCount = 0;
+        int mostOutsideBracketIndex = -1;
+        int lastStringStart = -1;
+        var span = expresionText.AsSpan();
+        bool insideString = false;
+        for (int i = 0; i < span.Length; i++)
+        {
+            if (span[i] == '\"')
+            {
+                insideString = !insideString;
+                if (insideString)
+                {
+                    lastStringStart = i;
+                }
+            }
+            else if (!insideString && span[i] == '(')
+            {
+                if (bracketCount == 0)
+                {
+                    mostOutsideBracketIndex = i;
+                }
+                bracketCount++;
+            }
+            else if (!insideString && span[i] == ')')
+            {
+                bracketCount--;
+                if (bracketCount < 0)
+                {
+                    throw new CompilerException("Invalid closing bracket found!", i);
+                }
+            }
+        }
+        if (bracketCount > 0)
+        {
+            throw new CompilerException("Unmatched bracket found!", mostOutsideBracketIndex);
+        }
+        if (insideString)
+        {
+            throw new CompilerException("Unmatched quote for string literal!", lastStringStart);
+        }
     }
 
     [DoesNotReturn]

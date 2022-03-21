@@ -36,28 +36,36 @@ internal static class TestCompilerHelper
     internal static readonly List<Node> EmptyNodeList = new();
 
     /// <summary>
-    /// Provides a common call site for testing boolean results.
+    /// Provides a common call site for testing script results against an expected value.
     /// </summary>
     /// <param name="text">The text value to test.</param>
     /// <param name="expectedResult">The expected result of the text.</param>
-    internal static void TestBoolean(string text, bool expectedResult, IList<Node> nodes = null)
+    internal static void TestExpression<T>(string text, T expectedResult, IList<Node> nodes = null)
     {
         string error = null;
         if (nodes is null)
         {
             nodes = EmptyNodeList;
         }
-        Assert.IsTrue(ParameterCompiler.CreateExpression(nodes, text, out var expression, ref error), $"Failed to compile {text}");
+        Assert.IsTrue(ParameterCompiler.CreateExpression(nodes, text, out var expression, ref error), $"Failed to compile \"{text}\"!");
         Assert.IsNotNull(expression, "The a null expression was returned!");
-        Assert.AreEqual(typeof(bool), expression.Type);
+        Assert.AreEqual(typeof(T), expression.Type);
         Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is bool boolResult)
+        if (result is T res)
         {
-            Assert.AreEqual(expectedResult, boolResult);
+            if (typeof(T) == typeof(float))
+            {
+                // The object->float conversion will be optimized away by the JIT
+                Assert.AreEqual((float)(object)expectedResult, (float)(object)res, 0.0001f);
+            }
+            else
+            {
+                Assert.AreEqual(expectedResult, res);
+            }
         }
         else
         {
-            Assert.Fail("The result is not an bool!");
+            Assert.Fail($"The result is not a {typeof(T).FullName}!");
         }
     }
 

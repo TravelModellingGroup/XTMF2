@@ -17,9 +17,6 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System.Collections.Generic;
-using XTMF2.ModelSystemConstruct;
-using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
 using static XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler.TestCompilerHelper;
 
@@ -31,20 +28,7 @@ public class TestLiterals
     [TestMethod]
     public void TestIntegerLiteral()
     {
-        string error = null;
-        var text = "12345";
-        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
-        Assert.IsNotNull(expression);
-        Assert.AreEqual(typeof(int), expression.Type);
-        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is int intResult)
-        {
-            Assert.AreEqual(12345, intResult);
-        }
-        else
-        {
-            Assert.Fail("The result is not an integer!");
-        }
+        TestExpression("12345", 12345);
     }
 
     [TestMethod]
@@ -56,20 +40,7 @@ public class TestLiterals
     [TestMethod]
     public void TestFloatLiteral()
     {
-        string error = null;
-        var text = "12345.6";
-        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
-        Assert.IsNotNull(expression);
-        Assert.AreEqual(typeof(float), expression.Type);
-        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is float floatResult)
-        {
-            Assert.AreEqual(12345.6, floatResult, 0.001f);
-        }
-        else
-        {
-            Assert.Fail("The result is not an integer!");
-        }
+        TestExpression("12345.6", 12345.6f);
     }
 
     [TestMethod]
@@ -84,94 +55,45 @@ public class TestLiterals
     [TestMethod]
     public void TestBooleanLiteralTrue()
     {
-        TestBoolean("True", true);
-        TestBoolean("true", true);
+        TestExpression("True", true);
+        TestExpression("true", true);
     }
 
     [TestMethod]
     public void TestBooleanLiteralFalse()
     {
-        TestBoolean("False", false);
-        TestBoolean("false", false);
-    }
-
-    /// <summary>
-    /// Provides a common call site for testing boolean literals.
-    /// </summary>
-    /// <param name="text">The text value to test.</param>
-    /// <param name="expectedResult">The expected result of the text.</param>
-    private static void TestBooleanLiteral(string text, bool expectedResult)
-    {
-        string error = null;
-        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
-        Assert.IsNotNull(expression, "The a null expression was returned!");
-        Assert.AreEqual(typeof(bool), expression.Type);
-        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is bool boolResult)
-        {
-            Assert.AreEqual(expectedResult, boolResult);
-        }
-        else
-        {
-            Assert.Fail("The result is not an bool!");
-        }
+        TestExpression("False", false);
+        TestExpression("false", false);
     }
 
     [TestMethod]
     public void TestStringLiteral()
     {
-        string error = null;
-        var text = "\"12345.6\"";
-        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
-        Assert.IsNotNull(expression);
-        Assert.AreEqual(typeof(string), expression.Type);
-        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is string strResult)
-        {
-            Assert.AreEqual("12345.6", strResult);
-        }
-        else
-        {
-            Assert.Fail("The result is not a string!");
-        }
+        TestExpression("\"12345.6\"", "12345.6");
+    }
+
+    [TestMethod]
+    public void TestStringLiteralMissingLeft()
+    {
+        TestFails("12345.6\"");
+    }
+
+    [TestMethod]
+    public void TestStringLiteralMissingRight()
+    {
+        TestFails("\"12345.6");
     }
 
     [TestMethod]
     public void TestWhitespaceBeforeStringLiteral()
     {
-        string error = null;
-        var text = " \"12345.6\"";
-        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
-        Assert.IsNotNull(expression);
-        Assert.AreEqual(typeof(string), expression.Type);
-        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is string strResult)
-        {
-            Assert.AreEqual("12345.6", strResult);
-        }
-        else
-        {
-            Assert.Fail("The result is not a string!");
-        }
+        TestExpression(" \"12345.6\"", "12345.6");
     }
 
     [TestMethod]
     public void TestWhitespaceAfterStringLiteral()
     {
-        string error = null;
-        var text = "\"12345.6\" ";
-        Assert.IsTrue(ParameterCompiler.CreateExpression(EmptyNodeList, text, out var expression, ref error), $"Failed to compile {text}");
-        Assert.IsNotNull(expression);
-        Assert.AreEqual(typeof(string), expression.Type);
-        Assert.IsTrue(ParameterCompiler.Evaluate(null!, expression, out var result, ref error), error);
-        if (result is string strResult)
-        {
-            Assert.AreEqual("12345.6", strResult);
-        }
-        else
-        {
-            Assert.Fail("The result is not a string!");
-        }
+        TestExpression("\"12345.6\" ", "12345.6");
     }
 
     [TestMethod]

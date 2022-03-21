@@ -37,17 +37,6 @@ public abstract class Expression
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="expression"></param>
-    /// <param name="offset"></param>
-    public Expression(string expression, int offset = 0)
-    {
-        Text = expression.AsMemory();
-        Offset = offset;
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
     /// <param name="expression">The text form of the expression that this represents.</param>
     /// <param name="offset">The offset into the full expression that we start at.</param>
     protected Expression(ReadOnlyMemory<char> expression, int offset)

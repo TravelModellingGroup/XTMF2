@@ -22,85 +22,62 @@ using XTMF2.ModelSystemConstruct;
 using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
 using static XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler.TestCompilerHelper;
-
 namespace XTMF2.UnitTests.ModelSystemConstruct.Parameters.Compiler;
 
 [TestClass]
-public class TestBracket
+public class TestOrOperator
 {
-    /// <summary>
-    /// Gives an empty set of nodes for use in the compiler.
-    /// </summary>
-    private static readonly List<Node> EmptyNodeList = new();
-
     [TestMethod]
-    public void TestBracketIntegerLiteral()
+    public void TestOr()
     {
-        TestExpression("(12345)", 12345);
+        TestExpression("true || true", true);
+        TestExpression("true || false", true);
+        TestExpression("false || true", true);
+        TestExpression("false || false", false);
     }
 
     [TestMethod]
-    public void TestWhitespaceBeforeBracketIntegerLiteral()
+    public void TestOrNoSpaces()
     {
-        TestExpression(" (12345)", 12345);
+        TestExpression("true||true", true);
+        TestExpression("true||false", true);
+        TestExpression("false||true", true);
+        TestExpression("false||false", false);
     }
 
     [TestMethod]
-    public void TestWhitespaceAfterBracketIntegerLiteral()
+    public void TestOrOutsideOfAnd()
     {
-        TestExpression("(12345) ", 12345);
+        TestExpression("true || true && false", true);
     }
 
     [TestMethod]
-    public void TestDoubleBracketIntegerLiteral()
+    public void TestOrInString()
     {
-        TestExpression("((12345))", 12345);
+        TestExpression("\"true || true\"", "true || true");
     }
 
     [TestMethod]
-    public void TestTooManyOpenBrackets()
+    public void TestOrWithIntegers()
     {
-        TestFails("((12345)");
+        TestFails("1||2");
     }
 
     [TestMethod]
-    public void TestTooManyCloseBrackets()
+    public void TestOrWithFloats()
     {
-        TestFails("(12345))");
+        TestFails("1.0||2.0");
     }
 
     [TestMethod]
-    public void TestTextBeforeBracket()
+    public void TestOrWithStrings()
     {
-        TestFails("asd (12345)");
+        TestFails("\"1.0\"||\"2.0\"");
     }
 
     [TestMethod]
-    public void TestTextAfterBracket()
+    public void TestOrOutsideOfEquals()
     {
-        TestFails("(12345) asd");
-    }
-
-    [TestMethod]
-    public void TestCloseBracketFirst()
-    {
-        TestFails(")(12345)");
-    }
-    [TestMethod]
-    public void TestCloseBracketBeforeOpen()
-    {
-        TestFails(")(12345)(");
-    }
-
-    [TestMethod]
-    public void TestOpenBracketInString()
-    {
-        TestExpression("\"(\"", "(");
-    }
-
-    [TestMethod]
-    public void TestCloseBracketInString()
-    {
-        TestExpression("\")\"", ")");
+        TestExpression("false || true == false", false);
     }
 }
