@@ -473,16 +473,6 @@ public static class ParameterCompiler
     }
 
     /// <summary>
-    /// Used for checking to see if the remaining text is empty or only white space.
-    /// </summary>
-    /// <param name="text">The text to check</param>
-    /// <returns>True if the text is empty or only white space</returns>
-    private static bool IsOnlyWhitespace(ReadOnlyMemory<char> text)
-    {
-        return IndexOfFirstNonWhiteSpace(text.Span) <= 0;
-    }
-
-    /// <summary>
     /// Gets the first index of a non-white space character.
     /// </summary>
     /// <param name="text">The text to search*</param>
