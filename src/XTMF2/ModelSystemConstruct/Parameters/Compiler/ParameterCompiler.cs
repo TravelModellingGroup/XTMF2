@@ -250,23 +250,13 @@ public static class ParameterCompiler
         lhs = null;
         rhs = null;
         var span = text.Span;
+        int operatorIndex;
         startOfLHS = IndexOfFirstNonWhiteSpace(span);
-        if (startOfLHS < 0)
-        {
-            return false;
-        }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, operatorCharacter);
-        // if there was no plus we can exit
-        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
-        {
-            return false;
-        }
-        if (!Compile(nodes, text.Slice(startOfLHS, operatorIndex - startOfLHS), offset + startOfLHS, out lhs)
-            || !Compile(nodes, text[(operatorIndex + 1)..], offset + operatorIndex + 1, out rhs))
-        {
-            return false;
-        }
-        return true;
+        return (startOfLHS >= 0
+            && (operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, operatorCharacter)) >= 0
+            && operatorIndex > startOfLHS
+            && Compile(nodes, text.Slice(startOfLHS, operatorIndex - startOfLHS), offset + startOfLHS, out lhs)
+            && Compile(nodes, text[(operatorIndex + 1)..], offset + operatorIndex + 1, out rhs));
     }
 
     private static bool GetBinaryOperator(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, string operatorCharacter, out int startOfLHS, [NotNullWhen(true)] out Expression? lhs, [NotNullWhen(true)] out Expression? rhs)
@@ -274,23 +264,13 @@ public static class ParameterCompiler
         lhs = null;
         rhs = null;
         var span = text.Span;
+        int operatorIndex;
         startOfLHS = IndexOfFirstNonWhiteSpace(span);
-        if (startOfLHS < 0)
-        {
-            return false;
-        }
-        int operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, operatorCharacter);
-        // if there was no plus we can exit
-        if (operatorIndex <= -1 || operatorIndex == startOfLHS)
-        {
-            return false;
-        }
-        if (!Compile(nodes, text.Slice(startOfLHS, operatorIndex - startOfLHS), offset + startOfLHS, out lhs)
-            || !Compile(nodes, text[(operatorIndex + operatorCharacter.Length)..], offset + operatorIndex + operatorCharacter.Length, out rhs))
-        {
-            return false;
-        }
-        return true;
+        return (startOfLHS >= 0
+            && (operatorIndex = IndexOfOutsideOfBrackets(span, startOfLHS, operatorCharacter)) >= 0
+            && operatorIndex > startOfLHS
+            && Compile(nodes, text.Slice(startOfLHS, operatorIndex - startOfLHS), offset + startOfLHS, out lhs)
+            && Compile(nodes, text[(operatorIndex + operatorCharacter.Length)..], offset + operatorIndex + operatorCharacter.Length, out rhs));
     }
 
     private static bool GetNot(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
@@ -298,15 +278,9 @@ public static class ParameterCompiler
         expression = null;
         var span = text.Span;
         var first = IndexOfFirstNonWhiteSpace(span);
-        if (first == -1)
-        {
-            return false;
-        }
-        if (span[first] != '!')
-        {
-            return false;
-        }
-        if (!Compile(nodes, text[(first + 1)..], offset + first + 1, out var inner))
+        if (first == -1
+            || span[first] != '!'
+            || !Compile(nodes, text[(first + 1)..], offset + first + 1, out var inner))
         {
             return false;
         }
@@ -338,10 +312,6 @@ public static class ParameterCompiler
             else if (span[i] == ')')
             {
                 bracketCount--;
-                if (bracketCount < 0)
-                {
-                    throw new CompilerException("Unmatched close bracket found!", offset + i);
-                }
                 if (bracketCount == 0)
                 {
                     second = i;
@@ -354,16 +324,8 @@ public static class ParameterCompiler
                 return false;
             }
         }
-        if (first == -1)
-        {
-            return false;
-        }
-        if (second == -1)
-        {
-            throw new CompilerException("Unmatched bracket found!", offset + first);
-        }
-        // If there is anything after the second quote this is an invalid string literal.
-        if (IndexOfFirstNonWhiteSpace(span[(second + 1)..]) >= 0)
+        if (first == -1
+            || IndexOfFirstNonWhiteSpace(span[(second + 1)..]) >= 0)
         {
             return false;
         }
@@ -401,10 +363,7 @@ public static class ParameterCompiler
             expression = Variable.CreateVariableForNode(node, innerText, offset + start);
             return true;
         }
-        else
-        {
-            return false;
-        }
+        return false;
     }
 
     private static bool GetStringLiteral(ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
@@ -417,10 +376,6 @@ public static class ParameterCompiler
             return false;
         }
         int second = span[(first + 1)..].IndexOf('"');
-        if (second == -1)
-        {
-            throw new CompilerException("Unmatched string quote found!", offset + first);
-        }
         // If there is anything after the second quote this is an invalid string literal.
         // +2 skips the ending quote
         if (IndexOfFirstNonWhiteSpace(span[(second + first + 2)..]) >= 0)
