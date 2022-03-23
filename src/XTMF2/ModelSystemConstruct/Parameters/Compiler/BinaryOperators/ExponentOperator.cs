@@ -41,8 +41,8 @@ internal sealed class ExponentOperator : Expression
     /// </summary>
     /// <param name="lhs">The expression for the left hand side.</param>
     /// <param name="rhs">The expression for the right hand side.</param>
-    /// <param name="expression">The string representation of the add.</param>
-    /// <param name="offset">The offset into the full expression that this add starts at.</param>
+    /// <param name="expression">The string representation of the exponent.</param>
+    /// <param name="offset">The offset into the full expression that this exponent starts at.</param>
     public ExponentOperator(Expression lhs, Expression rhs, ReadOnlyMemory<char> expression, int offset) : base(expression, offset)
     {
         _lhs = lhs;
@@ -69,7 +69,7 @@ internal sealed class ExponentOperator : Expression
             }
             else
             {
-                return new ErrorResult($"Unknown type pair for addition, {_lhs.Type.FullName} and {_rhs.Type.FullName}!", _lhs.Type);
+                return new ErrorResult($"Unknown type pair for exponent, {_lhs.Type.FullName} and {_rhs.Type.FullName}!", _lhs.Type);
             }
         }
         return errorResult;
@@ -110,11 +110,11 @@ internal sealed class ExponentOperator : Expression
     {
         if (lhs.Type != rhs.Type)
         {
-            throw new CompilerException($"The LHS and RHS of the add operation are not of the same type! LHS = {lhs.Type.FullName}, RHS = {rhs.Type.FullName}", offset);
+            throw new CompilerException($"The LHS and RHS of the exponent operator are not of the same type! LHS = {lhs.Type.FullName}, RHS = {rhs.Type.FullName}", offset);
         }
         else if(Array.IndexOf(_SupportedTypes, lhs.Type) < 0)
         {
-            throw new CompilerException($"The + operator does not support the type {lhs.Type.FullName}!", offset);
+            throw new CompilerException($"The ^ operator does not support the type {lhs.Type.FullName}!", offset);
         }
     }
 }
