@@ -82,6 +82,7 @@ public static class ParameterCompiler
             || GetSubtract(nodes, text, offset, out expression)
             || GetMultiply(nodes, text, offset, out expression)
             || GetDivide(nodes, text, offset, out expression)
+            || GetExponent(nodes, text, offset, out expression)
             || GetNot(nodes, text, offset, out expression)
             || GetBracket(nodes, text, offset, out expression)
             || GetVariable(nodes, text, offset, out expression)
@@ -200,6 +201,13 @@ public static class ParameterCompiler
     {
         expression = GetBinaryOperator(nodes, text, offset, '/', out var startOfLHS, out var lhs, out var rhs) ?
             new DivideOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
+        return expression is not null;
+    }
+
+    private static bool GetExponent(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
+    {
+        expression = GetBinaryOperator(nodes, text, offset, '^', out var startOfLHS, out var lhs, out var rhs) ?
+            new ExponentOperator(lhs, rhs, text[startOfLHS..], startOfLHS + offset) : null;
         return expression is not null;
     }
 
