@@ -20,7 +20,7 @@ operating XTMF2.
 
 ### Requirements
 
-1. DotNet Core 3.0+ SDK
+1. DotNet Core 6.0+ SDK
 
 ### Clone the XTMF2 repository
 
@@ -28,9 +28,9 @@ operating XTMF2.
 
 ### Compile from command line
 
-> dotnet build
+> dotnet build -c Release
 
-> dotnet test
+> dotnet test -c Release
 
 
 ## Main Branches
