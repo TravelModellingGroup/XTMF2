@@ -35,6 +35,12 @@ public class TestSubtractOperator
     }
 
     [TestMethod]
+    public void TestSubtractFloat()
+    {
+        TestExpression("123.0 - 312.0", -189.0f);
+    }
+
+    [TestMethod]
     public void TestMultipleSubtracts()
     {
         TestExpression("1 - 2 - 3", -4);
@@ -62,5 +68,77 @@ public class TestSubtractOperator
     public void TestSubtractAtEndFails()
     {
         TestFails("1 -");
+    }
+
+    [TestMethod]
+    public void TestMixedIntFloatSubtract()
+    {
+        TestFails("1.0 - 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrSubtract()
+    {
+        TestFails("1 - \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanSubtract()
+    {
+        TestFails("1 - true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntSubtract()
+    {
+        TestFails("1.0 - 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrSubtract()
+    {
+        TestFails("1.0 - \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanSubtract()
+    {
+        TestFails("1.0 - true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntSubtract()
+    {
+        TestFails("\"1\" - 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatSubtract()
+    {
+        TestFails("\"1\" - 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanSubtract()
+    {
+        TestFails("\"1.0\" - true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntSubtract()
+    {
+        TestFails("true - 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatSubtract()
+    {
+        TestFails("true - 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrSubtract()
+    {
+        TestFails("true - \"true\"");
     }
 }

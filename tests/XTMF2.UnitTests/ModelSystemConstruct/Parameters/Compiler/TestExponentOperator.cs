@@ -77,4 +77,76 @@ public class TestExponentOperator
     {
         TestFails("^ 1");
     }
+
+    [TestMethod]
+    public void TestMixedIntFloatExponent()
+    {
+        TestFails("1.0 ^ 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrExponent()
+    {
+        TestFails("1 ^ \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanExponent()
+    {
+        TestFails("1 ^ true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntExponent()
+    {
+        TestFails("1.0 ^ 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrExponent()
+    {
+        TestFails("1.0 ^ \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanExponent()
+    {
+        TestFails("1.0 ^ true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntExponent()
+    {
+        TestFails("\"1\" ^ 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatExponent()
+    {
+        TestFails("\"1\" ^ 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanExponent()
+    {
+        TestFails("\"1.0\" ^ true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntExponent()
+    {
+        TestFails("true ^ 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatExponent()
+    {
+        TestFails("true ^ 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrExponent()
+    {
+        TestFails("true ^ \"true\"");
+    }
 }

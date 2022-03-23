@@ -36,6 +36,19 @@ public class TestDivideOperator
     }
 
     [TestMethod]
+    public void TestDivideFloat()
+    {
+        TestExpression("123.0 / 312.0", 0.3942307f);
+        TestExpression("123.0 / 122.0", 1.0081967f);
+    }
+
+    [TestMethod]
+    public void TestDivideBool()
+    {
+        TestFails("true / false");
+    }
+
+    [TestMethod]
     public void TestMultipleDivisions()
     {
         TestExpression("1 / 2 / 3", 0);
@@ -69,5 +82,77 @@ public class TestDivideOperator
     public void TestDivideAtStartFails()
     {
         TestFails("/ 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntFloatDivide()
+    {
+        TestFails("1.0 / 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrDivide()
+    {
+        TestFails("1 / \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanDivide()
+    {
+        TestFails("1 / true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntDivide()
+    {
+        TestFails("1.0 / 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrDivide()
+    {
+        TestFails("1.0 / \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanDivide()
+    {
+        TestFails("1.0 / true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntDivide()
+    {
+        TestFails("\"1\" / 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatDivide()
+    {
+        TestFails("\"1\" / 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanDivide()
+    {
+        TestFails("\"1.0\" / true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntDivide()
+    {
+        TestFails("true / 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatDivide()
+    {
+        TestFails("true / 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrDivide()
+    {
+        TestFails("true / \"true\"");
     }
 }

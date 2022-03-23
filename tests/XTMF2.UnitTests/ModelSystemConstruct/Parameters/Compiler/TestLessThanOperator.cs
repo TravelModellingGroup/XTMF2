@@ -69,4 +69,76 @@ public class TestLessThanOperator
     {
         TestExpression("\"1<2\"", "1<2");
     }
+
+    [TestMethod]
+    public void TestMixedIntFloatLessThan()
+    {
+        TestFails("1.0 < 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrLessThan()
+    {
+        TestFails("1 < \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanLessThan()
+    {
+        TestFails("1 < true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntLessThan()
+    {
+        TestFails("1.0 < 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrLessThan()
+    {
+        TestFails("1.0 < \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanLessThan()
+    {
+        TestFails("1.0 < true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntLessThan()
+    {
+        TestFails("\"1\" < 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatLessThan()
+    {
+        TestFails("\"1\" < 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanLessThan()
+    {
+        TestFails("\"1.0\" < true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntLessThan()
+    {
+        TestFails("true < 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatLessThan()
+    {
+        TestFails("true < 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrLessThan()
+    {
+        TestFails("true < \"true\"");
+    }
 }

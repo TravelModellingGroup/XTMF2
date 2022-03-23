@@ -97,4 +97,76 @@ public class TestEqualsOperator
         TestExpression("123 >= 312 == true", false);
         TestExpression("312 >= 123 == true", true);
     }
+
+    [TestMethod]
+    public void TestMixedIntFloatEquals()
+    {
+        TestFails("1.0 == 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrEquals()
+    {
+        TestFails("1 == \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanEquals()
+    {
+        TestFails("1 == true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntEquals()
+    {
+        TestFails("1.0 == 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrEquals()
+    {
+        TestFails("1.0 == \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanEquals()
+    {
+        TestFails("1.0 == true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntEquals()
+    {
+        TestFails("\"1\" == 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatEquals()
+    {
+        TestFails("\"1\" == 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanEquals()
+    {
+        TestFails("\"1.0\" == true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntEquals()
+    {
+        TestFails("true == 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatEquals()
+    {
+        TestFails("true == 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrEquals()
+    {
+        TestFails("true == \"true\"");
+    }
 }

@@ -35,6 +35,12 @@ public class TestMultiplyOperator
     }
 
     [TestMethod]
+    public void TestMultiplyFloat()
+    {
+        TestExpression("123.0 * 312.0", 38376.0f);
+    }
+
+    [TestMethod]
     public void TestMultipleMultiplications()
     {
         TestExpression("1 * 2 * 3", 6);
@@ -74,5 +80,77 @@ public class TestMultiplyOperator
     public void TestMultiplyInString()
     {
         TestExpression("\"1*2\"", "1*2");
+    }
+
+    [TestMethod]
+    public void TestMixedIntFloatMultiply()
+    {
+        TestFails("1.0 * 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrMultiply()
+    {
+        TestFails("1 * \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanMultiply()
+    {
+        TestFails("1 * true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntMultiply()
+    {
+        TestFails("1.0 * 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrMultiply()
+    {
+        TestFails("1.0 * \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanMultiply()
+    {
+        TestFails("1.0 * true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntMultiply()
+    {
+        TestFails("\"1\" * 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatMultiply()
+    {
+        TestFails("\"1\" * 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanMultiply()
+    {
+        TestFails("\"1.0\" * true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntMultiply()
+    {
+        TestFails("true * 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatMultiply()
+    {
+        TestFails("true * 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrMultiply()
+    {
+        TestFails("true * \"true\"");
     }
 }

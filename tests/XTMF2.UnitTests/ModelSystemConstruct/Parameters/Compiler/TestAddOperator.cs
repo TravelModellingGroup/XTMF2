@@ -111,4 +111,77 @@ public class TestAddOperator
     {
         TestExpression("\"1+2\"", "1+2");
     }
+
+    [TestMethod]
+    public void TestMixedIntFloatAdd()
+    {
+        TestFails("1.0 + 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrAdd()
+    {
+        TestFails("1 + \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanAdd()
+    {
+        TestFails("1 + true");
+    }
+
+
+    [TestMethod]
+    public void TestMixedFloatIntAdd()
+    {
+        TestFails("1.0 + 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrAdd()
+    {
+        TestFails("1.0 + \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanAdd()
+    {
+        TestFails("1.0 + true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntAdd()
+    {
+        TestFails("\"1\" + 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatAdd()
+    {
+        TestFails("\"1\" + 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanAdd()
+    {
+        TestFails("\"1.0\" + true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntAdd()
+    {
+        TestFails("true + 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatAdd()
+    {
+        TestFails("true + 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrAdd()
+    {
+        TestFails("true + \"true\"");
+    }
 }

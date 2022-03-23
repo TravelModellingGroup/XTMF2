@@ -70,4 +70,76 @@ public class TestLessThanOrEqualsOperator
     {
         TestExpression("\"1<=2\"", "1<=2");
     }
+
+    [TestMethod]
+    public void TestMixedIntFloatLessThanOrEquals()
+    {
+        TestFails("1.0 <= 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrLessThanOrEquals()
+    {
+        TestFails("1 <= \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanLessThanOrEquals()
+    {
+        TestFails("1 <= true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntLessThanOrEquals()
+    {
+        TestFails("1.0 <= 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrLessThanOrEquals()
+    {
+        TestFails("1.0 <= \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanLessThanOrEquals()
+    {
+        TestFails("1.0 <= true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntLessThanOrEquals()
+    {
+        TestFails("\"1\" <= 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatLessThanOrEquals()
+    {
+        TestFails("\"1\" <= 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanLessThanOrEquals()
+    {
+        TestFails("\"1.0\" <= true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntLessThanOrEquals()
+    {
+        TestFails("true <= 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatLessThanOrEquals()
+    {
+        TestFails("true <= 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrLessThanOrEquals()
+    {
+        TestFails("true <= \"true\"");
+    }
 }
