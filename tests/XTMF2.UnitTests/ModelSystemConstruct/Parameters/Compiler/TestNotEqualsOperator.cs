@@ -97,4 +97,76 @@ public class TestNotEqualsOperator
         TestExpression("123 >= 312 != true", true);
         TestExpression("312 >= 123 != true", false);
     }
+
+    [TestMethod]
+    public void TestMixedIntFloatNotEquals()
+    {
+        TestFails("1.0 != 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrNotEquals()
+    {
+        TestFails("1 != \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanNotEquals()
+    {
+        TestFails("1 != true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntNotEquals()
+    {
+        TestFails("1.0 != 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrNotEquals()
+    {
+        TestFails("1.0 != \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanNotEquals()
+    {
+        TestFails("1.0 != true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntNotEquals()
+    {
+        TestFails("\"1\" != 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatNotEquals()
+    {
+        TestFails("\"1\" != 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanNotEquals()
+    {
+        TestFails("\"1.0\" != true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntNotEquals()
+    {
+        TestFails("true != 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatNotEquals()
+    {
+        TestFails("true != 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrNotEquals()
+    {
+        TestFails("true != \"true\"");
+    }
 }

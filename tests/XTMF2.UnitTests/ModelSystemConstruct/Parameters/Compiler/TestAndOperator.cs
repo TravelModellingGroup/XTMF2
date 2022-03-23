@@ -74,4 +74,76 @@ public class TestAndOperator
     {
         TestExpression("true && false == false", true);
     }
+
+    [TestMethod]
+    public void TestMixedIntFloatAnd()
+    {
+        TestFails("1.0 && 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrAnd()
+    {
+        TestFails("1 && \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanAnd()
+    {
+        TestFails("1 && true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntAnd()
+    {
+        TestFails("1.0 && 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrAnd()
+    {
+        TestFails("1.0 && \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanAnd()
+    {
+        TestFails("1.0 && true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntAnd()
+    {
+        TestFails("\"1\" && 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatAnd()
+    {
+        TestFails("\"1\" && 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanAnd()
+    {
+        TestFails("\"1.0\" && true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntAnd()
+    {
+        TestFails("true && 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatAnd()
+    {
+        TestFails("true && 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrAnd()
+    {
+        TestFails("true && \"true\"");
+    }
 }

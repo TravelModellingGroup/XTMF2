@@ -124,4 +124,76 @@ public class TestSelectOperator
     {
         TestExpression("\"true?1:0\"", "true?1:0");
     }
+
+    [TestMethod]
+    public void TestMixedIntFloatSelect()
+    {
+        TestFails("true ? 1.0 : 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrSelect()
+    {
+        TestFails("true ? 1 : \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanSelect()
+    {
+        TestFails("true ? 1 : true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntSelect()
+    {
+        TestFails("true ? 1.0 : 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrSelect()
+    {
+        TestFails("true ? 1.0 : \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanSelect()
+    {
+        TestFails("true ? 1.0 : true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntSelect()
+    {
+        TestFails("true ? \"1\" : 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatSelect()
+    {
+        TestFails("true ? \"1\" : 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanSelect()
+    {
+        TestFails("true ? \"1.0\" : true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntSelect()
+    {
+        TestFails("true ? true : 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatSelect()
+    {
+        TestFails("true ? true : 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrSelect()
+    {
+        TestFails("true ? true : \"true\"");
+    }
 }

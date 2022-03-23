@@ -80,4 +80,76 @@ public class TestOrOperator
     {
         TestExpression("false || true == false", false);
     }
+
+    [TestMethod]
+    public void TestMixedIntFloatOr()
+    {
+        TestFails("1.0 || 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrOr()
+    {
+        TestFails("1 || \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanOr()
+    {
+        TestFails("1 || true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntOr()
+    {
+        TestFails("1.0 || 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrOr()
+    {
+        TestFails("1.0 || \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanOr()
+    {
+        TestFails("1.0 || true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntOr()
+    {
+        TestFails("\"1\" || 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatOr()
+    {
+        TestFails("\"1\" || 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanOr()
+    {
+        TestFails("\"1.0\" || true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntOr()
+    {
+        TestFails("true || 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatOr()
+    {
+        TestFails("true || 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrOr()
+    {
+        TestFails("true || \"true\"");
+    }
 }

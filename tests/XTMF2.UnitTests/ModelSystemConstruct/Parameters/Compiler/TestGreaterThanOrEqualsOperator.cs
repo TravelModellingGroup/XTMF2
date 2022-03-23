@@ -70,4 +70,76 @@ public class TestGreaterThanOrEqualsOperator
     {
         TestExpression("\"1>=2\"", "1>=2");
     }
+
+    [TestMethod]
+    public void TestMixedIntFloatGreatherThanOrEqual()
+    {
+        TestFails("1.0 >= 1");
+    }
+
+    [TestMethod]
+    public void TestMixedIntStrGreatherThanOrEqual()
+    {
+        TestFails("1 >= \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedIntBooleanGreatherThanOrEqual()
+    {
+        TestFails("1 >= true");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatIntGreatherThanOrEqual()
+    {
+        TestFails("1.0 >= 1");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatStrGreatherThanOrEqual()
+    {
+        TestFails("1.0 >= \"Hello\"");
+    }
+
+    [TestMethod]
+    public void TestMixedFloatBooleanGreatherThanOrEqual()
+    {
+        TestFails("1.0 >= true");
+    }
+
+    [TestMethod]
+    public void TestMixedStrIntGreatherThanOrEqual()
+    {
+        TestFails("\"1\" >= 1");
+    }
+
+    [TestMethod]
+    public void TestMixedStrFloatGreatherThanOrEqual()
+    {
+        TestFails("\"1\" >= 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedStrBooleanGreatherThanOrEqual()
+    {
+        TestFails("\"1.0\" >= true");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanIntGreatherThanOrEqual()
+    {
+        TestFails("true >= 1");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanFloatGreatherThanOrEqual()
+    {
+        TestFails("true >= 1.0");
+    }
+
+    [TestMethod]
+    public void TestMixedBooleanStrGreatherThanOrEqual()
+    {
+        TestFails("true >= \"true\"");
+    }
 }
