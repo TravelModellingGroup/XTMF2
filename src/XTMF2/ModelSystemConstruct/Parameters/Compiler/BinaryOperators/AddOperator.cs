@@ -51,7 +51,7 @@ internal sealed class AddOperator : Expression
     }
 
     /// <inheritdoc/>
-    public override Type Type => _lhs.Type;
+    public override Type Type => _rhs.Type == typeof(string) ? typeof(string) : _lhs.Type;
 
     /// <inheritdoc/>
     internal override Result GetResult(IModule caller)
@@ -59,17 +59,17 @@ internal sealed class AddOperator : Expression
         if (GetResult(caller, _lhs, out var lhs, out var errorResult)
             && GetResult(caller, _rhs, out var rhs, out errorResult))
         {
-            if (lhs is int l && rhs is int r)
+            if(CheckForStringConversion(lhs, rhs, out var convertedString))
+            {
+                return convertedString;
+            }
+            else if (lhs is int l && rhs is int r)
             {
                 return new IntegerResult(l + r);
             }
             else if(lhs is float lf && rhs is float rf)
             {
                 return new FloatResult(lf + rf);
-            }
-            else if(lhs is string ls && rhs is string rs)
-            {
-                return new StringResult(ls + rs);
             }
             else
             {
@@ -80,6 +80,26 @@ internal sealed class AddOperator : Expression
     }
 
     /// <summary>
+    /// Check to see if this is a string conversion, and if so
+    /// </summary>
+    /// <param name="lhs"></param>
+    /// <param name="rhs"></param>
+    /// <param name="convertedString"></param>
+    /// <returns></returns>
+    private static bool CheckForStringConversion(object lhs, object rhs, [NotNullWhen(true)] out Result? convertedString)
+    {
+        var l = lhs as string;
+        var r = rhs as string;
+        convertedString = null;
+        if(l is null && r is null)
+        {
+            return false;
+        }
+        convertedString = l is not null ? new StringResult(l + rhs!.ToString()) : new StringResult(lhs.ToString() + r);
+        return true;
+    }
+
+    /// <summary>
     /// Gets the result for the given expression.
     /// </summary>
     /// <param name="caller">The module that has requested this expression to be evaluated.</param>
@@ -87,7 +107,7 @@ internal sealed class AddOperator : Expression
     /// <param name="result">The result from the expression, 0 if false.</param>
     /// <param name="errorResult">If false it will contain the error message from the expression.</param>
     /// <returns>Returns true if we were able to get the result of the expression, false otherwise with the error result.</returns>
-    private static bool GetResult(IModule caller, Expression child, out object? result, [NotNullWhen(false)] out Result? errorResult)
+    private static bool GetResult(IModule caller, Expression child, [NotNullWhen(true)]out object? result, [NotNullWhen(false)] out Result? errorResult)
     {
         string? error = null;
         errorResult = null;
@@ -112,11 +132,12 @@ internal sealed class AddOperator : Expression
     /// <exception cref="CompilerException">Throws a compiler exception of the types are not compatible.</exception>
     private static void TestTypes(Expression lhs, Expression rhs, int offset)
     {
-        if (lhs.Type != rhs.Type)
+        var oneSideIsString = lhs.Type == typeof(string) || rhs.Type == typeof(string);
+        if (lhs.Type != rhs.Type && !oneSideIsString)
         {
-            throw new CompilerException($"The LHS and RHS of the add operation are not of the same type! LHS = {lhs.Type.FullName}, RHS = {rhs.Type.FullName}", offset);
+            throw new CompilerException($"The LHS and RHS of the add operation are not of the same type unless adding with a string.! LHS = {lhs.Type.FullName}, RHS = {rhs.Type.FullName}", offset);
         }
-        else if(Array.IndexOf(_SupportedTypes, lhs.Type) < 0)
+        else if(!oneSideIsString && Array.IndexOf(_SupportedTypes, lhs.Type) < 0)
         {
             throw new CompilerException($"The + operator does not support the type {lhs.Type.FullName}!", offset);
         }

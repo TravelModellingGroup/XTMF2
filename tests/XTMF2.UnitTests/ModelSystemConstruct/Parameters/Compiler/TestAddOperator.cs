@@ -121,7 +121,7 @@ public class TestAddOperator
     [TestMethod]
     public void TestMixedIntStrAdd()
     {
-        TestFails("1 + \"Hello\"");
+        TestExpression("1 + \"Hello\"", "1Hello");
     }
 
     [TestMethod]
@@ -140,7 +140,7 @@ public class TestAddOperator
     [TestMethod]
     public void TestMixedFloatStrAdd()
     {
-        TestFails("1.0 + \"Hello\"");
+        TestExpression("1.2 + \"Hello\"", "1.2Hello");
     }
 
     [TestMethod]
@@ -152,19 +152,19 @@ public class TestAddOperator
     [TestMethod]
     public void TestMixedStrIntAdd()
     {
-        TestFails("\"1\" + 1");
+        TestExpression("\"1\" + 1", "11");
     }
 
     [TestMethod]
     public void TestMixedStrFloatAdd()
     {
-        TestFails("\"1\" + 1.0");
+        TestExpression("\"1\" + 1.1", "11.1");
     }
 
     [TestMethod]
     public void TestMixedStrBooleanAdd()
     {
-        TestFails("\"1.0\" + true");
+        TestExpression("\"1.0\" + true","1.0True");
     }
 
     [TestMethod]
@@ -182,6 +182,6 @@ public class TestAddOperator
     [TestMethod]
     public void TestMixedBooleanStrAdd()
     {
-        TestFails("true + \"true\"");
+        TestExpression("true + \"true\"", "Truetrue");
     }
 }
