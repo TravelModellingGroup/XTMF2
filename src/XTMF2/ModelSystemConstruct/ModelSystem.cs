@@ -28,6 +28,7 @@ using System.IO;
 using XTMF2.Repository;
 using XTMF2.ModelSystemConstruct;
 using System.Diagnostics.CodeAnalysis;
+using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
 namespace XTMF2
 {
@@ -82,6 +83,11 @@ namespace XTMF2
         /// A reference to the information stored at the project level.
         /// </summary>
         internal ModelSystemHeader Header { get; private set; }
+
+        /// <summary>
+        /// The nodes which are allowed to be used as a variable for parameter expressions
+        /// </summary>
+        public IList<Node> Variables { get; internal set; } = Array.Empty<Node>();
 
         private const string GlobalBoundaryName = "global";
         private const string IndexProperty = "Index";
@@ -273,7 +279,8 @@ namespace XTMF2
             }
         }
 
-        private static ModelSystem? Load(Stream rawStream, ModuleRepository modules, ModelSystemHeader modelSystemHeader, [NotNullWhen(false)] ref string? error)
+        private static ModelSystem? Load(Stream rawStream, ModuleRepository modules, ModelSystemHeader modelSystemHeader,
+            [NotNullWhen(false)] ref string? error)
         {
             try
             {
@@ -283,6 +290,7 @@ namespace XTMF2
                 var reader = new Utf8JsonReader(stream.GetBuffer().AsSpan());
                 var typeLookup = new Dictionary<int, Type>();
                 var nodes = new Dictionary<int, Node>();
+                List<(Node toAssignTo, string parameterExpression)> scriptedParameters = new();
                 while (reader.Read())
                 {
                     if (reader.TokenType == JsonTokenType.PropertyName)
@@ -296,7 +304,7 @@ namespace XTMF2
                         }
                         else if (reader.ValueTextEquals(BoundariesProperty))
                         {
-                            if (!LoadBoundaries(modules, typeLookup, nodes, ref reader, modelSystem.GlobalBoundary, ref error))
+                            if (!LoadBoundaries(modules, typeLookup, nodes, scriptedParameters, ref reader, modelSystem.GlobalBoundary, ref error))
                             {
                                 return null;
                             }
@@ -307,6 +315,14 @@ namespace XTMF2
                             error = $"Unknown token found '{reader.GetString()}'";
                             return null;
                         }
+                    }
+                }
+                // Now that all of the modules have been loaded we can process the scripted parameters
+                foreach (var (toAssignTo, parameterExpression) in scriptedParameters)
+                {
+                    if(!toAssignTo.SetParameterExpression(modelSystem.Variables, parameterExpression, out CommandError? cmdError))
+                    {
+                        // TODO: Think about what to do in order to heal the model system
                     }
                 }
                 return modelSystem;
@@ -382,7 +398,7 @@ namespace XTMF2
         }
 
         private static bool LoadBoundaries(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
-            ref Utf8JsonReader reader, Boundary global, [NotNullWhen(false)] ref string? error)
+            List<(Node toAssignTo, string parameterExpression)> scriptedParameters, ref Utf8JsonReader reader, Boundary global, [NotNullWhen(false)] ref string? error)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
@@ -394,7 +410,7 @@ namespace XTMF2
                 return FailWith(out error, "Unexpected end of file when loading boundaries!");
             }
 
-            if(!global.Load(modules, typeLookup, nodes, ref reader, ref error))
+            if(!global.Load(modules, typeLookup, nodes, scriptedParameters, ref reader, ref error))
             {
                 return false;
             }

@@ -154,6 +154,38 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
+        /// <summary>
+        /// Set the value of a parameter that is an expression.  This will
+        /// modify the node's type if required.
+        /// </summary>
+        /// <param name="variables">The nodes that can be used as a variable.</param>
+        /// <param name="value">The value to change the parameter to.</param>
+        /// <param name="error">A description of the error if one occurs</param>
+        /// <returns>True if the operation was successful, false otherwise</returns>
+        internal bool SetParameterExpression(IList<Node> variables, string value, [NotNullWhen(false)] out CommandError? error)
+        {
+            // ensure that the value is allowed
+            if (Type == null)
+            {
+                return FailWith(out error, "Unable to set the parameter value of a node that lacks a type!");
+            }
+            string? errorString = null;
+            // TODO: Add in the logic for how to select what nodes are available to use as variables
+            if (!ParameterCompiler.CreateExpression(variables, value, out var expression, ref errorString))
+            {
+                return FailWith(out error, errorString);
+            }
+            var parameterExpression = ParameterExpression.CreateParameter(expression);
+            if (!parameterExpression.IsCompatible(Type.GenericTypeArguments[0], ref errorString))
+            {
+                return FailWith(out error, $"Unable to create a parse the value {value} for type {Type.GenericTypeArguments[0].FullName}!");
+            }
+            ParameterValue = parameterExpression;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ParameterValue)));
+            error = null;
+            return true;
+        }
+
         internal bool Validate(ref string? moduleName, ref string? error)
         {
             foreach (var hook in Hooks)
@@ -349,7 +381,7 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteNumber(IndexProperty, index++);
             if (ParameterValue is not null)
             {
-                writer.WriteString(ParameterProperty, ParameterValue.Representation);
+                ParameterValue.Save(writer);
             }
             if (IsDisabled)
             {
@@ -358,7 +390,7 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteEndObject();
         }
 
-        internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
+        internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             Boundary boundary, ref Utf8JsonReader reader, out Node? mss, [NotNullWhen(false)] ref string? error)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
@@ -371,7 +403,8 @@ namespace XTMF2.ModelSystemConstruct
             bool disabled = false;
             Rectangle point = new Rectangle();
             string description = string.Empty;
-            ParameterExpression? parameter = null;
+            ParameterExpression? basicParameter = null;
+            string? scriptedParameter = null;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType == JsonTokenType.Comment) continue;
@@ -426,20 +459,12 @@ namespace XTMF2.ModelSystemConstruct
                 else if (reader.ValueTextEquals(ParameterProperty))
                 {
                     reader.Read();
-                    parameter = ParameterExpression.CreateParameter(reader.GetString() ?? string.Empty, typeof(string));
+                    basicParameter = ParameterExpression.CreateParameter(reader.GetString() ?? string.Empty, typeof(string));
                 }
-                else if(reader.ValueTextEquals(ParameterExpressionProperty))
+                else if (reader.ValueTextEquals(ParameterExpressionProperty))
                 {
                     reader.Read();
-                    var expressionString = reader.GetString() ?? string.Empty;
-                    if (ParameterCompiler.CreateExpression(null!, expressionString, out var expression, ref error))
-                    {
-                        parameter = ParameterExpression.CreateParameter(expression);
-                    }
-                    else
-                    {
-                        return FailWith(out mss, out error, $"Unable to process expression {expressionString}!\r\n{error}");
-                    }
+                    scriptedParameter = reader.GetString() ?? string.Empty;
                 }
                 else if (reader.ValueTextEquals(DisabledProperty))
                 {
@@ -476,10 +501,14 @@ namespace XTMF2.ModelSystemConstruct
             {
                 Location = point,
                 Description = description,
-                ParameterValue = parameter,
+                ParameterValue = basicParameter,
                 IsDisabled = disabled
             };
             nodes.Add(index, mss);
+            if(scriptedParameter is not null)
+            {
+                scriptedParameters.Add((mss, scriptedParameter));
+            }
             return true;
         }
 

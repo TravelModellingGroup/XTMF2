@@ -14,6 +14,7 @@
 */
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 
 namespace XTMF2.ModelSystemConstruct.Parameters;
 
@@ -22,6 +23,8 @@ namespace XTMF2.ModelSystemConstruct.Parameters;
 /// </summary>
 internal class BasicParameter : ParameterExpression
 {
+    protected const string ParameterProperty = "Parameter";
+
     /// <summary>
     /// The string presentation of the parameter
     /// </summary>
@@ -46,12 +49,12 @@ internal class BasicParameter : ParameterExpression
     }
 
     /// <inheritdoc/>
-    internal override bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString)
+    public override bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString)
     {
         return ArbitraryParameterParser.Check(type, _value, ref errorString);
     }
 
-    internal override object GetValue(IModule caller, Type type, ref string? errorString)
+    public override object GetValue(IModule caller, Type type, ref string? errorString)
     {
         var (sucess, value) = ArbitraryParameterParser.ArbitraryParameterParse(type, _value, ref errorString);
         if (sucess)
@@ -63,4 +66,9 @@ internal class BasicParameter : ParameterExpression
     }
 
     public override Type Type => _type;
+
+    internal override void Save(Utf8JsonWriter writer)
+    {
+        writer.WriteString(ParameterProperty, Representation);
+    }
 }
