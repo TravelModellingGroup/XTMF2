@@ -14,12 +14,14 @@
 */
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
 namespace XTMF2.ModelSystemConstruct.Parameters;
 
 internal class ScriptedParameter : ParameterExpression
 {
+    protected const string ParameterExpressionProperty = "ParameterExpression";
     private Expression _expression;
 
     public ScriptedParameter(Expression expression)
@@ -32,7 +34,7 @@ internal class ScriptedParameter : ParameterExpression
         get => new (_expression.AsString());
     }
 
-    internal override object? GetValue(IModule caller, Type type, ref string? errorString)
+    public override object? GetValue(IModule caller, Type type, ref string? errorString)
     {
         if(_expression.Type != type)
         {
@@ -46,7 +48,7 @@ internal class ScriptedParameter : ParameterExpression
         return null;
     }
 
-    internal override bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString)
+    public override bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString)
     {
         return type.IsAssignableFrom(_expression.Type);
     }
@@ -58,4 +60,9 @@ internal class ScriptedParameter : ParameterExpression
     }
 
     public override Type Type => _expression.Type;
+
+    internal override void Save(Utf8JsonWriter writer)
+    {
+        writer.WriteString(ParameterExpressionProperty, Representation);
+    }
 }

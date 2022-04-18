@@ -633,7 +633,7 @@ namespace XTMF2.ModelSystemConstruct
 
         
 
-        internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
+        internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
@@ -693,7 +693,7 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!Node.Load(modules, typeLookup, node, this, ref reader, out var mss, ref error))
+                            if (!Node.Load(modules, typeLookup, node, scriptedParameters, this, ref reader, out var mss, ref error))
                             {
                                 return false;
                             }
@@ -712,7 +712,7 @@ namespace XTMF2.ModelSystemConstruct
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
                             var boundary = new Boundary(this);
-                            if (!boundary.Load(modules, typeLookup, node, ref reader, ref error))
+                            if (!boundary.Load(modules, typeLookup, node, scriptedParameters, ref reader, ref error))
                             {
                                 return false;
                             }
@@ -765,7 +765,7 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         if(reader.TokenType != JsonTokenType.Comment)
                         {
-                            if(!FunctionTemplate.Load(modules, typeLookup, node, ref reader, this, out var template, ref error))
+                            if(!FunctionTemplate.Load(modules, typeLookup, node, scriptedParameters, ref reader, this, out var template, ref error))
                             {
                                 return false;
                             }

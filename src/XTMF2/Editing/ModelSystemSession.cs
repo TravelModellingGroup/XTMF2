@@ -15,6 +15,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -905,6 +906,51 @@ namespace XTMF2.Editing
                 return false;
             }
         }
+
+        /// <summary>
+        /// Set the value of a parameter to an expression
+        /// </summary>
+        /// <param name="user">The user issuing the command</param>
+        /// <param name="basicParameter">The parameter to set.</param>
+        /// <param name="value">The value to set the parameter to.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool SetParameterExpression(User user, Node basicParameter, string expression, [NotNullWhen(false)]out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(basicParameter);
+
+            lock(_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var previousType = basicParameter.Type;
+                var previousValue = basicParameter.ParameterValue;
+                if(basicParameter.SetParameterExpression(ModelSystem.Variables, expression, out error))
+                {
+                    var newType = basicParameter.Type;
+                    var newExpression = basicParameter.ParameterValue;
+                    Buffer.AddUndo(new Command(()=>
+                    {
+                        string? error = null;
+                        _ = basicParameter.SetType(GetModuleRepository(), previousType, ref error);
+                        _ = basicParameter.SetParameterValue(previousValue, out var e);
+                        return (true, e);
+                    }, ()=>
+                    {
+                        string? error = null;
+                        _ = basicParameter.SetType(GetModuleRepository(), newType, ref error);
+                        _ = basicParameter.SetParameterValue(newExpression, out var e);
+                        return (true, e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }     
 
         /// <summary>
         /// Set the node to the disabled state.

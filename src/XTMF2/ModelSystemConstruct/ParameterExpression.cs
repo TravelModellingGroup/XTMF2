@@ -15,6 +15,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using XTMF2.ModelSystemConstruct.Parameters;
 
 namespace XTMF2.ModelSystemConstruct;
@@ -30,7 +31,7 @@ public abstract class ParameterExpression : INotifyPropertyChanged
     /// <param name="type">The type to be converted to.</param>
     /// <param name="errorString">The error message of why the operation failed, null if it succeeds.</param>
     /// <returns>True if the type can be converted, false with error message if not.</returns>
-    internal abstract bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString);
+    public abstract bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString);
 
     /// <summary>
     /// Tries to convert the parameter expression to the given type.
@@ -39,7 +40,7 @@ public abstract class ParameterExpression : INotifyPropertyChanged
     /// <param name="type">The type to try to extract.</param>
     /// <param name="errorString">An error message if the extraction fails.</param>
     /// <returns>An object of the given type, or null with an error message if it fails.</returns>
-    internal abstract object? GetValue(IModule caller, Type type, ref string? errorString);
+    public abstract object? GetValue(IModule caller, Type type, ref string? errorString);
 
     /// <summary>
     /// Gets a string based representation of the parameter
@@ -82,4 +83,11 @@ public abstract class ParameterExpression : INotifyPropertyChanged
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Representation)));
     }
+
+    /// <summary>
+    /// Write the given parameter expression out to the write stream.
+    /// </summary>
+    /// <param name="writer">The writer to store the parameter to.</param>
+    internal abstract void Save(Utf8JsonWriter writer);
+   
 }

@@ -99,7 +99,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="template">The function template that was created by loading the file.</param>
         /// <param name="error">An error message if we failed to load the function template or its children.</param>
         /// <returns>True if the operation succeeded, false otherwise with an error message.</returns>
-        internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
+        internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             ref Utf8JsonReader reader, Boundary parent, [NotNullWhen(true)] out FunctionTemplate? template, [NotNullWhen(false)] ref string? error)
         {
             template = null;
@@ -123,7 +123,7 @@ namespace XTMF2.ModelSystemConstruct
                 else if(reader.ValueTextEquals(nameof(InternalModules)))
                 {
                     reader.Read();
-                    if(!innerModules.Load(modules, typeLookup, node, ref reader, ref error))
+                    if(!innerModules.Load(modules, typeLookup, node, scriptedParameters, ref reader, ref error))
                     {
                         return false;
                     }
