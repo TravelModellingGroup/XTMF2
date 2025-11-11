@@ -36,10 +36,10 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden,
                     out var Start, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
             });
         }
 
@@ -50,10 +50,10 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsFalse(mSession.AddModelSystemStart(unauthorizedUser, ms.GlobalBoundary, "Start", Rectangle.Hidden,
                     out var Start, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
             });
         }
 
@@ -64,14 +64,14 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden,
                     out var Start, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
                 Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
             });
         }
@@ -83,19 +83,19 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden,
                     out var Start, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
                 Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
 
                 //now test explicitly removing the start
                 Assert.IsTrue(mSession.RemoveStart(user, Start, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
             });
         }
 
@@ -106,19 +106,19 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden, 
                     out var Start, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
                 Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
 
                 //now test explicitly removing the start
                 Assert.IsFalse(mSession.RemoveStart(unauthorizedUser, Start, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
             });
         }
 
@@ -129,22 +129,22 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden, out var Start, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
                 Assert.AreSame(Start, ms.GlobalBoundary.Starts[0]);
 
                 //now test explicitly removing the start
                 Assert.IsTrue(mSession.RemoveStart(user, Start, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Starts.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Starts);
             });
         }
 
@@ -155,10 +155,10 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>), Rectangle.Hidden,
                     out var mss, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
             });
         }
 
@@ -169,10 +169,10 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsFalse(mSession.AddNode(unauthorizedUser, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>), Rectangle.Hidden,
                     out var mss, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
             });
         }
 
@@ -183,14 +183,14 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>), Rectangle.Hidden,
                     out var mss, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
             });
         }
@@ -202,19 +202,19 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>), Rectangle.Hidden,
                     out var mss, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
 
                 // now remove node explicitly
                 Assert.IsTrue(mSession.RemoveNode(user, mss, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
             });
         }
 
@@ -225,19 +225,19 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>), Rectangle.Hidden,
                     out var mss, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
 
                 // now remove node explicitly
                 Assert.IsFalse(mSession.RemoveNode(unauthorizedUser, mss, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
             });
         }
 
@@ -248,21 +248,21 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<int>), Rectangle.Hidden,
                     out var mss, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
                 Assert.AreSame(mss, ms.GlobalBoundary.Modules[0]);
 
                 // now remove node explicitly
                 Assert.IsTrue(mSession.RemoveNode(user, mss, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
             });
         }
@@ -282,11 +282,11 @@ namespace XTMF2.UnitTests.Editing
                     typeof(SimpleParameterModule), Rectangle.Hidden, out var node, out var children, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNotNull(children, "The child parameters of the node were returned as a null!");
-                Assert.AreEqual(1, children.Count);
+                Assert.HasCount(1, children);
                 var modules = gBound.Modules;
                 var links = gBound.Links;
-                Assert.AreEqual(2, modules.Count, "It seems that the child parameter was not contained in the global boundary.");
-                Assert.AreEqual(1, links.Count, "We did not have a link!");
+                Assert.HasCount(2, modules, "It seems that the child parameter was not contained in the global boundary.");
+                Assert.HasCount(1, links, "We did not have a link!");
                 // Find the automatically added basic parameter and make sure that it has the correct default value
                 bool found = false;
                 for (int i = 0; i < modules.Count; i++)
@@ -320,8 +320,8 @@ namespace XTMF2.UnitTests.Editing
                 Assert.IsNull(children, "The child parameters of the node were returned as a null!");
                 var modules = gBound.Modules;
                 var links = gBound.Links;
-                Assert.AreEqual(0, modules.Count, "A module was created by an invalid user!");
-                Assert.AreEqual(0, links.Count, "A link was created by an invalid user!");
+                Assert.IsEmpty(modules, "A module was created by an invalid user!");
+                Assert.IsEmpty(links, "A link was created by an invalid user!");
             });
         }
 
@@ -341,17 +341,17 @@ namespace XTMF2.UnitTests.Editing
                     typeof(SimpleParameterModule), Rectangle.Hidden, out var node, out var children, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNotNull(children, "The child parameters of the node were returned as a null!");
-                Assert.AreEqual(1, children.Count);
+                Assert.HasCount(1, children);
                 var modules = gBound.Modules;
                 var links = gBound.Links;
-                Assert.AreEqual(2, modules.Count, "It seems that the child parameter was not contained in the global boundary.");
-                Assert.AreEqual(1, links.Count, "We did not have a link!");
+                Assert.HasCount(2, modules, "It seems that the child parameter was not contained in the global boundary.");
+                Assert.HasCount(1, links, "We did not have a link!");
                 Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, modules.Count, "After undoing it seems that a module has survived.");
-                Assert.AreEqual(0, links.Count, "The link was not removed on undo.");
+                Assert.IsEmpty(modules, "After undoing it seems that a module has survived.");
+                Assert.IsEmpty(links, "The link was not removed on undo.");
                 Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(2, modules.Count, "After redoing it seems that a module was not restored.");
-                Assert.AreEqual(1, links.Count, "The link was not re-added on redo.");
+                Assert.HasCount(2, modules, "After redoing it seems that a module was not restored.");
+                Assert.HasCount(1, links, "The link was not re-added on redo.");
             });
         }
 
@@ -370,11 +370,11 @@ namespace XTMF2.UnitTests.Editing
                     typeof(SimpleParameterModule), Rectangle.Hidden, out var node, out var children, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNotNull(children, "The child parameters of the node were returned as a null!");
-                Assert.AreEqual(1, children.Count);
+                Assert.HasCount(1, children);
                 var modules = gBound.Modules;
                 var links = gBound.Links;
-                Assert.AreEqual(2, modules.Count, "It seems that the child parameter was not contained in the global boundary.");
-                Assert.AreEqual(1, links.Count, "We did not have a link!");
+                Assert.HasCount(2, modules, "It seems that the child parameter was not contained in the global boundary.");
+                Assert.HasCount(1, links, "We did not have a link!");
                 // Find the automatically added basic parameter and make sure that it has the correct default value
                 bool found = false;
                 for (int i = 0; i < modules.Count; i++)
@@ -392,12 +392,12 @@ namespace XTMF2.UnitTests.Editing
                 Assert.IsTrue(msSession.RemoveNodeGenerateParameters(user, node, out error), error?.Message);
 
                 // Make sure that both modules were deleted
-                Assert.AreEqual(0, modules.Count, "Both modules were not removed.");
+                Assert.IsEmpty(modules, "Both modules were not removed.");
                 Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(2, modules.Count, "Both modules were not re-added.");
+                Assert.HasCount(2, modules, "Both modules were not re-added.");
 
                 Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(0, modules.Count, "Both modules were not removed again.");
+                Assert.IsEmpty(modules, "Both modules were not removed again.");
             });
         }
 
@@ -416,11 +416,11 @@ namespace XTMF2.UnitTests.Editing
                     typeof(SimpleParameterModule), Rectangle.Hidden, out var node, out var children, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNotNull(children, "The child parameters of the node were returned as a null!");
-                Assert.AreEqual(1, children.Count);
+                Assert.HasCount(1, children);
                 var modules = gBound.Modules;
                 var links = gBound.Links;
-                Assert.AreEqual(2, modules.Count, "It seems that the child parameter was not contained in the global boundary.");
-                Assert.AreEqual(1, links.Count, "We did not have a link!");
+                Assert.HasCount(2, modules, "It seems that the child parameter was not contained in the global boundary.");
+                Assert.HasCount(1, links, "We did not have a link!");
                 // Find the automatically added basic parameter and make sure that it has the correct default value
                 bool found = false;
                 for (int i = 0; i < modules.Count; i++)
@@ -435,8 +435,8 @@ namespace XTMF2.UnitTests.Editing
                 }
                 Assert.IsTrue(found, "We did not find the automatically created parameter module!");
                 Assert.IsFalse(msSession.RemoveNodeGenerateParameters(unauthorizedUser, node, out error), error?.Message);
-                Assert.AreEqual(2, modules.Count, "The number of modules changed after an invalid user invoked RemoveNodeGenerateParameters.");
-                Assert.AreEqual(1, links.Count, "The number of links changed after an invalid user invoked RemoveNodeGenerateParameters!");
+                Assert.HasCount(2, modules, "The number of modules changed after an invalid user invoked RemoveNodeGenerateParameters.");
+                Assert.HasCount(1, links, "The number of links changed after an invalid user invoked RemoveNodeGenerateParameters!");
             });
         }
 
@@ -459,22 +459,22 @@ namespace XTMF2.UnitTests.Editing
                     typeof(SimpleParameterModule), Rectangle.Hidden, out var node2, out error), error?.Message);
                 // Test to make sure that there was a second module also added.
                 Assert.IsNotNull(children, "The child parameters of the node were returned as a null!");
-                Assert.AreEqual(1, children.Count);
+                Assert.HasCount(1, children);
                 var modules = gBound.Modules;
                 var links = gBound.Links;
-                Assert.AreEqual(1, links.Count);
-                Assert.AreEqual(3, modules.Count);
+                Assert.HasCount(1, links);
+                Assert.HasCount(3, modules);
                 Assert.IsTrue(msSession.AddLink(user, node2, node2.Hooks[0], children[0], out var node2Link, out error), error?.Message);
-                Assert.AreEqual(2, links.Count, "The second link was not added");
+                Assert.HasCount(2, links, "The second link was not added");
                 Assert.IsTrue(msSession.RemoveNodeGenerateParameters(user, node, out error), error?.Message);
-                Assert.AreEqual(1, links.Count);
-                Assert.AreEqual(2, modules.Count);
+                Assert.HasCount(1, links);
+                Assert.HasCount(2, modules);
                 Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(2, links.Count);
-                Assert.AreEqual(3, modules.Count);
+                Assert.HasCount(2, links);
+                Assert.HasCount(3, modules);
                 Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, links.Count);
-                Assert.AreEqual(2, modules.Count);
+                Assert.HasCount(1, links);
+                Assert.HasCount(2, modules);
             });
         }
 
@@ -546,7 +546,7 @@ namespace XTMF2.UnitTests.Editing
                 // after shutdown
                 var ms = mSession.ModelSystem;
                 var modules = ms.GlobalBoundary.Modules;
-                Assert.AreEqual(1, modules.Count);
+                Assert.HasCount(1, modules);
                 Assert.IsTrue(modules[0].IsDisabled, "The module was not disabled after reloading the model system!");
             });
         }

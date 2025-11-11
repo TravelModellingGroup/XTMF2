@@ -35,9 +35,9 @@ namespace XTMF2.UnitTests.Editing
                 var ms = mSession.ModelSystem;
                 var name = "FunctionTemplateName";
                 var functionTemplates = ms.GlobalBoundary.FunctionTemplates;
-                Assert.AreEqual(0, functionTemplates.Count);
+                Assert.IsEmpty(functionTemplates);
                 Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, name, out FunctionTemplate template, out error), error?.Message);
-                Assert.AreEqual(1, functionTemplates.Count);
+                Assert.HasCount(1, functionTemplates);
             });
         }
 
@@ -50,13 +50,13 @@ namespace XTMF2.UnitTests.Editing
                 var ms = mSession.ModelSystem;
                 var name = "FunctionTemplateName";
                 var functionTemplates = ms.GlobalBoundary.FunctionTemplates;
-                Assert.AreEqual(0, functionTemplates.Count);
+                Assert.IsEmpty(functionTemplates);
                 Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, name, out FunctionTemplate template, out error), error?.Message);
-                Assert.AreEqual(1, functionTemplates.Count);
+                Assert.HasCount(1, functionTemplates);
                 Assert.IsTrue(mSession.Undo(user, out error));
-                Assert.AreEqual(0, functionTemplates.Count);
+                Assert.IsEmpty(functionTemplates);
                 Assert.IsTrue(mSession.Redo(user, out error));
-                Assert.AreEqual(1, functionTemplates.Count);
+                Assert.HasCount(1, functionTemplates);
             });
         }
 
@@ -69,11 +69,11 @@ namespace XTMF2.UnitTests.Editing
                 var ms = mSession.ModelSystem;
                 var name = "FunctionTemplateName";
                 var functionTemplates = ms.GlobalBoundary.FunctionTemplates;
-                Assert.AreEqual(0, functionTemplates.Count);
+                Assert.IsEmpty(functionTemplates);
                 Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, name, out FunctionTemplate template, out error), error?.Message);
-                Assert.AreEqual(1, functionTemplates.Count);
+                Assert.HasCount(1, functionTemplates);
                 Assert.IsTrue(mSession.RemoveFunctionTemplate(user, ms.GlobalBoundary, template, out error), error?.Message);
-                Assert.AreEqual(0, functionTemplates.Count);
+                Assert.IsEmpty(functionTemplates);
             });
         }
 
@@ -86,15 +86,15 @@ namespace XTMF2.UnitTests.Editing
                 var ms = mSession.ModelSystem;
                 var name = "FunctionTemplateName";
                 var functionTemplates = ms.GlobalBoundary.FunctionTemplates;
-                Assert.AreEqual(0, functionTemplates.Count);
+                Assert.IsEmpty(functionTemplates);
                 Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, name, out FunctionTemplate template, out error), error?.Message);
-                Assert.AreEqual(1, functionTemplates.Count);
+                Assert.HasCount(1, functionTemplates);
                 Assert.IsTrue(mSession.RemoveFunctionTemplate(user, ms.GlobalBoundary, template, out error), error?.Message);
-                Assert.AreEqual(0, functionTemplates.Count);
+                Assert.IsEmpty(functionTemplates);
                 Assert.IsTrue(mSession.Undo(user, out error));
-                Assert.AreEqual(1, functionTemplates.Count);
+                Assert.HasCount(1, functionTemplates);
                 Assert.IsTrue(mSession.Redo(user, out error));
-                Assert.AreEqual(0, functionTemplates.Count);
+                Assert.IsEmpty(functionTemplates);
             });
         }
 
@@ -107,15 +107,15 @@ namespace XTMF2.UnitTests.Editing
                  var ms = mSession.ModelSystem;
                  var name = "FunctionTemplateName";
                  var functionTemplates = ms.GlobalBoundary.FunctionTemplates;
-                 Assert.AreEqual(0, functionTemplates.Count);
+                 Assert.IsEmpty(functionTemplates);
                  Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, name, out FunctionTemplate template, out error), error?.Message);
-                 Assert.AreEqual(1, functionTemplates.Count);
+                 Assert.HasCount(1, functionTemplates);
                  Assert.IsTrue(mSession.Save(out error), error?.Message);
              }, (user, pSession, mSession)=>
              {
                  var ms = mSession.ModelSystem;
                  var functionTemplates = ms.GlobalBoundary.FunctionTemplates;
-                 Assert.AreEqual(1, functionTemplates.Count, "The function template was not saved!");
+                 Assert.HasCount(1, functionTemplates, "The function template was not saved!");
              });
         }
     }

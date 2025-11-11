@@ -36,9 +36,9 @@ namespace XTMF2.UnitTests.Editing
                 var comment = "My Comment";
                 var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
                 Assert.IsTrue(mSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, out error), error?.Message);
-                Assert.AreEqual(1, comBlocks.Count);
+                Assert.HasCount(1, comBlocks);
                 Assert.AreEqual(comment, comBlocks[0].Comment);
                 Assert.AreEqual(location, comBlocks[0].Location);
             });
@@ -54,9 +54,9 @@ namespace XTMF2.UnitTests.Editing
                 var comment = "My Comment";
                 var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
                 Assert.IsFalse(mSession.AddCommentBlock(unauthorizedUser, ms.GlobalBoundary, comment, location, out CommentBlock block, out error), error?.Message);
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
             });
         }
 
@@ -70,9 +70,9 @@ namespace XTMF2.UnitTests.Editing
                 CommandError error = null;
                 var ms = msSession.ModelSystem;
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, out error), error?.Message);
-                Assert.AreEqual(1, comBlocks.Count);
+                Assert.HasCount(1, comBlocks);
                 Assert.AreEqual(comment, comBlocks[0].Comment);
                 Assert.AreEqual(location, comBlocks[0].Location);
                 Assert.IsTrue(msSession.Save(out error), error?.Message);
@@ -80,7 +80,7 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = msSession.ModelSystem;
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
-                Assert.AreEqual(1, comBlocks.Count);
+                Assert.HasCount(1, comBlocks);
                 Assert.AreEqual(comment, comBlocks[0].Comment);
                 Assert.AreEqual(location, comBlocks[0].Location);
             });
@@ -96,13 +96,13 @@ namespace XTMF2.UnitTests.Editing
                 var comment = "My Comment";
                 var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, out error), error?.Message);
-                Assert.AreEqual(1, comBlocks.Count);
+                Assert.HasCount(1, comBlocks);
                 Assert.AreEqual(comment, comBlocks[0].Comment);
                 Assert.AreEqual(location, comBlocks[0].Location);
                 Assert.IsTrue(msSession.RemoveCommentBlock(user, ms.GlobalBoundary, block, out error), error?.Message);
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
             });
         }
 
@@ -116,13 +116,13 @@ namespace XTMF2.UnitTests.Editing
                 var comment = "My Comment";
                 var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, out error), error?.Message);
-                Assert.AreEqual(1, comBlocks.Count);
+                Assert.HasCount(1, comBlocks);
                 Assert.AreEqual(comment, comBlocks[0].Comment);
                 Assert.AreEqual(location, comBlocks[0].Location);
                 Assert.IsFalse(msSession.RemoveCommentBlock(unauthorizedUser, ms.GlobalBoundary, block, out error), error?.Message);
-                Assert.AreEqual(1, comBlocks.Count);
+                Assert.HasCount(1, comBlocks);
             });
         }
 
@@ -136,15 +136,15 @@ namespace XTMF2.UnitTests.Editing
                 var comment = "My Comment";
                 var location = new Rectangle(100, 100);
                 var comBlock = ms.GlobalBoundary.CommentBlocks;
-                Assert.AreEqual(0, comBlock.Count);
+                Assert.IsEmpty(comBlock);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, out error), error?.Message);
-                Assert.AreEqual(1, comBlock.Count);
+                Assert.HasCount(1, comBlock);
                 Assert.AreEqual(comment, comBlock[0].Comment);
                 Assert.AreEqual(location, comBlock[0].Location);
                 Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, comBlock.Count);
+                Assert.IsEmpty(comBlock);
                 Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, comBlock.Count);
+                Assert.HasCount(1, comBlock);
                 Assert.AreEqual(comment, comBlock[0].Comment);
             });
         }
@@ -159,19 +159,19 @@ namespace XTMF2.UnitTests.Editing
                 var comment = "My Comment";
                 var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, out error), error?.Message);
-                Assert.AreEqual(1, comBlocks.Count);
+                Assert.HasCount(1, comBlocks);
                 Assert.AreEqual(comment, comBlocks[0].Comment);
                 Assert.AreEqual(location, comBlocks[0].Location);
                 Assert.IsTrue(msSession.RemoveCommentBlock(user, ms.GlobalBoundary, block, out error), error?.Message);
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
                 Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(1, comBlocks.Count);
+                Assert.HasCount(1, comBlocks);
                 Assert.AreEqual(comment, comBlocks[0].Comment);
                 Assert.AreEqual(location, comBlocks[0].Location);
                 Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
             });
         }
 
@@ -186,9 +186,9 @@ namespace XTMF2.UnitTests.Editing
                 var newComment = "New comment";
                 var location = new Rectangle(100, 100);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, out error), error?.Message);
-                Assert.AreEqual(1, comBlocks.Count);
+                Assert.HasCount(1, comBlocks);
                 Assert.AreEqual(comment, comBlocks[0].Comment);
                 Assert.IsTrue(msSession.SetCommentBlockText(user, block, newComment, out error), error?.Message);
                 Assert.AreEqual(newComment, block.Comment, "The comment block's text was not set!");
@@ -210,9 +210,9 @@ namespace XTMF2.UnitTests.Editing
                 var location = new Rectangle(100, 100);
                 var newLocation = new Rectangle(100, 200);
                 var comBlocks = ms.GlobalBoundary.CommentBlocks;
-                Assert.AreEqual(0, comBlocks.Count);
+                Assert.IsEmpty(comBlocks);
                 Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, out error), error?.Message);
-                Assert.AreEqual(1, comBlocks.Count);
+                Assert.HasCount(1, comBlocks);
                 Assert.AreEqual(comment, comBlocks[0].Comment);
                 Assert.IsTrue(msSession.SetCommentBlockLocation(user, block, newLocation, out error), error?.Message);
                 Assert.AreEqual(newLocation, block.Location, "The comment block's location was not set!");
