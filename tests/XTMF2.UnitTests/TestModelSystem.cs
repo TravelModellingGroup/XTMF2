@@ -60,7 +60,7 @@ namespace XTMF2.UnitTests
             Assert.IsTrue(projectController.GetProjectSession(user, user.AvailableProjects[0], out session, out error).UsingIf(session, () =>
              {
                  var modelSystems = session.ModelSystems;
-                 Assert.AreEqual(1, modelSystems.Count);
+                 Assert.HasCount(1, modelSystems);
                  Assert.AreEqual(modelSystemName, modelSystems[0].Name);
              }), error?.Message);
             //cleanup
@@ -193,7 +193,7 @@ namespace XTMF2.UnitTests
                 // after shutdown
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
                 // we shouldn't be able to add another start with the same name in the same boundary
                 Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, out var start, out error), error?.Message);
             });
@@ -213,7 +213,7 @@ namespace XTMF2.UnitTests
             {
                 // after shutdown
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
             });
         }
 
@@ -233,8 +233,8 @@ namespace XTMF2.UnitTests
                 // after shutdown
                 CommandError error = null;
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
                 Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, out var start, out error), error?.Message);
             });
         }
@@ -256,9 +256,9 @@ namespace XTMF2.UnitTests
                 // after shutdown
                 CommandError error = null;
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.AreEqual(1, ms.GlobalBoundary.Modules.Count);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden,
                     out var start, out error), error?.Message);
             });
@@ -304,9 +304,9 @@ namespace XTMF2.UnitTests
                 // after shutdown
                 CommandError error = null;
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(1, ms.GlobalBoundary.Starts.Count);
-                Assert.AreEqual(5, ms.GlobalBoundary.Modules.Count);
-                Assert.AreEqual(5, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Starts);
+                Assert.HasCount(5, ms.GlobalBoundary.Modules);
+                Assert.HasCount(5, ms.GlobalBoundary.Links);
                 Assert.IsFalse(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden,
                     out var start, out error), error?.Message);
             });
@@ -401,11 +401,11 @@ namespace XTMF2.UnitTests
                     using (var entryStream = entry.Open())
                     {
                         buffer = new byte[entry.Length];
-                        entryStream.Read(buffer, 0, buffer.Length);
+                        entryStream.ReadExactly(buffer, 0, buffer.Length);
                     }
                     var reader = new Utf8JsonReader(buffer);
                     Assert.IsTrue(reader.Read(), "Unable to read the initial object.");
-                    Assert.IsTrue(reader.TokenType == JsonTokenType.StartObject, "The first element was not a start object");
+                    Assert.AreEqual(JsonTokenType.StartObject, reader.TokenType, "The first element was not a start object");
                     bool readName = false, readDescription = false, readExportedOn = false, readExportedBy = false,
                             readVersionMajor = false, readVersionMinor = false;
                     while (reader.Read())
