@@ -20,7 +20,7 @@ operating XTMF2.
 
 ### Requirements
 
-1. DotNet Core 6.0+ SDK
+1. DotNet Core 10.0+ SDK
 
 ### Clone the XTMF2 repository
 

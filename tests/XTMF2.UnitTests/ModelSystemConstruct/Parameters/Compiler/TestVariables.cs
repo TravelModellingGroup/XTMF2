@@ -44,7 +44,7 @@ public class TestVariables
             Assert.IsTrue(ParameterCompiler.Evaluate(null, expression, out var result, ref error), error);
             if (result is bool boolResult)
             {
-                Assert.AreEqual(true, boolResult);
+                Assert.IsTrue(boolResult);
             }
             else
             {

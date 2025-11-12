@@ -37,19 +37,19 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<string>), Rectangle.Hidden,
                     out var parameter, out error), error?.Message);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(SimpleParameterModule), Rectangle.Hidden,
                     out var module, out error), error?.Message);
-                Assert.AreEqual(2, ms.GlobalBoundary.Modules.Count);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(2, ms.GlobalBoundary.Modules);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.AddLink(user, module, module.Hooks[0], parameter, out var link, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
             });
         }
@@ -61,24 +61,24 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<string>), Rectangle.Hidden,
                     out var parameter, out error), error?.Message);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(SimpleParameterModule), Rectangle.Hidden,
                     out var module, out error), error?.Message);
-                Assert.AreEqual(2, ms.GlobalBoundary.Modules.Count);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(2, ms.GlobalBoundary.Modules);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.AddLink(user, module, module.Hooks[0], parameter, out var link, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
 
                 // now remove the link explicitly
                 Assert.IsTrue(mSession.RemoveLink(user, link, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
             });
         }
 
@@ -89,24 +89,24 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<string>), Rectangle.Hidden,
                     out var parameter, out error), error?.Message);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(SimpleParameterModule), Rectangle.Hidden,
                     out var module, out error), error?.Message);
-                Assert.AreEqual(2, ms.GlobalBoundary.Modules.Count);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(2, ms.GlobalBoundary.Modules);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.AddLink(user, module, module.Hooks[0], parameter, out var link, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
 
                 // now remove the link explicitly
                 Assert.IsFalse(mSession.RemoveLink(unauthorizedUser, link, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
             });
         }
 
@@ -117,29 +117,29 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Modules.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(BasicParameter<string>), Rectangle.Hidden,
                     out var parameter, out error), error?.Message);
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Start", typeof(SimpleParameterModule), Rectangle.Hidden,
                     out var module, out error), error?.Message);
-                Assert.AreEqual(2, ms.GlobalBoundary.Modules.Count);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(2, ms.GlobalBoundary.Modules);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.AddLink(user, module, module.Hooks[0], parameter, out var link, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
 
                 // now remove the link explicitly
                 Assert.IsTrue(mSession.RemoveLink(user, link, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Links.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
             });
         }
 
@@ -159,10 +159,10 @@ namespace XTMF2.UnitTests.Editing
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), Rectangle.Hidden, out var mss1, out error));
                 Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), Rectangle.Hidden, out var mss2, out error));
                 Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], mss1, out var link1, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
                 // This should not create a new link but move the previous one
                 Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], mss2, out var link2, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Links.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Links);
             });
         }
 
@@ -180,17 +180,17 @@ namespace XTMF2.UnitTests.Editing
                 Assert.IsTrue(mSession.AddNode(user, toRemove, "Tricky", typeof(IgnoreResult<string>), Rectangle.Hidden,
                     out var tricky, out error), error?.Message);
                 Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], tricky, out var link, out error), error?.Message);
-                Assert.AreEqual(1, global.Starts.Count);
-                Assert.AreEqual(1, global.Links.Count);
-                Assert.AreEqual(1, toRemove.Modules.Count);
+                Assert.HasCount(1, global.Starts);
+                Assert.HasCount(1, global.Links);
+                Assert.HasCount(1, toRemove.Modules);
 
                 // Now remove the boundary and check to make sure the number of links is cleaned up
                 Assert.IsTrue(mSession.RemoveBoundary(user, global, toRemove, out error), error?.Message);
-                Assert.AreEqual(0, global.Links.Count, "We did not remove the link during the remove boundary!");
+                Assert.IsEmpty(global.Links, "We did not remove the link during the remove boundary!");
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(1, global.Links.Count, "The link was not restored after the undo on the remove boundary!");
+                Assert.HasCount(1, global.Links, "The link was not restored after the undo on the remove boundary!");
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(0, global.Links.Count, "We did not remove the link again doing the redo of the remove boundary!");
+                Assert.IsEmpty(global.Links, "We did not remove the link again doing the redo of the remove boundary!");
             });
         }
 
@@ -211,18 +211,18 @@ namespace XTMF2.UnitTests.Editing
                     out var tricky, out error), error?.Message);
                 Assert.IsTrue(mSession.AddLink(user, start, start.Hooks[0], execute, out var link, out error), error?.Message);
                 Assert.IsTrue(mSession.AddLink(user, execute, TestHelper.GetHook(execute.Hooks, "To Execute"), tricky, out var link2, out error), error?.Message);
-                Assert.AreEqual(1, global.Starts.Count);
-                Assert.AreEqual(1, global.Modules.Count);
-                Assert.AreEqual(2, global.Links.Count);
-                Assert.AreEqual(1, toRemove.Modules.Count);
+                Assert.HasCount(1, global.Starts);
+                Assert.HasCount(1, global.Modules);
+                Assert.HasCount(2, global.Links);
+                Assert.HasCount(1, toRemove.Modules);
 
                 // Now remove the boundary and check to make sure the number of links is cleaned up
                 Assert.IsTrue(mSession.RemoveBoundary(user, global, toRemove, out error), error?.Message);
-                Assert.AreEqual(0, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
+                Assert.IsEmpty(((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(1, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
+                Assert.HasCount(1, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(0, ((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations.Count);
+                Assert.IsEmpty(((MultiLink)global.Links.First(l => l.Origin == execute)).Destinations);
             });
         }
 
@@ -247,13 +247,13 @@ namespace XTMF2.UnitTests.Editing
                 Assert.IsTrue(mSession.AddLink(user, execute, TestHelper.GetHook(execute.Hooks, "To Execute"),
                     execute, out var _, out error), error?.Message);
 
-                Assert.AreEqual(2, ((MultiLink)linkI1).Destinations.Count);
+                Assert.HasCount(2, ((MultiLink)linkI1).Destinations);
                 Assert.IsTrue(mSession.RemoveLinkDestination(user, linkI1, 0, out error), error?.Message);
-                Assert.AreEqual(1, ((MultiLink)linkI1).Destinations.Count);
+                Assert.HasCount(1, ((MultiLink)linkI1).Destinations);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(2, ((MultiLink)linkI1).Destinations.Count);
+                Assert.HasCount(2, ((MultiLink)linkI1).Destinations);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ((MultiLink)linkI1).Destinations.Count);
+                Assert.HasCount(1, ((MultiLink)linkI1).Destinations);
             });
         }
 
@@ -278,9 +278,9 @@ namespace XTMF2.UnitTests.Editing
                 Assert.IsTrue(mSession.AddLink(user, execute, TestHelper.GetHook(execute.Hooks, "To Execute"),
                     execute, out var _, out error), error?.Message);
 
-                Assert.AreEqual(2, ((MultiLink)linkI1).Destinations.Count);
+                Assert.HasCount(2, ((MultiLink)linkI1).Destinations);
                 Assert.IsFalse(mSession.RemoveLinkDestination(unauthorizedUser, linkI1, 0, out error), error?.Message);
-                Assert.AreEqual(2, ((MultiLink)linkI1).Destinations.Count, "An unauthorized user was able to change the number of destinations.");
+                Assert.HasCount(2, ((MultiLink)linkI1).Destinations, "An unauthorized user was able to change the number of destinations.");
             });
         }
 
@@ -311,8 +311,8 @@ namespace XTMF2.UnitTests.Editing
                 var ms = mSession.ModelSystem;
                 var modules = ms.GlobalBoundary.Modules;
                 var links = ms.GlobalBoundary.Links;
-                Assert.AreEqual(3, modules.Count);
-                Assert.AreEqual(1, links.Count);
+                Assert.HasCount(3, modules);
+                Assert.HasCount(1, links);
                 Assert.IsTrue(links[0].IsDisabled, "The link was not disabled on reload.");
             });
         }

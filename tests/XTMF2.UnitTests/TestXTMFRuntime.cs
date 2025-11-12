@@ -43,7 +43,7 @@ namespace XTMF2.UnitTests
         {
             XTMFRuntime runtime = XTMFRuntime.CreateRuntime();
             var users = runtime.UserController.Users;
-            Assert.IsTrue(users.Count > 0);
+            Assert.IsNotEmpty(users);
         }
 
         [TestMethod]

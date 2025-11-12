@@ -46,7 +46,7 @@ public class TestEditingParameterExpressions
             Assert.IsNotNull(childNode);
             Assert.IsTrue(mSession.SetParameterExpression(user, childNode, "\"Hello World\" + (1 + 2)", out error));
             Assert.IsNotNull(childNode.ParameterValue);
-            Assert.AreEqual(childNode.ParameterValue.Type, typeof(string));
+            Assert.AreEqual(typeof(string), childNode.ParameterValue.Type);
             Assert.IsInstanceOfType(childNode.ParameterValue, typeof(ParameterExpression));
             Assert.AreEqual("Hello World3", childNode.ParameterValue.GetValue(null, typeof(string), ref errorStr));
         });
@@ -69,7 +69,7 @@ public class TestEditingParameterExpressions
             Assert.IsTrue(mSession.SetParameterValue(user, childNode, "OriginalValue", out error));
             Assert.IsTrue(mSession.SetParameterExpression(user, childNode, "\"Hello World\" + (1 + 2)", out error));
             Assert.IsNotNull(childNode.ParameterValue);
-            Assert.AreEqual(childNode.ParameterValue.Type, typeof(string));
+            Assert.AreEqual(typeof(string), childNode.ParameterValue.Type);
             Assert.IsInstanceOfType(childNode.ParameterValue, typeof(ParameterExpression));
             Assert.AreEqual("Hello World3", childNode.ParameterValue.GetValue(null, typeof(string), ref errorStr));
             Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
@@ -94,7 +94,7 @@ public class TestEditingParameterExpressions
             Assert.IsTrue(mSession.SetParameterValue(user, childNode, "OriginalValue", out error));
             Assert.IsTrue(mSession.SetParameterExpression(user, childNode, "\"Hello World\" + (1 + 2)", out error));
             Assert.IsNotNull(childNode.ParameterValue);
-            Assert.AreEqual(childNode.ParameterValue.Type, typeof(string));
+            Assert.AreEqual(typeof(string), childNode.ParameterValue.Type);
             Assert.IsInstanceOfType(childNode.ParameterValue, typeof(ParameterExpression));
             Assert.AreEqual("Hello World3", childNode.ParameterValue.GetValue(null, typeof(string), ref errorStr));
             Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
@@ -120,7 +120,7 @@ public class TestEditingParameterExpressions
             Assert.IsNotNull(childNode);
             Assert.IsTrue(mSession.SetParameterExpression(user, childNode, "\"Hello World\" + (1 + 2)", out error));
             Assert.IsNotNull(childNode.ParameterValue);
-            Assert.AreEqual(childNode.ParameterValue.Type, typeof(string));
+            Assert.AreEqual(typeof(string), childNode.ParameterValue.Type);
             Assert.IsInstanceOfType(childNode.ParameterValue, typeof(ParameterExpression));
             Assert.AreEqual("Hello World3", childNode.ParameterValue.GetValue(null, typeof(string), ref errorStr));
         },(user, pSession, mSession)=>

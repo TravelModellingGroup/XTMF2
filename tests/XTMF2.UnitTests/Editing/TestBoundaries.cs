@@ -33,14 +33,14 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, out error), error?.Message);
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail1, out error), "Created a second boundary with the same name!");
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(0, ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
                 Assert.AreSame(subB, ms.GlobalBoundary.Boundaries[0]);
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail2, out error), "Created a second boundary with the same name after redo!");
             });
@@ -52,7 +52,7 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("AddBoundaryWithBadUser", (user, unauthorizedUser, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
                 Assert.IsFalse(mSession.AddBoundary(unauthorizedUser, ms.GlobalBoundary, "UniqueName", out Boundary subB, out var error), error?.Message);
             });
         }
@@ -63,8 +63,8 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("AddBoundaryNullParent", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
-                Assert.ThrowsException<ArgumentNullException>(() =>
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
+                Assert.Throws<ArgumentNullException>(() =>
                 {
                     mSession.AddBoundary(user, null, "UniqueName", out Boundary subB, out var error);
                 });
@@ -77,8 +77,8 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("AddBoundaryNullUser", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
-                Assert.ThrowsException<ArgumentNullException>(() =>
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
+                Assert.Throws<ArgumentNullException>(() =>
                 {
                     mSession.AddBoundary(null, ms.GlobalBoundary, "UniqueName", out Boundary subB, out var error);
                 });
@@ -91,25 +91,25 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, out var error), error?.Message);
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail1, out error), "Created a second boundary with the same name!");
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(0, ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
                 Assert.AreSame(subB, ms.GlobalBoundary.Boundaries[0]);
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail2, out error), "Created a second boundary with the same name after redo!");
 
                 // Now test removing the boundary explicitly
                 Assert.IsTrue(mSession.RemoveBoundary(user, ms.GlobalBoundary, subB, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
                 Assert.AreSame(subB, ms.GlobalBoundary.Boundaries[0]);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
             });
         }
 
@@ -120,21 +120,21 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, out error), error?.Message);
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail1, out error), "Created a second boundary with the same name!");
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
                 Assert.AreSame(subB, ms.GlobalBoundary.Boundaries[0]);
                 Assert.IsFalse(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary fail2, out error), "Created a second boundary with the same name after redo!");
 
                 // Now test removing the boundary explicitly
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
                 Assert.IsFalse(mSession.RemoveBoundary(unauthorizedUser, ms.GlobalBoundary, subB, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
             });
         }
 
@@ -144,12 +144,12 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, out var error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
 
                 // Now test removing the boundary explicitly
-                Assert.ThrowsException<ArgumentNullException>(() =>
+                Assert.Throws<ArgumentNullException>(() =>
                 {
                     mSession.RemoveBoundary(user, ms.GlobalBoundary, null, out error);
                 });
@@ -162,12 +162,12 @@ namespace XTMF2.UnitTests.Editing
             TestHelper.RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, out var error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
 
                 // Now test removing the boundary explicitly
-                Assert.ThrowsException<ArgumentNullException>(() =>
+                Assert.Throws<ArgumentNullException>(() =>
                 {
                     mSession.RemoveBoundary(user, null, subB, out error);
                 });
@@ -181,12 +181,12 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "UniqueName", out Boundary subB, out error), error?.Message);
-                Assert.AreEqual(1, ms.GlobalBoundary.Boundaries.Count);
+                Assert.HasCount(1, ms.GlobalBoundary.Boundaries);
 
                 // Now test removing the boundary explicitly
-                Assert.ThrowsException<ArgumentNullException>(() =>
+                Assert.Throws<ArgumentNullException>(() =>
                 {
                     mSession.RemoveBoundary(null, ms.GlobalBoundary, subB, out error);
                 });
@@ -200,12 +200,12 @@ namespace XTMF2.UnitTests.Editing
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.AreEqual(0, ms.GlobalBoundary.Boundaries.Count);
+                Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
                 Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "SubB", out Boundary subB, out error), error?.Message);
                 Assert.IsTrue(mSession.AddBoundary(user, ms.GlobalBoundary, "SubC", out Boundary subC, out error), error?.Message);
                 Assert.IsTrue(mSession.AddBoundary(user, subC, "SubCA", out Boundary subCA, out error), error?.Message);
-                Assert.AreEqual(2, ms.GlobalBoundary.Boundaries.Count);
-                Assert.AreEqual(1, subC.Boundaries.Count);
+                Assert.HasCount(2, ms.GlobalBoundary.Boundaries);
+                Assert.HasCount(1, subC.Boundaries);
 
                 Assert.IsFalse(mSession.RemoveBoundary(user, ms.GlobalBoundary, subCA, out error), "Successfully removed a boundary from a grandparent isntead of failing!");
             });

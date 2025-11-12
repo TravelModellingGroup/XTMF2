@@ -117,7 +117,7 @@ namespace XTMF2.UnitTests
             runtime = XTMFRuntime.CreateRuntime();
             controller = runtime.ProjectController;
             localUser = TestHelper.GetTestUser(runtime);
-            Assert.AreEqual(numberOfProjects, localUser.AvailableProjects.Count);
+            Assert.HasCount(numberOfProjects, localUser.AvailableProjects);
             var regainedProject = localUser.AvailableProjects[0];
             Assert.AreEqual(projectName, regainedProject.Name);
         }
@@ -320,7 +320,7 @@ namespace XTMF2.UnitTests
                     using (importedSession)
                     {
                         var modelSystems = importedSession.ModelSystems;
-                        Assert.AreEqual(0, modelSystems.Count);
+                        Assert.IsEmpty(modelSystems);
                     }
                 }
                 finally
@@ -358,7 +358,7 @@ namespace XTMF2.UnitTests
                     using (importedSession)
                     {
                         var modelSystems = importedSession.ModelSystems;
-                        Assert.AreEqual(1, modelSystems.Count);
+                        Assert.HasCount(1, modelSystems);
                     }
                 }
                 finally
@@ -400,7 +400,7 @@ namespace XTMF2.UnitTests
                     using (importedSession)
                     {
                         var modelSystems = importedSession.ModelSystems;
-                        Assert.AreEqual(numberOfModelSystems, modelSystems.Count);
+                        Assert.HasCount(numberOfModelSystems, modelSystems);
                     }
                 }
                 finally
@@ -440,7 +440,7 @@ namespace XTMF2.UnitTests
                     using (importedSession)
                     {
                         var modelSystems = importedSession.ModelSystems;
-                        Assert.AreEqual(0, modelSystems.Count);
+                        Assert.IsEmpty(modelSystems);
                     }
                     Assert.IsTrue(user.AvailableProjects.Any(p => p.Name == ImportedModelSystemName), "The imported project was not available to use user.");
                 }
@@ -542,9 +542,9 @@ namespace XTMF2.UnitTests
                 string path = Path.GetTempPath();
                 CommandError error = null;
                 var previousRunDirectories = project.AdditionalPreviousRunDirectories;
-                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsEmpty(previousRunDirectories, "There were already previous run directories!");
                 Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
-                Assert.AreEqual(1, previousRunDirectories.Count, "The previous runs did not include the new path!");
+                Assert.HasCount(1, previousRunDirectories, "The previous runs did not include the new path!");
                 Assert.AreEqual(path, previousRunDirectories[0], "The path is not the same!");
             });
         }
@@ -555,10 +555,10 @@ namespace XTMF2.UnitTests
             TestHelper.RunInProjectContext("AddAdditionalPastRunDirectory_Null", (User user, ProjectSession project) =>
             {
                 var previousRunDirectories = project.AdditionalPreviousRunDirectories;
-                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsEmpty(previousRunDirectories, "There were already previous run directories!");
                 Assert.IsFalse(project.AddAdditionalPastRunDirectory(user, null, out CommandError error),
                     "The add operation succeeded even though it should have failed!");
-                Assert.AreEqual(0, previousRunDirectories.Count, "The invalid previous run directory was added!");
+                Assert.IsEmpty(previousRunDirectories, "The invalid previous run directory was added!");
             });
         }
 
@@ -568,10 +568,10 @@ namespace XTMF2.UnitTests
             TestHelper.RunInProjectContext("AddAdditionalPastRunDirectory_EmptyString", (User user, ProjectSession project) =>
             {
                 var previousRunDirectories = project.AdditionalPreviousRunDirectories;
-                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsEmpty(previousRunDirectories, "There were already previous run directories!");
                 Assert.IsFalse(project.AddAdditionalPastRunDirectory(user, String.Empty, out CommandError error),
                     "The add operation succeeded even though it should have failed!");
-                Assert.AreEqual(0, previousRunDirectories.Count, "The invalid previous run directory was added!");
+                Assert.IsEmpty(previousRunDirectories, "The invalid previous run directory was added!");
             });
         }
 
@@ -583,12 +583,12 @@ namespace XTMF2.UnitTests
                 string path = Path.GetTempPath();
                 CommandError error = null;
                 var previousRunDirectories = project.AdditionalPreviousRunDirectories;
-                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsEmpty(previousRunDirectories, "There were already previous run directories!");
                 Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
-                Assert.AreEqual(1, previousRunDirectories.Count, "The previous runs did not include the new path!");
+                Assert.HasCount(1, previousRunDirectories, "The previous runs did not include the new path!");
                 Assert.AreEqual(path, previousRunDirectories[0], "The path is not the same!");
                 Assert.IsTrue(project.RemoveAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
-                Assert.AreEqual(0, previousRunDirectories.Count, "The previous run directory was not removed!");
+                Assert.IsEmpty(previousRunDirectories, "The previous run directory was not removed!");
             });
         }
 
@@ -600,11 +600,11 @@ namespace XTMF2.UnitTests
                 string path = Path.GetTempPath();
                 CommandError error = null;
                 var previousRunDirectories = project.AdditionalPreviousRunDirectories;
-                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsEmpty(previousRunDirectories, "There were already previous run directories!");
                 Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
                 Assert.IsFalse(project.RemoveAdditionalPastRunDirectory(user, null, out error),
                     "The remove operation succeeded even though it should have failed!");
-                Assert.AreEqual(1, previousRunDirectories.Count, "The previous run directory was removed!");
+                Assert.HasCount(1, previousRunDirectories, "The previous run directory was removed!");
             });
         }
 
@@ -616,11 +616,11 @@ namespace XTMF2.UnitTests
                 string path = Path.GetTempPath();
                 CommandError error = null;
                 var previousRunDirectories = project.AdditionalPreviousRunDirectories;
-                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsEmpty(previousRunDirectories, "There were already previous run directories!");
                 Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
                 Assert.IsFalse(project.RemoveAdditionalPastRunDirectory(user, String.Empty, out error),
                     "The remove operation succeeded even though it should have failed!");
-                Assert.AreEqual(1, previousRunDirectories.Count, "The previous run directory was removed!");
+                Assert.HasCount(1, previousRunDirectories, "The previous run directory was removed!");
             });
         }
 
@@ -632,11 +632,11 @@ namespace XTMF2.UnitTests
                 string path = Path.GetTempPath();
                 CommandError error = null;
                 var previousRunDirectories = project.AdditionalPreviousRunDirectories;
-                Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                Assert.IsEmpty(previousRunDirectories, "There were already previous run directories!");
                 Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
                 Assert.IsFalse(project.RemoveAdditionalPastRunDirectory(user, path + "a", out error),
                     "The remove operation succeeded even though it should have failed!");
-                Assert.AreEqual(1, previousRunDirectories.Count, "The previous run directory was removed!");
+                Assert.HasCount(1, previousRunDirectories, "The previous run directory was removed!");
             });
         }
 
@@ -649,14 +649,14 @@ namespace XTMF2.UnitTests
              {
                  CommandError error = null;
                  var previousRunDirectories = project.AdditionalPreviousRunDirectories;
-                 Assert.AreEqual(0, previousRunDirectories.Count, "There were already previous run directories!");
+                 Assert.IsEmpty(previousRunDirectories, "There were already previous run directories!");
                  Assert.IsTrue(project.AddAdditionalPastRunDirectory(user, path, out error), error?.Message ?? "Failed to have an error message!");
-                 Assert.AreEqual(1, previousRunDirectories.Count, "The previous runs did not include the new path!");
+                 Assert.HasCount(1, previousRunDirectories, "The previous runs did not include the new path!");
                  Assert.AreEqual(path, previousRunDirectories[0], "The path is not the same!");
              }, (user, project) =>
              {
                  var previousRunDirectories = project.AdditionalPreviousRunDirectories;
-                 Assert.AreEqual(1, previousRunDirectories.Count, "The number of past run directories is wrong after reloading!");
+                 Assert.HasCount(1, previousRunDirectories, "The number of past run directories is wrong after reloading!");
                  Assert.AreEqual(path, previousRunDirectories[0], "The path is not the same after reloading!");
              });
         }

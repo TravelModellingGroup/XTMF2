@@ -105,20 +105,20 @@ namespace XTMF2.UnitTests
             Assert.IsTrue(projectController.CreateNewProject(user2, projectName2, out var session2, out error), error?.Message);
 
             // make sure we only have 1 project
-            Assert.AreEqual(1, user1.AvailableProjects.Count);
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user1.AvailableProjects);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             // Share project1 with user1
             Assert.IsTrue(session1.ShareWith(user1, user2, out error), error?.Message);
-            Assert.AreEqual(1, user1.AvailableProjects.Count);
-            Assert.AreEqual(2, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user1.AvailableProjects);
+            Assert.HasCount(2, user2.AvailableProjects);
 
             Assert.IsFalse(session1.ShareWith(user1, user2, out error), error?.Message);
             Assert.IsFalse(session1.ShareWith(user2, user2, out error), error?.Message);
 
             // Delete user1 and make sure that user2 loses reference to project1
             Assert.IsTrue(userController.Delete(user1));
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             // finish cleaning up
             Assert.IsTrue(userController.Delete(user2));
@@ -144,19 +144,19 @@ namespace XTMF2.UnitTests
             Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, out error), error?.Message);
             
             // make sure we only have 1 project
-            Assert.AreEqual(1, user1.AvailableProjects.Count);
-            Assert.AreEqual(0, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user1.AvailableProjects);
+            Assert.IsEmpty(user2.AvailableProjects);
 
             Assert.IsTrue(session1.ShareWith(user1, user2, out error));
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             // Ensure that the command fails to be added the second time
             Assert.IsFalse(session1.ShareWith(user1, user2, out error));
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             // Delete user1 and make sure that user2 loses reference to project1
             Assert.IsTrue(userController.Delete(user1));
-            Assert.AreEqual(0, user2.AvailableProjects.Count);
+            Assert.IsEmpty(user2.AvailableProjects);
 
             // finish cleaning up
             Assert.IsTrue(userController.Delete(user2));
@@ -184,13 +184,13 @@ namespace XTMF2.UnitTests
             Assert.IsTrue(projectController.CreateNewProject(user2, projectName2, out var session2, out error), error?.Message);
 
             // make sure we only have 1 project
-            Assert.AreEqual(1, user1.AvailableProjects.Count);
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user1.AvailableProjects);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             // Share project1 with user1
             Assert.IsTrue(session1.ShareWith(user1, user2, out error), error?.Message);
-            Assert.AreEqual(1, user1.AvailableProjects.Count);
-            Assert.AreEqual(2, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user1.AvailableProjects);
+            Assert.HasCount(2, user2.AvailableProjects);
 
             Assert.IsFalse(session1.ShareWith(user1, user2, out error), error?.Message);
             Assert.IsFalse(session1.ShareWith(user2, user2, out error), error?.Message);
@@ -199,12 +199,12 @@ namespace XTMF2.UnitTests
             Assert.IsFalse(session1.RestrictAccess(user2, user1, out error));
             Assert.IsTrue(session1.RestrictAccess(user1, user2, out error), error?.Message);
 
-            Assert.AreEqual(1, user1.AvailableProjects.Count);
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user1.AvailableProjects);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             // Delete user1 and make sure that user2 loses reference to project1
             Assert.IsTrue(userController.Delete(user1));
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             // finish cleaning up
             Assert.IsTrue(userController.Delete(user2));
@@ -232,13 +232,13 @@ namespace XTMF2.UnitTests
             Assert.IsTrue(projectController.CreateNewProject(user2, projectName2, out var session2, out error), error?.Message);
 
             // make sure we only have 1 project
-            Assert.AreEqual(1, user1.AvailableProjects.Count);
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user1.AvailableProjects);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             // Share project1 with user1
             Assert.IsTrue(session1.ShareWith(user1, user2, out error), error?.Message);
-            Assert.AreEqual(1, user1.AvailableProjects.Count);
-            Assert.AreEqual(2, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user1.AvailableProjects);
+            Assert.HasCount(2, user2.AvailableProjects);
 
             Assert.IsFalse(session1.ShareWith(user1, user2, out error), error?.Message);
             Assert.IsFalse(session1.ShareWith(user2, user2, out error), error?.Message);
@@ -249,12 +249,12 @@ namespace XTMF2.UnitTests
             // Ensure that we can't do it again
             Assert.IsFalse(session1.RestrictAccess(user1, user2, out error), error?.Message);
 
-            Assert.AreEqual(1, user1.AvailableProjects.Count);
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user1.AvailableProjects);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             // Delete user1 and make sure that user2 loses reference to project1
             Assert.IsTrue(userController.Delete(user1));
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             // finish cleaning up
             Assert.IsTrue(userController.Delete(user2));
@@ -279,18 +279,18 @@ namespace XTMF2.UnitTests
 
             Assert.IsTrue(projectController.CreateNewProject(user1, projectName1, out var session1, out error), error?.Message);
 
-            Assert.AreEqual(1, user1.AvailableProjects.Count);
-            Assert.AreEqual(0, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user1.AvailableProjects);
+            Assert.IsEmpty(user2.AvailableProjects);
 
             Assert.IsTrue(session1.SwitchOwner(user1, user2, out error), error?.Message);
             Assert.IsFalse(session1.SwitchOwner(user1, user2, out error));
 
-            Assert.AreEqual(0, user1.AvailableProjects.Count);
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.IsEmpty(user1.AvailableProjects);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             Assert.IsTrue(userController.Delete(user1));
 
-            Assert.AreEqual(1, user2.AvailableProjects.Count);
+            Assert.HasCount(1, user2.AvailableProjects);
 
             Assert.IsTrue(userController.Delete(user2));
         }
