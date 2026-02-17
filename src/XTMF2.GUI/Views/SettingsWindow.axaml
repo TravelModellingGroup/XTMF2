@@ -2,13 +2,16 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:res="clr-namespace:XTMF2.GUI.Resources"
         mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="450"
         x:Class="XTMF2.GUI.Views.SettingsWindow"
-        Title="Settings"
+        Title="{res:Localize Settings_Title}"
         Width="600"
         Height="450"
         WindowStartupLocation="CenterOwner"
-        CanResize="False">
+        CanResize="False"
+        KeyUp="Window_KeyUp"
+        >
     
     <Grid Margin="20">
         <Grid.RowDefinitions>
@@ -19,10 +22,10 @@
         
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,20">
-            <TextBlock Text="Settings"
+            <TextBlock Text="{res:Localize Settings_Title}"
                        FontSize="24"
                        FontWeight="Bold"/>
-            <TextBlock Text="Configure XTMF2 preferences"
+            <TextBlock Text="{res:Localize Settings_Subtitle}"
                        FontSize="12"
                        Opacity="0.7"
                        Margin="0,5,0,0"/>
@@ -38,32 +41,45 @@
                         CornerRadius="4"
                         Padding="15">
                     <StackPanel Spacing="12">
-                        <TextBlock Text="General"
+                        <TextBlock Text="{res:Localize Settings_General}"
                                    FontSize="16"
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,5"/>
                         
                         <StackPanel Spacing="8">
-                            <TextBlock Text="Default User"
+                            <TextBlock Text="{res:Localize Settings_DefaultUser}"
                                        FontWeight="SemiBold"/>
                             <TextBox x:Name="DefaultUserTextBox"
-                                     Watermark="Enter default user name"
+                                     Watermark="{res:Localize Settings_DefaultUserWatermark}"
                                      Width="300"
                                      HorizontalAlignment="Left"/>
                         </StackPanel>
                         
                         <StackPanel Spacing="8">
-                            <TextBlock Text="Theme"
+                            <TextBlock Text="{res:Localize Settings_Theme}"
                                        FontWeight="SemiBold"/>
                             <ComboBox x:Name="ThemeComboBox"
                                       Width="300"
                                       HorizontalAlignment="Left"
                                       SelectionChanged="ThemeComboBox_SelectionChanged">
-                                <ComboBoxItem Content="Dark" Tag="Dark"/>
-                                <ComboBoxItem Content="Light" Tag="Light"/>
-                                <ComboBoxItem Content="Forest Green" Tag="ForestGreen"/>
-                                <ComboBoxItem Content="Ruby Red" Tag="RubyRed"/>
-                                <ComboBoxItem Content="Sapphire Blue" Tag="SapphireBlue"/>
+                                <ComboBoxItem Content="{res:Localize Settings_ThemeDark}" Tag="Dark"/>
+                                <ComboBoxItem Content="{res:Localize Settings_ThemeLight}" Tag="Light"/>
+                                <ComboBoxItem Content="{res:Localize Settings_ThemeForestGreen}" Tag="ForestGreen"/>
+                                <ComboBoxItem Content="{res:Localize Settings_ThemeRubyRed}" Tag="RubyRed"/>
+                                <ComboBoxItem Content="{res:Localize Settings_ThemeSapphireBlue}" Tag="SapphireBlue"/>
+                            </ComboBox>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{res:Localize Settings_Language}"
+                                       FontWeight="SemiBold"/>
+                            <ComboBox x:Name="LanguageComboBox"
+                                      Width="300"
+                                      HorizontalAlignment="Left"
+                                      SelectionChanged="LanguageComboBox_SelectionChanged">
+                                <ComboBoxItem Content="{res:Localize Settings_LanguageEnglish}" Tag="en"/>
+                                <ComboBoxItem Content="{res:Localize Settings_LanguageFrench}" Tag="fr"/>
+                                <ComboBoxItem Content="{res:Localize Settings_LanguageSpanish}" Tag="es"/>
                             </ComboBox>
                         </StackPanel>
                     </StackPanel>
@@ -75,15 +91,15 @@
                         CornerRadius="4"
                         Padding="15">
                     <StackPanel Spacing="12">
-                        <TextBlock Text="Runtime"
+                        <TextBlock Text="{res:Localize Settings_Runtime}"
                                    FontSize="16"
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,5"/>
                         
-                        <CheckBox Content="Enable verbose logging"
+                        <CheckBox Content="{res:Localize Settings_VerboseLogging}"
                                   x:Name="VerboseLoggingCheckBox"/>
                         
-                        <CheckBox Content="Auto-save projects"
+                        <CheckBox Content="{res:Localize Settings_AutoSave}"
                                   x:Name="AutoSaveCheckBox"
                                   IsChecked="True"/>
                     </StackPanel>
@@ -97,14 +113,15 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="10">
-            <Button Content="Cancel"
-                    Click="Cancel_Click"
-                    Padding="20,8"
-                    Width="100"/>
-            <Button Content="Save"
+            <Button Content="{res:Localize Dialog_OK}"
                     Click="Save_Click"
                     Padding="20,8"
                     Width="100"/>
+            <Button Content="{res:Localize Dialog_Cancel}"
+                    Click="Cancel_Click"
+                    Padding="20,8"
+                    Width="100"/>
+            
         </StackPanel>
         
     </Grid>

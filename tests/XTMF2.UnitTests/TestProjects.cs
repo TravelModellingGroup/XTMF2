@@ -118,7 +118,8 @@ namespace XTMF2.UnitTests
             controller = runtime.ProjectController;
             localUser = TestHelper.GetTestUser(runtime);
             Assert.HasCount(numberOfProjects, localUser.AvailableProjects);
-            var regainedProject = localUser.AvailableProjects[0];
+            var regainedProject = localUser.AvailableProjects.FirstOrDefault(p => p.Name == projectName);
+            Assert.IsNotNull(regainedProject, $"Project '{projectName}' not found after restart");
             Assert.AreEqual(projectName, regainedProject.Name);
         }
 

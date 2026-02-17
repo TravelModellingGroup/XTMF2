@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="XTMF2.GUI.Views.ModelSystemEditorView"
+             x:DataType="vm:ModelSystemEditorViewModel">
+
+    <Grid RowDefinitions="Auto,*" Margin="10">
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="{Binding Title}"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       Margin="0,0,0,5"/>
+            <TextBlock Text="Model System Editor"
+                       FontSize="14"
+                       Opacity="0.7"/>
+        </StackPanel>
+
+        <!-- Placeholder editor area -->
+        <Border Grid.Row="1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                BorderThickness="1"
+                CornerRadius="4">
+            <TextBlock Text="Model system editor view — coming soon."
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Opacity="0.5"
+                       FontSize="16"/>
+        </Border>
+
+    </Grid>
+
+</UserControl>

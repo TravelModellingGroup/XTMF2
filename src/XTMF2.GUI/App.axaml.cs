@@ -4,6 +4,8 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
 using System.Threading.Tasks;
 using XTMF2;
+using XTMF2.GUI.Resources;
+using XTMF2.GUI.Views;
 
 namespace XTMF2.GUI;
 
@@ -23,28 +25,56 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Create the main window first
-            var mainWindow = new MainWindow();
-            desktop.MainWindow = mainWindow;
-            
+            // Load settings BEFORE creating UI to ensure correct initial state
             // Load saved theme preference
             LoadThemePreference();
+            
+            // Initialize localization from settings
+            LocalizationManager.Initialize();
+            
+            // Now create the main window with settings already loaded
+            var mainWindow = new MainWindow();
+            desktop.MainWindow = mainWindow;
             
             // Load the XTMF Runtime asynchronously
             _ = Task.Run(async () =>
             {
                 // Artificial delay for testing (0.5 seconds)
-                await Task.Delay(2000);
-                
-                // Create the XTMF Runtime
-                Runtime = XTMFRuntime.CreateRuntime();
+                await Task.Delay(500);
+                try
+                {
+                    // Create the XTMF Runtime
+                    Runtime = XTMFRuntime.CreateRuntime();
+                }
+                catch (XTMFCodeStyleError codeError)
+                {
+                    // Handle code style errors (e.g. invalid config)
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        var errorDialog = new MessageDialog(
+                            Strings.Format(Strings.RuntimeInitialization_CodeStyleError, codeError.Message),
+                            Strings.RuntimeInitialization_ErrorTitle,
+                            MessageDialog.MessageType.Error);
+                        errorDialog.ShowDialog(mainWindow);
+                    });
+                    System.Environment.Exit(1);
+                }
+                catch (System.Exception ex)
+                {
+                    // Handle general XTMF exceptions
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        var errorDialog = new MessageDialog(
+                            Strings.Format(Strings.RuntimeInitialization_ErrorMessage, ex.Message),
+                            Strings.RuntimeInitialization_ErrorTitle,
+                            MessageDialog.MessageType.Error);
+                        errorDialog.ShowDialog(mainWindow);
+                    });
+                    System.Environment.Exit(1);
+                }
                 
                 // Get or create the default user
                 var users = Runtime.UserController.Users;
-                if (users.Count == 0)
-                {
-                    Runtime.UserController.CreateOrGet("DefaultUser", false, out _, out _);
-                }
                 
                 // Initialize the main window with the runtime on the UI thread
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>

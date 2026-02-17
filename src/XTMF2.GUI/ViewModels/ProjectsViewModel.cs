@@ -16,15 +16,29 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using XTMF2.Controllers;
 
 namespace XTMF2.GUI.ViewModels;
 
-public class ProjectsViewModel
+public partial class ProjectsViewModel : ObservableObject
 {
     private readonly XTMFRuntime _runtime;
     private readonly User? _currentUser;
+
+    // Used by Dock ItemsSource for the tab title and close behaviour
+    public string Title => "Projects";
+    public bool CanClose => false;
+
+    [ObservableProperty]
+    private string _searchText = "";
+
+    /// <summary>
+    /// Projects filtered by <see cref="SearchText"/>, used as the list's ItemsSource.
+    /// </summary>
+    public ObservableCollection<Project> FilteredProjects { get; } = new();
 
     public ProjectsViewModel(XTMFRuntime runtime)
     {
@@ -44,6 +58,31 @@ public class ProjectsViewModel
             if (_runtime.UserController.CreateOrGet("DefaultUser", false, out var user, out var error))
             {
                 _currentUser = user;
+            }
+        }
+
+        // Keep FilteredProjects in sync with the underlying collection
+        if (Projects is INotifyCollectionChanged notifiable)
+        {
+            notifiable.CollectionChanged += (_, _) => RebuildFilteredProjects();
+        }
+        RebuildFilteredProjects();
+    }
+
+    partial void OnSearchTextChanged(string value) => RebuildFilteredProjects();
+
+    private void RebuildFilteredProjects()
+    {
+        FilteredProjects.Clear();
+        if (Projects is null) return;
+
+        var filter = SearchText.Trim();
+        foreach (var project in Projects)
+        {
+            if (string.IsNullOrEmpty(filter) ||
+                (project.Name?.Contains(filter, System.StringComparison.OrdinalIgnoreCase) ?? false))
+            {
+                FilteredProjects.Add(project);
             }
         }
     }

@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using Microsoft.VisualBasic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
@@ -248,7 +249,12 @@ namespace XTMF2.UnitTests
             {
                 throw new ArgumentNullException(nameof(runtime));
             }
-            return runtime.UserController.GetUserByName("local");
+            if (!runtime.UserController.CreateOrGet("testUser", false, out User user, out var error)
+                || user is null)
+            {
+                Assert.Fail(error?.Message ?? "Failed to create or get test user!");
+            }
+            return user;
         }
 
         /// <summary>
@@ -263,7 +269,7 @@ namespace XTMF2.UnitTests
                 throw new ArgumentNullException(nameof(runtime));
             }
             CommandError error = null;
-            var localUser = runtime.UserController.GetUserByName("local");
+            var localUser = GetTestUser(runtime);
             var userController = runtime.UserController;
             var unauthroizedUser = userController.GetUserByName("Hacker");
             if (unauthroizedUser is null)

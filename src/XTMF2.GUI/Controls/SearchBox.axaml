@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:self="clr-namespace:XTMF2.GUI.Controls"
+             mc:Ignorable="d"
+             x:Class="XTMF2.GUI.Controls.SearchBox"
+             x:DataType="self:SearchBox"
+             x:Name="Root">
+
+    <Grid>
+        <TextBox x:Name="InnerTextBox"
+                 Text="{Binding Text, ElementName=Root, Mode=TwoWay}"
+                 Watermark="{Binding Watermark, ElementName=Root}"
+                 Padding="8,4,28,4"
+                 Width="250"
+                 VerticalContentAlignment="Center"
+                 KeyDown="InnerTextBox_KeyDown"/>
+        <!-- Magnifying glass icon, right-aligned, non-interactive -->
+        <Canvas Width="16" Height="16"
+                Margin="0,0,7,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                IsHitTestVisible="False">
+            <Ellipse Canvas.Left="1" Canvas.Top="1"
+                     Width="10" Height="10"
+                     Stroke="{DynamicResource TextControlPlaceholderForeground}"
+                     StrokeThickness="1.5"
+                     Fill="Transparent"/>
+            <Line StartPoint="9.5,9.5" EndPoint="14.5,14.5"
+                  Stroke="{DynamicResource TextControlPlaceholderForeground}"
+                  StrokeThickness="1.5"
+                  StrokeLineCap="Round"/>
+        </Canvas>
+    </Grid>
+
+</UserControl>

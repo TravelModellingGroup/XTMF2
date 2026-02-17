@@ -68,6 +68,7 @@ public class Settings
     }
 
     public string? Theme { get; set; } = "Dark";
+    public string? Language { get; set; } = "en";
 
     public void Save()
     {
@@ -103,6 +104,7 @@ public class Settings
                 if (loaded != null)
                 {
                     settings.Theme = loaded.Theme;
+                    settings.Language = loaded.Language;
                 }
             }
         }

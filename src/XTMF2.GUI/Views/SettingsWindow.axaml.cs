@@ -18,14 +18,17 @@
 */
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using System.Linq;
+using XTMF2.GUI.Resources;
 
 namespace XTMF2.GUI.Views;
 
 public partial class SettingsWindow : Window
 {
     private string? _currentTheme;
+    private string? _currentLanguage;
 
     public SettingsWindow()
     {
@@ -47,6 +50,19 @@ public partial class SettingsWindow : Window
         {
             ThemeComboBox.SelectedItem = themeItem;
         }
+
+        // Load language preference
+        _currentLanguage = Properties.Settings.Default.Language ?? "en";
+        
+        // Set the selected language in the combo box
+        var languageItem = LanguageComboBox.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(item => item.Tag?.ToString() == _currentLanguage);
+        
+        if (languageItem != null)
+        {
+            LanguageComboBox.SelectedItem = languageItem;
+        }
     }
 
     private void ThemeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -59,6 +75,20 @@ public partial class SettingsWindow : Window
                 // Apply theme immediately for preview
                 app.ChangeTheme(themeName);
                 _currentTheme = themeName;
+            }
+        }
+    }
+
+    private void LanguageComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (LanguageComboBox.SelectedItem is ComboBoxItem selectedItem)
+        {
+            var languageCode = selectedItem.Tag?.ToString();
+            if (languageCode != null)
+            {
+                // Apply language immediately for preview
+                LocalizationManager.ChangeLanguage(languageCode);
+                _currentLanguage = languageCode;
             }
         }
     }
@@ -81,12 +111,35 @@ public partial class SettingsWindow : Window
                 app.ApplyThemePreview(savedTheme);
             }
         }
+
+        // Restore the original language if user cancels
+        var savedLanguage = Properties.Settings.Default.Language ?? "en";
+        if (_currentLanguage != null && savedLanguage != _currentLanguage)
+        {
+            LocalizationManager.ChangeLanguage(savedLanguage);
+        }
+
         Close();
     }
 
     private void SaveSettings()
     {
-        // Settings are already saved via ChangeTheme method
+        // Save language preference
+        if (_currentLanguage != null)
+        {
+            Properties.Settings.Default.Language = _currentLanguage;
+            Properties.Settings.Default.Save();
+        }
+
+        // Theme is already saved via ChangeTheme method
         // which calls SaveThemePreference internally
+    }
+
+    public void Window_KeyUp(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            Cancel_Click(sender, new RoutedEventArgs());
+        }
     }
 }
