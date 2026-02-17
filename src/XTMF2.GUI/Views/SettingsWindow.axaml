@@ -1,0 +1,112 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="450"
+        x:Class="XTMF2.GUI.Views.SettingsWindow"
+        Title="Settings"
+        Width="600"
+        Height="450"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Settings"
+                       FontSize="24"
+                       FontWeight="Bold"/>
+            <TextBlock Text="Configure XTMF2 preferences"
+                       FontSize="12"
+                       Opacity="0.7"
+                       Margin="0,5,0,0"/>
+        </StackPanel>
+        
+        <!-- Settings Content -->
+        <ScrollViewer Grid.Row="1" Margin="0,0,0,20">
+            <StackPanel Spacing="20">
+                
+                <!-- General Section -->
+                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="15">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="General"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,5"/>
+                        
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Default User"
+                                       FontWeight="SemiBold"/>
+                            <TextBox x:Name="DefaultUserTextBox"
+                                     Watermark="Enter default user name"
+                                     Width="300"
+                                     HorizontalAlignment="Left"/>
+                        </StackPanel>
+                        
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Theme"
+                                       FontWeight="SemiBold"/>
+                            <ComboBox x:Name="ThemeComboBox"
+                                      Width="300"
+                                      HorizontalAlignment="Left"
+                                      SelectionChanged="ThemeComboBox_SelectionChanged">
+                                <ComboBoxItem Content="Dark" Tag="Dark"/>
+                                <ComboBoxItem Content="Light" Tag="Light"/>
+                                <ComboBoxItem Content="Forest Green" Tag="ForestGreen"/>
+                                <ComboBoxItem Content="Ruby Red" Tag="RubyRed"/>
+                                <ComboBoxItem Content="Sapphire Blue" Tag="SapphireBlue"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Runtime Section -->
+                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="15">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Runtime"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,5"/>
+                        
+                        <CheckBox Content="Enable verbose logging"
+                                  x:Name="VerboseLoggingCheckBox"/>
+                        
+                        <CheckBox Content="Auto-save projects"
+                                  x:Name="AutoSaveCheckBox"
+                                  IsChecked="True"/>
+                    </StackPanel>
+                </Border>
+                
+            </StackPanel>
+        </ScrollViewer>
+        
+        <!-- Footer Buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10">
+            <Button Content="Cancel"
+                    Click="Cancel_Click"
+                    Padding="20,8"
+                    Width="100"/>
+            <Button Content="Save"
+                    Click="Save_Click"
+                    Padding="20,8"
+                    Width="100"/>
+        </StackPanel>
+        
+    </Grid>
+    
+</Window>

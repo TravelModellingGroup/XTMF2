@@ -1,0 +1,97 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="XTMF2.GUI.Views.ProjectsView"
+             x:DataType="vm:ProjectsViewModel">
+    
+    <Grid RowDefinitions="Auto,*" Margin="10">
+        
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="Projects"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       Margin="0,0,0,5"/>
+            <TextBlock Text="{Binding CurrentUser.UserName, StringFormat='User: {0}'}"
+                       FontSize="14"
+                       Opacity="0.7"/>
+        </StackPanel>
+        
+        <!-- Projects List -->
+        <Border Grid.Row="1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="0">
+            
+            <Grid RowDefinitions="Auto,*">
+                
+                <!-- Toolbar -->
+                <Border Grid.Row="0"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        Padding="10,8"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="New Project"
+                                Click="NewProject_Click"
+                                Padding="12,6"/>
+                        <Button Content="Refresh"
+                                Click="Refresh_Click"
+                                Padding="12,6"/>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Projects DataGrid -->
+                <ScrollViewer Grid.Row="1">
+                    <ItemsControl ItemsSource="{Binding Projects}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SystemControlBackgroundAltMediumLowBrush}"
+                                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                        BorderThickness="0,0,0,1"
+                                        Padding="15,10"
+                                        Cursor="Hand">
+                                    <Border.Styles>
+                                        <Style Selector="Border:pointerover">
+                                            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListMediumBrush}"/>
+                                        </Style>
+                                    </Border.Styles>
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding Name}"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       Margin="0,0,0,4"/>
+                                            <TextBlock Text="{Binding Owner.UserName, StringFormat='Owner: {0}'}"
+                                                       FontSize="12"
+                                                       Opacity="0.7"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1"
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
+                                            <Button Content="Open"
+                                                    Padding="10,5"
+                                                    FontSize="12"/>
+                                            <Button Content="Delete"
+                                                    Padding="10,5"
+                                                    FontSize="12"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                
+            </Grid>
+            
+        </Border>
+        
+    </Grid>
+    
+</UserControl>
