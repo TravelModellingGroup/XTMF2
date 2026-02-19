@@ -278,6 +278,32 @@ Cette action ne peut pas être annulée.</value>
 {0}</value>
   </data>
   
+  <!-- About Dialog -->
+  <data name="About_Title" xml:space="preserve">
+    <value>À propos de XTMF2</value>
+  </data>
+  <data name="About_Description" xml:space="preserve">
+    <value>XTMF2 est un cadre de modélisation open source conçu pour soutenir le développement et l'exécution de modèles de demande de transport.</value>
+  </data>
+  <data name="About_Copyright" xml:space="preserve">
+    <value>Copyright © 2026 Université de Toronto</value>
+  </data>
+  <data name="About_License" xml:space="preserve">
+    <value>Sous licence GNU General Public License v3</value>
+  </data>
+  <data name="About_Version" xml:space="preserve">
+    <value>Version {0}</value>
+  </data>
+  <data name="About_Close" xml:space="preserve">
+    <value>Fermer</value>
+  </data>
+  <data name="MainWindow_MenuHelp" xml:space="preserve">
+    <value>_Aide</value>
+  </data>
+  <data name="MainWindow_MenuAbout" xml:space="preserve">
+    <value>_À propos de XTMF2...</value>
+  </data>
+
   <!-- Dialogs -->
   <data name="Dialog_OK" xml:space="preserve">
     <value>OK</value>

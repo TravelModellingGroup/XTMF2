@@ -44,6 +44,7 @@ public partial class MainWindow : Window
     private XTMFRuntime? _runtime;
     private bool _isLoading = true;
     private SettingsWindow? _settingsWindow;
+    private AboutDialog? _aboutDialog;
 
     /// <summary>
     /// The collection of document view models displayed in the dock.
@@ -286,6 +287,20 @@ public partial class MainWindow : Window
         else
         {
             _settingsWindow.Activate();
+        }
+    }
+
+    private void About_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_aboutDialog is null || !_aboutDialog.IsVisible)
+        {
+            _aboutDialog = new Views.AboutDialog();
+            _aboutDialog.Closed += (s, _) => _aboutDialog = null;
+            _aboutDialog.ShowDialog(this);
+        }
+        else
+        {
+            _aboutDialog.Activate();
         }
     }
 

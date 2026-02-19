@@ -113,6 +113,18 @@ public static class Strings
     public static string Settings_LanguageFrench => Get(nameof(Settings_LanguageFrench));
     public static string Settings_LanguageSpanish => Get(nameof(Settings_LanguageSpanish));
 
+    // Main Window Menu
+    public static string MainWindow_MenuHelp => Get(nameof(MainWindow_MenuHelp));
+    public static string MainWindow_MenuAbout => Get(nameof(MainWindow_MenuAbout));
+
+    // About Dialog
+    public static string About_Title => Get(nameof(About_Title));
+    public static string About_Description => Get(nameof(About_Description));
+    public static string About_Copyright => Get(nameof(About_Copyright));
+    public static string About_License => Get(nameof(About_License));
+    public static string About_Version => Get(nameof(About_Version));
+    public static string About_Close => Get(nameof(About_Close));
+
     // Runtime Initialization
     public static string RuntimeInitialization_ErrorTitle => Get(nameof(RuntimeInitialization_ErrorTitle));
     public static string RuntimeInitialization_CodeStyleError => Get(nameof(RuntimeInitialization_CodeStyleError));

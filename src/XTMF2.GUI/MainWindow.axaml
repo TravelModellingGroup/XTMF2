@@ -26,6 +26,9 @@
             <MenuItem Header="{res:Localize MainWindow_MenuTools}">
                 <MenuItem Header="{res:Localize MainWindow_MenuSettings}" Click="Settings_Click"/>
             </MenuItem>
+            <MenuItem Header="{res:Localize MainWindow_MenuHelp}">
+                <MenuItem Header="{res:Localize MainWindow_MenuAbout}" Click="About_Click"/>
+            </MenuItem>
         </Menu>
         
         <!-- DockControl - layout initialized in code-behind -->
