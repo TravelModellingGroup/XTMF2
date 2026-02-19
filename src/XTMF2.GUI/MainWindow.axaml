@@ -27,7 +27,7 @@
                 <MenuItem Header="{res:Localize MainWindow_MenuSettings}" Click="Settings_Click"/>
             </MenuItem>
             <MenuItem Header="{res:Localize MainWindow_MenuHelp}">
-                <MenuItem Header="{res:Localize MainWindow_MenuAbout}" Click="About_Click"/>
+                <MenuItem Header="{res:Localize MainWindow_MenuAbout}" Command="{Binding LaunchAboutDialogCommand}"/>
             </MenuItem>
         </Menu>
         

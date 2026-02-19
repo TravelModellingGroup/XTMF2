@@ -38,7 +38,7 @@ public partial class AboutDialog : Window
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             ?.InformationalVersion
             ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
-            ?? "1.0.0";
+            ?? "0.0.0";
 
         // Strip any build metadata suffix (e.g. "+sha.abc1234")
         var plusIndex = version.IndexOf('+');
@@ -50,9 +50,18 @@ public partial class AboutDialog : Window
 
     private void Close_Click(object? sender, RoutedEventArgs e) => Close();
 
-    private void Window_KeyUp(object? sender, KeyEventArgs e)
+    private void Window_KeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape || e.Key == Key.Enter)
+        {
+            e.Handled = true;
             Close();
+        }
+    }
+
+    protected override void OnLoaded(RoutedEventArgs e)
+    {
+        base.OnLoaded(e);
+        CloseButton.Focus();
     }
 }

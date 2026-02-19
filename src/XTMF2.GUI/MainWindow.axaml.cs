@@ -22,6 +22,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using CommunityToolkit.Mvvm.Input;
 using Dock.Avalonia.Controls;
 using Dock.Model.Avalonia;
 using Dock.Model.Avalonia.Controls;
@@ -31,6 +32,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
+using System.Threading.Tasks;
 using XTMF2;
 using XTMF2.Editing;
 using XTMF2.GUI.Controls;
@@ -44,7 +46,6 @@ public partial class MainWindow : Window
     private XTMFRuntime? _runtime;
     private bool _isLoading = true;
     private SettingsWindow? _settingsWindow;
-    private AboutDialog? _aboutDialog;
 
     /// <summary>
     /// The collection of document view models displayed in the dock.
@@ -290,18 +291,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private void About_Click(object? sender, RoutedEventArgs e)
-    {
-        if (_aboutDialog is null || !_aboutDialog.IsVisible)
-        {
-            _aboutDialog = new Views.AboutDialog();
-            _aboutDialog.Closed += (s, _) => _aboutDialog = null;
-            _aboutDialog.ShowDialog(this);
-        }
-        else
-        {
-            _aboutDialog.Activate();
-        }
+    [RelayCommand]
+    private void LaunchAboutDialog() {
+        var aboutDialog = new AboutDialog();
+        aboutDialog.ShowDialog(this);
     }
 
     private void Exit_Click(object? sender, RoutedEventArgs e) => Close();

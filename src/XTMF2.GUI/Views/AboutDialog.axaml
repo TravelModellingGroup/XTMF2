@@ -10,7 +10,7 @@
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
-        KeyUp="Window_KeyUp">
+        KeyDown="Window_KeyDown">
 
     <Grid Margin="28,24,28,24">
         <Grid.RowDefinitions>
@@ -77,6 +77,7 @@
 
         <!-- Close button -->
         <Button Grid.Row="6"
+                x:Name="CloseButton"
                 Content="{res:Localize About_Close}"
                 HorizontalAlignment="Center"
                 Width="100"

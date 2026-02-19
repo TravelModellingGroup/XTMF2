@@ -6,6 +6,7 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,7 +14,6 @@
     <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.3.9" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.1-build.4" />
     <PackageReference Include="Dock.Avalonia" Version="11.3.11.13" />
     <PackageReference Include="Dock.Model.Avalonia" Version="11.3.11.13" />
