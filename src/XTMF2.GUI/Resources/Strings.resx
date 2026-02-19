@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  
+  <!-- Main Window -->
+  <data name="MainWindow_Title" xml:space="preserve">
+    <value>XTMF2</value>
+  </data>
+  <data name="MainWindow_StartTab" xml:space="preserve">
+    <value>Start</value>
+  </data>
+  <data name="MainWindow_Settings" xml:space="preserve">
+    <value>⚙ Settings</value>
+  </data>
+  <data name="MainWindow_LoadingTitle" xml:space="preserve">
+    <value>Loading XTMF2...</value>
+  </data>
+  <data name="MainWindow_LoadingMessage" xml:space="preserve">
+    <value>Initializing runtime and loading projects</value>
+  </data>
+  <data name="MainWindow_MenuFile" xml:space="preserve">
+    <value>_File</value>
+  </data>
+  <data name="MainWindow_MenuExit" xml:space="preserve">
+    <value>E_xit</value>
+  </data>
+  <data name="MainWindow_MenuTools" xml:space="preserve">
+    <value>_Tools</value>
+  </data>
+  <data name="MainWindow_MenuSettings" xml:space="preserve">
+    <value>_Settings...</value>
+  </data>
+  
+  <!-- Projects View -->
+  <data name="Projects_Title" xml:space="preserve">
+    <value>Projects</value>
+  </data>
+  <data name="Projects_UserFormat" xml:space="preserve">
+    <value>User: {0}</value>
+  </data>
+  <data name="Projects_NewProject" xml:space="preserve">
+    <value>New Project</value>
+  </data>
+  <data name="Projects_Refresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="Projects_Open" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="Projects_Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Projects_OwnerFormat" xml:space="preserve">
+    <value>Owner: {0}</value>
+  </data>
+  <data name="Projects_CreateTitle" xml:space="preserve">
+    <value>Create New Project</value>
+  </data>
+  <data name="Projects_CreatePrompt" xml:space="preserve">
+    <value>Enter the project name:</value>
+  </data>
+  <data name="Projects_CreateError" xml:space="preserve">
+    <value>Failed to Create Project</value>
+  </data>
+  <data name="Projects_CloseTab" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Projects_DeleteConfirmTitle" xml:space="preserve">
+    <value>Confirm Delete</value>
+  </data>
+  <data name="Projects_DeleteConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to delete the project '{0}'?
+
+This action cannot be undone.</value>
+  </data>
+  <data name="Projects_DeleteFailedTitle" xml:space="preserve">
+    <value>Delete Project Failed</value>
+  </data>
+  <data name="Projects_Rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="Projects_RenameTitle" xml:space="preserve">
+    <value>Rename Project</value>
+  </data>
+  <data name="Projects_RenameFailedTitle" xml:space="preserve">
+    <value>Rename Project Failed</value>
+  </data>
+  <data name="Projects_SearchPlaceholder" xml:space="preserve">
+    <value>Search projects...</value>
+  </data>
+  
+  <!-- Model Systems View -->
+  <data name="ModelSystems_TitleFormat" xml:space="preserve">
+    <value>Model Systems - {0}</value>
+  </data>
+  <data name="ModelSystems_UserFormat" xml:space="preserve">
+    <value>User: {0}</value>
+  </data>
+  <data name="ModelSystems_NewModelSystem" xml:space="preserve">
+    <value>New Model System</value>
+  </data>
+  <data name="ModelSystems_SearchPlaceholder" xml:space="preserve">
+    <value>Search model systems...</value>
+  </data>
+  <data name="ModelSystems_Open" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="ModelSystems_OpenFailedTitle" xml:space="preserve">
+    <value>Failed to Open Model System</value>
+  </data>
+  <data name="ModelSystems_Rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="ModelSystems_Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="ModelSystems_UnknownProject" xml:space="preserve">
+    <value>Unknown Project</value>
+  </data>
+  <data name="ModelSystems_CreateTitle" xml:space="preserve">
+    <value>Create New Model System</value>
+  </data>
+  <data name="ModelSystems_CreatePrompt" xml:space="preserve">
+    <value>Enter model system name:</value>
+  </data>
+  <data name="ModelSystems_CreateFailedTitle" xml:space="preserve">
+    <value>Create Model System Failed</value>
+  </data>
+  <data name="ModelSystems_RenameTitle" xml:space="preserve">
+    <value>Rename Model System</value>
+  </data>
+  <data name="ModelSystems_RenameFailedTitle" xml:space="preserve">
+    <value>Rename Model System Failed</value>
+  </data>
+  <data name="ModelSystems_DeleteConfirmTitle" xml:space="preserve">
+    <value>Confirm Delete</value>
+  </data>
+  <data name="ModelSystems_DeleteConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to delete the model system '{0}'?
+
+This action cannot be undone.</value>
+  </data>
+  <data name="ModelSystems_DeleteFailedTitle" xml:space="preserve">
+    <value>Delete Model System Failed</value>
+  </data>
+  <data name="ModelSystems_UnknownError" xml:space="preserve">
+    <value>Unknown error</value>
+  </data>
+  
+  <!-- Settings Window -->
+  <data name="Settings_Title" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Settings_Subtitle" xml:space="preserve">
+    <value>Configure XTMF2 preferences</value>
+  </data>
+  <data name="Settings_General" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="Settings_DefaultUser" xml:space="preserve">
+    <value>Default User</value>
+  </data>
+  <data name="Settings_DefaultUserWatermark" xml:space="preserve">
+    <value>Enter default user name</value>
+  </data>
+  <data name="Settings_Theme" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="Settings_ThemeDark" xml:space="preserve">
+    <value>Dark</value>
+  </data>
+  <data name="Settings_ThemeLight" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="Settings_ThemeForestGreen" xml:space="preserve">
+    <value>Forest Green</value>
+  </data>
+  <data name="Settings_ThemeRubyRed" xml:space="preserve">
+    <value>Ruby Red</value>
+  </data>
+  <data name="Settings_ThemeSapphireBlue" xml:space="preserve">
+    <value>Sapphire Blue</value>
+  </data>
+  <data name="Settings_Runtime" xml:space="preserve">
+    <value>Runtime</value>
+  </data>
+  <data name="Settings_VerboseLogging" xml:space="preserve">
+    <value>Enable verbose logging</value>
+  </data>
+  <data name="Settings_AutoSave" xml:space="preserve">
+    <value>Auto-save projects</value>
+  </data>
+  <data name="Settings_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Settings_Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Settings_Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="Settings_LanguageEnglish" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="Settings_LanguageFrench" xml:space="preserve">
+    <value>French</value>
+  </data>
+  <data name="Settings_LanguageSpanish" xml:space="preserve">
+    <value>Spanish</value>
+  </data>
+  
+  <!-- Runtime Initialization -->
+  <data name="RuntimeInitialization_ErrorTitle" xml:space="preserve">
+    <value>XTMF Runtime Initialization Error</value>
+  </data>
+  <data name="RuntimeInitialization_CodeStyleError" xml:space="preserve">
+    <value>Failed to initialize XTMF runtime due to a code style error:
+
+{0}</value>
+  </data>
+  <data name="RuntimeInitialization_ErrorMessage" xml:space="preserve">
+    <value>Failed to initialize XTMF runtime:
+
+{0}</value>
+  </data>
+  
+  <!-- Dialogs -->
+  <data name="Dialog_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Dialog_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Dialog_Yes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="Dialog_No" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="Dialog_EnterText" xml:space="preserve">
+    <value>Enter text...</value>
+  </data>
+</root>

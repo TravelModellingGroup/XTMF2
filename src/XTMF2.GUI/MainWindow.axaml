@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:res="clr-namespace:XTMF2.GUI.Resources"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="XTMF2.GUI.MainWindow"
+        Title="{res:Localize MainWindow_Title}"
+        Icon="avares://XTMF2.GUI/Resources/XTMF_icon.png"
+        x:CompileBindings="False"
+        Width="1200"
+        Height="700"
+        KeyDown="Window_KeyDown">
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Menu Bar -->
+        <Menu Grid.Row="0" ZIndex="100">
+            <MenuItem Header="{res:Localize MainWindow_MenuFile}">
+                <MenuItem Header="{res:Localize MainWindow_MenuExit}" Click="Exit_Click"/>
+            </MenuItem>
+            <MenuItem Header="{res:Localize MainWindow_MenuTools}">
+                <MenuItem Header="{res:Localize MainWindow_MenuSettings}" Click="Settings_Click"/>
+            </MenuItem>
+        </Menu>
+        
+        <!-- DockControl - layout initialized in code-behind -->
+        <DockControl x:Name="DockControl" Grid.Row="1" />
+        
+        <!-- Loading Overlay -->
+        <Border x:Name="LoadingPanel"
+                Grid.Row="0"
+                Grid.RowSpan="2"
+                Background="#CC000000"
+                IsVisible="True">
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="20"
+                        Width="300">
+                
+                <TextBlock Text="{res:Localize MainWindow_LoadingTitle}"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           Foreground="White"/>
+                
+                <ProgressBar IsIndeterminate="True"
+                             Height="4"/>
+                
+                <TextBlock Text="{res:Localize MainWindow_LoadingMessage}"
+                           FontSize="12"
+                           HorizontalAlignment="Center"
+                           Foreground="#CCFFFFFF"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"/>
+                
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

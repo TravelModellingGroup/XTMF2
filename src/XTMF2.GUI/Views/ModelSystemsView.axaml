@@ -1,0 +1,121 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
+             xmlns:controls="clr-namespace:XTMF2.GUI.Controls"
+             xmlns:res="clr-namespace:XTMF2.GUI.Resources"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="XTMF2.GUI.Views.ModelSystemsView"
+             x:DataType="vm:ModelSystemsViewModel">
+    
+    <Grid RowDefinitions="Auto,*" Margin="10">
+        
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock x:Name="TitleTextBlock"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       Margin="0,0,0,5"/>
+            <TextBlock x:Name="UserTextBlock"
+                       FontSize="14"
+                       Opacity="0.7"/>
+        </StackPanel>
+        
+        <!-- Model Systems List -->
+        <Border Grid.Row="1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="0">
+            
+            <Grid RowDefinitions="Auto,*">
+                
+                <!-- Toolbar -->
+                <Border Grid.Row="0"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        Padding="10,8"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                        BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                            <Button Command="{Binding CreateNewModelSystemCommand}"
+                                    Padding="12,6">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="+" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{res:Localize ModelSystems_NewModelSystem}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <controls:SearchBox Grid.Column="1"
+                                            x:Name="ModelSystemSearchBox"
+                                            Text="{Binding SearchText, Mode=TwoWay}"
+                                            Watermark="{res:Localize ModelSystems_SearchPlaceholder}"
+                                            MaxWidth="300"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Margin="10,0,0,0"/>
+                    </Grid>
+                </Border>
+                
+                <!-- Model Systems List -->
+                <ScrollViewer Grid.Row="1">
+                    <ListBox ItemsSource="{Binding FilteredModelSystems}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SystemControlBackgroundAltMediumLowBrush}"
+                                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                        BorderThickness="0,0,0,1"
+                                        Padding="15,10"
+                                        Cursor="Hand"
+                                        DoubleTapped="ModelSystem_DoubleTapped">
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="{res:Localize ModelSystems_Open}"
+                                                      Click="OpenModelSystem_ContextMenu_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="→" FontSize="11" VerticalAlignment="Center"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="{res:Localize ModelSystems_Rename}"
+                                                      Click="RenameModelSystem_ContextMenu_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="✏" FontSize="11" VerticalAlignment="Center"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="{res:Localize ModelSystems_Delete}"
+                                                      Click="DeleteModelSystem_ContextMenu_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="✕" FontSize="11" VerticalAlignment="Center"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <Border.Styles>
+                                        <Style Selector="Border:pointerover">
+                                            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListMediumBrush}"/>
+                                        </Style>
+                                    </Border.Styles>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding Description}"
+                                                   FontSize="12"
+                                                   Opacity="0.7"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </ScrollViewer>
+                
+            </Grid>
+            
+        </Border>
+        
+    </Grid>
+    
+</UserControl>

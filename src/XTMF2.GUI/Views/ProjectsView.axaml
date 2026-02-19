@@ -1,0 +1,112 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
+             xmlns:controls="clr-namespace:XTMF2.GUI.Controls"
+             xmlns:res="clr-namespace:XTMF2.GUI.Resources"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="XTMF2.GUI.Views.ProjectsView"
+             x:DataType="vm:ProjectsViewModel">
+    
+    <Grid RowDefinitions="Auto,*" Margin="10">
+        
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="{res:Localize Projects_Title}"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       Margin="0,0,0,5"/>
+            <TextBlock x:Name="UserTextBlock"
+                       FontSize="14"
+                       Opacity="0.7"/>
+        </StackPanel>
+        
+        <!-- Projects List -->
+        <Border Grid.Row="1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="0">
+            
+            <Grid RowDefinitions="Auto,*">
+                
+                <!-- Toolbar -->
+                <Border Grid.Row="0"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        Padding="10,8"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                        BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Button Grid.Column="0"
+                                Click="NewProject_Click"
+                                Padding="12,6"
+                                Margin="0,0,10,0">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="+" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <TextBlock Text="{res:Localize Projects_NewProject}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <controls:SearchBox Grid.Column="1"
+                                           x:Name="ProjectSearchBox"
+                                           Text="{Binding SearchText, Mode=TwoWay}"
+                                           Watermark="{res:Localize Projects_SearchPlaceholder}"
+                                           MaxWidth="300"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           EnterPressed="SearchBox_EnterPressed"/>
+                    </Grid>
+                </Border>
+                
+                <!-- Projects DataGrid -->
+                <ScrollViewer Grid.Row="1">
+                    <ListBox ItemsSource="{Binding FilteredProjects}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border 
+                                        Background="{DynamicResource SystemControlBackgroundAltMediumLowBrush}"
+                                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                        BorderThickness="0,0,0,1"
+                                        Padding="2"
+                                        Cursor="Hand"
+                                        DoubleTapped="Border_DoubleTapped">
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="{res:Localize Projects_Open}"
+                                                      Click="OpenProject_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="→" FontSize="11" VerticalAlignment="Center"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="{res:Localize Projects_Rename}"
+                                                      Click="RenameProject_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="✏" FontSize="11" VerticalAlignment="Center"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="{res:Localize Projects_Delete}"
+                                                      Click="DeleteProject_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="✕" FontSize="11" VerticalAlignment="Center"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <Border.Styles>
+                                        <Style Selector="Border:pointerover">
+                                            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListMediumBrush}"/>
+                                        </Style>
+                                    </Border.Styles>
+                                        <TextBlock VerticalAlignment="Center" Text="{Binding Name}"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,4"/>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
