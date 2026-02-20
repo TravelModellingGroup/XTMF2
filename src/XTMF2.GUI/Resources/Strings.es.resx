@@ -274,7 +274,7 @@ Esta acción no se puede deshacer.</value>
   
   <!-- About Dialog -->
   <data name="About_Title" xml:space="preserve">
-    <value>Acerca de XTMF2</value>
+    <value>Acerca</value>
   </data>
   <data name="About_Description" xml:space="preserve">
     <value>XTMF2 es un marco de modelización de código abierto diseñado para apoyar el desarrollo y ejecución de modelos de demanda de transporte.</value>
