@@ -1,0 +1,87 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:res="clr-namespace:XTMF2.GUI.Resources"
+        mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="340"
+        x:Class="XTMF2.GUI.Views.AboutDialog"
+        Title="{res:Localize About_Title}"
+        Width="420"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        KeyDown="Window_KeyDown">
+
+    <Grid Margin="28,24,28,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Icon + Title row -->
+        <StackPanel Grid.Row="0"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Center"
+                    Spacing="16"
+                    Margin="0,0,0,16">
+            <Image Source="avares://XTMF2.GUI/Resources/XTMF_icon.png"
+                   Width="64"
+                   Height="64"
+                   VerticalAlignment="Center"/>
+            <StackPanel VerticalAlignment="Center" Spacing="4">
+                <TextBlock Text="XTMF2"
+                           FontSize="28"
+                           FontWeight="Bold"/>
+                <TextBlock x:Name="VersionText"
+                           FontSize="13"
+                           Opacity="0.7"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Separator -->
+        <Separator Grid.Row="1" Margin="0,0,0,14"/>
+
+        <!-- Description -->
+        <TextBlock Grid.Row="2"
+                   Text="{res:Localize About_Description}"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"
+                   Opacity="0.85"
+                   Margin="0,0,0,14"/>
+
+        <!-- Copyright -->
+        <TextBlock Grid.Row="3"
+                   Text="{res:Localize About_Copyright}"
+                   FontSize="12"
+                   HorizontalAlignment="Center"
+                   Opacity="0.7"
+                   Margin="0,0,0,4"/>
+
+        <!-- License -->
+        <TextBlock Grid.Row="4"
+                   Text="{res:Localize About_License}"
+                   FontSize="11"
+                   HorizontalAlignment="Center"
+                   Opacity="0.55"
+                   Margin="0,0,0,20"/>
+
+        <!-- Separator -->
+        <Separator Grid.Row="5" Margin="0,0,0,16"/>
+
+        <!-- Close button -->
+        <Button Grid.Row="6"
+                x:Name="CloseButton"
+                Content="{res:Localize About_Close}"
+                HorizontalAlignment="Center"
+                Width="100"
+                Click="Close_Click"
+                IsDefault="True"/>
+    </Grid>
+</Window>

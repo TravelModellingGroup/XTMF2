@@ -22,6 +22,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using CommunityToolkit.Mvvm.Input;
 using Dock.Avalonia.Controls;
 using Dock.Model.Avalonia;
 using Dock.Model.Avalonia.Controls;
@@ -31,6 +32,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
+using System.Threading.Tasks;
 using XTMF2;
 using XTMF2.Editing;
 using XTMF2.GUI.Controls;
@@ -287,6 +289,12 @@ public partial class MainWindow : Window
         {
             _settingsWindow.Activate();
         }
+    }
+
+    [RelayCommand]
+    private void LaunchAboutDialog() {
+        var aboutDialog = new AboutDialog();
+        aboutDialog.ShowDialog(this);
     }
 
     private void Exit_Click(object? sender, RoutedEventArgs e) => Close();

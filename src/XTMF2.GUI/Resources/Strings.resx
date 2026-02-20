@@ -87,6 +87,12 @@
   <data name="MainWindow_MenuSettings" xml:space="preserve">
     <value>_Settings...</value>
   </data>
+  <data name="MainWindow_MenuHelp" xml:space="preserve">
+    <value>_Help</value>
+  </data>
+  <data name="MainWindow_MenuAbout" xml:space="preserve">
+    <value>_About</value>
+  </data>
   
   <!-- Projects View -->
   <data name="Projects_Title" xml:space="preserve">
@@ -266,6 +272,26 @@ This action cannot be undone.</value>
     <value>Spanish</value>
   </data>
   
+  <!-- About Dialog -->
+  <data name="About_Title" xml:space="preserve">
+    <value>About XTMF2</value>
+  </data>
+  <data name="About_Description" xml:space="preserve">
+    <value>XTMF2 is an open-source modelling framework designed to support the development and execution of transportation demand models.</value>
+  </data>
+  <data name="About_Copyright" xml:space="preserve">
+    <value>Copyright © 2026 University of Toronto</value>
+  </data>
+  <data name="About_License" xml:space="preserve">
+    <value>Licensed under the GNU General Public License v3</value>
+  </data>
+  <data name="About_Version" xml:space="preserve">
+    <value>Version {0}</value>
+  </data>
+  <data name="About_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+
   <!-- Runtime Initialization -->
   <data name="RuntimeInitialization_ErrorTitle" xml:space="preserve">
     <value>XTMF Runtime Initialization Error</value>

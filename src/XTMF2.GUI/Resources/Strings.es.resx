@@ -272,6 +272,32 @@ Esta acción no se puede deshacer.</value>
 {0}</value>
   </data>
   
+  <!-- About Dialog -->
+  <data name="About_Title" xml:space="preserve">
+    <value>Acerca</value>
+  </data>
+  <data name="About_Description" xml:space="preserve">
+    <value>XTMF2 es un marco de modelización de código abierto diseñado para apoyar el desarrollo y ejecución de modelos de demanda de transporte.</value>
+  </data>
+  <data name="About_Copyright" xml:space="preserve">
+    <value>Copyright © 2026 Universidad de Toronto</value>
+  </data>
+  <data name="About_License" xml:space="preserve">
+    <value>Con licencia GNU General Public License v3</value>
+  </data>
+  <data name="About_Version" xml:space="preserve">
+    <value>Versión {0}</value>
+  </data>
+  <data name="About_Close" xml:space="preserve">
+    <value>Cerrar</value>
+  </data>
+  <data name="MainWindow_MenuHelp" xml:space="preserve">
+    <value>_Ayuda</value>
+  </data>
+  <data name="MainWindow_MenuAbout" xml:space="preserve">
+    <value>_Acerca de XTMF2...</value>
+  </data>
+
   <!-- Dialogs -->
   <data name="Dialog_OK" xml:space="preserve">
     <value>Aceptar</value>

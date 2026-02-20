@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
+using System.Reflection;
 using System.Threading.Tasks;
 using XTMF2;
 using XTMF2.GUI.Resources;
