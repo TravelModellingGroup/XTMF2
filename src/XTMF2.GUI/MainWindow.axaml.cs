@@ -292,7 +292,8 @@ public partial class MainWindow : Window
     }
 
     [RelayCommand]
-    private void LaunchAboutDialog() {
+    private void LaunchAboutDialog()
+    {
         var aboutDialog = new AboutDialog();
         aboutDialog.ShowDialog(this);
     }
@@ -303,7 +304,7 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.W && e.KeyModifiers == KeyModifiers.Control)
         {
-            CloseCurrentProjectTab();
+            CloseCurrentDocument();
             e.Handled = true;
         }
         else if (e.Key == Key.E && e.KeyModifiers == KeyModifiers.Control)
@@ -354,12 +355,24 @@ public partial class MainWindow : Window
         return null;
     }
 
-    private void CloseCurrentProjectTab()
+    private void CloseCurrentDocument()
     {
-        // Find the ModelSystemsViewModel whose project matches the active tab.
-        // With ItemsSource Dock, remove the VM from the collection to close it.
-        var activeVm = Documents.OfType<ModelSystemsViewModel>().LastOrDefault();
-        if (activeVm is not null)
-            Documents.Remove(activeVm);
+        // Find the currently active document and remove it from the collection, which will close the tab.
+        if (_documentDock?.ActiveDockable is IDocument activeDoc
+            && activeDoc.CanClose
+            && activeDoc.Context is object context)
+        {
+            if (DockControl.Layout is IDock currentDock
+                && currentDock.CanGoBack)
+            {
+                var goBackCommand = currentDock.GoBack;
+                if(goBackCommand.CanExecute(currentDock))
+                {
+                    goBackCommand.Execute(currentDock);
+                }
+            }
+            // Now that we tried to move back, we can remove the active document.
+            Documents.Remove(context);
+        }
     }
 }
