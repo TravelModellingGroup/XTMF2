@@ -37,7 +37,7 @@
                         Padding="10,8"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                         BorderThickness="0,0,0,1">
-                    <Grid ColumnDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
                             <Button Command="{Binding CreateNewModelSystemCommand}"
                                     Padding="12,6">
@@ -47,7 +47,7 @@
                                 </StackPanel>
                             </Button>
                         </StackPanel>
-                        <controls:SearchBox Grid.Column="1"
+                        <controls:SearchBox Grid.Column="2"
                                             x:Name="ModelSystemSearchBox"
                                             Text="{Binding SearchText, Mode=TwoWay}"
                                             Watermark="{res:Localize ModelSystems_SearchPlaceholder}"

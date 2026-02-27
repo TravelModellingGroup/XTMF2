@@ -37,7 +37,7 @@
                         Padding="10,8"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                         BorderThickness="0,0,0,1">
-                    <Grid ColumnDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
                         <Button Grid.Column="0"
                                 Click="NewProject_Click"
                                 Padding="12,6"
@@ -47,7 +47,7 @@
                                 <TextBlock Text="{res:Localize Projects_NewProject}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                        <controls:SearchBox Grid.Column="1"
+                        <controls:SearchBox Grid.Column="2"
                                            x:Name="ProjectSearchBox"
                                            Text="{Binding SearchText, Mode=TwoWay}"
                                            Watermark="{res:Localize Projects_SearchPlaceholder}"
