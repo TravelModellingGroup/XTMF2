@@ -18,10 +18,12 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Text;
 using System.Reflection;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Threading;
 
 namespace XTMF2.Repository
 {
@@ -34,21 +36,51 @@ namespace XTMF2.Repository
             = new ConcurrentDictionary<Type, (ModuleAttribute Description, TypeInfo TypeInfo, NodeHook[] Hooks)>();
         private static TypeInfo IModuleTypeInfo = typeof(IModule).GetTypeInfo();
 
+        private Lock _moduleTypesLock = new();
+        private readonly ObservableCollection<Type> _moduleTypes = new ObservableCollection<Type>();
+
+        /// <summary>
+        /// An observable, read-only list of every module <see cref="Type"/> currently loaded
+        /// into this repository.  Consumers can bind to this collection; it is updated on the
+        /// thread that calls <see cref="Add"/> or <see cref="AddIfModuleType"/>.
+        /// </summary>
+        public ReadOnlyObservableCollection<Type> LoadedModuleTypes { get; }
+            = null!; // assigned in constructor
+
+        public ModuleRepository()
+        {
+            LoadedModuleTypes = new ReadOnlyObservableCollection<Type>(_moduleTypes);
+        }
+
+        /// <summary>
+        /// Adds <paramref name="type"/> to <see cref="LoadedModuleTypes"/> if it is not already
+        /// present. Must be called after the type is successfully stored in <see cref="_Data"/>.
+        /// </summary>
+        private void TrackType(Type type)
+        {
+            lock(_moduleTypesLock)
+            {   
+                if (!_moduleTypes.Contains(type))
+                {
+                    _moduleTypes.Add(type);
+                }
+            }
+        }
+
         /// <summary>
         /// Add the given type to the module repository.
         /// </summary>
         /// <param name="type">The type to add to the repository.</param>
         public void Add(Type type)
         {
-            if (type == null)
-            {
-                throw new ArgumentNullException(nameof(type));
-            }
+            ArgumentNullException.ThrowIfNull(type);
+
             if (!IModuleTypeInfo.IsAssignableFrom(type))
             {
                 throw new ArgumentException(nameof(type), "The type is not of a module!");
             }
             _Data[type] = GetTypeData(type);
+            TrackType(type);
         }
 
         /// <summary>
@@ -67,6 +99,7 @@ namespace XTMF2.Repository
                 if (IModuleTypeInfo.IsAssignableFrom(type))
                 {
                     _Data[type] = GetTypeData(type);
+                    TrackType(type);
                 }
             }
         }
@@ -86,6 +119,7 @@ namespace XTMF2.Repository
                 }
                 if (!_Data.TryGetValue(type, out var ret))
                 {
+                    // Add() calls TrackType() internally, so LoadedModuleTypes is updated here too.
                     Add(type);
                     _Data.TryGetValue(type, out ret);
                 }

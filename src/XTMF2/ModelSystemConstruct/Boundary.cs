@@ -486,7 +486,8 @@ namespace XTMF2.ModelSystemConstruct
             }
         }
 
-        private readonly Boundary? Parent;
+        /// <summary>The parent boundary, or <c>null</c> if this is the root boundary.</summary>
+        public Boundary? Parent { get; private set; }
 
         public string FullPath
         {
@@ -716,6 +717,7 @@ namespace XTMF2.ModelSystemConstruct
                             {
                                 return false;
                             }
+                            _boundaries.Add(boundary);
                         }
                     }
                 }

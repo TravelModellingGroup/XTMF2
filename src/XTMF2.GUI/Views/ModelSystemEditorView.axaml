@@ -3,35 +3,255 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             xmlns:ctrl="clr-namespace:XTMF2.GUI.Controls"
+             xmlns:res="clr-namespace:XTMF2.GUI.Resources"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
              x:Class="XTMF2.GUI.Views.ModelSystemEditorView"
-             x:DataType="vm:ModelSystemEditorViewModel">
+             x:DataType="vm:ModelSystemEditorViewModel"
+             Focusable="True">
+
+    <UserControl.KeyBindings>
+        <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveModelSystemCommand}"/>
+    </UserControl.KeyBindings>
 
     <Grid RowDefinitions="Auto,*" Margin="10">
 
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="{Binding Title}"
-                       FontSize="24"
-                       FontWeight="Bold"
-                       Margin="0,0,0,5"/>
-            <TextBlock Text="Model System Editor"
-                       FontSize="14"
-                       Opacity="0.7"/>
-        </StackPanel>
+        <!-- ── Header ──────────────────────────────────────────────── -->
+        <Grid Grid.Row="0" Margin="0,0,0,8" ColumnDefinitions="*,Auto,Auto">
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="{Binding Title}"
+                           FontSize="22"
+                           FontWeight="Bold"
+                           Margin="0,0,0,2"/>
+                <TextBlock Text="Model System Editor"
+                           FontSize="13"
+                           Opacity="0.6"/>
+            </StackPanel>
 
-        <!-- Placeholder editor area -->
+            <!-- Boundary navigation dropdown -->
+            <ComboBox x:Name="BoundaryNavComboBox"
+                      Grid.Column="1"
+                      ItemsSource="{Binding BoundaryNavigationItems}"
+                      PlaceholderText="{Binding CurrentBoundaryLabel}"
+                      Width="200"
+                      VerticalAlignment="Center"
+                      Margin="0,0,8,0"
+                      ToolTip.Tip="Navigate to a boundary">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:BoundaryNavigationItem">
+                        <TextBlock Text="{Binding Label}"/>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <AutoCompleteBox x:Name="NodeSearchBox"
+                             Grid.Column="2"
+                             ItemsSource="{Binding Nodes}"
+                             MinimumPrefixLength="0"
+                             FilterMode="ContainsOrdinal"
+                             ValueMemberBinding="{Binding Name}"
+                             Watermark="Find node…  (Ctrl+E)"
+                             Width="220"
+                             VerticalAlignment="Center"/>
+        </Grid>
+
+        <!-- ── Main content: toolbox + canvas ──────────────────────── -->
+        <Grid Grid.Row="1" ColumnDefinitions="220,Auto,*">
+
+            <!-- Left: Toolbox -->
+            <Border Grid.Column="0"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="8">
+                <DockPanel>
+
+                    <!-- ── File action buttons (bottom) ───────────────── -->
+                    <Border DockPanel.Dock="Bottom"
+                            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                            BorderThickness="0,1,0,0"
+                            Padding="0,8,0,0"
+                            Margin="0,8,0,0">
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    Spacing="6">
+
+                            <!-- Save -->
+                            <Button Command="{Binding SaveModelSystemCommand}"
+                                    ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                    <TextBlock Text="💾" FontSize="18" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Export -->
+                            <Button Command="{Binding ExportModelSystemCommand}"
+                                    ToolTip.Tip="{res:Localize ModelSystemEditor_ExportTooltip}">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                    <TextBlock Text="📤" FontSize="18" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Revert -->
+                            <Button Command="{Binding RevertModelSystemCommand}"
+                                    ToolTip.Tip="{res:Localize ModelSystemEditor_RevertTooltip}">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                    <TextBlock Text="↩" FontSize="18" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ── Scrollable toolbox content (fills remaining space) ── -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="6">
+
+                            <!-- Section: Add elements -->
+                            <TextBlock Text="Toolbox"
+                                       FontWeight="SemiBold"
+                                       FontSize="14"
+                                       Margin="0,0,0,4"/>
+
+                            <Button Content="Add Start"
+                                    Command="{Binding AddStartCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"/>
+
+                            <Button Content="Add Module"
+                                    Command="{Binding AddModuleCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"/>
+
+                            <Button Content="Add Comment"
+                                    Command="{Binding AddCommentBlockCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"/>
+
+                            <CheckBox Content="Show all hooks"
+                                      IsChecked="{Binding ShowAllHooks}"
+                                      FontSize="12"
+                                      Margin="0,6,0,0"/>
+
+                            <Separator Margin="0,8"/>
+
+                            <!-- Section: Selected element properties -->
+                            <TextBlock Text="Selected Element"
+                                       FontWeight="SemiBold"
+                                       FontSize="13"
+                                       Margin="0,0,0,2"/>
+
+                            <StackPanel Spacing="4"
+                                        IsVisible="{Binding SelectedElement, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <TextBlock Text="{Binding SelectedElementFieldLabel, StringFormat='{}{0}:'}"
+                                           FontSize="12"
+                                           Opacity="0.7"/>
+                                <TextBox x:Name="NameEditBox"
+                                         Text="{Binding SelectedElementEditName, Mode=TwoWay}"
+                                         FontSize="12"
+                                         Watermark="Element name…"/>
+                                <Button Content="{Binding SelectedElementFieldLabel, StringFormat='Apply {0}'}"
+                                        Command="{Binding CommitRenameCommand}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        FontSize="12"/>
+                                <Separator Margin="0,4"/>
+                                <TextBlock Text="Type:"
+                                           FontSize="12"
+                                           Opacity="0.7"/>
+                                <TextBlock Text="{Binding SelectedElementTypeName}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"/>
+                                <Button Content="Change Type…"
+                                        Command="{Binding ChangeModuleTypeCommand}"
+                                        IsVisible="{Binding SelectedElementIsNode}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        FontSize="12"
+                                        Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <!-- Section: MultiLink destinations -->
+                            <StackPanel IsVisible="{Binding SelectedLinkIsMulti}" Spacing="4" Margin="0,4,0,0">
+                                <TextBlock Text="Link Destinations"
+                                           FontWeight="SemiBold"
+                                           FontSize="13"/>
+                                <TextBlock Text="Drag to reorder  ·  select + Delete to remove"
+                                           FontSize="10"
+                                           Opacity="0.6"
+                                           TextWrapping="Wrap"/>
+                                <ListBox x:Name="DestinationListBox"
+                                         ItemsSource="{Binding SelectedLinkDestinationEntries}"
+                                         SelectedItem="{Binding SelectedLinkDestinationEntry, Mode=TwoWay}"
+                                         MaxHeight="180">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:LinkDestinationViewModel">
+                                            <TextBlock Text="{Binding Name}" Padding="4,2"/>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+
+                            <TextBlock Text="Nothing selected."
+                                       FontSize="12"
+                                       Opacity="0.5"
+                                       IsVisible="{Binding NothingSelected}"/>
+
+                        </StackPanel>
+                    </ScrollViewer>
+
+                </DockPanel>
+            </Border>
+
+            <!-- Splitter -->
+            <GridSplitter Grid.Column="1"
+                          ResizeDirection="Columns"
+                          Width="5"
+                          Background="Transparent"
+                          Margin="2,0"/>
+
+            <!-- Right: Canvas area -->
+            <Border Grid.Column="2"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    ClipToBounds="True">
+                <ScrollViewer x:Name="CanvasScrollViewer"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto">
+                    <ctrl:ModelSystemCanvas x:Name="TheCanvas"
+                                            DataContext="{Binding}"/>
+                </ScrollViewer>
+            </Border>
+
+        </Grid>
+
+        <!-- ── Toast notification overlay ──────────────────────────────── -->
         <Border Grid.Row="1"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                BorderThickness="1"
-                CornerRadius="4">
-            <TextBlock Text="Model system editor view — coming soon."
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       Opacity="0.5"
-                       FontSize="16"/>
+                VerticalAlignment="Bottom"
+                HorizontalAlignment="Center"
+                Margin="0,0,0,20"
+                Padding="16,10"
+                CornerRadius="6"
+                IsVisible="{Binding ToastMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                IsHitTestVisible="False"
+                ZIndex="100"
+                Classes.error="{Binding ToastIsError}">
+            <Border.Styles>
+                <Style Selector="Border">
+                    <Setter Property="Background" Value="#CC1565C0"/>
+                </Style>
+                <Style Selector="Border.error">
+                    <Setter Property="Background" Value="#CCC62828"/>
+                </Style>
+            </Border.Styles>
+            <TextBlock Text="{Binding ToastMessage}"
+                       Foreground="White"
+                       FontSize="13"
+                       HorizontalAlignment="Center"/>
         </Border>
 
     </Grid>
 
 </UserControl>
+

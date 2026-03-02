@@ -244,7 +244,9 @@ public partial class MainWindow : Window
     /// If a tab for the same <see cref="ModelSystemHeader"/> is already open it is
     /// activated instead and <paramref name="session"/> is disposed.
     /// </summary>
-    public void OpenModelSystemTab(ModelSystemSession session)
+    /// <param name="session">The model system editing session to open.</param>
+    /// <param name="user">The user who opened the session (forwarded to the editor VM).</param>
+    public void OpenModelSystemTab(ModelSystemSession session, User user)
     {
         // Reuse an existing tab for the same model system, if any.
         var existing = Documents
@@ -261,7 +263,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        Documents.Add(new ModelSystemEditorViewModel(session));
+        Documents.Add(new ModelSystemEditorViewModel(session, user));
     }
 
     /// <summary>

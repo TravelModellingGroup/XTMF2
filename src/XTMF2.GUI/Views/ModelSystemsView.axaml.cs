@@ -19,6 +19,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using System.Linq;
 using XTMF2;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Resources;
@@ -41,6 +42,9 @@ public partial class ModelSystemsView : UserControl
         
         // Subscribe to visual tree attachment to find MainWindow
         AttachedToVisualTree += OnAttachedToVisualTree;
+
+        ModelSystemListBox.KeyDown += OnModelSystemListBoxKeyDown;
+        ModelSystemSearchBox.EnterPressed += OnModelSystemSearchBoxEnterPressed;
     }
 
     private void OnAttachedToVisualTree(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
@@ -81,6 +85,23 @@ public partial class ModelSystemsView : UserControl
             OpenModelSystem(header);
     }
 
+    private void OnModelSystemListBoxKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
+    {
+        if (e.Key != Avalonia.Input.Key.Enter) return;
+        if (_viewModel?.SelectedModelSystem is { } header)
+        {
+            OpenModelSystem(header);
+            e.Handled = true;
+        }
+    }
+
+    private void OnModelSystemSearchBoxEnterPressed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var first = _viewModel?.FilteredModelSystems.FirstOrDefault();
+        if (first is not null)
+            OpenModelSystem(first);
+    }
+
     private void OpenModelSystem_ContextMenu_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is MenuItem menuItem && menuItem.DataContext is ModelSystemHeader header)
@@ -108,7 +129,7 @@ public partial class ModelSystemsView : UserControl
             return;
         }
 
-        mainWindow.OpenModelSystemTab(session);
+        mainWindow.OpenModelSystemTab(session, _viewModel.CurrentUser);
     }
 
     private void RenameModelSystem_ContextMenu_Click(object? sender, RoutedEventArgs e)

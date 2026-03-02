@@ -1,0 +1,79 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="XTMF2.GUI.Views.BoundaryPickerDialog"
+        x:CompileBindings="False"
+        Title="Boundaries"
+        Width="480"
+        Height="420"
+        MinWidth="360"
+        MinHeight="300"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="16">
+
+        <!-- Instructions -->
+        <TextBlock Grid.Row="0"
+                   Text="Select a boundary to navigate to, or create a new child boundary below."
+                   FontSize="13"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,10"/>
+
+        <!-- Boundary list -->
+        <Border Grid.Row="1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                BorderThickness="1"
+                CornerRadius="4">
+            <ListBox x:Name="BoundaryListBox"
+                     ItemsSource="{Binding BrowseItems}"
+                     SelectedItem="{Binding SelectedBrowseItem, Mode=TwoWay}"
+                     SelectionMode="Single">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Boundary.Name}"
+                                   Margin="{Binding ItemMargin}"
+                                   Padding="2"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <!-- Create new boundary section -->
+        <Border Grid.Row="2"
+                Margin="0,10,0,0"
+                Padding="0,8,0,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBox Grid.Column="0"
+                         x:Name="NewBoundaryNameBox"
+                         Watermark="New child boundary name…"
+                         VerticalAlignment="Center"/>
+                <Button Grid.Column="1"
+                        Content="Create Under Selected"
+                        Click="CreateBoundary_Click"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- Dialog buttons -->
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,12,0,0">
+            <Button Content="Go To Selected"
+                    Click="Navigate_Click"
+                    IsDefault="True"
+                    Padding="16,8"
+                    MinWidth="100"/>
+            <Button Content="Cancel"
+                    Click="Cancel_Click"
+                    IsCancel="True"
+                    Padding="16,8"
+                    MinWidth="80"/>
+        </StackPanel>
+
+    </Grid>
+
+</Window>

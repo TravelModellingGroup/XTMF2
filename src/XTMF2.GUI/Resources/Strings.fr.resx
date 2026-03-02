@@ -320,4 +320,24 @@ Cette action ne peut pas être annulée.</value>
   <data name="Dialog_EnterText" xml:space="preserve">
     <value>Entrez le texte...</value>
   </data>
+
+  <!-- Model System Editor -->
+  <data name="ModelSystemEditor_SaveTooltip" xml:space="preserve">
+    <value>Enregistrer – écrire le système de modèle dans son fichier de projet (Ctrl+S)</value>
+  </data>
+  <data name="ModelSystemEditor_ExportTooltip" xml:space="preserve">
+    <value>Exporter – enregistrer une copie du système de modèle dans un fichier de votre choix</value>
+  </data>
+  <data name="ModelSystemEditor_RevertTooltip" xml:space="preserve">
+    <value>Revenir – annuler toutes les modifications non enregistrées et restaurer la dernière version enregistrée</value>
+  </data>
+  <data name="ModelSystemEditor_ToastSaving" xml:space="preserve">
+    <value>Enregistrement du système de modèle…</value>
+  </data>
+  <data name="ModelSystemEditor_ToastSaved" xml:space="preserve">
+    <value>Système de modèle enregistré avec succès.</value>
+  </data>
+  <data name="ModelSystemEditor_ToastSaveFailed" xml:space="preserve">
+    <value>Échec de l'enregistrement : {0}</value>
+  </data>
 </root>

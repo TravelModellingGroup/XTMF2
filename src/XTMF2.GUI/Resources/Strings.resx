@@ -323,4 +323,24 @@ This action cannot be undone.</value>
   <data name="Dialog_EnterText" xml:space="preserve">
     <value>Enter text...</value>
   </data>
+
+  <!-- Model System Editor -->
+  <data name="ModelSystemEditor_SaveTooltip" xml:space="preserve">
+    <value>Save – write the model system to its project file (Ctrl+S)</value>
+  </data>
+  <data name="ModelSystemEditor_ExportTooltip" xml:space="preserve">
+    <value>Export – save a copy of the model system to a chosen file</value>
+  </data>
+  <data name="ModelSystemEditor_RevertTooltip" xml:space="preserve">
+    <value>Revert – discard all unsaved changes and restore the last saved version</value>
+  </data>
+  <data name="ModelSystemEditor_ToastSaving" xml:space="preserve">
+    <value>Saving model system…</value>
+  </data>
+  <data name="ModelSystemEditor_ToastSaved" xml:space="preserve">
+    <value>Model system saved successfully.</value>
+  </data>
+  <data name="ModelSystemEditor_ToastSaveFailed" xml:space="preserve">
+    <value>Save failed: {0}</value>
+  </data>
 </root>
