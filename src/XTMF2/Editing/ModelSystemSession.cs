@@ -752,6 +752,9 @@ namespace XTMF2.Editing
 
         /// <summary>
         /// Remove the given node.
+        /// All outgoing links (where this node is the origin) and all incoming links (where
+        /// this node is a destination) are also removed, keeping the model consistent.
+        /// The removal — including all affected links — is registered as a single undoable command.
         /// </summary>
         /// <param name="user">The user issuing the command.</param>
         /// <param name="node">The node to be removed.</param>
@@ -770,18 +773,113 @@ namespace XTMF2.Editing
                     return false;
                 }
                 var boundary = node.ContainedWithin!;
+
+                // Collect all outgoing links (this node is the origin; stored in its own boundary).
+                var outgoingLinks = boundary.Links.Where(l => l.Origin == node).ToList();
+
+                // Collect all links that point TO this node from any boundary.
+                var incomingLinks = GetLinksGoingTo(node);
+
+                // For multi-links in the incoming set, record the exact destination indices
+                // that refer to 'node' so they can be faithfully restored on undo.
+                var multiLinkRestoreInfo = new Dictionary<MultiLink, List<(int Index, Node Dest)>>();
+                foreach (var link in incomingLinks)
+                {
+                    if (link is MultiLink ml)
+                    {
+                        var list = new List<(int Index, Node Dest)>();
+                        var dests = ml.Destinations;
+                        for (int i = 0; i < dests.Count; i++)
+                        {
+                            if (dests[i] == node)
+                                list.Add((i, dests[i]));
+                        }
+                        multiLinkRestoreInfo[ml] = list;
+                    }
+                }
+
+                // Remove all incoming links (or just the relevant destination entries).
+                void RemoveIncoming()
+                {
+                    foreach (var link in incomingLinks)
+                    {
+                        if (link is SingleLink)
+                        {
+                            link.Origin!.ContainedWithin!.RemoveLink(link, out _);
+                        }
+                        else if (link is MultiLink ml)
+                        {
+                            // Remove back-to-front so indices remain valid during removal.
+                            var list = multiLinkRestoreInfo[ml];
+                            for (int i = list.Count - 1; i >= 0; i--)
+                                ml.RemoveDestination(list[i].Index);
+
+                            // If the multi-link is now empty, remove the link object itself.
+                            if (ml.Destinations.Count == 0)
+                                ml.Origin!.ContainedWithin!.RemoveLink(ml, out _);
+                        }
+                    }
+                }
+
+                // Restore all incoming links (inverse of RemoveIncoming).
+                void RestoreIncoming()
+                {
+                    foreach (var link in incomingLinks)
+                    {
+                        if (link is SingleLink)
+                        {
+                            link.Origin!.ContainedWithin!.AddLink(link, out _);
+                        }
+                        else if (link is MultiLink ml)
+                        {
+                            // If the link object was fully removed, re-add it first.
+                            if (!ml.Origin!.ContainedWithin!.Links.Contains(ml))
+                                ml.Origin.ContainedWithin.AddLink(ml, out _);
+
+                            // Re-insert destination entries in original order (front-to-back).
+                            var list = multiLinkRestoreInfo[ml];
+                            for (int i = 0; i < list.Count; i++)
+                                ml.AddDestination(list[i].Dest, list[i].Index);
+                        }
+                    }
+                }
+
+                // Remove incoming links, then outgoing links, then the node itself.
+                RemoveIncoming();
+                foreach (var link in outgoingLinks)
+                    boundary.RemoveLink(link, out _);
+
                 if (boundary.RemoveNode(node, out error))
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (boundary.AddNode(node, out var e), e);
+                        // Undo: restore node first, then its outgoing links, then all incoming links.
+                        if (boundary.AddNode(node, out var e))
+                        {
+                            foreach (var link in outgoingLinks)
+                                boundary.AddLink(link, out e);
+                            RestoreIncoming();
+                            return (true, null);
+                        }
+                        return (false, e);
                     }, () =>
                     {
+                        // Redo: same sequence as the original removal.
+                        RemoveIncoming();
+                        foreach (var link in outgoingLinks)
+                            boundary.RemoveLink(link, out _);
                         return (boundary.RemoveNode(node, out var e), e);
                     }));
                     return true;
                 }
-                return false;
+                else
+                {
+                    // Node removal failed; roll back the link removals.
+                    foreach (var link in outgoingLinks)
+                        boundary.AddLink(link, out _);
+                    RestoreIncoming();
+                    return false;
+                }
             }
         }
 
