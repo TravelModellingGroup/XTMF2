@@ -969,6 +969,26 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
     }
 
+    /// <summary>
+    /// Navigates the canvas to the node referenced by <paramref name="dest"/>.
+    /// If the node lives in a different boundary the view is switched first, then
+    /// the canvas is scrolled to centre on the node.
+    /// </summary>
+    public void NavigateToLinkDestination(LinkDestinationViewModel dest)
+    {
+        var node     = dest.NodeVm.UnderlyingNode;
+        var boundary = node.ContainedWithin;
+        if (boundary is null) return;
+
+        if (!ReferenceEquals(boundary, _currentBoundary))
+            SwitchToBoundary(boundary);
+
+        // After a possible boundary switch, Nodes has been rebuilt — look up the fresh VM.
+        var nodeVm = Nodes.FirstOrDefault(n => n.UnderlyingNode == node);
+        if (nodeVm is not null)
+            ScrollToNodeRequested?.Invoke(nodeVm);
+    }
+
     /// <summary>Move a MultiLink destination from one index to another (called from code-behind).</summary>
     public void MoveLinkDestination(int fromIndex, int toIndex)
     {

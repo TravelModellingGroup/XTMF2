@@ -55,6 +55,9 @@ public partial class ModelSystemEditorView : UserControl
         DestinationListBox.PointerMoved    += OnDestListPointerMoved;
         DestinationListBox.PointerReleased += OnDestListPointerReleased;
 
+        // Double-tap a destination entry to navigate the canvas to that node.
+        DestinationListBox.DoubleTapped += OnDestListDoubleTapped;
+
         // Boundary navigation dropdown.
         BoundaryNavComboBox.SelectionChanged += OnBoundaryNavSelectionChanged;
     }
@@ -182,6 +185,13 @@ public partial class ModelSystemEditorView : UserControl
     }
 
     // ── Destination list drag-and-drop (pointer-based, no DragDrop API) ──
+
+    private void OnDestListDoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e)
+    {
+        if (_vm is null) return;
+        if (e.Source is Control src && src.DataContext is LinkDestinationViewModel item)
+            _vm.NavigateToLinkDestination(item);
+    }
 
     private void OnDestListPointerPressed(object? sender, PointerPressedEventArgs e)
     {
