@@ -277,6 +277,9 @@ public sealed class ModelSystemCanvas : Control
     {
         foreach (var link in _vm!.Links)
         {
+            // Don't render links whose destination is in a different boundary.
+            if (link.Destination is null) continue;
+
             var brush = link.IsSelected ? LinkSelBrush : LinkBrush;
             var pen   = new Pen(brush, LinkThickness);
             var (p1, mid1, mid2, p2) = ComputeElbow(link);
@@ -460,6 +463,9 @@ public sealed class ModelSystemCanvas : Control
         if (_vm is null) return null;
         foreach (var link in _vm.Links)
         {
+            // Skip inter-boundary links — they are not rendered.
+            if (link.Destination is null) continue;
+
             var (p1, mid1, mid2, p2) = ComputeElbow(link);
             if (DistToSeg(pos, p1,   mid1) <= LinkHitTolerance ||
                 DistToSeg(pos, mid1, mid2) <= LinkHitTolerance ||
