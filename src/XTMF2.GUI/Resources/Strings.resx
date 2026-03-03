@@ -104,6 +104,27 @@
   <data name="Projects_NewProject" xml:space="preserve">
     <value>New Project</value>
   </data>
+  <data name="Projects_Import" xml:space="preserve">
+    <value>Import Project</value>
+  </data>
+  <data name="Projects_ImportTitle" xml:space="preserve">
+    <value>Import Project</value>
+  </data>
+  <data name="Projects_ImportNamePrompt" xml:space="preserve">
+    <value>Enter a name for the imported project:</value>
+  </data>
+  <data name="Projects_ImportError" xml:space="preserve">
+    <value>Failed to Import Project</value>
+  </data>
+  <data name="Projects_Export" xml:space="preserve">
+    <value>Export Project</value>
+  </data>
+  <data name="Projects_ExportTitle" xml:space="preserve">
+    <value>Export Project</value>
+  </data>
+  <data name="Projects_ExportError" xml:space="preserve">
+    <value>Failed to Export Project</value>
+  </data>
   <data name="Projects_Refresh" xml:space="preserve">
     <value>Refresh</value>
   </data>
@@ -161,6 +182,27 @@ This action cannot be undone.</value>
   </data>
   <data name="ModelSystems_NewModelSystem" xml:space="preserve">
     <value>New Model System</value>
+  </data>
+  <data name="ModelSystems_Import" xml:space="preserve">
+    <value>Import Model System</value>
+  </data>
+  <data name="ModelSystems_ImportTitle" xml:space="preserve">
+    <value>Import Model System</value>
+  </data>
+  <data name="ModelSystems_ImportNamePrompt" xml:space="preserve">
+    <value>Enter a name for the imported model system:</value>
+  </data>
+  <data name="ModelSystems_ImportError" xml:space="preserve">
+    <value>Failed to Import Model System</value>
+  </data>
+  <data name="ModelSystems_Export" xml:space="preserve">
+    <value>Export Model System</value>
+  </data>
+  <data name="ModelSystems_ExportTitle" xml:space="preserve">
+    <value>Export Model System</value>
+  </data>
+  <data name="ModelSystems_ExportError" xml:space="preserve">
+    <value>Failed to Export Model System</value>
   </data>
   <data name="ModelSystems_SearchPlaceholder" xml:space="preserve">
     <value>Search model systems...</value>

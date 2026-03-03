@@ -18,7 +18,9 @@
 */
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using System.IO;
 using System.Linq;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Resources;
@@ -144,6 +146,107 @@ public partial class ProjectsView : UserControl
                 Strings.Projects_CreateError,
                 error?.Message ?? Strings.ModelSystems_UnknownError);
             await errorDialog.ShowDialog(_parentWindow);
+        }
+    }
+
+    private async void ImportProject_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel?.CurrentUser == null || _parentWindow == null) return;
+
+        // Pick the project file
+        var files = await _parentWindow.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = Strings.Projects_ImportTitle,
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType(Strings.Projects_ImportTitle) { Patterns = ["*.xprj"] },
+                new FilePickerFileType("All Files") { Patterns = ["*"] }
+            ]
+        });
+
+        if (files.Count == 0) return;
+
+        var filePath = files[0].TryGetLocalPath();
+        if (string.IsNullOrEmpty(filePath)) return;
+
+        // Prompt for project name
+        var suggestedName = Path.GetFileNameWithoutExtension(filePath);
+        var nameDialog = new InputDialog(
+            Strings.Projects_ImportTitle,
+            Strings.Projects_ImportNamePrompt,
+            suggestedName);
+        await nameDialog.ShowDialog(_parentWindow);
+
+        if (nameDialog.WasCancelled || string.IsNullOrWhiteSpace(nameDialog.InputText)) return;
+
+        // Import the project
+        if (_viewModel.Runtime.ProjectController.ImportProjectFile(
+            _viewModel.CurrentUser,
+            nameDialog.InputText,
+            filePath,
+            out var session,
+            out var error))
+        {
+            // Success - dispose the session since we're not editing it immediately
+            session?.Dispose();
+            // The observable collection will automatically update
+        }
+        else
+        {
+            var errorDialog = new ConfirmDialog(
+                Strings.Projects_ImportError,
+                error?.Message ?? Strings.ModelSystems_UnknownError);
+            await errorDialog.ShowDialog(_parentWindow);
+        }
+    }
+
+    private async void ExportProject_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem || menuItem.DataContext is not Project project)
+            return;
+
+        if (_viewModel?.CurrentUser == null || _parentWindow == null)
+            return;
+
+        // Pick where to save the exported project file
+        var file = await _parentWindow.StorageProvider.SaveFilePickerAsync(new Avalonia.Platform.Storage.FilePickerSaveOptions
+        {
+            Title = Strings.Projects_ExportTitle,
+            SuggestedFileName = project.Name ?? "project",
+            DefaultExtension = "xprj",
+            FileTypeChoices =
+            [
+                new Avalonia.Platform.Storage.FilePickerFileType(Strings.Projects_ExportTitle) { Patterns = ["*.xprj"] },
+                new Avalonia.Platform.Storage.FilePickerFileType("All Files") { Patterns = ["*"] }
+            ]
+        });
+
+        if (file is null) return;
+
+        var exportPath = file.TryGetLocalPath();
+        if (string.IsNullOrEmpty(exportPath)) return;
+
+        // We need a project session to call ExportProject
+        if (!_viewModel.Runtime.ProjectController.GetProjectSession(
+            _viewModel.CurrentUser, project, out var session, out var sessionError))
+        {
+            var errorDialog = new ConfirmDialog(
+                Strings.Projects_ExportError,
+                sessionError?.Message ?? Strings.ModelSystems_UnknownError);
+            await errorDialog.ShowDialog(_parentWindow);
+            return;
+        }
+
+        using (session)
+        {
+            if (!session.ExportProject(_viewModel.CurrentUser, exportPath, out var exportError))
+            {
+                var errorDialog = new ConfirmDialog(
+                    Strings.Projects_ExportError,
+                    exportError?.Message ?? Strings.ModelSystems_UnknownError);
+                await errorDialog.ShowDialog(_parentWindow);
+            }
         }
     }
 

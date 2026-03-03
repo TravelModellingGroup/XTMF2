@@ -96,6 +96,27 @@
   <data name="Projects_NewProject" xml:space="preserve">
     <value>Nuevo proyecto</value>
   </data>
+  <data name="Projects_Import" xml:space="preserve">
+    <value>Importar proyecto</value>
+  </data>
+  <data name="Projects_ImportTitle" xml:space="preserve">
+    <value>Importar proyecto</value>
+  </data>
+  <data name="Projects_ImportNamePrompt" xml:space="preserve">
+    <value>Ingrese un nombre para el proyecto importado:</value>
+  </data>
+  <data name="Projects_ImportError" xml:space="preserve">
+    <value>Error al importar el proyecto</value>
+  </data>
+  <data name="Projects_Export" xml:space="preserve">
+    <value>Exportar proyecto</value>
+  </data>
+  <data name="Projects_ExportTitle" xml:space="preserve">
+    <value>Exportar proyecto</value>
+  </data>
+  <data name="Projects_ExportError" xml:space="preserve">
+    <value>Error al exportar el proyecto</value>
+  </data>
   <data name="Projects_Refresh" xml:space="preserve">
     <value>Actualizar</value>
   </data>
@@ -149,6 +170,27 @@ Esta acción no se puede deshacer.</value>
   </data>
   <data name="ModelSystems_NewModelSystem" xml:space="preserve">
     <value>Nuevo sistema de modelos</value>
+  </data>
+  <data name="ModelSystems_Import" xml:space="preserve">
+    <value>Importar sistema de modelos</value>
+  </data>
+  <data name="ModelSystems_ImportTitle" xml:space="preserve">
+    <value>Importar sistema de modelos</value>
+  </data>
+  <data name="ModelSystems_ImportNamePrompt" xml:space="preserve">
+    <value>Ingrese un nombre para el sistema de modelos importado:</value>
+  </data>
+  <data name="ModelSystems_ImportError" xml:space="preserve">
+    <value>Error al importar el sistema de modelos</value>
+  </data>
+  <data name="ModelSystems_Export" xml:space="preserve">
+    <value>Exportar sistema de modelos</value>
+  </data>
+  <data name="ModelSystems_ExportTitle" xml:space="preserve">
+    <value>Exportar sistema de modelos</value>
+  </data>
+  <data name="ModelSystems_ExportError" xml:space="preserve">
+    <value>Error al exportar el sistema de modelos</value>
   </data>
   <data name="ModelSystems_Open" xml:space="preserve">
     <value>Abrir</value>

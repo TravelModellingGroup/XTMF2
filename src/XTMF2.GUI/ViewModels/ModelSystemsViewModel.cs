@@ -19,8 +19,10 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XTMF2;
@@ -129,6 +131,41 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
         }
     }
 
+    [RelayCommand]
+    private async Task ImportModelSystem()
+    {
+        if (_parentWindow is null) return;
+
+        var files = await _parentWindow.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = Strings.ModelSystems_ImportTitle,
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType(Strings.ModelSystems_ImportTitle) { Patterns = ["*.xmsys"] },
+                new FilePickerFileType("All Files") { Patterns = ["*"] }
+            ]
+        });
+
+        if (files.Count == 0) return;
+
+        var filePath = files[0].TryGetLocalPath();
+        if (string.IsNullOrEmpty(filePath)) return;
+
+        var suggestedName = Path.GetFileNameWithoutExtension(filePath);
+        var name = await PromptForModelSystemName(Strings.ModelSystems_ImportTitle, suggestedName);
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        if (_session.ImportModelSystem(_user, filePath, name, out _, out var error))
+        {
+            // Success - the observable collection will automatically update
+        }
+        else
+        {
+            await ShowError(Strings.ModelSystems_ImportError, error?.Message ?? Strings.ModelSystems_UnknownError);
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanRenameModelSystem))]
     private async Task RenameModelSystem()
     {
@@ -184,6 +221,36 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
 
     private bool CanDeleteModelSystem() => SelectedModelSystem != null;
 
+    [RelayCommand(CanExecute = nameof(CanExportModelSystem))]
+    private async Task ExportModelSystem()
+    {
+        if (SelectedModelSystem is null || _parentWindow is null) return;
+
+        var file = await _parentWindow.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = Strings.ModelSystems_ExportTitle,
+            SuggestedFileName = SelectedModelSystem.Name ?? "model-system",
+            DefaultExtension = "xmsys",
+            FileTypeChoices =
+            [
+                new FilePickerFileType(Strings.ModelSystems_ExportTitle) { Patterns = ["*.xmsys"] },
+                new FilePickerFileType("All Files") { Patterns = ["*"] }
+            ]
+        });
+
+        if (file is null) return;
+
+        var exportPath = file.TryGetLocalPath();
+        if (string.IsNullOrEmpty(exportPath)) return;
+
+        if (!_session.ExportModelSystem(_user, SelectedModelSystem, exportPath, out var error))
+        {
+            await ShowError(Strings.ModelSystems_ExportError, error?.Message ?? Strings.ModelSystems_UnknownError);
+        }
+    }
+
+    private bool CanExportModelSystem() => SelectedModelSystem != null;
+
     /// <summary>
     /// Attempts to open an editing session for the given model system header.
     /// </summary>
@@ -201,6 +268,7 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
         // Update command can-execute states
         RenameModelSystemCommand.NotifyCanExecuteChanged();
         DeleteModelSystemCommand.NotifyCanExecuteChanged();
+        ExportModelSystemCommand.NotifyCanExecuteChanged();
     }
 
     // These methods show dialogs to the user

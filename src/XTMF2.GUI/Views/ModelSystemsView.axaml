@@ -49,6 +49,13 @@
                                     <TextBlock Text="{res:Localize ModelSystems_NewModelSystem}" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
+                            <Button Command="{Binding ImportModelSystemCommand}"
+                                    Padding="12,6">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="↑" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{res:Localize ModelSystems_Import}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                         <controls:SearchBox Grid.Column="2"
                                             x:Name="ModelSystemSearchBox"
@@ -86,6 +93,12 @@
                                                       Click="RenameModelSystem_ContextMenu_Click">
                                                 <MenuItem.Icon>
                                                     <TextBlock Text="✏" FontSize="11" VerticalAlignment="Center"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="{res:Localize ModelSystems_Export}"
+                                                      Click="ExportModelSystem_ContextMenu_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="↓" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>
                                             </MenuItem>
                                             <MenuItem Header="{res:Localize ModelSystems_Delete}"

@@ -777,10 +777,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         {
             Title              = "Export Model System",
             SuggestedFileName  = ModelSystemHeader.Name ?? "model-system",
-            DefaultExtension   = "xml",
+            DefaultExtension   = "xmsys",
             FileTypeChoices    =
             [
-                new FilePickerFileType("XTMF Model System") { Patterns = ["*.xml"] },
+                new FilePickerFileType("XTMF Model System") { Patterns = ["*.xmsys"] },
                 new FilePickerFileType("All Files")         { Patterns = ["*"] }
             ]
         });

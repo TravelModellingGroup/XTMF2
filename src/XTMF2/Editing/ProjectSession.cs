@@ -538,7 +538,6 @@ namespace XTMF2.Editing
 
             try
             {
-                using var archive = ZipFile.OpenRead(modelSystemFilePath);
                 lock (_sessionLock)
                 {
                     if (!HasAccess(user))

@@ -96,6 +96,27 @@
   <data name="Projects_NewProject" xml:space="preserve">
     <value>Nouveau projet</value>
   </data>
+  <data name="Projects_Import" xml:space="preserve">
+    <value>Importer un projet</value>
+  </data>
+  <data name="Projects_ImportTitle" xml:space="preserve">
+    <value>Importer un projet</value>
+  </data>
+  <data name="Projects_ImportNamePrompt" xml:space="preserve">
+    <value>Entrez un nom pour le projet importé :</value>
+  </data>
+  <data name="Projects_ImportError" xml:space="preserve">
+    <value>Échec de l'importation du projet</value>
+  </data>
+  <data name="Projects_Export" xml:space="preserve">
+    <value>Exporter le projet</value>
+  </data>
+  <data name="Projects_ExportTitle" xml:space="preserve">
+    <value>Exporter le projet</value>
+  </data>
+  <data name="Projects_ExportError" xml:space="preserve">
+    <value>Échec de l'exportation du projet</value>
+  </data>
   <data name="Projects_Refresh" xml:space="preserve">
     <value>Actualiser</value>
   </data>
@@ -152,6 +173,27 @@ Cette action ne peut pas être annulée.</value>
   </data>
   <data name="ModelSystems_NewModelSystem" xml:space="preserve">
     <value>Nouveau système de modèles</value>
+  </data>
+  <data name="ModelSystems_Import" xml:space="preserve">
+    <value>Importer un système de modèles</value>
+  </data>
+  <data name="ModelSystems_ImportTitle" xml:space="preserve">
+    <value>Importer un système de modèles</value>
+  </data>
+  <data name="ModelSystems_ImportNamePrompt" xml:space="preserve">
+    <value>Entrez un nom pour le système de modèles importé :</value>
+  </data>
+  <data name="ModelSystems_ImportError" xml:space="preserve">
+    <value>Échec de l'importation du système de modèles</value>
+  </data>
+  <data name="ModelSystems_Export" xml:space="preserve">
+    <value>Exporter le système de modèles</value>
+  </data>
+  <data name="ModelSystems_ExportTitle" xml:space="preserve">
+    <value>Exporter le système de modèles</value>
+  </data>
+  <data name="ModelSystems_ExportError" xml:space="preserve">
+    <value>Échec de l'exportation du système de modèles</value>
   </data>
   <data name="ModelSystems_SearchPlaceholder" xml:space="preserve">
     <value>Rechercher des systèmes de modèles...</value>
