@@ -57,6 +57,10 @@ public static class Strings
     public static string Projects_Title => Get(nameof(Projects_Title));
     public static string Projects_UserFormat => Get(nameof(Projects_UserFormat));
     public static string Projects_NewProject => Get(nameof(Projects_NewProject));
+    public static string Projects_Import => Get(nameof(Projects_Import));
+    public static string Projects_ImportTitle => Get(nameof(Projects_ImportTitle));
+    public static string Projects_ImportNamePrompt => Get(nameof(Projects_ImportNamePrompt));
+    public static string Projects_ImportError => Get(nameof(Projects_ImportError));
     public static string Projects_Refresh => Get(nameof(Projects_Refresh));
     public static string Projects_Open => Get(nameof(Projects_Open));
     public static string Projects_Delete => Get(nameof(Projects_Delete));
@@ -71,11 +75,21 @@ public static class Strings
     public static string Projects_Rename => Get(nameof(Projects_Rename));
     public static string Projects_RenameTitle => Get(nameof(Projects_RenameTitle));
     public static string Projects_RenameFailedTitle => Get(nameof(Projects_RenameFailedTitle));
+    public static string Projects_Export => Get(nameof(Projects_Export));
+    public static string Projects_ExportTitle => Get(nameof(Projects_ExportTitle));
+    public static string Projects_ExportError => Get(nameof(Projects_ExportError));
 
     // Model Systems View
     public static string ModelSystems_TitleFormat => Get(nameof(ModelSystems_TitleFormat));
     public static string ModelSystems_UserFormat => Get(nameof(ModelSystems_UserFormat));
     public static string ModelSystems_NewModelSystem => Get(nameof(ModelSystems_NewModelSystem));
+    public static string ModelSystems_Import => Get(nameof(ModelSystems_Import));
+    public static string ModelSystems_ImportTitle => Get(nameof(ModelSystems_ImportTitle));
+    public static string ModelSystems_ImportNamePrompt => Get(nameof(ModelSystems_ImportNamePrompt));
+    public static string ModelSystems_ImportError => Get(nameof(ModelSystems_ImportError));
+    public static string ModelSystems_Export => Get(nameof(ModelSystems_Export));
+    public static string ModelSystems_ExportTitle => Get(nameof(ModelSystems_ExportTitle));
+    public static string ModelSystems_ExportError => Get(nameof(ModelSystems_ExportError));
     public static string ModelSystems_Open => Get(nameof(ModelSystems_Open));
     public static string ModelSystems_OpenFailedTitle => Get(nameof(ModelSystems_OpenFailedTitle));
     public static string ModelSystems_Rename => Get(nameof(ModelSystems_Rename));

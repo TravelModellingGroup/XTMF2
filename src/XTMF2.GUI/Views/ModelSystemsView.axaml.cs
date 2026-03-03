@@ -148,6 +148,14 @@ public partial class ModelSystemsView : UserControl
         _viewModel.DeleteModelSystemCommand.Execute(null);
     }
 
+    private void ExportModelSystem_ContextMenu_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is null) return;
+        if (sender is MenuItem menuItem && menuItem.DataContext is ModelSystemHeader header)
+            _viewModel.SelectedModelSystem = header;
+        _viewModel.ExportModelSystemCommand.Execute(null);
+    }
+
     private void OnLanguageChanged(object? sender, System.EventArgs e)
     {
         UpdateLocalizedText();

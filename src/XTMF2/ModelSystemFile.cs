@@ -25,6 +25,7 @@ using XTMF2.Editing;
 using System.IO;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Net.Http.Headers;
 
 namespace XTMF2
 {
@@ -147,7 +148,12 @@ namespace XTMF2
                     writer.WriteNumber(PropertyVersionMinor, fvi.FileMinorPart);
                     writer.WriteEndObject();
                 }
-                // Zip the temporary directory and store it.
+                // Zip the temporary directory and store it, delete the file if it already exists.
+                var fileInfo = new FileInfo(exportPath);
+                if (fileInfo.Exists)
+                {
+                    fileInfo.Delete();
+                }
                 ZipFile.CreateFromDirectory(tempDirName, exportPath);
                 error = null;
                 return true;
