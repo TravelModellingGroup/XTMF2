@@ -8,6 +8,7 @@
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
              x:Class="XTMF2.GUI.Views.ModelSystemEditorView"
              x:DataType="vm:ModelSystemEditorViewModel"
+             x:CompileBindings="True"
              Focusable="True">
 
     <UserControl.KeyBindings>

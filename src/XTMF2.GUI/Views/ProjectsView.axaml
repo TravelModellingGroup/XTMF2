@@ -2,9 +2,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             x:CompileBindings="True"
              xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
              xmlns:controls="clr-namespace:XTMF2.GUI.Controls"
              xmlns:res="clr-namespace:XTMF2.GUI.Resources"
+             xmlns:xtmf2="clr-namespace:XTMF2;assembly=XTMF2"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="XTMF2.GUI.Views.ProjectsView"
              x:DataType="vm:ProjectsViewModel">
@@ -62,7 +64,7 @@
                 <ScrollViewer Grid.Row="1">
                     <ListBox ItemsSource="{Binding FilteredProjects}">
                         <ListBox.ItemTemplate>
-                            <DataTemplate>
+                            <DataTemplate x:DataType="xtmf2:Project">
                                 <Border 
                                         Background="{DynamicResource SystemControlBackgroundAltMediumLowBrush}"
                                         BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
