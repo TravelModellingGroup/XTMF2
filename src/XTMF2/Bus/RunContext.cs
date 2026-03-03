@@ -94,10 +94,10 @@ namespace XTMF2.Bus
             var pipeName = Guid.NewGuid().ToString();
             string? error = null;
             Stream? clientToRunStream = null;
-            CreateStreams.CreateNewNamedPipeHost(pipeName, out clientToRunStream, ref error, () =>
+            CreateStreams.CreateNewNamedPipeHost(pipeName, out clientToRunStream, out error, () =>
             {
                 clientBus.StartProcessingRequestFromRun(ID, clientToRunStream!);
-                if (CreateStreams.CreateNamedPipeClient(pipeName, out var runToClientStream, ref error))
+                if (CreateStreams.CreateNamedPipeClient(pipeName, out var runToClientStream, out error))
                 {
                     Task.Factory.StartNew(() =>
                     {
@@ -114,7 +114,7 @@ namespace XTMF2.Bus
             var pipeName = Guid.NewGuid().ToString();
             string? error = null;
             Process? runProcess = null;
-            CreateStreams.CreateNewNamedPipeHost(pipeName, out var clientToRunStream, ref error, () =>
+            CreateStreams.CreateNewNamedPipeHost(pipeName, out var clientToRunStream, out error, () =>
             {
                 var path = Path.GetDirectoryName(typeof(RunServerBus).GetTypeInfo().Assembly.Location)!;
                 var startInfo = new ProcessStartInfo()

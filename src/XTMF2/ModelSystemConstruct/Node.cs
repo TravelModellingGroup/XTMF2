@@ -114,7 +114,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="name">The name to change it to</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        internal bool SetName(string name, out CommandError? error)
+        internal bool SetName(string name, [NotNullWhen(false)] out CommandError? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -133,7 +133,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="value">The value to change the parameter to.</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        internal bool SetParameterValue(ParameterExpression? value, out CommandError? error)
+        internal bool SetParameterValue(ParameterExpression? value, [NotNullWhen(false)] out CommandError? error)
         {
             // ensure that the value is allowed
             if (Type == null)
@@ -306,7 +306,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="modelSystemSession">The model system session</param>
         /// <param name="disabled"></param>
         /// <returns></returns>
-        internal bool SetDisabled(bool disabled, out CommandError? error)
+        internal bool SetDisabled(bool disabled, [NotNullWhen(false)] out CommandError? error)
         {
             IsDisabled = disabled;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));

@@ -787,8 +787,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         if (file is null) return;
 
-        await using var stream = await file.OpenWriteAsync();
-        if (!Session.Save(out var error, stream)) await ShowError("Export Failed", error);
+        if(!Session.ExportModelSystem(User, file.Path.AbsolutePath, out var error))
+        {
+            await ShowError("Export Failed", error);
+        }
     }
 
     /// <summary>

@@ -18,233 +18,288 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using XTMF2.Editing;
 
-namespace XTMF2.Bus
+namespace XTMF2.Bus;
+
+/// <summary>
+/// Provides communication with the client process
+/// </summary>
+public sealed class HostBus : IDisposable
 {
+    private readonly Stream _HostStream;
+    private readonly bool _Owner;
+    private volatile bool _Exit = false;
+    private volatile bool _Exited = false;
+
     /// <summary>
-    /// Provides communication with the client process
+    /// Create a host on a given stream.
     /// </summary>
-    public sealed class HostBus : IDisposable
+    /// <param name="hostStream">The stream to host.</param>
+    /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
+    public HostBus(Stream hostStream, bool streamOwner)
     {
-        private readonly Stream _HostStream;
-        private readonly bool _Owner;
-        private volatile bool _Exit = false;
-        private volatile bool _Exited = false;
+        _Owner = streamOwner;
+        _HostStream = hostStream ?? throw new ArgumentNullException(nameof(hostStream));
+        StartListenner();
+    }
 
-        /// <summary>
-        /// Create a host on a given stream.
-        /// </summary>
-        /// <param name="hostStream">The stream to host.</param>
-        /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
-        public HostBus(Stream hostStream, bool streamOwner)
+    ~HostBus()
+    {
+        Dispose(false);
+    }
+
+    private void Dispose(bool managed)
+    {
+        if (managed)
         {
-            _Owner = streamOwner;
-            _HostStream = hostStream ?? throw new ArgumentNullException(nameof(hostStream));
-            StartListenner();
+            GC.SuppressFinalize(this);
         }
-
-        ~HostBus()
+        _Exit = true;
+        while (!_Exited)
         {
-            Dispose(false);
-        }
-
-        private void Dispose(bool managed)
-        {
-            if (managed)
+            Interlocked.MemoryBarrier();
+            if (!_Exited)
             {
-                GC.SuppressFinalize(this);
+                Task.WaitAll(Task.Delay(50));
             }
-            _Exit = true;
-            while (!_Exited)
-            {
-                Interlocked.MemoryBarrier();
-                if (!_Exited)
-                {
-                    Task.WaitAll(Task.Delay(50));
-                }
-                Interlocked.MemoryBarrier();
-            }
-            if (_Owner)
-            {
-                _HostStream.Dispose();
-            }
+            Interlocked.MemoryBarrier();
         }
-
-        /// <summary>
-        /// Disconnect from the client.
-        /// </summary>
-        public void Dispose()
+        if (_Owner)
         {
-            Dispose(true);
+            _HostStream.Dispose();
         }
+    }
 
-        private enum In
-        {
-            Heartbeat = 0,
-            ClientReady = 1,
-            ClientExiting = 2,
-            ClientFinishedModelSystem = 3,
-            ClientErrorWhenRunningModelSystem = 4,
-            ClientErrorValidatingModelSystem = 5,
-            ProgressUpdate = 6,
-            SendModelSystemResult = 7,
-            ClientReportedStatus = 8
-        }
+    /// <summary>
+    /// Disconnect from the client.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+    }
 
-        /// <summary>
-        /// This event is signalled when a client finishes running a model system.
-        /// The parameter is the name of the completed model system.
-        /// </summary>
-        public event EventHandler<string>? ClientFinishedModelSystem;
+    private enum In
+    {
+        Heartbeat = 0,
+        ClientReady = 1,
+        ClientExiting = 2,
+        ClientFinishedModelSystem = 3,
+        ClientErrorWhenRunningModelSystem = 4,
+        ClientErrorValidatingModelSystem = 5,
+        ProgressUpdate = 6,
+        SendModelSystemResult = 7,
+        ClientReportedStatus = 8
+    }
 
-        /// <summary>
-        /// Used to report that a model system has had a run error.
-        /// </summary>
-        /// <param name="sender">The object reporting the event.</param>
-        /// <param name="runID">The ID of the run that failed.</param>
-        /// <param name="errorMessage">The error message from the error.</param>
-        /// <param name="stack">The stack trace at the point of the error.</param>
-        public delegate void RunError(object sender, string runID, string errorMessage, string stack);
+    /// <summary>
+    /// This event is signalled when a client finishes running a model system.
+    /// The parameter is the name of the completed model system.
+    /// </summary>
+    public event EventHandler<string>? ClientFinishedModelSystem;
 
-        /// <summary>
-        /// Used to trigger a status update from a model system.
-        /// </summary>
-        /// <param name="sender">The object reporting the event.</param>
-        /// <param name="runID">The ID of the run that is sending the update.</param>
-        /// <param name="status">The status message from the model system.</param>
-        public delegate void ClientStatusUpdate(object sender, string runID, string status);
+    /// <summary>
+    /// Used to report that a model system has had a run error.
+    /// </summary>
+    /// <param name="sender">The object reporting the event.</param>
+    /// <param name="runID">The ID of the run that failed.</param>
+    /// <param name="errorMessage">The error message from the error.</param>
+    /// <param name="stack">The stack trace at the point of the error.</param>
+    public delegate void RunError(object sender, string runID, string errorMessage, string stack);
 
-        /// <summary>
-        /// This event is signalled when a client runs into an error.
-        /// </summary>
-        public event RunError? ClientErrorWhenRunningModelSystem;
+    /// <summary>
+    /// Used to trigger a status update from a model system.
+    /// </summary>
+    /// <param name="sender">The object reporting the event.</param>
+    /// <param name="runID">The ID of the run that is sending the update.</param>
+    /// <param name="status">The status message from the model system.</param>
+    public delegate void ClientStatusUpdate(object sender, string runID, string status);
 
-        /// <summary>
-        /// This event is triggered when the client has sent an update for the run's status message.
-        /// </summary>
-        public event ClientStatusUpdate? ClientReportedStatus;
+    /// <summary>
+    /// This event is signalled when a client runs into an error.
+    /// </summary>
+    public event RunError? ClientErrorWhenRunningModelSystem;
 
-        private static void IgnoreWarnings(Action toRun)
-        {
-            /*
-* We are disabling the warning to catch a specific error since we are going to
-* be called into unknown code.
-*/
+    /// <summary>
+    /// This event is triggered when the client has sent an update for the run's status message.
+    /// </summary>
+    public event ClientStatusUpdate? ClientReportedStatus;
+
+    private static void IgnoreWarnings(Action toRun)
+    {
+        /*
+        * We are disabling the warning to catch a specific error since we are going to
+        * be called into unknown code.
+        */
 #pragma warning disable CA1031
+        try
+        {
+            toRun();
+        }
+        catch { }
+#pragma warning restore CA1031
+    }
+
+    /// <summary>
+    /// Invoke this to start listening on a separate thread.
+    /// </summary>
+    private void StartListenner()
+    {
+        Task.Factory.StartNew((token) =>
+        {
             try
             {
-                toRun();
+                using var reader = new BinaryReader(_HostStream, Encoding.UTF8, true);
+                while (!_Exit)
+                {
+                    var command = (In)reader.ReadInt32();
+                    switch (command)
+                    {
+                        case In.Heartbeat:
+                            // Read in the ID of the run that issued the Heartbeat.
+                            reader.ReadString(); 
+                            break;
+                        case In.ClientReady:
+                            break;
+                        case In.ClientExiting:
+                            _Exit = true;
+                            break;
+                        case In.ClientErrorValidatingModelSystem:
+                            IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), String.Empty));
+                            break;
+                        case In.ClientFinishedModelSystem:
+                            IgnoreWarnings(() => ClientFinishedModelSystem?.Invoke(this, reader.ReadString()));
+                            break;
+                        case In.ClientErrorWhenRunningModelSystem:
+                            IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), reader.ReadString()));
+                            break;
+                        case In.ClientReportedStatus:
+                            IgnoreWarnings(() => ClientReportedStatus?.Invoke(this, reader.ReadString(), reader.ReadString()));
+                            break;
+                        default:
+                            throw new Exception($"Unsupported command: {Enum.GetName<In>(command)}");
+                    }
+                    System.Threading.Interlocked.MemoryBarrier();
+                }
             }
-            catch { }
-#pragma warning restore CA1031
-        }
-
-        /// <summary>
-        /// Invoke this to start listening on a separate thread.
-        /// </summary>
-        public void StartListenner()
-        {
-            Task.Factory.StartNew((token) =>
+            finally
             {
-                try
-                {
-                    using var reader = new BinaryReader(_HostStream, Encoding.UTF8, true);
-                    while (!_Exit)
-                    {
-                        var command = (In)reader.ReadInt32();
-                        switch (command)
-                        {
-                            case In.Heartbeat:
-                                // Read in the ID of the run that issued the Heartbeat.
-                                reader.ReadString(); 
-                                break;
-                            case In.ClientReady:
-                                break;
-                            case In.ClientExiting:
-                                _Exit = true;
-                                break;
-                            case In.ClientErrorValidatingModelSystem:
-                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), String.Empty));
-                                break;
-                            case In.ClientFinishedModelSystem:
-                                IgnoreWarnings(() => ClientFinishedModelSystem?.Invoke(this, reader.ReadString()));
-                                break;
-                            case In.ClientErrorWhenRunningModelSystem:
-                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), reader.ReadString()));
-                                break;
-                            case In.ClientReportedStatus:
-                                IgnoreWarnings(() => ClientReportedStatus?.Invoke(this, reader.ReadString(), reader.ReadString()));
-                                break;
-                            default:
-                                throw new Exception($"Unsupported command: {Enum.GetName(typeof(In), command)}");
-                        }
-                        System.Threading.Interlocked.MemoryBarrier();
-                    }
-                }
-                finally
-                {
-                    _Exited = true;
-                }
-            }, TaskCreationOptions.LongRunning);
-        }
+                _Exited = true;
+            }
+        }, TaskCreationOptions.LongRunning);
+    }
 
-        private enum Out
+    private enum Out
+    {
+        Heartbeat = 0,
+        RunModelSystem = 1,
+        CancelModelRun = 2,
+        KillModelRun = 3
+    }
+
+    /// <summary>
+    /// Take this lock before writing anything to the out stream.
+    /// </summary>
+    private readonly object _outLock = new object();
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="modelSystem">The model system to execute</param>
+    /// <param name="cwd">The directory to run in.</param>
+    /// <param name="startToExecute">The starting point for the model system run</param>
+    /// <param name="id">The ID given to this model run.</param>
+    /// <param name="error">An error message if there is an issue creating the model system.</param>
+    /// <returns>True if the model system was sent</returns>
+    public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, 
+        [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
+    {
+        id = null;
+        lock (_outLock)
         {
-            Heartbeat = 0,
-            RunModelSystem = 1,
-            CancelModelRun = 2,
-            KillModelRun = 3
-        }
-
-        /// <summary>
-        /// Take this lock before writing anything to the out stream.
-        /// </summary>
-        private readonly object _outLock = new object();
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="modelSystem">The model system to execute</param>
-        /// <param name="cwd">The directory to run in.</param>
-        /// <param name="startToExecute">The starting point for the model system run</param>
-        /// <param name="id">The ID given to this model run.</param>
-        /// <param name="error">An error message if there is an issue creating the model system.</param>
-        /// <returns>True if the model system was sent</returns>
-        public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, out string? id, out CommandError? error)
-        {
-            id = null;
-            lock (_outLock)
+            try
             {
-                try
+                using var memStream = new MemoryStream();
+                using var write = new BinaryWriter(memStream, Encoding.UTF8, true);
+                if (!modelSystem.Save(out error, memStream))
                 {
-                    using var memStream = new MemoryStream();
-                    using var write = new BinaryWriter(memStream, Encoding.UTF8, true);
-                    if (!modelSystem.Save(out error, memStream))
-                    {
-                        return false;
-                    }
-                    id = Guid.NewGuid().ToString();
-                    // int64
-                    using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
-                    writer.Write((int)Out.RunModelSystem);
-                    writer.Write(id);
-                    writer.Write(cwd);
-                    writer.Write(startToExecute);
-                    writer.Write(memStream.Length);
-                    memStream.WriteTo(_HostStream);
-                    return true;
-                }
-                catch (IOException e)
-                {
-                    error = new CommandError(e.Message);
                     return false;
                 }
+                id = Guid.NewGuid().ToString();
+                // int64
+                using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
+                writer.Write((int)Out.RunModelSystem);
+                writer.Write(id);
+                writer.Write(cwd);
+                writer.Write(startToExecute);
+                writer.Write(memStream.Length);
+                memStream.WriteTo(_HostStream);
+                return true;
+            }
+            catch (IOException e)
+            {
+                error = new CommandError(e.Message);
+                return false;
             }
         }
     }
+
+    /// <summary>
+    /// Cancel a model run with the given ID. This will trigger an event on the client to cancel the run, but it is up to the client to decide how to handle this.
+    /// </summary>
+    /// <param name="runID">The ID of the run to cancel.</param>
+    /// <param name="error">An error message if there is an issue canceling the run.</param>
+    /// <returns>True if the cancel command was successfully sent, false otherwise.</returns>
+    public bool CancelModelRun(string runID, [NotNullWhen(false)] out CommandError? error)
+    {
+        error = null;
+        lock (_outLock)
+        {
+            try
+            {
+                using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
+                writer.Write((int)Out.CancelModelRun);
+                writer.Write(runID);
+                return true;
+            }
+            catch (IOException e)
+            {
+                error = new CommandError(e.Message);
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Kill a model run with the given ID. This will trigger an event on the client to kill the run, but it is up to the client to decide how to handle this.
+    /// </summary>
+    /// <param name="runID">The ID of the run to kill.</param>
+    /// <param name="error">An error message if there is an issue killing the run.</param>
+    /// <returns>True if the kill command was successfully sent, false otherwise.</returns>
+    public bool KillModelRun(string runID, [NotNullWhen(false)] out CommandError? error)
+    {
+        error = null;
+        lock (_outLock)
+        {
+            try
+            {
+                using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
+                writer.Write((int)Out.KillModelRun);
+                writer.Write(runID);
+                return true;
+            }
+            catch (IOException e)
+            {
+                error = new CommandError(e.Message);
+                return false;
+            }
+        }
+    }
+
 }
+

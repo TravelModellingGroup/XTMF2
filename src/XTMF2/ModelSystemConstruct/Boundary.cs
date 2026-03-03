@@ -243,7 +243,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="boundary">The resulting boundary.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool AddBoundary(string name, out Boundary? boundary, out CommandError? error)
+        internal bool AddBoundary(string name, out Boundary? boundary, [NotNullWhen(false)] out CommandError? error)
         {
             if (string.IsNullOrWhiteSpace(name))
             {
@@ -270,7 +270,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="block">The resulting block</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool AddCommentBlock(string documentation, Rectangle position, out CommentBlock? block, out CommandError? error)
+        internal bool AddCommentBlock(string documentation, Rectangle position, out CommentBlock? block, [NotNullWhen(false)] out CommandError? error)
         {
             block = null;
             var _block = new CommentBlock(documentation, position);
@@ -282,7 +282,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool AddCommentBlock(CommentBlock block, out CommandError? error)
+        internal bool AddCommentBlock(CommentBlock block, [NotNullWhen(false)] out CommandError? error)
         {
             if (block is null)
             {
@@ -301,7 +301,7 @@ namespace XTMF2.ModelSystemConstruct
             }
         }
 
-        internal bool RemoveCommentBlock(CommentBlock block, out CommandError? error)
+        internal bool RemoveCommentBlock(CommentBlock block, [NotNullWhen(false)] out CommandError? error)
         {
             if (block is null)
             {
@@ -371,7 +371,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="boundary"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        internal bool AddBoundary(Boundary boundary, out CommandError? error)
+        internal bool AddBoundary(Boundary boundary, [NotNullWhen(false)] out CommandError? error)
         {
             if (_boundaries.Contains(boundary))
             {
@@ -383,7 +383,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool RemoveBoundary(Boundary boundary, out CommandError? error)
+        internal bool RemoveBoundary(Boundary boundary, [NotNullWhen(false)] out CommandError? error)
         {
             if (!_boundaries.Remove(boundary))
             {
@@ -394,7 +394,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool AddStart(Start start, out CommandError? error)
+        internal bool AddStart(Start start, [NotNullWhen(false)] out CommandError? error)
         {
             if (_starts.Contains(start))
             {
@@ -406,7 +406,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool AddFunctionTemplate(string name, out FunctionTemplate? template, out CommandError? error)
+        internal bool AddFunctionTemplate(string name, out FunctionTemplate? template, [NotNullWhen(false)] out CommandError? error)
         {
             template = null;
             error = null;
@@ -422,7 +422,7 @@ namespace XTMF2.ModelSystemConstruct
             }
         }
 
-        internal bool AddFunctionTemplate(FunctionTemplate template, out CommandError? error)
+        internal bool AddFunctionTemplate(FunctionTemplate template, [NotNullWhen(false)] out CommandError? error)
         {
             lock (_writeLock)
             {
@@ -437,7 +437,7 @@ namespace XTMF2.ModelSystemConstruct
             }
         }
 
-        internal bool RemoveFunctionTemplate(FunctionTemplate template, out CommandError? error)
+        internal bool RemoveFunctionTemplate(FunctionTemplate template, [NotNullWhen(false)] out CommandError? error)
         {
             lock (_writeLock)
             {
@@ -516,7 +516,7 @@ namespace XTMF2.ModelSystemConstruct
             }
         }
 
-        internal bool AddNode(ModuleRepository modules, string name, Type type, Rectangle location, out Node? node, out CommandError? error)
+        internal bool AddNode(ModuleRepository modules, string name, Type type, Rectangle location, out Node? node, [NotNullWhen(false)] out CommandError? error)
         {
             node = Node.Create(modules, name, type, this, location);
             if (node is null)
@@ -528,7 +528,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool AddNode(Node node, out CommandError? e)
+        internal bool AddNode(Node node, [NotNullWhen(false)] out CommandError? e)
         {
             if (_modules.Contains(node))
             {
@@ -593,7 +593,7 @@ namespace XTMF2.ModelSystemConstruct
             }
         }
 
-        internal bool RemoveNode(Node node, out CommandError? error)
+        internal bool RemoveNode(Node node, [NotNullWhen(false)]out CommandError? error)
         {
             if (!_modules.Remove(node))
             {
@@ -611,7 +611,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="link">The returning link</param>
         /// <param name="e">An error message if one occurs</param>
         /// <returns>True if it was added again, false otherwise with message.</returns>
-        internal bool AddLink(Link link, out CommandError? e)
+        internal bool AddLink(Link link, [NotNullWhen(false)] out CommandError? e)
         {
             if (link == null)
             {
@@ -783,7 +783,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link? link, out CommandError? error)
+        internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link? link, [NotNullWhen(false)] out CommandError? error)
         {
             switch (originHook.Cardinality)
             {
@@ -818,7 +818,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool AddLink(Node origin, NodeHook originHook, Node destination, Link link, out CommandError? error)
+        internal bool AddLink(Node origin, NodeHook originHook, Node destination, Link link, [NotNullWhen(false)] out CommandError? error)
         {
             switch (originHook.Cardinality)
             {
@@ -849,7 +849,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool RemoveLink(Link link, out CommandError? error)
+        internal bool RemoveLink(Link link, [NotNullWhen(false)] out CommandError? error)
         {
             if (!_links.Remove(link))
             {
@@ -860,7 +860,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool SetName(string name, out CommandError? error)
+        internal bool SetName(string name, [NotNullWhen(false)] out CommandError? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -879,7 +879,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool SetDescription(string description, out CommandError? error)
+        internal bool SetDescription(string description, [NotNullWhen(false)] out CommandError? error)
         {
             error = null;
             Description = description;
@@ -887,7 +887,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool AddStart(ModelSystemSession session, string startName, Rectangle location, out Start? start, out CommandError? error)
+        internal bool AddStart(ModelSystemSession session, string startName, Rectangle location, out Start? start, [NotNullWhen(false)] out CommandError? error)
         {
             start = null;
             // ensure the name is unique between starting points
@@ -913,7 +913,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="start"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        internal bool AddStart(string startName, Start start, out CommandError? error)
+        internal bool AddStart(string startName, Start start, [NotNullWhen(false)] out CommandError? error)
         {
             // ensure the name is unique between starting points
             foreach (var ms in _starts)
@@ -929,7 +929,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal bool RemoveStart(Start start, out CommandError? error)
+        internal bool RemoveStart(Start start, [NotNullWhen(false)] out CommandError? error)
         {
             if (!_starts.Remove(start))
             {
