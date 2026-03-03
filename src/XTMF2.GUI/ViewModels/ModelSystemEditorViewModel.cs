@@ -954,8 +954,17 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             {
                 var nodeVm = Nodes.FirstOrDefault(n => n.UnderlyingNode == dest);
                 if (nodeVm is not null)
+                {
                     SelectedLinkDestinationEntries.Add(
                         new LinkDestinationViewModel(nodeVm.Name, nodeVm));
+                }
+                else 
+                {
+                    // If the link is connecting to a node in another boundary, we won't find it in the current Nodes collection.
+                    // In that case we can still show the node's name by looking it up directly from the model.
+                    SelectedLinkDestinationEntries.Add(
+                        new LinkDestinationViewModel(dest.Name, new NodeViewModel(dest, Session, User)));
+                }
             }
         }
     }
