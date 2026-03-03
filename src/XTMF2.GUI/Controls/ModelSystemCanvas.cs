@@ -128,6 +128,8 @@ public sealed class ModelSystemCanvas : Control
     private ICanvasElement? _rightClickElement;
     /// <summary>Link under the right-button press when no element was hit.</summary>
     private LinkViewModel?  _rightClickLink;
+    /// <summary>Hook dot under the right-button press, if any (may be set alongside <see cref="_rightClickElement"/>).</summary>
+    private (NodeViewModel Node, NodeHook Hook)? _rightClickHookHit;
 
     // ── DataContext wiring ────────────────────────────────────────────────
     protected override void OnDataContextChanged(EventArgs e)
@@ -468,18 +470,33 @@ public sealed class ModelSystemCanvas : Control
     }
 
     /// <summary>
-    /// Returns the <see cref="NodeViewModel"/> and <see cref="NodeHook"/> whose anchor dot
-    /// is within <see cref="HookHitRadius"/> pixels of <paramref name="pos"/>, or <c>null</c>.
+    /// Returns the <see cref="NodeViewModel"/> and <see cref="NodeHook"/> whose rendered
+    /// row rectangle contains <paramref name="pos"/>, or <c>null</c> when the point lies
+    /// outside all hook rows.
+    /// <para>
+    /// The hit area is the full horizontal extent of the node multiplied by
+    /// <see cref="HookRowHeight"/>, so any click anywhere on a hook row registers —
+    /// not just the small anchor dot on the right edge.
+    /// </para>
     /// </summary>
     private (NodeViewModel node, NodeHook hook, Point anchor)? HitTestHook(Point pos)
     {
-        const double HookHitRadius = 8.0;
-        foreach (var kv in _hookAnchors)
+        foreach (var (node, hooks) in _nodeVisibleHooks)
         {
-            var dx = pos.X - kv.Value.X;
-            var dy = pos.Y - kv.Value.Y;
-            if (dx * dx + dy * dy <= HookHitRadius * HookHitRadius)
-                return (kv.Key.Item1, kv.Key.Item2, kv.Value);
+            double rw = NodeRenderWidth(node);
+
+            // Quick reject: x must be within the node's horizontal extent.
+            if (pos.X < node.X || pos.X > node.X + rw) continue;
+
+            for (int i = 0; i < hooks.Count; i++)
+            {
+                double rowTop = node.Y + NodeHeaderHeight + i * HookRowHeight;
+                if (pos.Y >= rowTop && pos.Y < rowTop + HookRowHeight)
+                {
+                    var anchor = new Point(node.X + rw, rowTop + HookRowHeight / 2.0);
+                    return (node, hooks[i], anchor);
+                }
+            }
         }
         return null;
     }
@@ -702,6 +719,9 @@ public sealed class ModelSystemCanvas : Control
                 _rightClickPressPos = pos;
                 _rightClickElement  = HitTest(pos, testComments: true);
                 _rightClickLink     = _rightClickElement is null ? HitTestLink(pos) : null;
+                // Also check whether a hook dot was right-clicked on a node.
+                var hookHit = HitTestHook(pos);
+                _rightClickHookHit  = hookHit.HasValue ? (hookHit.Value.node, hookHit.Value.hook) : null;
             }
 
             // Begin link-creation drag from a node or start.
@@ -830,6 +850,21 @@ public sealed class ModelSystemCanvas : Control
 
         var vm = _vm; // capture for closure
 
+        var menu = new ContextMenu();
+
+        // ── Hook-specific item: link to a node in a different boundary ────
+        if (_rightClickHookHit is { } hookEntry)
+        {
+            var capturedNode = hookEntry.Node;
+            var capturedHook = hookEntry.Hook;
+            var interBoundaryItem = new MenuItem { Header = "Link to node in another boundary…" };
+            interBoundaryItem.Click += (_, _) =>
+                _ = vm.CreateInterBoundaryLinkAsync(capturedNode, capturedHook);
+            menu.Items.Add(interBoundaryItem);
+            menu.Items.Add(new Separator());
+        }
+
+        // ── Standard Delete ───────────────────────────────────────────────
         var deleteItem = new MenuItem { Header = "Delete" };
         deleteItem.Click += (_, _) =>
         {
@@ -839,8 +874,9 @@ public sealed class ModelSystemCanvas : Control
                 vm.SelectLinkCommand.Execute(link);
             _ = vm.DeleteSelectedCommand.ExecuteAsync(null);
         };
+        menu.Items.Add(deleteItem);
 
-        ContextMenu = new ContextMenu { Items = { deleteItem } };
+        ContextMenu = menu;
         ContextMenu.Open(this);
     }
 

@@ -672,6 +672,30 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // On success the boundary CollectionChanged fires and TryAddLinkViewModel wires up the new link.
     }
 
+    /// <summary>
+    /// Presents a two-phase dialog that lets the user pick a boundary, then a compatible node
+    /// within that boundary, and creates a link from <paramref name="originNode"/>'s
+    /// <paramref name="hook"/> to the chosen node.
+    /// <para>
+    /// This supports inter-boundary links: the origin and destination can live in different
+    /// boundaries; the link is stored in the origin node's own boundary as usual.
+    /// </para>
+    /// </summary>
+    public async Task CreateInterBoundaryLinkAsync(NodeViewModel originNode, NodeHook hook)
+    {
+        if (ParentWindow is null) return;
+
+        var allBoundaries = GetAllBoundaries(GlobalBoundary);
+        var dialog = new Views.InterBoundaryLinkDialog(allBoundaries, hook, originNode.Name);
+        await dialog.ShowDialog(ParentWindow);
+
+        if (dialog.WasCancelled || dialog.ChosenNode is null) return;
+
+        if (!Session.AddLink(User, originNode.UnderlyingNode, hook, dialog.ChosenNode, out _, out var error))
+            await ShowError("Create Inter-Boundary Link Failed", error);
+        // On success the boundary CollectionChanged fires and TryAddLinkViewModel wires up the new link.
+    }
+
     /// <summary>Commit the name/comment currently in <see cref="SelectedElementEditName"/> back to the model.</summary>
     [RelayCommand]
     private async Task CommitRename()
