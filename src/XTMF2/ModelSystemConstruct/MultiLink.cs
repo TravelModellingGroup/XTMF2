@@ -29,15 +29,21 @@ namespace XTMF2.ModelSystemConstruct
     public sealed class MultiLink : Link
     {
         private readonly ObservableCollection<Node> _Destinations;
+        private readonly ReadOnlyObservableCollection<Node> _destinationsView;
 
         public MultiLink(Node origin, NodeHook hook, List<Node> destinations, bool disabled)
             : base(origin, hook, disabled)
         {
-            _Destinations = new ObservableCollection<Node>(destinations);
+            _Destinations     = new ObservableCollection<Node>(destinations);
+            _destinationsView = new ReadOnlyObservableCollection<Node>(_Destinations);
         }
 
-        public ReadOnlyObservableCollection<Node> Destinations =>
-            new ReadOnlyObservableCollection<Node>(_Destinations);
+        /// <summary>
+        /// A stable, observable read-only view of this link's destinations.
+        /// Subscribing to <see cref="ReadOnlyObservableCollection{T}.CollectionChanged"/>
+        /// on this property is safe — the same instance is always returned.
+        /// </summary>
+        public ReadOnlyObservableCollection<Node> Destinations => _destinationsView;
 
         internal bool AddDestination(Node destination, out CommandError? error)
         {
@@ -109,6 +115,15 @@ namespace XTMF2.ModelSystemConstruct
         internal void RemoveDestination(int i)
         {
             _Destinations.RemoveAt(i);
+        }
+
+        /// <summary>Moves the destination at <paramref name="fromIndex"/> to <paramref name="toIndex"/>.</summary>
+        internal void MoveDestination(int fromIndex, int toIndex)
+        {
+            if (fromIndex == toIndex) return;
+            var node = _Destinations[fromIndex];
+            _Destinations.RemoveAt(fromIndex);
+            _Destinations.Insert(toIndex, node);
         }
 
         internal override bool HasDestination(Node destNode)

@@ -59,6 +59,57 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// A live, observable read-only view of all module types registered in the runtime.
+        /// GUI components can bind to this to populate type-picker lists.
+        /// </summary>
+        public System.Collections.ObjectModel.ReadOnlyObservableCollection<Type> LoadedModuleTypes
+            => GetModuleRepository().LoadedModuleTypes;
+
+        /// <summary>
+        /// Change the type of an existing node, with full undo/redo support.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="node">The node whose type should change.</param>
+        /// <param name="type">The new module type.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeded, false with a message otherwise.</returns>
+        public bool SetNodeType(User user, Node node, Type type, out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(node);
+            ArgumentNullException.ThrowIfNull(type);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var previousType = node.Type;
+                string? err = null;
+                if (node.SetType(GetModuleRepository(), type, ref err))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        string? e = null;
+                        _ = node.SetType(GetModuleRepository(), previousType, ref e);
+                        return (true, e is null ? null : new CommandError(e));
+                    }, () =>
+                    {
+                        string? e = null;
+                        _ = node.SetType(GetModuleRepository(), type, ref e);
+                        return (true, e is null ? null : new CommandError(e));
+                    }));
+                    error = null;
+                    return true;
+                }
+                error = new CommandError(err ?? "Failed to set the node type.");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Set the name of a given boundary.
         /// </summary>
         /// <param name="user">The user issuing the action.</param>
@@ -833,6 +884,49 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Renames the given node (or start) within the model system, with undo support.
+        /// </summary>
+        /// <param name="user">The user issuing the action.</param>
+        /// <param name="node">The node (or start) to rename.</param>
+        /// <param name="name">The new name to assign.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise.</returns>
+        public bool SetNodeName(User user, Node node, string name, out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(node);
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                error = new CommandError("A node name must not be empty or whitespace.");
+                return false;
+            }
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var oldName = node.Name;
+                if (node.SetName(name, out error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (node.SetName(oldName, out var e), e);
+                    }, () =>
+                    {
+                        return (node.SetName(name, out var e), e);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
         public bool SetNodeLocation(User user, Node mss, Rectangle newLocation, out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
@@ -1330,6 +1424,43 @@ namespace XTMF2.Editing
         /// <param name="index">The index to remove</param>
         /// <param name="error">The error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with error message.</returns>
+        /// <summary>
+        /// Moves a destination within a multi-link from one index to another.
+        /// </summary>
+        public bool MoveLinkDestination(User user, Link multiLink, int fromIndex, int toIndex, out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(multiLink);
+            error = null;
+
+            if (multiLink is not MultiLink ml)
+            {
+                error = new CommandError("The link is not a multi-link!");
+                return false;
+            }
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var count = ml.Destinations.Count;
+                if (fromIndex < 0 || fromIndex >= count || toIndex < 0 || toIndex >= count)
+                {
+                    error = new CommandError("Index is out of bounds!");
+                    return false;
+                }
+                ml.MoveDestination(fromIndex, toIndex);
+                int _from = fromIndex, _to = toIndex;
+                Buffer.AddUndo(new Command(
+                    () => { ml.MoveDestination(_to, _from); return (true, null); },
+                    () => { ml.MoveDestination(_from, _to); return (true, null); }));
+                return true;
+            }
+        }
+
         public bool RemoveLinkDestination(User user, Link multiLink, int index, out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);

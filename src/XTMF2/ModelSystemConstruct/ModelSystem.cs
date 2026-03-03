@@ -108,19 +108,30 @@ namespace XTMF2
             {
                 try
                 {
-                    var fileInfo = new FileInfo(Header.ModelSystemPath);
-                    var dir = fileInfo.Directory;
-                    if (dir is null)
+                    // Writ the file to a temporary location first, and then move it to the final location. This is to prevent data loss in the case of an error during the save process.
+                    var tempPath = Path.GetTempFileName();
+                    var tempFileInfo = new FileInfo(tempPath);
+                    bool saveResult = false;
+                    using (var stream = tempFileInfo.OpenWrite())
                     {
-                        error = $"The provided path '{Header.ModelSystemPath}' was invalid!";
-                        return false;
+                        saveResult = Save(ref error, stream, false);
                     }
-                    if (!dir.Exists)
+                    if (saveResult)
                     {
-                        dir.Create();
+                        var fileInfo = new FileInfo(Header.ModelSystemPath);
+                        var dir = fileInfo.Directory;
+                        if (dir is null)
+                        {
+                            error = $"The provided path '{Header.ModelSystemPath}' was invalid!";
+                            return false;
+                        }
+                        if (!dir.Exists)
+                        {
+                            dir.Create();
+                        }
+                        File.Move(tempPath, fileInfo.FullName, true);
                     }
-                    using var stream = fileInfo.Create();
-                    return Save(ref error, stream, false);
+                    return saveResult;
                 }
                 catch (IOException e)
                 {
@@ -320,7 +331,7 @@ namespace XTMF2
                 // Now that all of the modules have been loaded we can process the scripted parameters
                 foreach (var (toAssignTo, parameterExpression) in scriptedParameters)
                 {
-                    if(!toAssignTo.SetParameterExpression(modelSystem.Variables, parameterExpression, out CommandError? cmdError))
+                    if (!toAssignTo.SetParameterExpression(modelSystem.Variables, parameterExpression, out CommandError? cmdError))
                     {
                         // TODO: Think about what to do in order to heal the model system
                     }
@@ -410,7 +421,7 @@ namespace XTMF2
                 return FailWith(out error, "Unexpected end of file when loading boundaries!");
             }
 
-            if(!global.Load(modules, typeLookup, nodes, scriptedParameters, ref reader, ref error))
+            if (!global.Load(modules, typeLookup, nodes, scriptedParameters, ref reader, ref error))
             {
                 return false;
             }

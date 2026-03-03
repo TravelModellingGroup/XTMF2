@@ -314,4 +314,24 @@ Esta acción no se puede deshacer.</value>
   <data name="Dialog_EnterText" xml:space="preserve">
     <value>Ingrese texto...</value>
   </data>
+
+  <!-- Model System Editor -->
+  <data name="ModelSystemEditor_SaveTooltip" xml:space="preserve">
+    <value>Guardar – escribir el sistema de modelos en su archivo de proyecto (Ctrl+S)</value>
+  </data>
+  <data name="ModelSystemEditor_ExportTooltip" xml:space="preserve">
+    <value>Exportar – guardar una copia del sistema de modelos en un archivo de su elección</value>
+  </data>
+  <data name="ModelSystemEditor_RevertTooltip" xml:space="preserve">
+    <value>Revertir – descartar todos los cambios no guardados y restaurar la última versión guardada</value>
+  </data>
+  <data name="ModelSystemEditor_ToastSaving" xml:space="preserve">
+    <value>Guardando sistema de modelos…</value>
+  </data>
+  <data name="ModelSystemEditor_ToastSaved" xml:space="preserve">
+    <value>Sistema de modelos guardado correctamente.</value>
+  </data>
+  <data name="ModelSystemEditor_ToastSaveFailed" xml:space="preserve">
+    <value>Error al guardar: {0}</value>
+  </data>
 </root>

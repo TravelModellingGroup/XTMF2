@@ -71,8 +71,15 @@ public partial class SearchBox : UserControl
     {
         if (e.Key == Key.Escape)
         {
-            Text = "";
-            e.Handled = true;
+            if (!string.IsNullOrEmpty(Text))
+            {
+                // Text present: clear the filter and consume the event so the
+                // host window (e.g. TypePickerDialog) does not close.
+                Text = "";
+                e.Handled = true;
+            }
+            // Empty box: don't consume — let the event bubble so the host
+            // window can act on it (e.g. close via IsCancel routing).
         }
         else if (e.Key == Key.Enter)
         {
