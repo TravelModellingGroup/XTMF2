@@ -51,7 +51,7 @@
                                            x:Name="ProjectSearchBox"
                                            Text="{Binding SearchText, Mode=TwoWay}"
                                            Watermark="{res:Localize Projects_SearchPlaceholder}"
-                                           MaxWidth="300"
+                                           Width="275"
                                            HorizontalAlignment="Left"
                                            VerticalAlignment="Center"
                                            EnterPressed="SearchBox_EnterPressed"/>

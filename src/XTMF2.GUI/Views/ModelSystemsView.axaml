@@ -53,7 +53,7 @@
                                             x:Name="ModelSystemSearchBox"
                                             Text="{Binding SearchText, Mode=TwoWay}"
                                             Watermark="{res:Localize ModelSystems_SearchPlaceholder}"
-                                            MaxWidth="300"
+                                            Width="275"
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Center"
                                             Margin="10,0,0,0"/>

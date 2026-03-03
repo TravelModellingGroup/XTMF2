@@ -37,6 +37,7 @@
                             x:Name="BoundarySearchBox"
                             Text="{Binding BoundarySearchText, Mode=TwoWay}"
                             Watermark="Search boundaries…"
+                            HorizontalAlignment="Stretch"
                             Margin="0,0,0,6"/>
 
             <Border Grid.Row="3"
@@ -81,6 +82,7 @@
                             x:Name="NodeSearchBox"
                             Text="{Binding NodeSearchText, Mode=TwoWay}"
                             Watermark="Search modules…"
+                            HorizontalAlignment="Stretch"
                             Margin="0,0,0,6"/>
 
             <!-- "No compatible modules" notice (shown when the boundary has no type-compatible nodes) -->
