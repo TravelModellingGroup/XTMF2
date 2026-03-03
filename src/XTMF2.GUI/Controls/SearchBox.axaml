@@ -13,7 +13,6 @@
                  Text="{Binding Text, ElementName=Root, Mode=TwoWay}"
                  Watermark="{Binding Watermark, ElementName=Root}"
                  Padding="8,4,28,4"
-                 Width="250"
                  VerticalContentAlignment="Center"
                  KeyDown="InnerTextBox_KeyDown"/>
         <!-- Magnifying glass icon, right-aligned, non-interactive -->

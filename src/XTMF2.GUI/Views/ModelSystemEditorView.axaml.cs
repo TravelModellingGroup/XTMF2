@@ -30,9 +30,11 @@ public partial class ModelSystemEditorView : UserControl
     private ModelSystemEditorViewModel? _vm;
 
     // ── Destination list drag-and-drop state ────────────────────────────
-    private int  _destDragIndex      = -1;   // index captured on pointer-press
-    private int  _destActiveDragFrom = -1;   // index being dragged (set before DoDragDropAsync)
-    private bool _destDragging       = false;
+    private int    _destDragIndex      = -1;   // index captured on pointer-press
+    private int    _destActiveDragFrom = -1;   // index that is currently being dragged
+    private bool   _destDragging       = false;
+    private double _destDragStartY     = 0;   // Y position at press, used for threshold
+    private const double DestDragThreshold = 5.0;
 
     public ModelSystemEditorView()
     {
@@ -54,6 +56,9 @@ public partial class ModelSystemEditorView : UserControl
         DestinationListBox.PointerPressed  += OnDestListPointerPressed;
         DestinationListBox.PointerMoved    += OnDestListPointerMoved;
         DestinationListBox.PointerReleased += OnDestListPointerReleased;
+
+        // Double-tap a destination entry to navigate the canvas to that node.
+        DestinationListBox.DoubleTapped += OnDestListDoubleTapped;
 
         // Boundary navigation dropdown.
         BoundaryNavComboBox.SelectionChanged += OnBoundaryNavSelectionChanged;
@@ -183,13 +188,21 @@ public partial class ModelSystemEditorView : UserControl
 
     // ── Destination list drag-and-drop (pointer-based, no DragDrop API) ──
 
+    private void OnDestListDoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e)
+    {
+        if (_vm is null) return;
+        if (e.Source is Control src && src.DataContext is LinkDestinationViewModel item)
+            _vm.NavigateToLinkDestination(item);
+    }
+
     private void OnDestListPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         _destDragging       = false;
         _destActiveDragFrom = -1;
         if (e.Source is Control src && src.DataContext is LinkDestinationViewModel item)
         {
-            _destDragIndex = _vm?.SelectedLinkDestinationEntries.IndexOf(item) ?? -1;
+            _destDragIndex  = _vm?.SelectedLinkDestinationEntries.IndexOf(item) ?? -1;
+            _destDragStartY = e.GetPosition(DestinationListBox).Y;
             if (_destDragIndex >= 0)
                 e.Pointer.Capture(DestinationListBox);
         }
@@ -202,18 +215,31 @@ public partial class ModelSystemEditorView : UserControl
     private void OnDestListPointerMoved(object? sender, PointerEventArgs e)
     {
         if (_destDragIndex < 0) return;
-        if (!e.GetCurrentPoint(DestinationListBox).Properties.IsLeftButtonPressed)
+        var pt = e.GetCurrentPoint(DestinationListBox);
+        if (!pt.Properties.IsLeftButtonPressed)
         {
             _destDragIndex = -1;
+            HideDragIndicator();
             return;
         }
-        _destDragging       = true;
-        _destActiveDragFrom = _destDragIndex;
+
+        // Don't commit to a drag until the pointer has moved enough to be intentional.
+        if (!_destDragging)
+        {
+            if (Math.Abs(pt.Position.Y - _destDragStartY) < DestDragThreshold)
+                return;
+            _destDragging       = true;
+            _destActiveDragFrom = _destDragIndex;
+        }
+
+        UpdateDragIndicator(pt.Position);
     }
 
     private void OnDestListPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         e.Pointer.Capture(null);
+        HideDragIndicator();
+
         if (!_destDragging || _destActiveDragFrom < 0)
         {
             _destDragIndex = -1;
@@ -221,8 +247,14 @@ public partial class ModelSystemEditorView : UserControl
             return;
         }
 
-        var fromIndex = _destActiveDragFrom;
-        var toIndex   = GetDestDropIndex(e.GetPosition(DestinationListBox));
+        var fromIndex       = _destActiveDragFrom;
+        var insertBefore    = GetDropInsertIndex(e.GetPosition(DestinationListBox));
+
+        // MoveDestination(from, to) removes the item first then inserts at 'to', so the
+        // effective target index shifts by -1 whenever the source was before the insert point.
+        var toIndex = fromIndex < insertBefore ? insertBefore - 1 : insertBefore;
+        toIndex = Math.Clamp(toIndex, 0, DestinationListBox.ItemCount - 1);
+
         if (_vm is not null && fromIndex != toIndex)
             _vm.MoveLinkDestination(fromIndex, toIndex);
 
@@ -231,8 +263,11 @@ public partial class ModelSystemEditorView : UserControl
         _destActiveDragFrom = -1;
     }
 
-    /// <summary>Determine the insert index from the pointer Y position within the ListBox.</summary>
-    private int GetDestDropIndex(Avalonia.Point dropPos)
+    /// <summary>
+    /// Returns the "insert before" index (0 = before the first item, ItemCount = append after the last).
+    /// Used for both computing the drop target and positioning the indicator.
+    /// </summary>
+    private int GetDropInsertIndex(Avalonia.Point dropPos)
     {
         for (int i = 0; i < DestinationListBox.ItemCount; i++)
         {
@@ -241,7 +276,33 @@ public partial class ModelSystemEditorView : UserControl
             if (dropPos.Y < mid)
                 return i;
         }
-        return Math.Max(0, DestinationListBox.ItemCount - 1);
+        return DestinationListBox.ItemCount;  // append to end
     }
+
+    /// <summary>Show the drop-indicator line at the position implied by the current pointer.</summary>
+    private void UpdateDragIndicator(Avalonia.Point posInListBox)
+    {
+        int insertBefore = GetDropInsertIndex(posInListBox);
+
+        double? indicatorY = null;
+        if (insertBefore < DestinationListBox.ItemCount)
+        {
+            if (DestinationListBox.ContainerFromIndex(insertBefore) is Control c)
+                indicatorY = c.Bounds.Top;
+        }
+        else if (DestinationListBox.ItemCount > 0)
+        {
+            if (DestinationListBox.ContainerFromIndex(DestinationListBox.ItemCount - 1) is Control last)
+                indicatorY = last.Bounds.Bottom;
+        }
+
+        if (indicatorY is null) return;
+
+        DestDropIndicator.Width     = DestinationListBox.Bounds.Width;
+        Avalonia.Controls.Canvas.SetTop(DestDropIndicator, indicatorY.Value - 1);
+        DestDropIndicator.IsVisible = true;
+    }
+
+    private void HideDragIndicator() => DestDropIndicator.IsVisible = false;
 }
 

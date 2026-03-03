@@ -5,6 +5,7 @@
         xmlns:res="clr-namespace:XTMF2.GUI.Resources"
         mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="450"
         x:Class="XTMF2.GUI.Views.SettingsWindow"
+        x:CompileBindings="True"
         Title="{res:Localize Settings_Title}"
         Width="600"
         Height="450"

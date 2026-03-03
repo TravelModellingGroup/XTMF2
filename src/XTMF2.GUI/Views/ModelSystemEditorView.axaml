@@ -8,6 +8,7 @@
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
              x:Class="XTMF2.GUI.Views.ModelSystemEditorView"
              x:DataType="vm:ModelSystemEditorViewModel"
+             x:CompileBindings="True"
              Focusable="True">
 
     <UserControl.KeyBindings>
@@ -180,16 +181,27 @@
                                            FontSize="10"
                                            Opacity="0.6"
                                            TextWrapping="Wrap"/>
-                                <ListBox x:Name="DestinationListBox"
-                                         ItemsSource="{Binding SelectedLinkDestinationEntries}"
-                                         SelectedItem="{Binding SelectedLinkDestinationEntry, Mode=TwoWay}"
-                                         MaxHeight="180">
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:LinkDestinationViewModel">
-                                            <TextBlock Text="{Binding Name}" Padding="4,2"/>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
+                                <!-- Wrap in Grid so the drop-indicator Canvas can overlay the ListBox. -->
+                                <Grid>
+                                    <ListBox x:Name="DestinationListBox"
+                                             ItemsSource="{Binding SelectedLinkDestinationEntries}"
+                                             SelectedItem="{Binding SelectedLinkDestinationEntry, Mode=TwoWay}"
+                                             MaxHeight="180">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:LinkDestinationViewModel">
+                                                <TextBlock Text="{Binding Name}" Padding="4,2"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <!-- Drop indicator: shown while dragging to mark the insert position. -->
+                                    <Canvas IsHitTestVisible="False">
+                                        <Border x:Name="DestDropIndicator"
+                                                IsVisible="False"
+                                                Height="2"
+                                                CornerRadius="1"
+                                                Background="{DynamicResource SystemAccentColor}"/>
+                                    </Canvas>
+                                </Grid>
                             </StackPanel>
 
                             <TextBlock Text="Nothing selected."
