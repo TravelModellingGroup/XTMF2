@@ -48,6 +48,22 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>The active editing session for the model system.</summary>
     public ModelSystemSession Session { get; }
 
+    // ── Run support ───────────────────────────────────────────────────────
+    /// <summary>
+    /// Optional run controller used to submit model system runs.
+    /// When null the Run button is disabled.
+    /// </summary>
+    private readonly RunController? _runController;
+
+    /// <summary>True when a <see cref="RunController"/> is available.</summary>
+    public bool CanRun => _runController is not null;
+
+    /// <summary>
+    /// Optional callback invoked on the UI thread after a run is successfully submitted.
+    /// Set by <see cref="MainWindow"/> to switch the active document to the Runs view.
+    /// </summary>
+    public Action? RunStarted { get; set; }
+
     /// <summary>The user who owns this editing session.</summary>
     public User User { get; }
 
@@ -168,6 +184,20 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public bool SelectedElementIsNode => SelectedElement is NodeViewModel;
 
     /// <summary>
+    /// True when the selected node is a BasicParameter or ScriptedParameter,
+    /// used to gate the parameter value editor in the property panel.
+    /// </summary>
+    public bool SelectedElementIsParameter
+        => SelectedElement is NodeViewModel pnvm && pnvm.IsParameterNode;
+
+    /// <summary>
+    /// Mutable copy of the selected parameter node's current value string,
+    /// bound two-way to the parameter value text box.
+    /// </summary>
+    [ObservableProperty]
+    private string _selectedElementParameterValue = string.Empty;
+
+    /// <summary>
     /// Human-readable type string shown in the property panel's "Type:" row.
     /// Automatically updates when the node's type changes.
     /// </summary>
@@ -207,12 +237,22 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         OnPropertyChanged(nameof(SelectedElementFieldLabel));
         OnPropertyChanged(nameof(SelectedElementTypeName));
         OnPropertyChanged(nameof(SelectedElementIsNode));
+        OnPropertyChanged(nameof(SelectedElementIsParameter));
+        SelectedElementParameterValue =
+            value is NodeViewModel pnvm && pnvm.IsParameterNode
+                ? pnvm.ParameterValueRepresentation
+                : string.Empty;
     }
 
     private void OnSelectedElementPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(NodeViewModel.TypeName))
             OnPropertyChanged(nameof(SelectedElementTypeName));
+        if (e.PropertyName == nameof(NodeViewModel.ParameterValueRepresentation))
+        {
+            if (SelectedElement is NodeViewModel nvm && nvm.IsParameterNode)
+                SelectedElementParameterValue = nvm.ParameterValueRepresentation;
+        }
     }
 
     // ── Parent window reference (set by the view) ─────────────────────────
@@ -243,12 +283,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     private const float PlacementStep = 80f;
 
     // =====================================================================
-    public ModelSystemEditorViewModel(ModelSystemSession session, User user)
+    public ModelSystemEditorViewModel(ModelSystemSession session, User user, RunController? runController = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(user);
         Session = session;
         User = user;
+        _runController = runController;
 
         // Build initial VM collections from the active boundary.
         _currentBoundary = GlobalBoundary;
@@ -566,8 +607,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             : hook.Type;
 
         // Build a filtered, read-only collection of compatible types.
+        // This includes both closed registered types and constructions of open-generic
+        // module types (e.g. BasicParameter<bool> for an IFunction<bool> hook).
         var compatibleList = new ObservableCollection<Type>(
-            Session.LoadedModuleTypes.Where(t => hookElementType.IsAssignableFrom(t)));
+            Session.GetCompatibleModuleTypes(hookElementType).Distinct());
         var filteredTypes = new ReadOnlyObservableCollection<Type>(compatibleList);
 
         if (filteredTypes.Count == 0)
@@ -696,6 +739,20 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // On success the boundary CollectionChanged fires and TryAddLinkViewModel wires up the new link.
     }
 
+    /// <summary>
+    /// Apply the value in <see cref="SelectedElementParameterValue"/> to the
+    /// selected BasicParameter / ScriptedParameter node.
+    /// </summary>
+    [RelayCommand]
+    private void CommitParameterValue()
+    {
+        if (SelectedElement is not NodeViewModel nvm) return;
+        if (!Session.SetParameterValue(User, nvm.UnderlyingNode,
+                SelectedElementParameterValue, out var error))
+            ShowToast(error?.Message ?? "Failed to set parameter value.",
+                      isError: true, durationMs: 5000);
+    }
+
     /// <summary>Commit the name/comment currently in <see cref="SelectedElementEditName"/> back to the model.</summary>
     [RelayCommand]
     private async Task CommitRename()
@@ -746,6 +803,65 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             (float)CommentBlockViewModel.DefaultWidth,
             (float)CommentBlockViewModel.DefaultHeight);
         Session.AddCommentBlock(User, _currentBoundary, $"Comment {++_commentCounter}", location, out _, out _);
+    }
+
+    /// <summary>
+    /// Prompts for a run name and start to execute, then submits the run to the
+    /// <see cref="RunController"/>.
+    /// </summary>
+    [RelayCommand]
+    private async Task RunModelSystem()
+    {
+        if (ParentWindow is null || _runController is null) return;
+
+        // Collect available starts from the global boundary.
+        var availableStarts = Session.ModelSystem.GlobalBoundary.Starts.ToList();
+        if (availableStarts.Count == 0)
+        {
+            ShowToast("No starts are defined in this model system.", isError: true, durationMs: 5000);
+            return;
+        }
+
+        // Prompt for the run name.
+        var defaultRunName = $"{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var runNameDialog = new InputDialog(
+            title: "Run Model System",
+            prompt: "Enter a name for this run:",
+            defaultText: defaultRunName);
+        await runNameDialog.ShowDialog(ParentWindow);
+        if (runNameDialog.WasCancelled) return;
+        var runName = runNameDialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(runName)) return;
+
+        // Determine which start to execute.
+        string startToExecute;
+        if (availableStarts.Count == 1)
+        {
+            startToExecute = availableStarts[0].Name;
+        }
+        else
+        {
+            // Multiple starts: ask the user to type the start name (listing the options).
+            var startList = string.Join(", ", availableStarts.Select(s => s.Name));
+            var startDialog = new InputDialog(
+                title: "Select Start",
+                prompt: $"Available starts: {startList}\nEnter the start to execute:",
+                defaultText: availableStarts[0].Name);
+            await startDialog.ShowDialog(ParentWindow);
+            if (startDialog.WasCancelled) return;
+            startToExecute = startDialog.InputText?.Trim() ?? availableStarts[0].Name;
+            if (string.IsNullOrEmpty(startToExecute)) return;
+        }
+
+        var project = Session.Project;
+        if (!_runController.SendRun(project, Session, startToExecute, runName, out _, out var runError))
+        {
+            ShowToast($"Failed to start run: {runError?.Message}", isError: true, durationMs: 6000);
+            return;
+        }
+
+        ShowToast($"Run '{runName}' started.", durationMs: 3000);
+        RunStarted?.Invoke();
     }
 
     /// <summary>Save the model system to its project file.</summary>

@@ -101,6 +101,15 @@
                                 </StackPanel>
                             </Button>
 
+                            <!-- Run -->
+                            <Button Command="{Binding RunModelSystemCommand}"
+                                    IsEnabled="{Binding CanRun}"
+                                    ToolTip.Tip="Run this model system (save first to apply changes)">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                    <TextBlock Text="▶" FontSize="18" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+
                         </StackPanel>
                     </Border>
 
@@ -170,6 +179,25 @@
                                         HorizontalContentAlignment="Center"
                                         FontSize="12"
                                         Margin="0,4,0,0"/>
+
+                                <!-- ── Parameter value editor ──────────────── -->
+                                <StackPanel Spacing="4"
+                                            IsVisible="{Binding SelectedElementIsParameter}"
+                                            Margin="0,4,0,0">
+                                    <Separator Margin="0,4"/>
+                                    <TextBlock Text="Value:"
+                                               FontSize="12"
+                                               Opacity="0.7"/>
+                                    <TextBox x:Name="ParameterValueEditBox"
+                                             Text="{Binding SelectedElementParameterValue, Mode=TwoWay}"
+                                             FontSize="12"
+                                             Watermark="Enter value…"/>
+                                    <Button Content="Apply Value"
+                                            Command="{Binding CommitParameterValueCommand}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            FontSize="12"/>
+                                </StackPanel>
                             </StackPanel>
 
                             <!-- Section: MultiLink destinations -->

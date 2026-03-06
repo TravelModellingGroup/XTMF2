@@ -36,7 +36,10 @@
   <ItemGroup>    <AvaloniaResource Include="Resources\XTMF_icon.png"/>
   </ItemGroup>
 
-  <ItemGroup>    <ProjectReference Include="..\XTMF2\XTMF2.csproj" />
+  <ItemGroup>    
+    <ProjectReference Include="..\XTMF2\XTMF2.csproj" />
     <ProjectReference Include="..\XTMF2.Interfaces\XTMF2.Interfaces.csproj" />
+    <ProjectReference Include="..\XTMF2.Client\XTMF2.RunServer.csproj" />
+    <ProjectReference Include="..\XTMF2.Run\XTMF2.Run.csproj" />
   </ItemGroup>
 </Project>

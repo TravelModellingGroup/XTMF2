@@ -46,7 +46,7 @@ public sealed class HostBus : IDisposable
     {
         _Owner = streamOwner;
         _HostStream = hostStream ?? throw new ArgumentNullException(nameof(hostStream));
-        StartListenner();
+        _listenerThread = StartListenner();
     }
 
     ~HostBus()
@@ -145,12 +145,14 @@ public sealed class HostBus : IDisposable
 #pragma warning restore CA1031
     }
 
+    private Thread _listenerThread;
+
     /// <summary>
     /// Invoke this to start listening on a separate thread.
     /// </summary>
-    private void StartListenner()
+    private Thread StartListenner()
     {
-        Task.Factory.StartNew((token) =>
+        var listenerThread = new Thread(() => 
         {
             try
             {
@@ -187,11 +189,21 @@ public sealed class HostBus : IDisposable
                     System.Threading.Interlocked.MemoryBarrier();
                 }
             }
+            catch(Exception)
+            {
+                // The client has disconnected or crashed. Exit the listener thread.
+            }
             finally
             {
                 _Exited = true;
             }
-        }, TaskCreationOptions.LongRunning);
+        })
+        {
+            IsBackground = true,
+            Name = "HostBus Listener Thread"
+        };
+        listenerThread.Start();
+        return listenerThread;
     }
 
     private enum Out
@@ -199,7 +211,8 @@ public sealed class HostBus : IDisposable
         Heartbeat = 0,
         RunModelSystem = 1,
         CancelModelRun = 2,
-        KillModelRun = 3
+        KillModelRun = 3,
+        RequestClientShutdown = 4,
     }
 
     /// <summary>
@@ -291,6 +304,25 @@ public sealed class HostBus : IDisposable
                 using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
                 writer.Write((int)Out.KillModelRun);
                 writer.Write(runID);
+                return true;
+            }
+            catch (IOException e)
+            {
+                error = new CommandError(e.Message);
+                return false;
+            }
+        }
+    }
+
+    public bool RequestClientShutdown([NotNullWhen(false)] out CommandError? error)
+    {
+        error = null;
+        lock (_outLock)
+        {
+            try
+            {
+                using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
+                writer.Write((int)Out.RequestClientShutdown);
                 return true;
             }
             catch (IOException e)

@@ -45,6 +45,9 @@ public partial class ModelSystemEditorView : UserControl
         // Pressing Enter in the name box commits the rename without requiring the Rename button.
         NameEditBox.KeyDown += OnNameEditBoxKeyDown;
 
+        // Pressing Enter in the parameter value box commits the value.
+        ParameterValueEditBox.KeyDown += OnParameterValueEditBoxKeyDown;
+
         // F2 anywhere in this view focuses the rename box (when an element is selected).
         KeyDown += OnViewKeyDown;
 
@@ -89,6 +92,12 @@ public partial class ModelSystemEditorView : UserControl
     {
         if (e.Key == Key.Enter)
             _vm?.CommitRenameCommand.Execute(null);
+    }
+
+    private void OnParameterValueEditBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+            _vm?.CommitParameterValueCommand.Execute(null);
     }
 
     private void OnAttachedToVisualTree(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)

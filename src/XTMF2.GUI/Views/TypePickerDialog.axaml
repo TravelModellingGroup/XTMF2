@@ -42,9 +42,9 @@
                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
                          IsVisible="{Binding !HasNoResults}">
                     <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="system:Type">
+                        <DataTemplate x:DataType="system:Type" x:CompileBindings="False">
                             <StackPanel Spacing="1" Margin="4,2">
-                                <TextBlock Text="{Binding Name}"
+                                <TextBlock Text="{Binding Converter={x:Static ctrl:FriendlyTypeNameConverter.Instance}}"
                                            FontWeight="SemiBold"
                                            FontSize="13"/>
                                 <TextBlock Text="{Binding Namespace}"

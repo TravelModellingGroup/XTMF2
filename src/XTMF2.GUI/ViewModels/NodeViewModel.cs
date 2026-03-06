@@ -21,6 +21,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using XTMF2.Configuration;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -64,6 +65,29 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     /// </summary>
     public string TypeName => UnderlyingNode.Type?.Name ?? "Unknown";
 
+    /// <summary>
+    /// True when the node's type is <see cref="BasicParameter{T}"/> or
+    /// <see cref="ScriptedParameter{T}"/>, meaning it carries a string
+    /// parameter value the user can view and edit.
+    /// </summary>
+    public bool IsParameterNode
+    {
+        get
+        {
+            var t = UnderlyingNode.Type;
+            if (t is null || !t.IsGenericType) return false;
+            var td = t.GetGenericTypeDefinition();
+            return td == typeof(BasicParameter<>) || td == typeof(ScriptedParameter<>);
+        }
+    }
+
+    /// <summary>
+    /// The string representation of the node's current parameter value,
+    /// or <see cref="string.Empty"/> when no value has been assigned.
+    /// </summary>
+    public string ParameterValueRepresentation
+        => UnderlyingNode.ParameterValue?.Representation ?? string.Empty;
+
     public NodeViewModel(Node node, ModelSystemSession session, User user)
     {
         UnderlyingNode = node;
@@ -84,6 +108,10 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
                 break;
             case nameof(Node.Type):
                 OnPropertyChanged(nameof(TypeName));
+                OnPropertyChanged(nameof(IsParameterNode));
+                break;
+            case nameof(Node.ParameterValue):
+                OnPropertyChanged(nameof(ParameterValueRepresentation));
                 break;
             case nameof(Node.Location):
                 OnPropertyChanged(nameof(X));

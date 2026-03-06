@@ -39,6 +39,11 @@ namespace XTMF2.Editing
 
         public ModelSystemHeader ModelSystemHeader { get; private set; }
 
+        /// <summary>
+        /// The project that this model system session belongs to.
+        /// </summary>
+        public Project Project => _session.Project;
+
         private readonly CommandBuffer Buffer = new CommandBuffer();
 
         public ModelSystemSession(ProjectSession session, ModelSystem modelSystem)
@@ -64,6 +69,27 @@ namespace XTMF2.Editing
         /// </summary>
         public System.Collections.ObjectModel.ReadOnlyObservableCollection<Type> LoadedModuleTypes
             => GetModuleRepository().LoadedModuleTypes;
+
+        /// <summary>
+        /// Snapshot of open-generic module types registered in the runtime (e.g.
+        /// <c>BasicParameter&lt;&gt;</c>).  Use <see cref="GetCompatibleModuleTypes"/> to
+        /// obtain the full set of types (closed + constructed) that satisfy a specific hook.
+        /// </summary>
+        public System.Collections.Generic.IReadOnlyList<Type> OpenGenericModuleTypes
+            => GetModuleRepository().OpenGenericModuleTypes;
+
+        /// <summary>
+        /// Returns every module type that is compatible with <paramref name="hookType"/>:
+        /// closed types already in <see cref="LoadedModuleTypes"/> that are directly assignable,
+        /// plus any closed generics that can be constructed from open-generic module types.
+        /// </summary>
+        public System.Collections.Generic.IEnumerable<Type> GetCompatibleModuleTypes(Type hookType)
+        {
+            var repo = GetModuleRepository();
+            return repo.LoadedModuleTypes
+                       .Where(t => hookType.IsAssignableFrom(t))
+                       .Concat(repo.GetCompatibleConstructedTypes(hookType));
+        }
 
         /// <summary>
         /// Change the type of an existing node, with full undo/redo support.

@@ -23,6 +23,7 @@ using System.IO;
 using System.Threading;
 using XTMF2.Bus;
 using XTMF2.Editing;
+using XTMF2.GUI.ViewModels;
 
 
 namespace XTMF2.GUI;
@@ -39,6 +40,11 @@ public class RunController : IDisposable
     /// The XTMF runtime that this controller controls.
     /// </summary>
     public XTMFRuntime Runtime { get; private set; }
+
+    /// <summary>
+    /// The view model that tracks active and completed runs for display in the Runs tab.
+    /// </summary>
+    public RunsViewModel RunsViewModel { get; } = new RunsViewModel();
 
     /// <summary>
     /// The hostbus that this controller uses to communicate with the client. This is used to send commands to the client and receive status updates from the client.
@@ -58,7 +64,7 @@ public class RunController : IDisposable
     {
         var id = Guid.NewGuid().ToString();
         var xtmfGUIFilePath = typeof(XTMF2.GUI.Program).Assembly.Location;
-        var xtmfClientFileName = Path.Combine(Path.GetDirectoryName(xtmfGUIFilePath)!, "XTMF2.Client.dll");
+        var xtmfClientFileName = Path.Combine(Path.GetDirectoryName(xtmfGUIFilePath)!, "XTMF2.RunServer.dll");
         Process? client = null;
         try
         {
@@ -85,9 +91,9 @@ public class RunController : IDisposable
             }
             var hostBus = new HostBus(hostStream, true);
             controller = new RunController(runtime, hostBus);
-            hostBus.ClientReportedStatus += StatusUpdateFromClient;
-            hostBus.ClientFinishedModelSystem += ClientFinishedModelSystem;
-            hostBus.ClientErrorWhenRunningModelSystem += ClientErrorWhenRunningModelSystem;
+            hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
+            hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
+            hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
             return true;
         }
         catch (Exception ex)
@@ -98,19 +104,19 @@ public class RunController : IDisposable
         }
     }
 
-    private static void ClientErrorWhenRunningModelSystem(object sender, string runID, string errorMessage, string stack)
+    private void OnClientErrorWhenRunningModelSystem(object sender, string runID, string errorMessage, string stack)
     {
-        
+        RunsViewModel.NotifyError(runID, errorMessage, stack);
     }
 
-    private static void ClientFinishedModelSystem(object? sender, string e)
+    private void OnClientFinishedModelSystem(object? sender, string runID)
     {
-        
+        RunsViewModel.NotifyFinished(runID);
     }
 
-    private static void StatusUpdateFromClient(object sender, string runID, string status)
+    private void OnClientReportedStatus(object sender, string runID, string status)
     {
-        
+        RunsViewModel.NotifyStatus(runID, status);
     }
 
     /// <summary>
@@ -141,6 +147,7 @@ public class RunController : IDisposable
         {
             return false;
         }
+        RunsViewModel.AddRun(id, runName);
         return true;
     }
 
@@ -150,8 +157,14 @@ public class RunController : IDisposable
         _hostBus = hostBus;
     }
 
+    private bool _disposed;
+
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        GC.SuppressFinalize(this);
+        _hostBus.RequestClientShutdown(out _);
         _hostBus.Dispose();
     }
 }
