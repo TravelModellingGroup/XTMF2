@@ -28,6 +28,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
+using Avalonia.Layout;
 using Avalonia.VisualTree;
 using XTMF2;
 using XTMF2.GUI.ViewModels;
@@ -115,6 +116,10 @@ public sealed class ModelSystemCanvas : Control
     private const double ElbowMinOffset   = 16.0;
     private const double MaxStraightLineDistance = 50.0;
     private const double LinkHitTolerance = 6.0;
+    // Canvas scaling
+    private const double ScaleStep = 0.10;
+    private const double ScaleMin  = 0.10;
+    private const double ScaleMax  = 4.0;
 
     private static readonly Typeface DefaultTypeface = new Typeface("Segoe UI, Arial, sans-serif");
 
@@ -150,6 +155,12 @@ public sealed class ModelSystemCanvas : Control
     /// </summary>
     private readonly HashSet<NodeViewModel> _canInlineNodes = new();
 
+    // ── Canvas scale ───────────────────────────────────────────────────────
+    private double _scale = 1.0;
+    // ── Zoom control overlay ───────────────────────────────────────────────
+    private readonly Border  _zoomBar;
+    private readonly TextBox _zoomTextBox;
+
     public ModelSystemCanvas()
     {
         Focusable = true;
@@ -172,6 +183,61 @@ public sealed class ModelSystemCanvas : Control
 
         LogicalChildren.Add(_inlineEditor);
         VisualChildren.Add(_inlineEditor);
+
+        // ── Zoom control (pinned to viewport bottom-right) ────────────────
+        _zoomTextBox = new TextBox
+        {
+            FontFamily               = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize                 = 11,
+            Foreground               = NodeTextBrush,
+            Background               = new SolidColorBrush(Color.FromRgb(0x22, 0x32, 0x44)),
+            BorderThickness          = new Thickness(0),
+            Padding                  = new Thickness(4, 1, 4, 1),
+            Width                    = 52,
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Text                     = "100%",
+        };
+        _zoomTextBox.KeyDown   += OnZoomTextBoxKeyDown;
+        _zoomTextBox.LostFocus += (_, _) => TryApplyZoomText();
+
+        var minusBtn = new Button
+        {
+            Content         = "\u2212",   // − (minus sign)
+            FontSize        = 13,
+            Padding         = new Thickness(6, 1, 6, 1),
+            Background      = Brushes.Transparent,
+            Foreground      = NodeTextBrush,
+            BorderThickness = new Thickness(0),
+        };
+        minusBtn.Click += (_, _) => ApplyScale(_scale - ScaleStep);
+
+        var plusBtn = new Button
+        {
+            Content         = "+",
+            FontSize        = 13,
+            Padding         = new Thickness(6, 1, 6, 1),
+            Background      = Brushes.Transparent,
+            Foreground      = NodeTextBrush,
+            BorderThickness = new Thickness(0),
+        };
+        plusBtn.Click += (_, _) => ApplyScale(_scale + ScaleStep);
+
+        _zoomBar = new Border
+        {
+            Background      = new SolidColorBrush(Color.FromArgb(0xCC, 0x1A, 0x1A, 0x2E)),
+            BorderBrush     = new SolidColorBrush(Color.FromRgb(0x44, 0x55, 0x66)),
+            BorderThickness = new Thickness(1),
+            CornerRadius    = new CornerRadius(4),
+            Padding         = new Thickness(2),
+            Child           = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing     = 0,
+                Children    = { minusBtn, _zoomTextBox, plusBtn },
+            },
+        };
+        LogicalChildren.Add(_zoomBar);
+        VisualChildren.Add(_zoomBar);
     }
 
     // ── Drag state ────────────────────────────────────────────────────────
@@ -190,8 +256,16 @@ public sealed class ModelSystemCanvas : Control
 
     /// <summary>Returns the ancestor <see cref="ScrollViewer"/> that hosts this canvas, lazily resolved.</summary>
     private ScrollViewer? _scrollViewer;
-    private ScrollViewer? GetScrollViewer() =>
-        _scrollViewer ??= this.FindAncestorOfType<ScrollViewer>();
+    private ScrollViewer? GetScrollViewer()
+    {
+        if (_scrollViewer is null)
+        {
+            _scrollViewer = this.FindAncestorOfType<ScrollViewer>();
+            if (_scrollViewer is not null)
+                _scrollViewer.ScrollChanged += (_, _) => InvalidateMeasure();
+        }
+        return _scrollViewer;
+    }
 
     // ── Resize drag state ─────────────────────────────────────────────────
     /// <summary>The node being resized, or <c>null</c> when not resizing.</summary>
@@ -319,24 +393,38 @@ public sealed class ModelSystemCanvas : Control
         // Measure the inline editor so Avalonia knows its desired size.
         if (_editingParamNode is not null)
         {
-            _inlineEditor.Measure(new Size(_editingParamEditorW > 0 ? _editingParamEditorW
-                                                                     : NodeRenderWidth(_editingParamNode),
-                                           HookRowHeight));
+            _inlineEditor.Measure(new Size(_editingParamEditorW > 0 ? _editingParamEditorW * _scale
+                                                                     : NodeRenderWidth(_editingParamNode) * _scale,
+                                           HookRowHeight * _scale));
         }
-        return new Size(maxX, maxY);
+        // Measure the zoom bar so ArrangeOverride can use its desired size.
+        _zoomBar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return new Size(maxX * _scale, maxY * _scale);
     }
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        // Position the inline editor at the stored row location.
+        // Position the inline editor at the stored row location (scaled to screen coords).
         if (_editingParamNode is not null && _editingParamEditorW > 0)
         {
             _inlineEditor.Arrange(new Rect(
-                _editingParamEditorX,
-                _editingParamEditorY,
-                _editingParamEditorW,
-                HookRowHeight));
+                _editingParamEditorX * _scale,
+                _editingParamEditorY * _scale,
+                _editingParamEditorW * _scale,
+                HookRowHeight * _scale));
         }
+        // Pin the zoom control to the bottom-right of the visible viewport.
+        var sv = GetScrollViewer();
+        var zw = _zoomBar.DesiredSize.Width;
+        var zh = _zoomBar.DesiredSize.Height;
+        const double margin = 10.0;
+        double bx = margin, by = margin;
+        if (sv is not null)
+        {
+            bx = sv.Offset.X + sv.Viewport.Width  - zw - margin;
+            by = sv.Offset.Y + sv.Viewport.Height - zh - margin;
+        }
+        _zoomBar.Arrange(new Rect(Math.Max(0, bx), Math.Max(0, by), zw, zh));
         return finalSize;
     }
 
@@ -349,11 +437,14 @@ public sealed class ModelSystemCanvas : Control
 
         if (_vm is null) return;
 
-        RenderCommentBlocks(ctx);
-        RenderLinks(ctx);
-        RenderNodes(ctx);
-        RenderStarts(ctx);
-        RenderPendingLink(ctx);
+        using (ctx.PushTransform(Matrix.CreateScale(_scale, _scale)))
+        {
+            RenderCommentBlocks(ctx);
+            RenderLinks(ctx);
+            RenderNodes(ctx);
+            RenderStarts(ctx);
+            RenderPendingLink(ctx);
+        }
     }
 
     private void RenderCommentBlocks(DrawingContext ctx)
@@ -1093,6 +1184,72 @@ public sealed class ModelSystemCanvas : Control
             _vm.DeleteSelectedCommand.Execute(null);
             e.Handled = true;
         }
+        if (e.Key == Key.D0 && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            ApplyScale(1.0);
+            e.Handled = true;
+        }
+    }
+
+    // ── Scaling helpers ───────────────────────────────────────────────────
+    /// <summary>
+    /// Converts a pointer position in this control's coordinate space (screen pixels) to
+    /// model/canvas coordinates by dividing by the current scale factor.
+    /// </summary>
+    private Point ToCanvasPos(Point screenPos) => new Point(screenPos.X / _scale, screenPos.Y / _scale);
+
+    /// <summary>
+    /// Sets a new scale factor, clamped to [<see cref="ScaleMin"/>, <see cref="ScaleMax"/>].
+    /// Adjusts the scroll offset so the viewport centre remains on the same model coordinate.
+    /// </summary>
+    private void ApplyScale(double newScale)
+    {
+        newScale = Math.Clamp(Math.Round(newScale, 2), ScaleMin, ScaleMax);
+        if (Math.Abs(newScale - _scale) < 0.005) return;
+        var sv = GetScrollViewer();
+        double prevScale = _scale;
+        _scale = newScale;
+        _zoomTextBox.Text = $"{(int)Math.Round(_scale * 100)}%";
+        if (sv is not null)
+        {
+            // Keep the viewport centre fixed on the same model coordinate.
+            double cx = sv.Offset.X + sv.Viewport.Width  / 2.0;
+            double cy = sv.Offset.Y + sv.Viewport.Height / 2.0;
+            sv.Offset = new Vector(
+                Math.Max(0, cx * newScale / prevScale - sv.Viewport.Width  / 2.0),
+                Math.Max(0, cy * newScale / prevScale - sv.Viewport.Height / 2.0));
+        }
+        InvalidateAndMeasure();
+    }
+
+    private void TryApplyZoomText()
+    {
+        var text = (_zoomTextBox.Text ?? string.Empty).TrimEnd('%').Trim();
+        if (double.TryParse(text, System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out double pct) && pct >= 1)
+            ApplyScale(pct / 100.0);
+        else
+            _zoomTextBox.Text = $"{(int)Math.Round(_scale * 100)}%";
+    }
+
+    private void OnZoomTextBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Enter or Key.Return)
+        {
+            TryApplyZoomText();
+            e.Handled = true;
+        }
+    }
+
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        if ((e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            ApplyScale(_scale + (e.Delta.Y > 0 ? ScaleStep : -ScaleStep));
+            e.Handled = true;
+            return;
+        }
+        base.OnPointerWheelChanged(e);
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -1101,7 +1258,8 @@ public sealed class ModelSystemCanvas : Control
         if (_vm is null) return;
 
         var point = e.GetCurrentPoint(this);
-        var pos   = point.Position;
+        var pos   = point.Position;           // screen coords
+        var mpos  = ToCanvasPos(pos);         // model coords
         bool isRightButton = point.Properties.IsRightButtonPressed;
         bool isCtrlLeft    = !isRightButton
                              && point.Properties.IsLeftButtonPressed
@@ -1113,13 +1271,13 @@ public sealed class ModelSystemCanvas : Control
         // ── Resize handle press (left button) ────────────────────────────
         if (!isLinkDrag)
         {
-            var resizeHit = HitTestResizeHandle(pos);
+            var resizeHit = HitTestResizeHandle(mpos);
             if (resizeHit is not null)
             {
                 // If editing, commit before selecting/dragging anything else.
                 if (_editingParamNode is not null) CommitParamEdit();
                 _resizing       = resizeHit;
-                _resizeStartPos = pos;
+                _resizeStartPos = mpos;
                 _resizeStartW   = ElementRenderWidth(resizeHit);
                 _resizeStartH   = ElementRenderHeight(resizeHit);
                 _vm.SelectElementCommand.Execute(resizeHit);
@@ -1133,7 +1291,7 @@ public sealed class ModelSystemCanvas : Control
         // ── Minimize-to-inline button (BasicParameter header top-left) ───
         if (!isLinkDrag)
         {
-            var minimizeHit = HitTestMinimizeButton(pos);
+            var minimizeHit = HitTestMinimizeButton(mpos);
             if (minimizeHit is not null)
             {
                 if (_editingParamNode is not null) CommitParamEdit();
@@ -1148,7 +1306,7 @@ public sealed class ModelSystemCanvas : Control
         if (!isLinkDrag)
         {
             // Regular parameter value row (node is visible on canvas).
-            var paramRowHit = HitTestParamValueRow(pos);
+            var paramRowHit = HitTestParamValueRow(mpos);
             if (paramRowHit is not null)
             {
                 _vm.SelectElementCommand.Execute(paramRowHit);
@@ -1157,7 +1315,7 @@ public sealed class ModelSystemCanvas : Control
                 return;
             }
             // Inlined BasicParameter hook row inside the origin node.
-            var inlinedRowHit = HitTestInlinedParamRow(pos);
+            var inlinedRowHit = HitTestInlinedParamRow(mpos);
             if (inlinedRowHit is not null)
             {
                 var (originNode, _, inlinedParam, rx, ry, rw2) = inlinedRowHit.Value;
@@ -1173,7 +1331,7 @@ public sealed class ModelSystemCanvas : Control
         // ── Hook toggle icon click (left button, any click count) ─────────
         if (!isLinkDrag)
         {
-            var toggleHit = HitTestHookToggleIcon(pos);
+            var toggleHit = HitTestHookToggleIcon(mpos);
             if (toggleHit is not null)
             {
                 toggleHit.ShowHooks = !toggleHit.ShowHooks;
@@ -1186,7 +1344,7 @@ public sealed class ModelSystemCanvas : Control
         // ── Double-click on a hook dot: create + auto-link a new node ─────
         if (!isLinkDrag && e.ClickCount == 2)
         {
-            var hookHit = HitTestHook(pos);
+            var hookHit = HitTestHook(mpos);
             if (hookHit is { } hh)
             {
                 _ = _vm.CreateNodeFromHookAsync(hh.node, hh.hook, hh.anchor.X, hh.anchor.Y);
@@ -1195,7 +1353,7 @@ public sealed class ModelSystemCanvas : Control
             }
 
             // ── Double-click on a parameter node: open the value editor ────
-            var nodeHit = HitTest(pos, testComments: false) as NodeViewModel;
+            var nodeHit = HitTest(mpos, testComments: false) as NodeViewModel;
             if (nodeHit is { IsParameterNode: true })
             {
                 _ = _vm.EditParameterNodeAsync(nodeHit);
@@ -1204,7 +1362,7 @@ public sealed class ModelSystemCanvas : Control
             }
         }
 
-        ICanvasElement? hit = HitTest(pos, testComments: !isLinkDrag);
+        ICanvasElement? hit = HitTest(mpos, testComments: !isLinkDrag);
 
         if (isLinkDrag)
         {
@@ -1212,11 +1370,11 @@ public sealed class ModelSystemCanvas : Control
             if (isRightButton)
             {
                 _rightClickPending  = true;
-                _rightClickPressPos = pos;
-                _rightClickElement  = HitTest(pos, testComments: true);
-                _rightClickLink     = _rightClickElement is null ? HitTestLink(pos) : null;
+                _rightClickPressPos = pos;                              // screen coords for distance threshold
+                _rightClickElement  = HitTest(mpos, testComments: true);
+                _rightClickLink     = _rightClickElement is null ? HitTestLink(mpos) : null;
                 // Also check whether a hook dot was right-clicked on a node.
-                var hookHit = HitTestHook(pos);
+                var hookHit = HitTestHook(mpos);
                 _rightClickHookHit  = hookHit.HasValue ? (hookHit.Value.node, hookHit.Value.hook) : null;
             }
 
@@ -1225,7 +1383,7 @@ public sealed class ModelSystemCanvas : Control
             if (hit is NodeViewModel or StartViewModel)
             {
                 _linkOrigin     = hit;
-                _linkCurrentPos = pos;
+                _linkCurrentPos = mpos;
                 e.Pointer.Capture(this);
                 Focus();
                 e.Handled = true;
@@ -1238,13 +1396,13 @@ public sealed class ModelSystemCanvas : Control
         {
             _vm.SelectElementCommand.Execute(hit);
             _dragging   = hit;
-            _dragOffset = new Point(pos.X - hit.X, pos.Y - hit.Y);
+            _dragOffset = new Point(mpos.X - hit.X, mpos.Y - hit.Y);
             e.Pointer.Capture(this);
         }
         else
         {
             // No element hit — try links.
-            var linkHit = HitTestLink(pos);
+            var linkHit = HitTestLink(mpos);
             if (linkHit is not null)
             {
                 _vm.SelectLinkCommand.Execute(linkHit);
@@ -1256,9 +1414,9 @@ public sealed class ModelSystemCanvas : Control
                 var sv = GetScrollViewer();
                 if (sv is not null)
                 {
-                    _panning          = true;
+                    _panning           = true;
                     _panStartScrollPos = e.GetCurrentPoint(sv).Position;
-                    _panStartOffset   = sv.Offset;
+                    _panStartOffset    = sv.Offset;
                     Cursor = new Cursor(StandardCursorType.SizeAll);
                     e.Pointer.Capture(this);
                 }
@@ -1272,12 +1430,13 @@ public sealed class ModelSystemCanvas : Control
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
-        var pos = e.GetCurrentPoint(this).Position;
+        var pos  = e.GetCurrentPoint(this).Position;  // screen coords
+        var mpos = ToCanvasPos(pos);                  // model coords
 
         // Right-drag: update pending link preview.
         if (_linkOrigin is not null)
         {
-            _linkCurrentPos = pos;
+            _linkCurrentPos = mpos;
             InvalidateVisual();
             e.Handled = true;
             return;
@@ -1286,8 +1445,8 @@ public sealed class ModelSystemCanvas : Control
         // ── Resize drag ───────────────────────────────────────────────────
         if (_resizing is not null)
         {
-            var dw = pos.X - _resizeStartPos.X;
-            var dh = pos.Y - _resizeStartPos.Y;
+            var dw = mpos.X - _resizeStartPos.X;
+            var dh = mpos.Y - _resizeStartPos.Y;
             if (_resizing is NodeViewModel resizingNode)
                 resizingNode.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
             else if (_resizing is CommentBlockViewModel resizingComment)
@@ -1317,15 +1476,15 @@ public sealed class ModelSystemCanvas : Control
         // ── Cursor feedback while idle ────────────────────────────────────
         if (_dragging is null)
         {
-            Cursor = HitTestResizeHandle(pos) is not null
+            Cursor = HitTestResizeHandle(mpos) is not null
                 ? new Cursor(StandardCursorType.SizeAll)
                 : Cursor.Default;
         }
 
         if (_dragging is null) return;
 
-        var newX = Math.Max(0, pos.X - _dragOffset.X);
-        var newY = Math.Max(0, pos.Y - _dragOffset.Y);
+        var newX = Math.Max(0, mpos.X - _dragOffset.X);
+        var newY = Math.Max(0, mpos.Y - _dragOffset.Y);
 
         if (_dragging is NodeViewModel         nvm) nvm.MoveTo(newX, newY);
         if (_dragging is StartViewModel         svm) svm.MoveTo(newX, newY);
@@ -1370,7 +1529,7 @@ public sealed class ModelSystemCanvas : Control
             if (_vm is not null)
             {
                 var pos  = e.GetCurrentPoint(this).Position;
-                var dest = HitTest(pos, testComments: false) as NodeViewModel;
+                var dest = HitTest(ToCanvasPos(pos), testComments: false) as NodeViewModel;
                 // A start is never a valid destination; dest must be a NodeViewModel.
                 if (dest is not null && !ReferenceEquals(dest, origin))
                     _ = _vm.CreateLinkAsync(origin, dest);
