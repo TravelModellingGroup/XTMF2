@@ -30,9 +30,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XTMF2;
 using XTMF2.Editing;
+using XTMF2.GUI.Controls;
 using XTMF2.GUI.Resources;
 using XTMF2.GUI.Views;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -751,6 +753,62 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 SelectedElementParameterValue, out var error))
             ShowToast(error?.Message ?? "Failed to set parameter value.",
                       isError: true, durationMs: 5000);
+    }
+
+    /// <summary>
+    /// Opens the parameter editor dialog for a BasicParameter or ScriptedParameter node,
+    /// allowing the user to set the value and optionally switch between Basic and Scripted modes.
+    /// </summary>
+    public async Task EditParameterNodeAsync(NodeViewModel nvm)
+    {
+        if (ParentWindow is null) return;
+
+        var node      = nvm.UnderlyingNode;
+        var nodeType  = node.Type;
+        if (nodeType is null) return;
+
+        // Determine the inner type T from BasicParameter<T> / ScriptedParameter<T>
+        var innerType = nodeType.GetGenericArguments().FirstOrDefault();
+        if (innerType is null) return;
+
+        var innerTypeName      = FriendlyTypeNameConverter.GetFriendlyName(innerType);
+        var currentValue       = node.ParameterValue?.Representation ?? string.Empty;
+        var isCurrentlyScripted =
+            nodeType.IsGenericType &&
+            nodeType.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
+
+        // Basic validator: use ArbitraryParameterParser
+        string? BasicValidator(string v)
+        {
+            string? err = null;
+            return ArbitraryParameterParser.Check(innerType, v, ref err) ? null : (err ?? $"'{v}' is not valid for type {innerTypeName}.");
+        }
+
+        // Scripted validator: accept any non-empty text; the session will catch compile errors.
+        string? ScriptedValidator(string v) =>
+            string.IsNullOrWhiteSpace(v) ? "Expression cannot be empty." : null;
+
+        var dialog = new ParameterEditorDialog(
+            innerTypeName:      innerTypeName,
+            currentValue:       currentValue,
+            isCurrentlyScripted: isCurrentlyScripted,
+            basicValidator:     BasicValidator,
+            scriptedValidator:  ScriptedValidator);
+
+        await dialog.ShowDialog(ParentWindow);
+
+        if (dialog.WasCancelled) return;
+
+        if (dialog.ResultIsScripted)
+        {
+            if (!Session.SetParameterExpression(User, node, dialog.ResultValue, out var error))
+                await ShowError("Set Expression Failed", error);
+        }
+        else
+        {
+            if (!Session.SetParameterValue(User, node, dialog.ResultValue, out var error))
+                await ShowError("Set Value Failed", error);
+        }
     }
 
     /// <summary>Commit the name/comment currently in <see cref="SelectedElementEditName"/> back to the model.</summary>

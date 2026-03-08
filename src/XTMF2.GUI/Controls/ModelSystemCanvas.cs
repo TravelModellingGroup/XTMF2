@@ -57,6 +57,10 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush PendingLinkBrush   = new SolidColorBrush(Color.FromRgb(0x2E, 0xCC, 0x71));
     private static readonly DashStyle PendingLinkDash = new DashStyle([6, 4], 0);
 
+    // Parameter value row
+    private static readonly IBrush ParamValueTextBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xE0, 0x82));
+    private static readonly IBrush ParamValueBg        = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
+
     // Comment block colours (sticky-note style)
     private static readonly IBrush CommentFill        = new SolidColorBrush(Color.FromArgb(0xE6, 0xFF, 0xF0, 0x96));
     private static readonly IBrush CommentSelFill     = new SolidColorBrush(Color.FromArgb(0xE6, 0xFF, 0xE0, 0x50));
@@ -577,8 +581,12 @@ public sealed class ModelSystemCanvas : Control
 
     private double NodeRenderHeight(NodeViewModel node)
     {
+        bool hasParamRow = node.IsParameterNode;
+        int extraRows    = hasParamRow ? 1 : 0;
         if (_nodeVisibleHooks.TryGetValue(node, out var hooks) && hooks.Count > 0)
-            return Math.Max(node.Height, NodeHeaderHeight + hooks.Count * HookRowHeight);
+            return Math.Max(node.Height, NodeHeaderHeight + (hooks.Count + extraRows) * HookRowHeight);
+        if (hasParamRow)
+            return Math.Max(node.Height, NodeHeaderHeight + HookRowHeight);
         // No visible hooks — keep at least NodeHeaderHeight so the name always fits.
         return Math.Max(node.Height, NodeHeaderHeight);
     }
@@ -603,23 +611,61 @@ public sealed class ModelSystemCanvas : Control
             ctx.DrawText(ft, new Point(tx, ty));
 
             // ── Hook rows ─────────────────────────────────────────────────
-            if (!_nodeVisibleHooks.TryGetValue(node, out var hooks) || hooks.Count == 0)
+            bool hasParamRow = node.IsParameterNode;
+            bool hasHooks    = _nodeVisibleHooks.TryGetValue(node, out var hooks) && hooks.Count > 0;
+
+            if (!hasParamRow && !hasHooks)
                 continue;
 
-            // Divider line separating header from hooks
+            // Divider line separating header from content rows
             var dividerPen = new Pen(HookDividerBrush, 1.0);
             ctx.DrawLine(dividerPen,
                 new Point(node.X + 1,      headerBottom),
                 new Point(node.X + rw - 1, headerBottom));
 
+            int rowOffset = 0;
+
+            // ── Parameter value row (first, for parameter nodes) ──────────
+            if (hasParamRow)
+            {
+                var paramValue = node.ParameterValueRepresentation;
+                double rowMidY = node.Y + NodeHeaderHeight + HookRowHeight / 2.0;
+
+                // Subtle tinted background for readability
+                ctx.DrawRectangle(ParamValueBg, null,
+                    new Rect(node.X + 1, node.Y + NodeHeaderHeight, rw - 2, HookRowHeight));
+
+                const double textPad = 6.0;
+                var display  = string.IsNullOrEmpty(paramValue) ? "(no value)" : paramValue;
+                var paramFt  = MakeText(display, HookFontSize, ParamValueTextBrush);
+                double maxW  = rw - textPad * 2;
+                double paramTy = rowMidY - paramFt.Height / 2.0;
+                using (ctx.PushClip(new Rect(node.X + textPad, paramTy, Math.Max(0, maxW), paramFt.Height + 1)))
+                    ctx.DrawText(paramFt, new Point(node.X + textPad, paramTy));
+
+                rowOffset = 1;
+
+                // Separator below the value row when hooks follow
+                if (hasHooks)
+                {
+                    double sepY = node.Y + NodeHeaderHeight + HookRowHeight;
+                    ctx.DrawLine(new Pen(HookDividerBrush, 0.5),
+                        new Point(node.X + 1,      sepY),
+                        new Point(node.X + rw - 1, sepY));
+                }
+            }
+
+            if (!hasHooks)
+                continue;
+
             _nodeConnectedHooks.TryGetValue(node, out var connected);
 
-            for (int i = 0; i < hooks.Count; i++)
+            for (int i = 0; i < hooks!.Count; i++)
             {
                 var hook  = hooks[i];
                 bool conn = connected is not null && connected.Contains(hook);
 
-                double rowMidY = node.Y + NodeHeaderHeight + i * HookRowHeight + HookRowHeight / 2.0;
+                double rowMidY = node.Y + NodeHeaderHeight + (rowOffset + i) * HookRowHeight + HookRowHeight / 2.0;
 
                 // Dot on the right edge (the link anchor)
                 var dotBrush = conn ? HookConnectedBrush : HookUnconnectedBrush;
@@ -638,7 +684,7 @@ public sealed class ModelSystemCanvas : Control
                 // Row separator (skip after last row)
                 if (i < hooks.Count - 1)
                 {
-                    double sepY = node.Y + NodeHeaderHeight + (i + 1) * HookRowHeight;
+                    double sepY = node.Y + NodeHeaderHeight + (rowOffset + i + 1) * HookRowHeight;
                     ctx.DrawLine(new Pen(HookDividerBrush, 0.5),
                         new Point(node.X + 1,      sepY),
                         new Point(node.X + rw - 1, sepY));
@@ -647,6 +693,10 @@ public sealed class ModelSystemCanvas : Control
         }
     }
 
+    /// <summary>
+    /// Updates <see cref="_hoveredParameterNode"/> based on which node (if any) the
+    /// pointer currently sits over, and invalidates the visual when the value changes.
+    /// </summary>
     private void RenderStarts(DrawingContext ctx)
     {
         foreach (var start in _vm!.Starts)
@@ -709,6 +759,15 @@ public sealed class ModelSystemCanvas : Control
             if (hookHit is { } hh)
             {
                 _ = _vm.CreateNodeFromHookAsync(hh.node, hh.hook, hh.anchor.X, hh.anchor.Y);
+                e.Handled = true;
+                return;
+            }
+
+            // ── Double-click on a parameter node: open the value editor ────
+            var nodeHit = HitTest(pos, testComments: false) as NodeViewModel;
+            if (nodeHit is { IsParameterNode: true })
+            {
+                _ = _vm.EditParameterNodeAsync(nodeHit);
                 e.Handled = true;
                 return;
             }
