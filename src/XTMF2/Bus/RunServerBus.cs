@@ -137,7 +137,7 @@ namespace XTMF2.Bus
                 {
                     while (true)
                     {
-                        switch((Out)reader.ReadInt32())
+                        switch ((Out)reader.ReadInt32())
                         {
                             case Out.Heartbeat:
                                 WriteHeartbeat(reader.ReadString());
@@ -271,29 +271,37 @@ namespace XTMF2.Bus
             using var reader = new BinaryReader(_clientHost, Encoding.UTF8, false);
             while (!_exit)
             {
-                switch ((In)reader.ReadInt32())
+                try
                 {
-                    case In.RunModelSystem:
-                        {
-                            var id = reader.ReadString();
-                            var cwd = reader.ReadString();
-                            var start = reader.ReadString();
-                            var msSize = (int)reader.ReadInt64();
-                            using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
-                            if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, out var context))
+                    switch ((In)reader.ReadInt32())
+                    {
+                        case In.RunModelSystem:
                             {
-                                _runScheduler.Run(context);
+                                var id = reader.ReadString();
+                                var cwd = reader.ReadString();
+                                var start = reader.ReadString();
+                                var msSize = (int)reader.ReadInt64();
+                                using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
+                                if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, out var context))
+                                {
+                                    _runScheduler.Run(context);
+                                }
                             }
-                        }
-                        break;
-                    case In.KillClient:
-                        _exit = true;
-                        break;
-                    // failsafe
-                    default:
-                        return;
+                            break;
+                        case In.KillClient:
+                            _exit = true;
+                            break;
+                        // failsafe
+                        default:
+                            return;
+                    }
+                    Interlocked.MemoryBarrier();
                 }
-                Interlocked.MemoryBarrier();
+                catch
+                {
+                    // if anything goes wrong, just exit the loop and end the process.
+                    return;
+                }
             }
         }
     }

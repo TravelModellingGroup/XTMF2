@@ -108,7 +108,8 @@ public sealed class ModelSystemCanvas : Control
     // Minimize-to-inline button on BasicParameter node header top-left
     private const double InlineMinimizeButtonSize = NodeHeaderHeight - 8.0;
     // Elbow routing
-    private const double ElbowMinOffset   = 32.0;
+    private const double ElbowMinOffset   = 16.0;
+    private const double MaxStraightLineDistance = 50.0;
     private const double LinkHitTolerance = 6.0;
 
     private static readonly Typeface DefaultTypeface = new Typeface("Segoe UI, Arial, sans-serif");
@@ -297,18 +298,18 @@ public sealed class ModelSystemCanvas : Control
             foreach (var n in _vm.Nodes)
             {
                 if (n.IsInlined) continue;  // hidden nodes don't contribute to canvas extents
-                maxX = Math.Max(maxX, n.X + NodeRenderWidth(n)  + 80);
-                maxY = Math.Max(maxY, n.Y + NodeRenderHeight(n) + 80);
+                maxX = Math.Max(maxX, n.X + NodeRenderWidth(n)  + 400);
+                maxY = Math.Max(maxY, n.Y + NodeRenderHeight(n) + 400);
             }
             foreach (var s in _vm.Starts)
             {
-                maxX = Math.Max(maxX, s.X + s.Diameter + 80);
-                maxY = Math.Max(maxY, s.Y + s.Diameter + 40);
+                maxX = Math.Max(maxX, s.X + s.Diameter + 400);
+                maxY = Math.Max(maxY, s.Y + s.Diameter + 400);
             }
             foreach (var c in _vm.CommentBlocks)
             {
-                maxX = Math.Max(maxX, c.X + c.Width  + 80);
-                maxY = Math.Max(maxY, c.Y + c.Height + 40);
+                maxX = Math.Max(maxX, c.X + c.Width  + 400);
+                maxY = Math.Max(maxY, c.Y + c.Height + 400);
             }
         }
         // Measure the inline editor so Avalonia knows its desired size.
@@ -406,11 +407,26 @@ public sealed class ModelSystemCanvas : Control
 
             var brush = link.IsSelected ? LinkSelBrush : LinkBrush;
             var pen   = new Pen(brush, LinkThickness);
-            var (p1, mid1, mid2, p2) = ComputeElbow(link);
-            var shaftEnd = DrawArrow(ctx, brush, mid2, p2);
-            ctx.DrawLine(pen, p1,   mid1);
-            ctx.DrawLine(pen, mid1, mid2);
-            ctx.DrawLine(pen, mid2, shaftEnd);
+
+            // Use centre-to-centre distance to decide: when the two elements are
+            // closer than ElbowMinOffset an elbow looks cramped, so draw a straight
+            // line from the natural exit point of the origin to the nearest border
+            // of the destination (bypassing the forced midX offset in ComputeElbow).
+            double cdx = link.X2 - link.X1, cdy = link.Y2 - link.Y1;
+            if (Math.Sqrt(cdx * cdx + cdy * cdy) < MaxStraightLineDistance)
+            {
+                var (sp1, sp2) = ComputeDirectLine(link);
+                var shaftEnd = DrawArrow(ctx, brush, sp1, sp2);
+                ctx.DrawLine(pen, sp1, shaftEnd);
+            }
+            else
+            {
+                var (p1, mid1, mid2, p2) = ComputeElbow(link);
+                var shaftEnd = DrawArrow(ctx, brush, mid2, p2);
+                ctx.DrawLine(pen, p1,   mid1);
+                ctx.DrawLine(pen, mid1, mid2);
+                ctx.DrawLine(pen, mid2, shaftEnd);
+            }
         }
     }
 
@@ -488,11 +504,63 @@ public sealed class ModelSystemCanvas : Control
         {
             double midY    = (p1.Y + destCenter.Y) / 2.0;
             mid1           = new Point(p1.X, midY);
-            var approachPt = new Point(destCenter.X, midY);
-            p2             = BorderPoint(link.Destination, approachPt) ?? destCenter;
-            mid2           = new Point(p2.X, midY);
+
+            // Determine whether the horizontal middle segment will intersect the
+            // destination's left or right border rather than a top/bottom border.
+            // This happens when midY falls inside the destination's vertical span.
+            // In that case the approach point (destCenter.X, midY) is inside the
+            // destination box, which causes BorderPoint/ClipLineToRect to return
+            // an exit intersection rather than an entry, misplacing the arrowhead.
+            bool midYInVSpan = false;
+            double borderX   = 0;
+            if (link.Destination is NodeViewModel destNodeV)
+            {
+                var dRect    = new Rect(destNodeV.X, destNodeV.Y,
+                                        NodeRenderWidth(destNodeV), NodeRenderHeight(destNodeV));
+                midYInVSpan  = midY >= dRect.Y && midY <= dRect.Bottom;
+                if (midYInVSpan)
+                    borderX  = p1.X <= destCenter.X ? dRect.X : dRect.Right;
+            }
+
+            if (midYInVSpan)
+            {
+                // Horizontal approach: arrow arrives from the left or right border.
+                // Collapse mid2 onto mid1 so the second segment has zero length
+                // and the full arrow is the horizontal shaft.
+                p2   = new Point(borderX, midY);
+                mid2 = mid1;
+            }
+            else
+            {
+                var approachPt = new Point(destCenter.X, midY);
+                p2             = BorderPoint(link.Destination, approachPt) ?? destCenter;
+                mid2           = new Point(p2.X, midY);
+            }
         }
         return (p1, mid1, mid2, p2);
+    }
+
+    /// <summary>
+    /// Computes a straight-line (p1, p2) pair for a link:
+    /// p1 is the hook anchor (or origin border point), and p2 is the destination
+    /// border point along the direct p1→destination-centre direction.
+    /// Used when the two elements are too close for an elbow to look reasonable.
+    /// </summary>
+    private (Point p1, Point p2) ComputeDirectLine(LinkViewModel link)
+    {
+        var destCenter = new Point(link.X2, link.Y2);
+
+        // p1: hook anchor when available, else origin border point toward dest centre.
+        Point p1;
+        if (link.Origin is NodeViewModel originNvm
+            && _hookAnchors.TryGetValue((originNvm, link.UnderlyingLink.OriginHook), out var hookPt))
+            p1 = hookPt;
+        else
+            p1 = BorderPoint(link.Origin, destCenter) ?? new Point(link.X1, link.Y1);
+
+        // p2: destination border point along the p1→dest direction.
+        var p2 = BorderPoint(link.Destination, p1) ?? destCenter;
+        return (p1, p2);
     }
 
     /// <summary>
@@ -625,11 +693,21 @@ public sealed class ModelSystemCanvas : Control
             // Skip links to inlined nodes — no line is drawn for them.
             if (link.Destination is NodeViewModel dlNvm && dlNvm.IsInlined) continue;
 
-            var (p1, mid1, mid2, p2) = ComputeElbow(link);
-            if (DistToSeg(pos, p1,   mid1) <= LinkHitTolerance ||
-                DistToSeg(pos, mid1, mid2) <= LinkHitTolerance ||
-                DistToSeg(pos, mid2, p2)   <= LinkHitTolerance)
-                return link;
+            double hcdx = link.X2 - link.X1, hcdy = link.Y2 - link.Y1;
+            if (Math.Sqrt(hcdx * hcdx + hcdy * hcdy) < ElbowMinOffset)
+            {
+                var (sp1, sp2) = ComputeDirectLine(link);
+                if (DistToSeg(pos, sp1, sp2) <= LinkHitTolerance)
+                    return link;
+            }
+            else
+            {
+                var (p1, mid1, mid2, p2) = ComputeElbow(link);
+                if (DistToSeg(pos, p1,   mid1) <= LinkHitTolerance ||
+                    DistToSeg(pos, mid1, mid2) <= LinkHitTolerance ||
+                    DistToSeg(pos, mid2, p2)   <= LinkHitTolerance)
+                    return link;
+            }
         }
         return null;
     }
