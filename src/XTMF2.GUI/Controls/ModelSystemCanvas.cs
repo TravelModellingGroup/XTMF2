@@ -433,9 +433,42 @@ public sealed class ModelSystemCanvas : Control
         {
             double midX    = Math.Max(p1.X + ElbowMinOffset, (p1.X + destCenter.X) / 2.0);
             mid1           = new Point(midX, p1.Y);
-            var approachPt = new Point(midX, destCenter.Y);
-            p2             = BorderPoint(link.Destination, approachPt) ?? destCenter;
-            mid2           = new Point(midX, p2.Y);
+
+            // Determine whether the vertical middle segment will intersect the
+            // destination's top or bottom border rather than a side border.
+            // This happens when midX falls inside the destination's horizontal span.
+            // In that case the old approach of using (midX, destCenter.Y) as the
+            // approach point is wrong: destCenter.Y equals the centre Y, so dy=0
+            // in ClipLineToRect and only side borders are checked.  Worse, when
+            // the approach point itself is inside the rect ClipLineToRect returns
+            // an exit intersection rather than an entry, misplacing the arrowhead.
+            bool midXInHSpan = false;
+            double borderY   = 0;
+            if (link.Destination is NodeViewModel destNode)
+            {
+                var dRect    = new Rect(destNode.X, destNode.Y,
+                                        NodeRenderWidth(destNode), NodeRenderHeight(destNode));
+                midXInHSpan  = midX >= dRect.X && midX <= dRect.Right;
+                if (midXInHSpan)
+                    borderY  = p1.Y <= destCenter.Y ? dRect.Y : dRect.Bottom;
+            }
+
+            if (midXInHSpan)
+            {
+                // Vertical approach: arrow arrives straight down (or up) at the
+                // top (or bottom) border.  Collapse mid2 onto mid1 so the second
+                // segment has zero length and the full arrow is the vertical shaft.
+                p2   = new Point(midX, borderY);
+                mid2 = mid1;
+            }
+            else
+            {
+                // Normal case: midX is outside the destination's horizontal span,
+                // so the final segment is horizontal into a side border.
+                var approachPt = new Point(midX, destCenter.Y);
+                p2             = BorderPoint(link.Destination, approachPt) ?? destCenter;
+                mid2           = new Point(midX, p2.Y);
+            }
         }
         else
         {
