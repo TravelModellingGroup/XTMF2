@@ -28,6 +28,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
+using Avalonia.VisualTree;
 using XTMF2;
 using XTMF2.GUI.ViewModels;
 
@@ -173,6 +174,19 @@ public sealed class ModelSystemCanvas : Control
     private ICanvasElement? _dragging;
     /// <summary>Offset from the element's top-left corner to the pointer position at drag start.</summary>
     private Point _dragOffset;
+
+    // ── Canvas pan state (left-drag on empty space) ───────────────────────
+    /// <summary><c>true</c> while the user is panning by dragging empty canvas space.</summary>
+    private bool _panning;
+    /// <summary>Pointer position (in ScrollViewer coordinates) where the pan started.</summary>
+    private Point _panStartScrollPos;
+    /// <summary>ScrollViewer.Offset value at the moment the pan started.</summary>
+    private Vector _panStartOffset;
+
+    /// <summary>Returns the ancestor <see cref="ScrollViewer"/> that hosts this canvas, lazily resolved.</summary>
+    private ScrollViewer? _scrollViewer;
+    private ScrollViewer? GetScrollViewer() =>
+        _scrollViewer ??= this.FindAncestorOfType<ScrollViewer>();
 
     // ── Resize drag state ─────────────────────────────────────────────────
     /// <summary>The node being resized, or <c>null</c> when not resizing.</summary>
@@ -1139,9 +1153,23 @@ public sealed class ModelSystemCanvas : Control
             // No element hit — try links.
             var linkHit = HitTestLink(pos);
             if (linkHit is not null)
+            {
                 _vm.SelectLinkCommand.Execute(linkHit);
+            }
             else
+            {
+                // Truly empty space — deselect and begin canvas pan.
                 _vm.SelectElementCommand.Execute(null);
+                var sv = GetScrollViewer();
+                if (sv is not null)
+                {
+                    _panning          = true;
+                    _panStartScrollPos = e.GetCurrentPoint(sv).Position;
+                    _panStartOffset   = sv.Offset;
+                    Cursor = new Cursor(StandardCursorType.SizeAll);
+                    e.Pointer.Capture(this);
+                }
+            }
         }
 
         Focus();
@@ -1172,6 +1200,23 @@ public sealed class ModelSystemCanvas : Control
             else if (_resizing is CommentBlockViewModel resizingComment)
                 resizingComment.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
             InvalidateAndMeasure();
+            e.Handled = true;
+            return;
+        }
+
+        // ── Canvas pan drag ───────────────────────────────────────────────
+        if (_panning)
+        {
+            var sv = GetScrollViewer();
+            if (sv is not null)
+            {
+                var currentScrollPos = e.GetCurrentPoint(sv).Position;
+                var dx = currentScrollPos.X - _panStartScrollPos.X;
+                var dy = currentScrollPos.Y - _panStartScrollPos.Y;
+                sv.Offset = new Vector(
+                    Math.Max(0, _panStartOffset.X - dx),
+                    Math.Max(0, _panStartOffset.Y - dy));
+            }
             e.Handled = true;
             return;
         }
@@ -1249,6 +1294,16 @@ public sealed class ModelSystemCanvas : Control
             e.Pointer.Capture(null);
             Cursor = Cursor.Default;
             InvalidateAndMeasure();
+            e.Handled = true;
+            return;
+        }
+
+        // ── Left-button release: end canvas pan ──────────────────────────
+        if (_panning)
+        {
+            _panning = false;
+            e.Pointer.Capture(null);
+            Cursor = Cursor.Default;
             e.Handled = true;
             return;
         }
