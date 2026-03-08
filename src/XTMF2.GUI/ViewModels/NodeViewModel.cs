@@ -19,6 +19,7 @@
 using System;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using XTMF2;
 using XTMF2.Configuration;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
@@ -190,6 +191,97 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     /// rendered inline inside another node's hook row rather than as a standalone canvas element.
     /// </summary>
     public bool IsInlined => UnderlyingNode.Location.Equals(Rectangle.Hidden);
+
+    /// <summary>True when this node's type is <see cref="BasicParameter{T}"/>.</summary>
+    public bool IsBasicParameter
+    {
+        get
+        {
+            var t = UnderlyingNode.Type;
+            return t is not null && t.IsGenericType
+                   && t.GetGenericTypeDefinition() == typeof(BasicParameter<>);
+        }
+    }
+
+    /// <summary>True when this node's type is <see cref="ScriptedParameter{T}"/>.</summary>
+    public bool IsScriptedParameter
+    {
+        get
+        {
+            var t = UnderlyingNode.Type;
+            return t is not null && t.IsGenericType
+                   && t.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
+        }
+    }
+
+    /// <summary>
+    /// Attempts to switch this node between <see cref="BasicParameter{T}"/> and
+    /// <see cref="ScriptedParameter{T}"/>, carrying the current value over.
+    /// <para>
+    /// When switching from <c>ScriptedParameter</c> to <c>BasicParameter</c>, the current
+    /// expression string is validated with <see cref="ArbitraryParameterParser"/> to ensure
+    /// it can be represented as a plain value of type <c>T</c>.  If validation fails the
+    /// method returns <c>false</c> and <paramref name="error"/> describes the problem.
+    /// </para>
+    /// </summary>
+    public bool SwitchParameterType(out CommandError? error)
+    {
+        var t = UnderlyingNode.Type;
+        if (t is null || !t.IsGenericType)
+        {
+            error = new CommandError("Node has no generic type assigned.");
+            return false;
+        }
+
+        var td      = t.GetGenericTypeDefinition();
+        var typeArg = t.GetGenericArguments()[0];
+        // Capture the current value before the type change.
+        var currentValue = UnderlyingNode.ParameterValue?.Representation ?? string.Empty;
+
+        bool toBasic;
+        Type targetOpenGeneric;
+        if (td == typeof(BasicParameter<>))
+        {
+            targetOpenGeneric = typeof(ScriptedParameter<>);
+            toBasic           = false;
+        }
+        else if (td == typeof(ScriptedParameter<>))
+        {
+            targetOpenGeneric = typeof(BasicParameter<>);
+            toBasic           = true;
+        }
+        else
+        {
+            error = new CommandError("Node is not a BasicParameter or ScriptedParameter.");
+            return false;
+        }
+
+        // When switching to BasicParameter, verify the expression string is parseable as T.
+        if (toBasic)
+        {
+            string? parseError = null;
+            var (success, _) = ArbitraryParameterParser.ArbitraryParameterParse(typeArg, currentValue, ref parseError);
+            if (!success)
+            {
+                error = new CommandError(
+                    $"The value \u2018{currentValue}\u2019 cannot be represented as a {typeArg.Name} "
+                    + $"in a Basic Parameter: {parseError}");
+                return false;
+            }
+        }
+
+        var targetType = targetOpenGeneric.MakeGenericType(typeArg);
+
+        // Step 1 – change the node type.
+        if (!_session.SetNodeType(_user, UnderlyingNode, targetType, out error))
+            return false;
+
+        // Step 2 – re-apply the value in the new type's format.
+        if (toBasic)
+            return _session.SetParameterValue(_user, UnderlyingNode, currentValue, out error);
+        else
+            return _session.SetParameterExpression(_user, UnderlyingNode, currentValue, out error);
+    }
 
     /// <summary>
     /// Hides this node from the canvas by setting its location to <see cref="Rectangle.Hidden"/>.

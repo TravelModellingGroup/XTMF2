@@ -1424,6 +1424,23 @@ public sealed class ModelSystemCanvas : Control
                     capturedParam.ExpandToCanvas(capturedNode.X + rw + 30.0, capturedNode.Y);
                 };
                 menu.Items.Add(expandItem);
+
+                // Offer switching between BasicParameter and ScriptedParameter.
+                if (capturedParam.IsBasicParameter || capturedParam.IsScriptedParameter)
+                {
+                    var switchHeader = capturedParam.IsBasicParameter
+                        ? "Switch to Scripted Parameter"
+                        : "Switch to Basic Parameter";
+                    var switchItem = new MenuItem { Header = switchHeader };
+                    switchItem.Click += (_, _) =>
+                    {
+                        if (!capturedParam.SwitchParameterType(out var err))
+                            vm.ShowToast(err?.Message ?? "Could not switch parameter type.",
+                                         isError: true, durationMs: 6000);
+                    };
+                    menu.Items.Add(switchItem);
+                }
+
                 menu.Items.Add(new Separator());
             }
 
@@ -1454,8 +1471,26 @@ public sealed class ModelSystemCanvas : Control
                 var inlineItem = new MenuItem { Header = "Inline parameter into parent hook" };
                 inlineItem.Click += (_, _) => paramNode.InlineBasicParameter();
                 menu.Items.Add(inlineItem);
-                menu.Items.Add(new Separator());
             }
+
+            // Offer switching between BasicParameter and ScriptedParameter.
+            if (paramNode.IsBasicParameter || paramNode.IsScriptedParameter)
+            {
+                var switchHeader = paramNode.IsBasicParameter
+                    ? "Switch to Scripted Parameter"
+                    : "Switch to Basic Parameter";
+                var capturedParamNode = paramNode;
+                var switchItem = new MenuItem { Header = switchHeader };
+                switchItem.Click += (_, _) =>
+                {
+                    if (!capturedParamNode.SwitchParameterType(out var err))
+                        vm.ShowToast(err?.Message ?? "Could not switch parameter type.",
+                                     isError: true, durationMs: 6000);
+                };
+                menu.Items.Add(switchItem);
+            }
+
+            menu.Items.Add(new Separator());
 
             bool alreadyVar = vm.IsNodeInVariables(paramNode);
             var varHeader = alreadyVar
