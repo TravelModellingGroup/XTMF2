@@ -578,7 +578,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
 
         var location = NextPlacement(Nodes.Count);
-        Session.AddNode(User, _currentBoundary, name, selectedType, location, out _, out _);
+        Session.AddNodeGenerateParameters(User, _currentBoundary, name, selectedType, location, out _, out _, out _);
         // The ObservableCollection event from the boundary automatically adds the NodeViewModel.
     }
 
@@ -656,7 +656,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             (float)hookAnchorY - NodePlacementOffsetY,
             120f, 50f);
 
-        if (!Session.AddNode(User, _currentBoundary, name, selectedType, location, out var newNode, out var nodeError))
+        if (!Session.AddNodeGenerateParameters(User, _currentBoundary, name, selectedType, location, out var newNode, out _, out var nodeError))
         {
             await ShowError("Add Module Failed", nodeError);
             return;

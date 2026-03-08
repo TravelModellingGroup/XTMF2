@@ -764,14 +764,10 @@ namespace XTMF2.Editing
                         if (child?.SetParameterValue(ParameterExpression.CreateParameter(hook.DefaultValue!, genericParameters[0]), out var error) == true)
                         {
                             nodes.Add(child);
-                            if (boundary.AddLink(baseNode, hook, child, out var link, out error))
-                            {
-                                links.Add(link!);
-                            }
-                            else
-                            {
-                                nodes.Remove(child);
-                            }
+                            // Construct the link object directly without adding it to the boundary.
+                            // Add() will first add child nodes (creating NodeViewModels) and THEN
+                            // add links, so that TryAddLinkViewModel can resolve the destination.
+                            links.Add(new SingleLink(baseNode, hook, child, false));
                         }
                     }
                 }
