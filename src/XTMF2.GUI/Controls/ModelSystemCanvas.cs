@@ -1202,7 +1202,15 @@ public sealed class ModelSystemCanvas : Control
     /// Sets a new scale factor, clamped to [<see cref="ScaleMin"/>, <see cref="ScaleMax"/>].
     /// Adjusts the scroll offset so the viewport centre remains on the same model coordinate.
     /// </summary>
-    private void ApplyScale(double newScale)
+    /// <summary>
+    /// Change the canvas scale to <paramref name="newScale"/>.
+    /// When <paramref name="canvasPivot"/> is supplied the scroll offset is adjusted so that
+    /// the model coordinate under the pivot point stays fixed (zoom-to-cursor).  When it is
+    /// <c>null</c> the viewport centre is kept fixed instead.
+    /// <paramref name="canvasPivot"/> must be in canvas-local coordinates
+    /// (i.e. <c>e.GetPosition(this)</c> from a pointer event).
+    /// </summary>
+    private void ApplyScale(double newScale, Point? canvasPivot = null)
     {
         newScale = Math.Clamp(Math.Round(newScale, 2), ScaleMin, ScaleMax);
         if (Math.Abs(newScale - _scale) < 0.005) return;
@@ -1212,12 +1220,25 @@ public sealed class ModelSystemCanvas : Control
         _zoomTextBox.Text = $"{(int)Math.Round(_scale * 100)}%";
         if (sv is not null)
         {
-            // Keep the viewport centre fixed on the same model coordinate.
-            double cx = sv.Offset.X + sv.Viewport.Width  / 2.0;
-            double cy = sv.Offset.Y + sv.Viewport.Height / 2.0;
-            sv.Offset = new Vector(
-                Math.Max(0, cx * newScale / prevScale - sv.Viewport.Width  / 2.0),
-                Math.Max(0, cy * newScale / prevScale - sv.Viewport.Height / 2.0));
+            double ratio = newScale / prevScale;
+            if (canvasPivot.HasValue)
+            {
+                // Keep the model point under the cursor fixed in the viewport.
+                // canvasPivot is in canvas-local pixels (scroll-offset included).
+                // newOffset = pivot * (ratio - 1) + oldOffset
+                sv.Offset = new Vector(
+                    Math.Max(0, canvasPivot.Value.X * (ratio - 1) + sv.Offset.X),
+                    Math.Max(0, canvasPivot.Value.Y * (ratio - 1) + sv.Offset.Y));
+            }
+            else
+            {
+                // Keep the viewport centre fixed on the same model coordinate.
+                double cx = sv.Offset.X + sv.Viewport.Width  / 2.0;
+                double cy = sv.Offset.Y + sv.Viewport.Height / 2.0;
+                sv.Offset = new Vector(
+                    Math.Max(0, cx * ratio - sv.Viewport.Width  / 2.0),
+                    Math.Max(0, cy * ratio - sv.Viewport.Height / 2.0));
+            }
         }
         InvalidateAndMeasure();
     }
@@ -1245,7 +1266,9 @@ public sealed class ModelSystemCanvas : Control
     {
         if ((e.KeyModifiers & KeyModifiers.Control) != 0)
         {
-            ApplyScale(_scale + (e.Delta.Y > 0 ? ScaleStep : -ScaleStep));
+            // Pass the canvas-local mouse position so the zoom is centred on the cursor.
+            var pivot = e.GetPosition(this);
+            ApplyScale(_scale + (e.Delta.Y > 0 ? ScaleStep : -ScaleStep), pivot);
             e.Handled = true;
             return;
         }
