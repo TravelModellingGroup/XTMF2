@@ -73,6 +73,10 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush HookDividerBrush     = new SolidColorBrush(Color.FromRgb(0x44, 0x55, 0x66));
     private static readonly IBrush HookTextConnBrush    = new SolidColorBrush(Color.FromRgb(0xAA, 0xEE, 0xBB));
     private static readonly IBrush HookTextDimBrush     = new SolidColorBrush(Color.FromRgb(0x77, 0x88, 0x99));
+    // Hook toggle icon
+    private static readonly IBrush HookToggleBg         = new SolidColorBrush(Color.FromArgb(0x60, 0x55, 0x88, 0xCC));
+    private static readonly IBrush HookToggleActiveBg   = new SolidColorBrush(Color.FromArgb(0x90, 0x33, 0x99, 0xFF));
+    private static readonly IBrush HookToggleText       = new SolidColorBrush(Color.FromRgb(0xBB, 0xCC, 0xEE));
 
     // ── Drawing constants ─────────────────────────────────────────────────
     private const double NodeCornerRadius    = 4.0;
@@ -84,11 +88,13 @@ public sealed class ModelSystemCanvas : Control
     private const double CommentFontSize     = 11.5;
     private const double CommentPadding      = 6.0;
     // Hook layout
-    private const double NodeHeaderHeight = 28.0;
-    private const double HookRowHeight    = 16.0;
-    private const double HookDotRadius    = 3.5;
-    private const double HookFontSize     = 10.0;
-    private const double NodeMinWidth     = 120.0;
+    private const double NodeHeaderHeight   = 28.0;
+    private const double HookRowHeight      = 16.0;
+    private const double HookDotRadius      = 3.5;
+    private const double HookFontSize       = 10.0;
+    private const double NodeMinWidth       = 120.0;
+    // Hook toggle icon button in the node header top-right
+    private const double HookToggleIconSize = NodeHeaderHeight - 8.0;
     // Elbow routing
     private const double ElbowMinOffset   = 32.0;
     private const double LinkHitTolerance = 6.0;
@@ -561,9 +567,24 @@ public sealed class ModelSystemCanvas : Control
             _nodeConnectedHooks.TryGetValue(node, out var connected);
             connected ??= new HashSet<NodeHook>();
 
-            IReadOnlyList<NodeHook> visible = _vm.ShowAllHooks
-                ? node.UnderlyingNode.Hooks
-                : node.UnderlyingNode.Hooks.Where(h => connected.Contains(h)).ToList();
+            IReadOnlyList<NodeHook> visible;
+            if (_vm.ShowAllHooks)
+            {
+                visible = node.UnderlyingNode.Hooks;
+            }
+            else
+            {
+                // Required hooks (Single / AtLeastOne) are always visible.
+                // Optional hooks are shown when the per-node toggle is on.
+                // Connected hooks are always shown so live links remain visible.
+                visible = node.UnderlyingNode.Hooks
+                    .Where(h =>
+                        h.Cardinality == HookCardinality.Single ||
+                        h.Cardinality == HookCardinality.AtLeastOne ||
+                        node.ShowHooks ||
+                        connected.Contains(h))
+                    .ToList();
+            }
 
             _nodeVisibleHooks[node] = visible;
 
@@ -609,6 +630,21 @@ public sealed class ModelSystemCanvas : Control
             var tx = node.X + (rw       - ft.Width)  / 2;
             var ty = node.Y + (NodeHeaderHeight - ft.Height) / 2;
             ctx.DrawText(ft, new Point(tx, ty));
+
+            // ── Hook toggle icon (top-right of header) ─────────────────────
+            // Only shown when the node has at least one hook and there is no
+            // global ShowAllHooks override (per-node toggle would be redundant).
+            if (!_vm.ShowAllHooks && node.UnderlyingNode.Hooks.Count > 0)
+            {
+                var iconRect  = HookToggleIconRect(node, rw);
+                var iconBg    = node.ShowHooks ? HookToggleActiveBg : HookToggleBg;
+                ctx.DrawRectangle(iconBg, null, iconRect, 3.0, 3.0);
+                var glyph     = node.ShowHooks ? "\u25BE" : "\u25B8";  // ▾ or ▸
+                var iconFt    = MakeText(glyph, HookFontSize + 1.0, HookToggleText);
+                var glyphX    = iconRect.X + (iconRect.Width  - iconFt.Width)  / 2.0;
+                var glyphY    = iconRect.Y + (iconRect.Height - iconFt.Height) / 2.0;
+                ctx.DrawText(iconFt, new Point(glyphX, glyphY));
+            }
 
             // ── Hook rows ─────────────────────────────────────────────────
             bool hasParamRow = node.IsParameterNode;
@@ -751,6 +787,19 @@ public sealed class ModelSystemCanvas : Control
 
         // Both right-click and Ctrl+left-click begin a link-creation drag.
         bool isLinkDrag = isRightButton || isCtrlLeft;
+
+        // ── Hook toggle icon click (left button, any click count) ─────────
+        if (!isLinkDrag)
+        {
+            var toggleHit = HitTestHookToggleIcon(pos);
+            if (toggleHit is not null)
+            {
+                toggleHit.ShowHooks = !toggleHit.ShowHooks;
+                InvalidateAndMeasure();
+                e.Handled = true;
+                return;
+            }
+        }
 
         // ── Double-click on a hook dot: create + auto-link a new node ─────
         if (!isLinkDrag && e.ClickCount == 2)
@@ -963,6 +1012,41 @@ public sealed class ModelSystemCanvas : Control
 
         ContextMenu = menu;
         ContextMenu.Open(this);
+    }
+
+    // ── Hook toggle icon hit-testing ─────────────────────────────────────
+
+    /// <summary>
+    /// Returns the <see cref="NodeViewModel"/> whose hook-toggle icon button contains
+    /// <paramref name="pos"/>, or <c>null</c> if none.
+    /// </summary>
+    private NodeViewModel? HitTestHookToggleIcon(Point pos)
+    {
+        if (_vm is null || _vm.ShowAllHooks) return null;
+        foreach (var node in _vm.Nodes)
+        {
+            if (node.UnderlyingNode.Hooks.Count == 0) continue;
+            double rw    = NodeRenderWidth(node);
+            var iconRect = HookToggleIconRect(node, rw);
+            if (iconRect.Contains(pos))
+                return node;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the bounding rectangle of the hook-toggle icon button for
+    /// <paramref name="node"/> given its rendered width <paramref name="rw"/>.
+    /// </summary>
+    private static Rect HookToggleIconRect(NodeViewModel node, double rw)
+    {
+        const double margin = 4.0;
+        double size = HookToggleIconSize;
+        return new Rect(
+            node.X + rw - size - margin,
+            node.Y + (NodeHeaderHeight - size) / 2.0,
+            size,
+            size);
     }
 
     /// <summary>Finds the topmost canvas element under <paramref name="pos"/>.</summary>

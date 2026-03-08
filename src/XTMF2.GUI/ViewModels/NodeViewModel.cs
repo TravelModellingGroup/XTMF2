@@ -60,6 +60,13 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     [ObservableProperty] private bool _isSelected;
 
     /// <summary>
+    /// When <c>true</c> all hooks (including optional ones) are shown on this node.
+    /// Required hooks (cardinality <c>Single</c> or <c>AtLeastOne</c>)
+    /// are always visible regardless of this flag.
+    /// </summary>
+    [ObservableProperty] private bool _showHooks;
+
+    /// <summary>
     /// The short name of the module type currently assigned to this node
     /// (e.g. "BasicParameter`1"). Updates automatically when the type changes.
     /// </summary>
