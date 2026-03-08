@@ -74,6 +74,10 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush HookDividerBrush     = new SolidColorBrush(Color.FromRgb(0x44, 0x55, 0x66));
     private static readonly IBrush HookTextConnBrush    = new SolidColorBrush(Color.FromRgb(0xAA, 0xEE, 0xBB));
     private static readonly IBrush HookTextDimBrush     = new SolidColorBrush(Color.FromRgb(0x77, 0x88, 0x99));
+    // Unsatisfied required hook (Single / AtLeastOne with no connection)
+    private static readonly IBrush HookUnsatisfiedBrush    = new SolidColorBrush(Color.FromRgb(0xE7, 0x4C, 0x3C));
+    private static readonly IBrush HookTextUnsatisfiedBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x99, 0x88));
+    private static readonly IBrush HookUnsatisfiedRowBg    = new SolidColorBrush(Color.FromArgb(0x30, 0xE7, 0x4C, 0x3C));
     // Hook toggle icon
     private static readonly IBrush HookToggleBg         = new SolidColorBrush(Color.FromArgb(0x60, 0x55, 0x88, 0xCC));
     private static readonly IBrush HookToggleActiveBg   = new SolidColorBrush(Color.FromArgb(0x90, 0x33, 0x99, 0xFF));
@@ -995,17 +999,27 @@ public sealed class ModelSystemCanvas : Control
                 // Is this hook occupied by an inlined BasicParameter?
                 bool hasInlined = _hookInlinedParam.TryGetValue((node, hook), out var inlinedParam);
 
+                // Unsatisfied: required cardinality with no connection at all.
+                bool isRequired  = hook.Cardinality == HookCardinality.Single
+                                || hook.Cardinality == HookCardinality.AtLeastOne;
+                bool unsatisfied = isRequired && !conn && !hasInlined;
+
                 double rowMidY = node.Y + NodeHeaderHeight + (rowOffset + i) * HookRowHeight + HookRowHeight / 2.0;
                 double rowTopY = node.Y + NodeHeaderHeight + (rowOffset + i) * HookRowHeight;
 
-                // Tinted background for inlined-param hook rows
-                if (hasInlined)
+                // Tinted background: red for unsatisfied required hooks, amber for inlined params.
+                if (unsatisfied)
+                    ctx.DrawRectangle(HookUnsatisfiedRowBg, null,
+                        new Rect(node.X + 1, rowTopY, rw - 2, HookRowHeight));
+                else if (hasInlined)
                     ctx.DrawRectangle(InlineParamRowBg, null,
                         new Rect(node.X + 1, rowTopY, rw - 2, HookRowHeight));
 
-                // Dot on the right edge (the link anchor)
-                // Green for connected or inlined (both mean the hook is bound).
-                var dotBrush = (conn || hasInlined) ? HookConnectedBrush : HookUnconnectedBrush;
+                // Dot on the right edge (the link anchor).
+                // Red for unsatisfied required hooks, green for connected/inlined, grey otherwise.
+                var dotBrush = unsatisfied        ? HookUnsatisfiedBrush
+                             : (conn || hasInlined) ? HookConnectedBrush
+                             :                        HookUnconnectedBrush;
                 ctx.DrawEllipse(dotBrush, null,
                     new Point(node.X + rw, rowMidY),
                     HookDotRadius, HookDotRadius);
@@ -1015,9 +1029,10 @@ public sealed class ModelSystemCanvas : Control
                 string hookLabel = hasInlined && inlinedParam is not null
                     ? $"{hook.Name}: {(string.IsNullOrEmpty(inlinedParam.ParameterValueRepresentation) ? "(no value)" : inlinedParam.ParameterValueRepresentation)}"
                     : hook.Name;
-                IBrush hookTextBrush = hasInlined     ? ParamValueTextBrush
-                                     : conn           ? HookTextConnBrush
-                                     :                  HookTextDimBrush;
+                IBrush hookTextBrush = unsatisfied ? HookTextUnsatisfiedBrush
+                                     : hasInlined  ? ParamValueTextBrush
+                                     : conn        ? HookTextConnBrush
+                                     :               HookTextDimBrush;
                 var hookFt   = MakeText(hookLabel, HookFontSize, hookTextBrush);
                 double maxW  = rw - textPad * 2 - HookDotRadius * 2;
                 double hookTy = rowMidY - hookFt.Height / 2.0;
