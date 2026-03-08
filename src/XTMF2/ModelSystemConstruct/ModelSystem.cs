@@ -187,7 +187,8 @@ namespace XTMF2
         internal bool Construct(XTMFRuntime runtime, ref string? error)
         {
             return GlobalBoundary.ConstructModules(runtime, ref error)
-                && GlobalBoundary.ConstructLinks(ref error);
+                && GlobalBoundary.ConstructLinks(ref error)
+                && GlobalBoundary.ConstructEmptyLinks(ref error);;
         }
 
         /// <summary>

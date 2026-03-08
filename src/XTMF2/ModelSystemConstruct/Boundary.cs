@@ -475,6 +475,28 @@ namespace XTMF2.ModelSystemConstruct
             }
         }
 
+        internal bool ConstructEmptyLinks(ref string? error)
+        {
+            lock (_writeLock)
+            {
+                // Gp through all of the modules and if the cardinality is multiple and nothing has been set,
+                //  initialize it with an empty list or array.
+                foreach (var module in _modules)
+                {
+                    module.ConstructEmptyLinks(ref error);
+                }
+                // now construct all of the children
+                foreach (var child in Boundaries)
+                {
+                    if (!child.ConstructEmptyLinks(ref error))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+
         public ReadOnlyObservableCollection<Boundary> Boundaries
         {
             get

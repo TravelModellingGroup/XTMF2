@@ -265,6 +265,22 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
+        internal void ConstructEmptyLinks(ref string? error)
+        {
+            if (_type is null)
+            {
+                error = $"Unable to construct a module named {Name} without a type!";
+                return;
+            }
+            foreach (var hook in Hooks)
+            {
+                if (hook.Cardinality == HookCardinality.AnyNumber)
+                {
+                    hook.CreateArray(this.Module!, 0);
+                }
+            }
+        }
+
         /// <summary>
         /// Change the name of the node
         /// </summary>
@@ -505,7 +521,7 @@ namespace XTMF2.ModelSystemConstruct
                 IsDisabled = disabled
             };
             nodes.Add(index, mss);
-            if(scriptedParameter is not null)
+            if (scriptedParameter is not null)
             {
                 scriptedParameters.Add((mss, scriptedParameter));
             }

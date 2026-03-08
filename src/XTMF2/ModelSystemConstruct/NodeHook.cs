@@ -117,7 +117,19 @@ namespace XTMF2
 
         internal override void CreateArray(IModule origin, int length)
         {
-            Property.SetValue(origin, Array.CreateInstance(Property.PropertyType.GetElementType()!, length));
+            var elementType = Property.PropertyType.GetElementType()!;
+            if (length == 0)
+            {
+                // Use reflection to get access to the Array.Empty<T>() method using reflection.
+                var emptyMethod = typeof(Array).GetMethod(nameof(Array.Empty))!.MakeGenericMethod(elementType!);
+                var emptyArray = emptyMethod.Invoke(null, null);
+                Property.SetValue(origin, emptyArray);
+            }
+            else
+            {
+                Property.SetValue(origin, Array.CreateInstance(elementType, length));
+            }
+
         }
 
         internal override void Install(Node origin, Node destination, int index)
@@ -167,7 +179,18 @@ namespace XTMF2
 
         internal override void CreateArray(IModule origin, int length)
         {
-            Field.SetValue(origin, Array.CreateInstance(Field.FieldType.GetElementType()!, length));
+            var elementType = Field.FieldType.GetElementType();
+            if (length == 0)
+            {
+                // Use reflection to get access to the Array.Empty<T>() method using reflection.
+                var emptyMethod = typeof(Array).GetMethod(nameof(Array.Empty))!.MakeGenericMethod(elementType!);
+                var emptyArray = emptyMethod.Invoke(null, null);
+                Field.SetValue(origin, emptyArray);
+            }
+            else
+            {
+                Field.SetValue(origin, Array.CreateInstance(Field.FieldType.GetElementType()!, length));
+            }
         }
 
         internal override void Install(Node origin, Node destination, int index)
