@@ -129,6 +129,7 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
                 OnPropertyChanged(nameof(Height));
                 OnPropertyChanged(nameof(CenterX));
                 OnPropertyChanged(nameof(CenterY));
+                OnPropertyChanged(nameof(IsInlined));
                 break;
         }
     }
@@ -159,5 +160,42 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
         _session.SetNodeLocation(_user, UnderlyingNode,
             new Rectangle(loc.X, loc.Y, Math.Max(minW, (float)w), Math.Max(minH, (float)h)),
             out _);
+    }
+
+    /// <summary>
+    /// Applies <paramref name="value"/> as the parameter value for this (Basic/Scripted) parameter
+    /// node, using the session so the change is undo-able.
+    /// Returns <c>false</c> and populates <paramref name="error"/> when the value is invalid.
+    /// </summary>
+    public bool SetParameterValue(string value, out CommandError? error) =>
+        _session.SetParameterValue(_user, UnderlyingNode, value, out error);
+
+    /// <summary>
+    /// <c>true</c> when this node's location is <see cref="Rectangle.Hidden"/>, meaning it is
+    /// rendered inline inside another node's hook row rather than as a standalone canvas element.
+    /// </summary>
+    public bool IsInlined => UnderlyingNode.Location.Equals(Rectangle.Hidden);
+
+    /// <summary>
+    /// Hides this node from the canvas by setting its location to <see cref="Rectangle.Hidden"/>.
+    /// The node's value continues to be displayed inline within the connected origin node's hook row.
+    /// </summary>
+    public void InlineBasicParameter()
+    {
+        _session.SetNodeLocation(_user, UnderlyingNode, Rectangle.Hidden, out _);
+    }
+
+    /// <summary>
+    /// Expands this previously-inlined parameter node back onto the canvas at
+    /// (<paramref name="x"/>, <paramref name="y"/>), restoring its previous width/height
+    /// (or sensible defaults when the stored dimensions are invalid).
+    /// </summary>
+    public void ExpandToCanvas(double x, double y)
+    {
+        var loc = UnderlyingNode.Location;
+        var w = loc.Width  > 0 ? loc.Width  : 120f;
+        var h = loc.Height > 0 ? loc.Height : 50f;
+        _session.SetNodeLocation(_user, UnderlyingNode,
+            new Rectangle((float)x, (float)y, w, h), out _);
     }
 }

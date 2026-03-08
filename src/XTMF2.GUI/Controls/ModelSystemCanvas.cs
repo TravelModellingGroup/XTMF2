@@ -79,6 +79,11 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush HookToggleText       = new SolidColorBrush(Color.FromRgb(0xBB, 0xCC, 0xEE));
     // Resize handle
     private static readonly IBrush ResizeHandleBrush    = new SolidColorBrush(Color.FromArgb(0x80, 0xAA, 0xBB, 0xCC));
+    // Inline parameter hook row tint
+    private static readonly IBrush InlineParamRowBg     = new SolidColorBrush(Color.FromArgb(0x28, 0xFF, 0xE0, 0x80));
+    // Minimize-to-inline button on BasicParameter nodes
+    private static readonly IBrush MinimizeBtnBg        = new SolidColorBrush(Color.FromArgb(0x60, 0x88, 0xCC, 0x55));
+    private static readonly IBrush MinimizeBtnText      = new SolidColorBrush(Color.FromRgb(0xCC, 0xFF, 0xAA));
 
     // ── Drawing constants ─────────────────────────────────────────────────
     private const double NodeCornerRadius    = 4.0;
@@ -98,7 +103,9 @@ public sealed class ModelSystemCanvas : Control
     // Hook toggle icon button in the node header top-right
     private const double HookToggleIconSize = NodeHeaderHeight - 8.0;
     // Resize handle: square target area at node bottom-right corner
-    private const double ResizeHandleSize   = 14.0;
+    private const double ResizeHandleSize         = 14.0;
+    // Minimize-to-inline button on BasicParameter node header top-left
+    private const double InlineMinimizeButtonSize = NodeHeaderHeight - 8.0;
     // Elbow routing
     private const double ElbowMinOffset   = 32.0;
     private const double LinkHitTolerance = 6.0;
@@ -116,9 +123,49 @@ public sealed class ModelSystemCanvas : Control
     private readonly Dictionary<NodeViewModel, HashSet<NodeHook>>
         _nodeConnectedHooks = new();
 
+    // ── Inline parameter editor ───────────────────────────────────────────
+    /// <summary>Overlay TextBox used for in-canvas parameter value editing.</summary>
+    private readonly TextBox _inlineEditor;
+    /// <summary>The node whose parameter value row is currently being edited, or <c>null</c> when idle.</summary>
+    private NodeViewModel? _editingParamNode;
+    /// <summary>Screen position and width of the inline editor overlay (set in <see cref="BeginParamEdit"/>).</summary>
+    private double _editingParamEditorX, _editingParamEditorY, _editingParamEditorW;
+
+    // ── Inlined BasicParameter caches (rebuilt by BuildHookAnchorCache) ───
+    /// <summary>
+    /// Maps (origin node, hook) → the BasicParameter node that is currently inlined
+    /// into that hook row (node location is <see cref="Rectangle.Hidden"/>).
+    /// </summary>
+    private readonly Dictionary<(NodeViewModel, NodeHook), NodeViewModel>
+        _hookInlinedParam = new();
+    /// <summary>
+    /// BasicParameter nodes that are visible on the canvas AND connected via a Single hook,
+    /// so they can offer a "minimize to inline" button.
+    /// </summary>
+    private readonly HashSet<NodeViewModel> _canInlineNodes = new();
+
     public ModelSystemCanvas()
     {
         Focusable = true;
+
+        // Build the inline editor once; it lives as a visual child of this canvas.
+        _inlineEditor = new TextBox
+        {
+            FontFamily        = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize          = HookFontSize,
+            Foreground        = ParamValueTextBrush,
+            Background        = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38)),
+            BorderThickness   = new Thickness(1),
+            BorderBrush       = new SolidColorBrush(Color.FromRgb(0x44, 0x88, 0xCC)),
+            Padding           = new Thickness(4, 0, 4, 0),
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            IsVisible         = false,
+        };
+        _inlineEditor.KeyDown   += OnInlineEditorKeyDown;
+        _inlineEditor.LostFocus += OnInlineEditorLostFocus;
+
+        LogicalChildren.Add(_inlineEditor);
+        VisualChildren.Add(_inlineEditor);
     }
 
     // ── Drag state ────────────────────────────────────────────────────────
@@ -235,6 +282,7 @@ public sealed class ModelSystemCanvas : Control
         {
             foreach (var n in _vm.Nodes)
             {
+                if (n.IsInlined) continue;  // hidden nodes don't contribute to canvas extents
                 maxX = Math.Max(maxX, n.X + NodeRenderWidth(n)  + 80);
                 maxY = Math.Max(maxY, n.Y + NodeRenderHeight(n) + 80);
             }
@@ -249,7 +297,28 @@ public sealed class ModelSystemCanvas : Control
                 maxY = Math.Max(maxY, c.Y + c.Height + 40);
             }
         }
+        // Measure the inline editor so Avalonia knows its desired size.
+        if (_editingParamNode is not null)
+        {
+            _inlineEditor.Measure(new Size(_editingParamEditorW > 0 ? _editingParamEditorW
+                                                                     : NodeRenderWidth(_editingParamNode),
+                                           HookRowHeight));
+        }
         return new Size(maxX, maxY);
+    }
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        // Position the inline editor at the stored row location.
+        if (_editingParamNode is not null && _editingParamEditorW > 0)
+        {
+            _inlineEditor.Arrange(new Rect(
+                _editingParamEditorX,
+                _editingParamEditorY,
+                _editingParamEditorW,
+                HookRowHeight));
+        }
+        return finalSize;
     }
 
     // ── Rendering ─────────────────────────────────────────────────────────
@@ -316,8 +385,10 @@ public sealed class ModelSystemCanvas : Control
     {
         foreach (var link in _vm!.Links)
         {
-            // Don't render links whose destination is in a different boundary.
+            // Don't render links whose destination is in a different boundary
+            // or whose destination node is inlined (value shown in hook row instead).
             if (link.Destination is null) continue;
+            if (link.Destination is NodeViewModel destNvm && destNvm.IsInlined) continue;
 
             var brush = link.IsSelected ? LinkSelBrush : LinkBrush;
             var pen   = new Pen(brush, LinkThickness);
@@ -504,6 +575,8 @@ public sealed class ModelSystemCanvas : Control
         {
             // Skip inter-boundary links — they are not rendered.
             if (link.Destination is null) continue;
+            // Skip links to inlined nodes — no line is drawn for them.
+            if (link.Destination is NodeViewModel dlNvm && dlNvm.IsInlined) continue;
 
             var (p1, mid1, mid2, p2) = ComputeElbow(link);
             if (DistToSeg(pos, p1,   mid1) <= LinkHitTolerance ||
@@ -578,6 +651,8 @@ public sealed class ModelSystemCanvas : Control
         _hookAnchors.Clear();
         _nodeVisibleHooks.Clear();
         _nodeConnectedHooks.Clear();
+        _hookInlinedParam.Clear();
+        _canInlineNodes.Clear();
         if (_vm is null) return;
 
         // Which hooks on each node have a live link?
@@ -591,8 +666,27 @@ public sealed class ModelSystemCanvas : Control
             }
         }
 
+        // Identify inlined BasicParameter nodes and which hook rows they occupy.
+        // Also identify canvas-visible BasicParameter nodes eligible for the minimize button.
+        foreach (var link in _vm.Links)
+        {
+            if (link.Origin is NodeViewModel originVm2
+                && link.Destination is NodeViewModel destVm
+                && destVm.IsParameterNode
+                && link.UnderlyingLink.OriginHook.Cardinality == HookCardinality.Single)
+            {
+                if (destVm.IsInlined)
+                    _hookInlinedParam[(originVm2, link.UnderlyingLink.OriginHook)] = destVm;
+                else
+                    _canInlineNodes.Add(destVm);
+            }
+        }
+
         foreach (var node in _vm.Nodes)
         {
+            // Inlined nodes are hidden — no anchor rows needed.
+            if (node.IsInlined) continue;
+
             _nodeConnectedHooks.TryGetValue(node, out var connected);
             connected ??= new HashSet<NodeHook>();
 
@@ -657,6 +751,9 @@ public sealed class ModelSystemCanvas : Control
     {
         foreach (var node in _vm!.Nodes)
         {
+            // Inlined nodes are hidden — skip canvas rendering entirely.
+            if (node.IsInlined) continue;
+
             double rw = NodeRenderWidth(node);
             double rh = NodeRenderHeight(node);
             var rect   = new Rect(node.X, node.Y, rw, rh);
@@ -701,6 +798,19 @@ public sealed class ModelSystemCanvas : Control
                 var glyphX    = iconRect.X + (iconRect.Width  - iconFt.Width)  / 2.0;
                 var glyphY    = iconRect.Y + (iconRect.Height - iconFt.Height) / 2.0;
                 ctx.DrawText(iconFt, new Point(glyphX, glyphY));
+            }
+
+            // ── Minimize-to-inline button (top-left of header) ───────────
+            // Only on BasicParameter nodes that are wired to a Single hook
+            // and can therefore be folded into the parent's hook row.
+            if (_canInlineNodes.Contains(node))
+            {
+                var minRect  = InlineMinimizeButtonRect(node);
+                ctx.DrawRectangle(MinimizeBtnBg, null, minRect, 3.0, 3.0);
+                var minFt    = MakeText("\u229f", HookFontSize, MinimizeBtnText);  // ⊟ minus-in-box
+                var minGlX   = minRect.X + (minRect.Width  - minFt.Width)  / 2.0;
+                var minGlY   = minRect.Y + (minRect.Height - minFt.Height) / 2.0;
+                ctx.DrawText(minFt, new Point(minGlX, minGlY));
             }
 
             // ── Hook rows ─────────────────────────────────────────────────
@@ -757,18 +867,33 @@ public sealed class ModelSystemCanvas : Control
             {
                 var hook  = hooks[i];
                 bool conn = connected is not null && connected.Contains(hook);
+                // Is this hook occupied by an inlined BasicParameter?
+                bool hasInlined = _hookInlinedParam.TryGetValue((node, hook), out var inlinedParam);
 
                 double rowMidY = node.Y + NodeHeaderHeight + (rowOffset + i) * HookRowHeight + HookRowHeight / 2.0;
+                double rowTopY = node.Y + NodeHeaderHeight + (rowOffset + i) * HookRowHeight;
+
+                // Tinted background for inlined-param hook rows
+                if (hasInlined)
+                    ctx.DrawRectangle(InlineParamRowBg, null,
+                        new Rect(node.X + 1, rowTopY, rw - 2, HookRowHeight));
 
                 // Dot on the right edge (the link anchor)
-                var dotBrush = conn ? HookConnectedBrush : HookUnconnectedBrush;
+                // Green for connected or inlined (both mean the hook is bound).
+                var dotBrush = (conn || hasInlined) ? HookConnectedBrush : HookUnconnectedBrush;
                 ctx.DrawEllipse(dotBrush, null,
                     new Point(node.X + rw, rowMidY),
                     HookDotRadius, HookDotRadius);
 
-                // Hook name (clipped inside the row, left-aligned with padding)
+                // Hook name + optional inlined value
                 const double textPad = 6.0;
-                var hookFt   = MakeText(hook.Name, HookFontSize, conn ? HookTextConnBrush : HookTextDimBrush);
+                string hookLabel = hasInlined && inlinedParam is not null
+                    ? $"{hook.Name}: {(string.IsNullOrEmpty(inlinedParam.ParameterValueRepresentation) ? "(no value)" : inlinedParam.ParameterValueRepresentation)}"
+                    : hook.Name;
+                IBrush hookTextBrush = hasInlined     ? ParamValueTextBrush
+                                     : conn           ? HookTextConnBrush
+                                     :                  HookTextDimBrush;
+                var hookFt   = MakeText(hookLabel, HookFontSize, hookTextBrush);
                 double maxW  = rw - textPad * 2 - HookDotRadius * 2;
                 double hookTy = rowMidY - hookFt.Height / 2.0;
                 using (ctx.PushClip(new Rect(node.X + textPad, hookTy, Math.Max(0, maxW), hookFt.Height + 1)))
@@ -851,6 +976,8 @@ public sealed class ModelSystemCanvas : Control
             var resizeHit = HitTestResizeHandle(pos);
             if (resizeHit is not null)
             {
+                // If editing, commit before selecting/dragging anything else.
+                if (_editingParamNode is not null) CommitParamEdit();
                 _resizing       = resizeHit;
                 _resizeStartPos = pos;
                 _resizeStartW   = ElementRenderWidth(resizeHit);
@@ -861,6 +988,46 @@ public sealed class ModelSystemCanvas : Control
                 e.Handled = true;
                 return;
             }
+        }
+
+        // ── Minimize-to-inline button (BasicParameter header top-left) ───
+        if (!isLinkDrag)
+        {
+            var minimizeHit = HitTestMinimizeButton(pos);
+            if (minimizeHit is not null)
+            {
+                if (_editingParamNode is not null) CommitParamEdit();
+                minimizeHit.InlineBasicParameter();
+                InvalidateAndMeasure();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // ── Inline parameter value edit (single left click on param row) ──
+        if (!isLinkDrag)
+        {
+            // Regular parameter value row (node is visible on canvas).
+            var paramRowHit = HitTestParamValueRow(pos);
+            if (paramRowHit is not null)
+            {
+                _vm.SelectElementCommand.Execute(paramRowHit);
+                BeginParamEdit(paramRowHit);
+                e.Handled = true;
+                return;
+            }
+            // Inlined BasicParameter hook row inside the origin node.
+            var inlinedRowHit = HitTestInlinedParamRow(pos);
+            if (inlinedRowHit is not null)
+            {
+                var (originNode, _, inlinedParam, rx, ry, rw2) = inlinedRowHit.Value;
+                _vm.SelectElementCommand.Execute(originNode);
+                BeginParamEdit(inlinedParam, rx, ry, rw2);
+                e.Handled = true;
+                return;
+            }
+            // Clicking elsewhere commits any open edit.
+            if (_editingParamNode is not null) CommitParamEdit();
         }
 
         // ── Hook toggle icon click (left button, any click count) ─────────
@@ -1074,11 +1241,26 @@ public sealed class ModelSystemCanvas : Control
 
         var menu = new ContextMenu();
 
-        // ── Hook-specific item: link to a node in a different boundary ────
+        // ── Hook-specific items ───────────────────────────────────────────
         if (_rightClickHookHit is { } hookEntry)
         {
             var capturedNode = hookEntry.Node;
             var capturedHook = hookEntry.Hook;
+
+            // "Expand parameter to its own module" when the hook has an inlined BasicParam.
+            if (_hookInlinedParam.TryGetValue((capturedNode, capturedHook), out var inlinedParamNode))
+            {
+                var capturedParam = inlinedParamNode;
+                var expandItem = new MenuItem { Header = "Expand parameter to its own module" };
+                expandItem.Click += (_, _) =>
+                {
+                    double rw = NodeRenderWidth(capturedNode);
+                    capturedParam.ExpandToCanvas(capturedNode.X + rw + 30.0, capturedNode.Y);
+                };
+                menu.Items.Add(expandItem);
+                menu.Items.Add(new Separator());
+            }
+
             var interBoundaryItem = new MenuItem { Header = "Link to node in another boundary…" };
             interBoundaryItem.Click += (_, _) =>
                 _ = vm.CreateInterBoundaryLinkAsync(capturedNode, capturedHook);
@@ -1097,9 +1279,18 @@ public sealed class ModelSystemCanvas : Control
             _ = vm.DeleteSelectedCommand.ExecuteAsync(null);
         };
 
-        // ── Variable list management ──────────────────────────────────────
+        // ── Variable list management + inline option ────────────────────
         if (element is NodeViewModel paramNode && paramNode.IsParameterNode)
         {
+            // "Inline parameter" — only when this BasicParam is wired to a Single hook.
+            if (_canInlineNodes.Contains(paramNode))
+            {
+                var inlineItem = new MenuItem { Header = "Inline parameter into parent hook" };
+                inlineItem.Click += (_, _) => paramNode.InlineBasicParameter();
+                menu.Items.Add(inlineItem);
+                menu.Items.Add(new Separator());
+            }
+
             bool alreadyVar = vm.IsNodeInVariables(paramNode);
             var varHeader = alreadyVar
                 ? "Remove from Model System Variables"
@@ -1123,6 +1314,95 @@ public sealed class ModelSystemCanvas : Control
     }
 
     // ── Resize handle hit-testing ─────────────────────────────────────────
+
+    // ── Inline parameter editor ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the <see cref="NodeViewModel"/> whose parameter value row contains
+    /// <paramref name="pos"/>, or <c>null</c> if none.
+    /// </summary>
+    private NodeViewModel? HitTestParamValueRow(Point pos)
+    {
+        if (_vm is null) return null;
+        foreach (var node in _vm.Nodes)
+        {
+            if (!node.IsParameterNode || node.IsInlined) continue;
+            double rw = NodeRenderWidth(node);
+            var rowRect = new Rect(node.X, node.Y + NodeHeaderHeight, rw, HookRowHeight);
+            if (rowRect.Contains(pos))
+                return node;
+        }
+        return null;
+    }
+
+    /// <summary>Shows the inline editor over the parameter row of <paramref name="node"/>.</summary>
+    /// <param name="node">The BasicParameter node whose value is being edited.</param>
+    /// <param name="rowX">Override X position of the editor overlay (use -1 to auto-derive).</param>
+    /// <param name="rowY">Override Y position of the editor overlay (use -1 to auto-derive).</param>
+    /// <param name="rowW">Override width of the editor overlay (use -1 to auto-derive).</param>
+    private void BeginParamEdit(NodeViewModel node, double rowX = -1, double rowY = -1, double rowW = -1)
+    {
+        _editingParamNode = node;
+        _editingParamEditorX = rowX >= 0 ? rowX : node.X;
+        _editingParamEditorY = rowY >= 0 ? rowY : node.Y + NodeHeaderHeight;
+        _editingParamEditorW = rowW >= 0 ? rowW : NodeRenderWidth(node);
+        _inlineEditor.Text  = node.ParameterValueRepresentation;
+        _inlineEditor.IsVisible = true;
+        // Re-layout so ArrangeOverride positions the TextBox at the right row.
+        InvalidateMeasure();
+        // Focus + select-all after the layout pass completes.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _inlineEditor.Focus();
+            _inlineEditor.SelectAll();
+        }, Avalonia.Threading.DispatcherPriority.Render);
+    }
+
+    /// <summary>Commits the current editor text as the new parameter value.</summary>
+    private void CommitParamEdit()
+    {
+        if (_editingParamNode is null) return;
+        var node  = _editingParamNode;
+        var value = _inlineEditor.Text ?? string.Empty;
+        // Clear first so LostFocus re-entry is guarded.
+        _editingParamNode       = null;
+        _inlineEditor.IsVisible = false;
+        if (!node.SetParameterValue(value, out var error))
+            _vm?.ShowToast(error?.Message ?? "Failed to set parameter value.",
+                           isError: true, durationMs: 5000);
+        InvalidateAndMeasure();
+    }
+
+    /// <summary>Discards the current edit without saving.</summary>
+    private void CancelParamEdit()
+    {
+        _editingParamNode       = null;
+        _inlineEditor.IsVisible = false;
+        InvalidateAndMeasure();
+        Focus();
+    }
+
+    private void OnInlineEditorKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Return or Key.Enter)
+        {
+            CommitParamEdit();
+            Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CancelParamEdit();
+            e.Handled = true;
+        }
+    }
+
+    private void OnInlineEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // Commit on focus loss (e.g. user clicks away to another element).
+        if (_editingParamNode is not null)
+            CommitParamEdit();
+    }
 
     /// <summary>
     /// Returns the <see cref="NodeViewModel"/> whose resize handle (bottom-right
@@ -1196,6 +1476,65 @@ public sealed class ModelSystemCanvas : Control
             size);
     }
 
+    /// <summary>
+    /// Returns the bounding rectangle of the "minimize to inline" button that appears
+    /// in the top-left header of a <see cref="_canInlineNodes"/> BasicParameter node.
+    /// </summary>
+    private static Rect InlineMinimizeButtonRect(NodeViewModel node)
+    {
+        const double margin = 4.0;
+        double size = InlineMinimizeButtonSize;
+        return new Rect(
+            node.X + margin,
+            node.Y + (NodeHeaderHeight - size) / 2.0,
+            size,
+            size);
+    }
+
+    /// <summary>
+    /// Returns the <see cref="NodeViewModel"/> whose minimize-to-inline button
+    /// (top-left of header) contains <paramref name="pos"/>, or <c>null</c>.
+    /// Only nodes in <see cref="_canInlineNodes"/> have this button.
+    /// </summary>
+    private NodeViewModel? HitTestMinimizeButton(Point pos)
+    {
+        if (_vm is null) return null;
+        foreach (var node in _canInlineNodes)
+        {
+            if (InlineMinimizeButtonRect(node).Contains(pos))
+                return node;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns information about an inlined-param hook row that contains
+    /// <paramref name="pos"/>, or <c>null</c> when no such row is hit.
+    /// </summary>
+    private (NodeViewModel originNode, NodeHook hook, NodeViewModel paramNode,
+             double rowX, double rowY, double rowW)?
+        HitTestInlinedParamRow(Point pos)
+    {
+        foreach (var ((originNode, hook), paramNode) in _hookInlinedParam)
+        {
+            if (!_nodeVisibleHooks.TryGetValue(originNode, out var hooks)) continue;
+
+            int hookIdx = -1;
+            for (int j = 0; j < hooks.Count; j++)
+                if (ReferenceEquals(hooks[j], hook)) { hookIdx = j; break; }
+            if (hookIdx < 0) continue;
+
+            int rowOffset = originNode.IsParameterNode ? 1 : 0;
+            double rw     = NodeRenderWidth(originNode);
+            double rowTop = originNode.Y + NodeHeaderHeight + (rowOffset + hookIdx) * HookRowHeight;
+            var rowRect   = new Rect(originNode.X, rowTop, rw, HookRowHeight);
+
+            if (rowRect.Contains(pos))
+                return (originNode, hook, paramNode, originNode.X, rowTop, rw);
+        }
+        return null;
+    }
+
     /// <summary>Finds the topmost canvas element under <paramref name="pos"/>.</summary>
     /// <param name="testComments">When <c>false</c>, comment blocks are excluded (link creation).</param>
     private ICanvasElement? HitTest(Point pos, bool testComments)
@@ -1214,6 +1553,7 @@ public sealed class ModelSystemCanvas : Control
         // Nodes
         foreach (var node in _vm.Nodes)
         {
+            if (node.IsInlined) continue;  // hidden — not clickable directly
             if (new Rect(node.X, node.Y, NodeRenderWidth(node), NodeRenderHeight(node)).Contains(pos))
                 return node;
         }

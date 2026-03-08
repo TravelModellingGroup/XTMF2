@@ -1109,7 +1109,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// Display a toast message that automatically dismisses after <paramref name="durationMs"/> ms.
     /// Calling this again before the previous toast has dismissed resets the timer.
     /// </summary>
-    private void ShowToast(string message, bool isError = false, int durationMs = 3000)
+    internal void ShowToast(string message, bool isError = false, int durationMs = 3000)
     {
         // Cancel any existing dismiss timer.
         _toastCts?.Cancel();
