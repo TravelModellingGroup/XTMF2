@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using XTMF2.Configuration;
@@ -144,5 +145,19 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
         _session.SetNodeLocation(_user, UnderlyingNode, new Rectangle((float)x, (float)y, w, h), out _);
         // OnModelPropertyChanged("Location") is fired by the model; it raises
         // PropertyChanged for X, Y, CenterX, CenterY automatically.
+    }
+
+    /// <summary>
+    /// Resize the node, persisting the change via the session (supports undo/redo).
+    /// Width is clamped to a minimum of 120; height to a minimum of 28.
+    /// </summary>
+    public void ResizeTo(double w, double h)
+    {
+        const float minW = 120f;
+        const float minH = 28f;
+        var loc = UnderlyingNode.Location;
+        _session.SetNodeLocation(_user, UnderlyingNode,
+            new Rectangle(loc.X, loc.Y, Math.Max(minW, (float)w), Math.Max(minH, (float)h)),
+            out _);
     }
 }

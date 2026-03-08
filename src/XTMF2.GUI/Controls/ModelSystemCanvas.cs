@@ -77,6 +77,8 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush HookToggleBg         = new SolidColorBrush(Color.FromArgb(0x60, 0x55, 0x88, 0xCC));
     private static readonly IBrush HookToggleActiveBg   = new SolidColorBrush(Color.FromArgb(0x90, 0x33, 0x99, 0xFF));
     private static readonly IBrush HookToggleText       = new SolidColorBrush(Color.FromRgb(0xBB, 0xCC, 0xEE));
+    // Resize handle
+    private static readonly IBrush ResizeHandleBrush    = new SolidColorBrush(Color.FromArgb(0x80, 0xAA, 0xBB, 0xCC));
 
     // ── Drawing constants ─────────────────────────────────────────────────
     private const double NodeCornerRadius    = 4.0;
@@ -95,6 +97,8 @@ public sealed class ModelSystemCanvas : Control
     private const double NodeMinWidth       = 120.0;
     // Hook toggle icon button in the node header top-right
     private const double HookToggleIconSize = NodeHeaderHeight - 8.0;
+    // Resize handle: square target area at node bottom-right corner
+    private const double ResizeHandleSize   = 14.0;
     // Elbow routing
     private const double ElbowMinOffset   = 32.0;
     private const double LinkHitTolerance = 6.0;
@@ -122,6 +126,16 @@ public sealed class ModelSystemCanvas : Control
     private ICanvasElement? _dragging;
     /// <summary>Offset from the element's top-left corner to the pointer position at drag start.</summary>
     private Point _dragOffset;
+
+    // ── Resize drag state ─────────────────────────────────────────────────
+    /// <summary>The node being resized, or <c>null</c> when not resizing.</summary>
+    private ICanvasElement? _resizing;
+    /// <summary>Pointer position at the start of the resize drag.</summary>
+    private Point _resizeStartPos;
+    /// <summary>Node rendered width at the start of the resize drag.</summary>
+    private double _resizeStartW;
+    /// <summary>Node rendered height at the start of the resize drag.</summary>
+    private double _resizeStartH;
 
     // ── Link-creation drag state (right-button) ────────────────────────────
     /// <summary>The origin element for a pending link, or <c>null</c> when not drawing.</summary>
@@ -279,6 +293,21 @@ public sealed class ModelSystemCanvas : Control
                     maxWidth: textArea.Width,
                     maxHeight: textArea.Height);
                 layout.Draw(ctx, new Point(textArea.X, textArea.Y));
+            }
+
+            // Resize grip dots (bottom-right corner)
+            {
+                double dotR = 2.0;
+                double bx   = comment.X + comment.Width;
+                double by   = comment.Y + comment.Height;
+                for (int d = 0; d < 3; d++)
+                {
+                    double offset = 4.0 + d * 4.0;
+                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                        new Point(bx - offset + dotR, by - dotR), dotR, dotR);
+                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                        new Point(bx - dotR, by - offset + dotR), dotR, dotR);
+                }
             }
         }
     }
@@ -612,6 +641,18 @@ public sealed class ModelSystemCanvas : Control
         return Math.Max(node.Height, NodeHeaderHeight);
     }
 
+    /// <summary>Returns the rendered width of any resizable canvas element.</summary>
+    private double ElementRenderWidth(ICanvasElement el) =>
+        el is NodeViewModel nvm ? NodeRenderWidth(nvm)
+        : el is CommentBlockViewModel cvm ? cvm.Width
+        : 0;
+
+    /// <summary>Returns the rendered height of any resizable canvas element.</summary>
+    private double ElementRenderHeight(ICanvasElement el) =>
+        el is NodeViewModel nvm ? NodeRenderHeight(nvm)
+        : el is CommentBlockViewModel cvm ? cvm.Height
+        : 0;
+
     private void RenderNodes(DrawingContext ctx)
     {
         foreach (var node in _vm!.Nodes)
@@ -630,6 +671,22 @@ public sealed class ModelSystemCanvas : Control
             var tx = node.X + (rw       - ft.Width)  / 2;
             var ty = node.Y + (NodeHeaderHeight - ft.Height) / 2;
             ctx.DrawText(ft, new Point(tx, ty));
+
+            // ── Resize handle (bottom-right corner) ───────────────────────
+            // Three small diagonal dots — standard grip indicator.
+            {
+                double dotR = 2.0;
+                double bx   = node.X + rw;
+                double by   = node.Y + rh;
+                for (int d = 0; d < 3; d++)
+                {
+                    double offset = 4.0 + d * 4.0;
+                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                        new Point(bx - offset + dotR, by - dotR), dotR, dotR);
+                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                        new Point(bx - dotR,           by - offset + dotR), dotR, dotR);
+                }
+            }
 
             // ── Hook toggle icon (top-right of header) ─────────────────────
             // Only shown when the node has at least one hook and there is no
@@ -788,6 +845,24 @@ public sealed class ModelSystemCanvas : Control
         // Both right-click and Ctrl+left-click begin a link-creation drag.
         bool isLinkDrag = isRightButton || isCtrlLeft;
 
+        // ── Resize handle press (left button) ────────────────────────────
+        if (!isLinkDrag)
+        {
+            var resizeHit = HitTestResizeHandle(pos);
+            if (resizeHit is not null)
+            {
+                _resizing       = resizeHit;
+                _resizeStartPos = pos;
+                _resizeStartW   = ElementRenderWidth(resizeHit);
+                _resizeStartH   = ElementRenderHeight(resizeHit);
+                _vm.SelectElementCommand.Execute(resizeHit);
+                e.Pointer.Capture(this);
+                Focus();
+                e.Handled = true;
+                return;
+            }
+        }
+
         // ── Hook toggle icon click (left button, any click count) ─────────
         if (!isLinkDrag)
         {
@@ -887,6 +962,28 @@ public sealed class ModelSystemCanvas : Control
             return;
         }
 
+        // ── Resize drag ───────────────────────────────────────────────────
+        if (_resizing is not null)
+        {
+            var dw = pos.X - _resizeStartPos.X;
+            var dh = pos.Y - _resizeStartPos.Y;
+            if (_resizing is NodeViewModel resizingNode)
+                resizingNode.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
+            else if (_resizing is CommentBlockViewModel resizingComment)
+                resizingComment.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
+            InvalidateAndMeasure();
+            e.Handled = true;
+            return;
+        }
+
+        // ── Cursor feedback while idle ────────────────────────────────────
+        if (_dragging is null)
+        {
+            Cursor = HitTestResizeHandle(pos) is not null
+                ? new Cursor(StandardCursorType.SizeAll)
+                : Cursor.Default;
+        }
+
         if (_dragging is null) return;
 
         var newX = Math.Max(0, pos.X - _dragOffset.X);
@@ -941,6 +1038,17 @@ public sealed class ModelSystemCanvas : Control
                     _ = _vm.CreateLinkAsync(origin, dest);
             }
 
+            e.Handled = true;
+            return;
+        }
+
+        // ── Left-button release: end resize drag ─────────────────────────
+        if (_resizing is not null)
+        {
+            _resizing = null;
+            e.Pointer.Capture(null);
+            Cursor = Cursor.Default;
+            InvalidateAndMeasure();
             e.Handled = true;
             return;
         }
@@ -1012,6 +1120,45 @@ public sealed class ModelSystemCanvas : Control
 
         ContextMenu = menu;
         ContextMenu.Open(this);
+    }
+
+    // ── Resize handle hit-testing ─────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the <see cref="NodeViewModel"/> whose resize handle (bottom-right
+    /// corner square) contains <paramref name="pos"/>, or <c>null</c> if none.
+    /// </summary>
+    /// <summary>
+    /// Returns the <see cref="ICanvasElement"/> whose resize handle (bottom-right
+    /// corner square) contains <paramref name="pos"/>, or <c>null</c> if none.
+    /// Checks nodes first, then comment blocks.
+    /// </summary>
+    private ICanvasElement? HitTestResizeHandle(Point pos)
+    {
+        if (_vm is null) return null;
+        foreach (var node in _vm.Nodes)
+        {
+            double rw = NodeRenderWidth(node);
+            double rh = NodeRenderHeight(node);
+            var handle = new Rect(
+                node.X + rw - ResizeHandleSize,
+                node.Y + rh - ResizeHandleSize,
+                ResizeHandleSize,
+                ResizeHandleSize);
+            if (handle.Contains(pos))
+                return node;
+        }
+        foreach (var comment in _vm.CommentBlocks)
+        {
+            var handle = new Rect(
+                comment.X + comment.Width  - ResizeHandleSize,
+                comment.Y + comment.Height - ResizeHandleSize,
+                ResizeHandleSize,
+                ResizeHandleSize);
+            if (handle.Contains(pos))
+                return comment;
+        }
+        return null;
     }
 
     // ── Hook toggle icon hit-testing ─────────────────────────────────────
