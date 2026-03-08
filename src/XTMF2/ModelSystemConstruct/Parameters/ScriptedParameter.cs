@@ -13,7 +13,10 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
+using System.Reflection.Metadata.Ecma335;
 using System.Text.Json;
 using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
@@ -64,5 +67,22 @@ internal class ScriptedParameter : ParameterExpression
     internal override void Save(Utf8JsonWriter writer)
     {
         writer.WriteString(ParameterExpressionProperty, Representation);
+    }
+
+    internal override bool AssignToParameter(IModule module, ref string? error)
+    {
+        var fieldInfo = module.GetType().GetField("Expression", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        if(fieldInfo is null)
+        {
+            error = $"Unable to find a field named 'Expression' in module {module.Name} to assign the parameter value to.";
+            return false;
+        }
+        if (!fieldInfo.FieldType.IsAssignableFrom(typeof(ScriptedParameter)))
+        {
+            error = $"The field 'Expression' in module {module.Name} is not compatible with ScriptedParameter.";
+            return false;
+        }
+        fieldInfo.SetValue(module, this);
+        return true;
     }
 }

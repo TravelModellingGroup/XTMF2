@@ -13,7 +13,9 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using System.Text.Json;
 
 namespace XTMF2.ModelSystemConstruct.Parameters;
@@ -70,5 +72,28 @@ internal class BasicParameter : ParameterExpression
     internal override void Save(Utf8JsonWriter writer)
     {
         writer.WriteString(ParameterProperty, Representation);
+    }
+
+    internal override bool AssignToParameter(IModule module, [NotNullWhen(false)] ref string? error)
+    {
+        var (success, value) = ArbitraryParameterParser.ArbitraryParameterParse(Type, _value, ref error);
+        if (!success)
+        {
+            error = $"The parameter value {_value} is not compatible with the parameter type {Type}.";
+            return false;
+        }
+        var fieldInfo = module.GetType().GetField("Value", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        if(fieldInfo is null)
+        {
+            error = $"Unable to find a field named 'Value' in module {module.Name} to assign the parameter value to.";
+            return false;
+        }
+        if (!fieldInfo.FieldType.IsAssignableFrom(value!.GetType()))
+        {
+            error = $"The parameter value {_value} is not compatible with the field type {fieldInfo.FieldType}.";
+            return false;
+        }
+        fieldInfo.SetValue(module, value);
+        return true;
     }
 }

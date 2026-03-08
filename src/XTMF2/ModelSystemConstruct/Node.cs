@@ -219,10 +219,6 @@ namespace XTMF2.ModelSystemConstruct
 
         private static readonly Type[] RuntimeConstructor = new Type[] { typeof(XTMFRuntime) };
 
-        private static readonly Type GenericParameter = typeof(BasicParameter<>);
-
-        private static readonly ConcurrentDictionary<Type, FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
-
         /// <summary>
         /// Setup the module as defined in this node.
         /// </summary>
@@ -243,23 +239,10 @@ namespace XTMF2.ModelSystemConstruct
             }
             Module = module;
             Module.Name = Name;
-            if (_type.IsConstructedGenericType && _type.GetGenericTypeDefinition() == GenericParameter)
+            // We need to determine if this is a basic parameter or a scripted one.
+            if (ParameterValue is not null)
             {
-                var paramType = _type.GenericTypeArguments[0];
-                var paramValue = ParameterValue?.GetValue(module, paramType, ref error);
-                if (paramValue is not null)
-                {
-                    if (!GenericValue.TryGetValue(_type, out var info))
-                    {
-                        info = _type.GetRuntimeField("Value");
-                        if (info == null)
-                        {
-                            return FailWith(out error, $"Unable find a field named 'Value' on type {_type.FullName} in order to assign a value to it!");
-                        }
-                        GenericValue[paramType] = info;
-                    }
-                    info.SetValue(Module, paramValue);
-                }
+                return ParameterValue.AssignToParameter(module, ref error);
             }
             error = null;
             return true;

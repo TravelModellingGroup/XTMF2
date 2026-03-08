@@ -13,8 +13,10 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using System.Text.Json;
 using XTMF2.ModelSystemConstruct.Parameters;
 
@@ -89,5 +91,14 @@ public abstract class ParameterExpression : INotifyPropertyChanged
     /// </summary>
     /// <param name="writer">The writer to store the parameter to.</param>
     internal abstract void Save(Utf8JsonWriter writer);
-   
+
+    /// <summary>
+    /// Assign the value of this parameter expression to the given parameter field. 
+    /// This is used for generic parameters, where the parameter expression is stored as a field in the module,
+    ///  and needs to be assigned to the field when the module is being evaluated.
+    /// </summary>
+    /// <param name="module">The module that the parameter is going to be assigned to.</param>
+    /// <param name="error">An error message if the assignment fails.</param>
+    /// <returns>True if the assignment was successful, false otherwise.</returns>
+    internal abstract bool AssignToParameter(IModule module, ref string? error);
 }
