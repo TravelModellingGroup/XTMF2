@@ -85,6 +85,13 @@ namespace XTMF2
         /// </summary>
         /// <param name="length">The number of modules that will be installed</param>
         internal abstract void CreateArray(IModule origin, int length);
+
+        /// <summary>
+        /// Check to see if the hook for the given module was previously set.
+        /// </summary>
+        /// <param name="module">The module to check.</param>
+        /// <returns>True if there is something assigned to that property, false otherwise.</returns>
+        internal abstract bool AnyInstalled(IModule module);
     }
 
     // Cardinality 
@@ -156,6 +163,11 @@ namespace XTMF2
                     throw new NotImplementedException("Unknown Cardinality!");
             }
         }
+
+        internal override bool AnyInstalled(IModule module)
+        {
+            return Property.GetValue(module) is not null;
+        }
     }
 
     /// <summary>
@@ -216,6 +228,11 @@ namespace XTMF2
                 default:
                     throw new NotImplementedException("Unknown Cardinality!");
             }
+        }
+
+        internal override bool AnyInstalled(IModule module)
+        {
+            return Field.GetValue(module) is not null;
         }
     }
 }

@@ -21,6 +21,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using XTMF2.Bus;
 using XTMF2.Editing;
 using XTMF2.GUI.ViewModels;
@@ -52,6 +53,11 @@ public class RunController : IDisposable
     private HostBus _hostBus;
 
     /// <summary>
+    /// If running in debug mode, the RunServerBus with be run within the same process as the GUI to make debugging easier.
+    /// </summary>
+    private RunServerBus? _runServerBus;
+
+    /// <summary>
     /// Generate a new Run controller
     /// </summary>
     /// <param name="runtime"></param>
@@ -62,13 +68,51 @@ public class RunController : IDisposable
         [NotNullWhen(true)] out RunController? controller,
         [NotNullWhen(false)] ref string? error)
     {
+
+        if (Debugger.IsAttached)
+        {
+            return InitializeForDebugging(runtime, out controller, out error);
+        }
+        else
+        {
+            return InitializeInSeparateProcess(runtime, out controller, out error);
+        }
+    }
+
+    private static bool InitializeForDebugging(XTMFRuntime runtime, out RunController? controller, out string? error)
+    {
+        if(!XTMF2.Bus.CreateStreams.CreateDebugBusses(runtime, out HostBus hostBus, out RunServerBus runServerBus, out error))
+        {
+            controller = null;
+            return false;
+        }
+
+        controller = new RunController(runtime, hostBus)
+        {
+            _runServerBus = runServerBus
+        };
+        hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
+        hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
+        hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
+        // Start the client processing in a separate thread to avoid blocking the GUI
+        Task.Factory.StartNew(
+            () =>
+            {
+                runServerBus.ProcessRequests();
+            }, TaskCreationOptions.LongRunning);
+        error = null;
+        return true;
+    }
+
+    private static bool InitializeInSeparateProcess(XTMFRuntime runtime, out RunController? controller, out string? error)
+    {
         var id = Guid.NewGuid().ToString();
         var xtmfGUIFilePath = typeof(XTMF2.GUI.Program).Assembly.Location;
         var xtmfClientFileName = Path.Combine(Path.GetDirectoryName(xtmfGUIFilePath)!, "XTMF2.RunServer.dll");
         Process? client = null;
         try
         {
-            if(!XTMF2.Bus.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, out error, () =>
+            if (!XTMF2.Bus.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, out error, () =>
             {
                 // Client startup goes here
                 var startInfo = new ProcessStartInfo()
@@ -78,7 +122,7 @@ public class RunController : IDisposable
                     CreateNoWindow = false,
                     WorkingDirectory = Environment.CurrentDirectory
                 };
-                client = new ()
+                client = new()
                 {
                     StartInfo = startInfo,
                     EnableRaisingEvents = true
@@ -132,18 +176,18 @@ public class RunController : IDisposable
         ModelSystemSession msSession,
         string startToExecute,
         string runName,
-        [NotNullWhen(true)]out string? id,
-        [NotNullWhen(false)]out CommandError? error)
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
     {
         var projectDirectory = projectSession.ProjectDirectory;
-        if(String.IsNullOrWhiteSpace(projectDirectory))
+        if (String.IsNullOrWhiteSpace(projectDirectory))
         {
             id = null;
             error = new CommandError("Project directory is not set.");
             return false;
         }
         var runDirectory = Path.Combine(projectDirectory, "runs", runName);
-        if(!_hostBus.RunModelSystem(msSession, runDirectory, startToExecute, out id, out error))
+        if (!_hostBus.RunModelSystem(msSession, runDirectory, startToExecute, out id, out error))
         {
             return false;
         }
@@ -164,6 +208,7 @@ public class RunController : IDisposable
         if (_disposed) return;
         _disposed = true;
         GC.SuppressFinalize(this);
+        _runServerBus?.Dispose();
         _hostBus.RequestClientShutdown(out _);
         _hostBus.Dispose();
     }

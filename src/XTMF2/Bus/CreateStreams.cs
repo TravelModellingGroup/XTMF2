@@ -42,7 +42,7 @@ namespace XTMF2.Bus
         {
             try
             {
-                NamedPipeServerStream host = new (name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                NamedPipeServerStream host = new(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
                 stream = host;
                 var waitTask = host.WaitForConnectionAsync();
                 createClient();
@@ -63,7 +63,7 @@ namespace XTMF2.Bus
                 error = e.Message;
                 stream = null;
                 return false;
-            }           
+            }
         }
 
         /// <summary>
@@ -73,8 +73,8 @@ namespace XTMF2.Bus
         /// <param name="stream">The resulting stream</param>
         /// <param name="error">An error message if there is a problem</param>
         /// <returns>True if successful, false with message otherwise</returns>
-        public static bool CreateNamedPipeClient(string name, 
-            [NotNullWhen(true)] out Stream? stream, 
+        public static bool CreateNamedPipeClient(string name,
+            [NotNullWhen(true)] out Stream? stream,
             [NotNullWhen(false)] out string? error)
         {
             try
@@ -101,6 +101,31 @@ namespace XTMF2.Bus
             }
             stream = null;
             return false;
+        }
+
+        public static bool CreateDebugBusses(XTMFRuntime runtime, 
+            [NotNullWhen(true)] out HostBus hostBus, 
+            [NotNullWhen(true)] out RunServerBus runServerBus,
+            [NotNullWhen(false)] out string? error)
+        {
+            var debugId = Guid.NewGuid().ToString();
+            Stream? clientStream = null;
+            string? clientError = null;
+            if (!CreateNewNamedPipeHost(debugId, out var hostStream, out error, () =>
+            {
+                if (!CreateNamedPipeClient(debugId, out clientStream, out clientError))
+                {
+                    return;
+                }
+            }))
+            {
+                hostBus = null!;
+                runServerBus = null!;
+                return false;
+            }
+            hostBus = new HostBus(hostStream!, true);
+            runServerBus = new RunServerBus(clientStream!, true, runtime, null, true);
+            return true;
         }
     }
 }

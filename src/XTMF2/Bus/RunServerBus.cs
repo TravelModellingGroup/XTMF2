@@ -55,10 +55,12 @@ namespace XTMF2.Bus
         /// <param name="serverStream">A stream that connects to the host.</param>
         /// <param name="streamOwner">Should this bus assume ownership over the stream?</param>
         /// <param name="runtime">The XTMFRuntime to work within.</param>
-        public RunServerBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string>? extraDlls = null)
+        /// <param name="extraDlls">Additional DLLs that the client should load.</param>
+        /// <param name="runLocal">If true, the model system will be run within the same process as the GUI.  This is only intended for debugging purposes.</param>
+        public RunServerBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string>? extraDlls = null, bool runLocal = false)
         {
             Runtime = runtime;
-            _runScheduler = new Scheduler(this);
+            _runScheduler = new Scheduler(this, runLocal);
             _clientHost = serverStream;
             _owner = streamOwner;
             _extraDlls = extraDlls ?? new List<string>();

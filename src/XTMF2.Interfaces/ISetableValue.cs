@@ -24,6 +24,7 @@ namespace XTMF2
 {
     public interface ISetableValue<T> : IModule
     {
+        T Get();
         void Set(T value);
     }
 }

@@ -43,7 +43,7 @@ namespace XTMF2.Bus
         /// Create a new Scheduler to process the given client bus.
         /// </summary>
         /// <param name="bus">The bus to listen to.</param>
-        public Scheduler(RunServerBus bus)
+        public Scheduler(RunServerBus bus, bool runLocal)
         {
             _Bus = bus;
             _CancelExecutionEngine = new CancellationTokenSource();
@@ -63,7 +63,14 @@ namespace XTMF2.Bus
                         try
                         {
                             Current = context;
-                            context.RunInNewProcess(_Bus);
+                            if(runLocal)
+                            {
+                                context.RunInCurrentProcess(_Bus);
+                            }
+                            else
+                            {
+                                context.RunInNewProcess(_Bus);
+                            }
                         }
                         catch (Exception e)
                         {

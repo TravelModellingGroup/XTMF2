@@ -77,7 +77,8 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
             var t = UnderlyingNode.Type;
             if (t is null || !t.IsGenericType) return false;
             var td = t.GetGenericTypeDefinition();
-            return td == typeof(BasicParameter<>) || td == typeof(ScriptedParameter<>);
+            return td == typeof(BasicParameter<>) || td == typeof(ScriptedParameter<>)
+                || td == typeof(SetableParameter<>);
         }
     }
 

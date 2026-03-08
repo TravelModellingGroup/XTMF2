@@ -26,6 +26,11 @@ namespace XTMF2.RuntimeModules
         DocumentationLink = "http://tmg.utoronto.ca/doc/2.0")]
     public sealed class SetableParameter<T> : BasicParameter<T>, ISetableValue<T>
     {
+        public T Get()
+        {
+            return Value;
+        }
+
         public void Set(T value)
         {
             Value = value;

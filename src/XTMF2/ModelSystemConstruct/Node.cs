@@ -259,7 +259,10 @@ namespace XTMF2.ModelSystemConstruct
             {
                 if (hook.Cardinality == HookCardinality.AnyNumber)
                 {
-                    hook.CreateArray(this.Module!, 0);
+                    if (!hook.AnyInstalled(this.Module!))
+                    {
+                        hook.CreateArray(this.Module!, 0);
+                    }
                 }
             }
         }

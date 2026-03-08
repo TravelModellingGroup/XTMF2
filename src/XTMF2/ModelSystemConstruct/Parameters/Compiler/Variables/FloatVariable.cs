@@ -41,6 +41,12 @@ internal sealed class FloatVariable : Variable
     internal override Result GetResult(IModule caller)
     {
         string? error = null;
+        // Check to see if we're dealing with a variable that can change.
+        if(typeof(ISetableValue<float>).IsAssignableFrom(_backingNode.Module!.GetType()))
+        {
+            var setable = (ISetableValue<float>)_backingNode.Module;
+            return new FloatResult(setable.Get());
+        }
         var expression = _backingNode.ParameterValue;
         if (expression is null || expression?.IsCompatible(typeof(float), ref error) != true)
         {
