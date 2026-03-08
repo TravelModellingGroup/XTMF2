@@ -42,9 +42,8 @@ internal sealed class BooleanVariable : Variable
     {
         string? error = null;
         // Check to see if we're dealing with a variable that can change.
-        if(typeof(ISetableValue<bool>).IsAssignableFrom(_backingNode.Module!.GetType()))
+        if(_backingNode.Module is ISetableValue<bool> setable)
         {
-            var setable = (ISetableValue<bool>)_backingNode.Module;
             return new BooleanResult(setable.Get());
         }
         var expression = _backingNode.ParameterValue;

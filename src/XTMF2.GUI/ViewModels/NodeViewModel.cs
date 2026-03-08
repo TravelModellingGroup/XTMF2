@@ -165,10 +165,25 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     /// <summary>
     /// Applies <paramref name="value"/> as the parameter value for this (Basic/Scripted) parameter
     /// node, using the session so the change is undo-able.
+    /// <para>
+    /// If the underlying node type is <see cref="ScriptedParameter{T}"/>, the value is treated as
+    /// an expression string and routed through
+    /// <see cref="ModelSystemSession.SetParameterExpression"/> so that a <c>ScriptedParameter</c>
+    /// instance is kept rather than being silently replaced with a <c>BasicParameter</c>.
+    /// </para>
     /// Returns <c>false</c> and populates <paramref name="error"/> when the value is invalid.
     /// </summary>
-    public bool SetParameterValue(string value, out CommandError? error) =>
-        _session.SetParameterValue(_user, UnderlyingNode, value, out error);
+    public bool SetParameterValue(string value, out CommandError? error)
+    {
+        var t = UnderlyingNode.Type;
+        bool isScripted = t is not null && t.IsGenericType
+                          && t.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
+
+        if (isScripted)
+            return _session.SetParameterExpression(_user, UnderlyingNode, value, out error);
+
+        return _session.SetParameterValue(_user, UnderlyingNode, value, out error);
+    }
 
     /// <summary>
     /// <c>true</c> when this node's location is <see cref="Rectangle.Hidden"/>, meaning it is

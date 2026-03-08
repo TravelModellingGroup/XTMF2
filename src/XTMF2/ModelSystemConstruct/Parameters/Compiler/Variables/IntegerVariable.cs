@@ -42,9 +42,8 @@ internal sealed class IntegerVariable : Variable
     {
         string? error = null;
         // Check to see if we're dealing with a variable that can change.
-        if(typeof(ISetableValue<int>).IsAssignableFrom(_backingNode.Module!.GetType()))
+        if(_backingNode.Module is ISetableValue<int> setable)
         {
-            var setable = (ISetableValue<int>)_backingNode.Module;
             return new IntegerResult(setable.Get());
         }
         // If it is not a variable that can change, we can use the parameter value as the expression for the variable.

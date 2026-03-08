@@ -42,9 +42,8 @@ internal sealed class FloatVariable : Variable
     {
         string? error = null;
         // Check to see if we're dealing with a variable that can change.
-        if(typeof(ISetableValue<float>).IsAssignableFrom(_backingNode.Module!.GetType()))
+        if(_backingNode.Module is ISetableValue<float> setable)
         {
-            var setable = (ISetableValue<float>)_backingNode.Module;
             return new FloatResult(setable.Get());
         }
         var expression = _backingNode.ParameterValue;
