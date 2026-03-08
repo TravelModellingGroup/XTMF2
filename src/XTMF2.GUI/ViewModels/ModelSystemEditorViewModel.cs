@@ -123,6 +123,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>Observable wrappers around <see cref="Boundary.CommentBlocks"/>.</summary>
     public ObservableCollection<CommentBlockViewModel> CommentBlocks { get; } = new();
 
+    /// <summary>Observable view-models for the model system's variable list.</summary>
+    public ObservableCollection<ModelSystemVariableViewModel> ModelSystemVariables { get; } = new();
+
     /// <summary>The currently selected link, if any. Mutually exclusive with <see cref="SelectedElement"/>.</summary>
     [ObservableProperty]
     private LinkViewModel? _selectedLink;
@@ -298,6 +301,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         BuildFromBoundary(_currentBoundary);
         SubscribeToBoundary(_currentBoundary);
         RebuildBoundaryNavItems();
+
+        // Build the variables collection and keep it in sync.
+        SyncModelSystemVariables();
+        ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.Variables)
+            .CollectionChanged += OnModelSystemVariablesChanged;
     }
 
     // ── Collection sync ───────────────────────────────────────────────────
@@ -811,6 +819,83 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
     }
 
+    // ── Model system variables ────────────────────────────────────────────
+
+    /// <summary>Returns true when <paramref name="nvm"/> is in the model system variable list.</summary>
+    public bool IsNodeInVariables(NodeViewModel nvm) =>
+        Session.ModelSystem.Variables.Contains(nvm.UnderlyingNode);
+
+    /// <summary>True when the model system variable list is empty (drives the empty-state label).</summary>
+    public bool HasNoModelSystemVariables => ModelSystemVariables.Count == 0;
+
+    /// <summary>
+    /// Adds the given parameter node to the model system's variable list.
+    /// Called from the canvas context menu.
+    /// </summary>
+    public async Task AddNodeToVariablesAsync(NodeViewModel nvm)
+    {
+        if (!Session.AddVariable(User, nvm.UnderlyingNode, out var error))
+            await ShowError("Add Variable Failed", error);
+    }
+
+    /// <summary>
+    /// Removes the given parameter node from the model system's variable list.
+    /// Called from the canvas context menu.
+    /// </summary>
+    public async Task RemoveNodeFromVariablesAsync(NodeViewModel nvm)
+    {
+        if (!Session.RemoveVariable(User, nvm.UnderlyingNode, out var error))
+            await ShowError("Remove Variable Failed", error);
+    }
+
+    /// <summary>
+    /// Removes the given variable entry from the model system's variable list.
+    /// Bound to the "Remove" button in the variables panel.
+    /// </summary>
+    [RelayCommand]
+    private async Task RemoveVariableNode(ModelSystemVariableViewModel varVm)
+    {
+        if (!Session.RemoveVariable(User, varVm.UnderlyingNode, out var error))
+            await ShowError("Remove Variable Failed", error);
+    }
+
+    /// <summary>
+    /// Navigates to the boundary containing the variable's node and selects it.
+    /// Bound to the "Go To" button in the variables panel.
+    /// </summary>
+    [RelayCommand]
+    private void GoToVariableNode(ModelSystemVariableViewModel varVm)
+    {
+        var targetBoundary = varVm.UnderlyingNode.ContainedWithin;
+        if (targetBoundary is not null)
+            SwitchToBoundary(targetBoundary);
+
+        // Find the NodeViewModel for this node in the current boundary's Nodes collection.
+        var nvm = Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, varVm.UnderlyingNode));
+        if (nvm is not null)
+        {
+            SelectElement(nvm);
+            ScrollToNodeRequested?.Invoke(nvm);
+        }
+    }
+
+    /// <summary>Rebuilds <see cref="ModelSystemVariables"/> from the current Variables list.</summary>
+    private void SyncModelSystemVariables()
+    {
+        foreach (var old in ModelSystemVariables) old.Detach();
+        ModelSystemVariables.Clear();
+        foreach (var node in Session.ModelSystem.Variables)
+            ModelSystemVariables.Add(new ModelSystemVariableViewModel(node));
+    }
+
+    private void OnModelSystemVariablesChanged(object? sender,
+        System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        // Full rebuild keeps the code simple; the list is expected to be small.
+        SyncModelSystemVariables();
+        OnPropertyChanged(nameof(HasNoModelSystemVariables));
+    }
+
     /// <summary>Commit the name/comment currently in <see cref="SelectedElementEditName"/> back to the model.</summary>
     [RelayCommand]
     private async Task CommitRename()
@@ -1246,6 +1331,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (_disposed) return;
         _disposed = true;
+
+        ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.Variables)
+            .CollectionChanged -= OnModelSystemVariablesChanged;
+
+        foreach (var varVm in ModelSystemVariables) varVm.Detach();
 
         UnsubscribeFromBoundary(_currentBoundary);
 

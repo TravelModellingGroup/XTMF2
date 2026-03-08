@@ -107,7 +107,7 @@ namespace XTMF2.Bus
                 || !ms!.Construct(_runtime, ref error)
                 || !ms!.Validate(ref moduleName, ref error))
             {
-                RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, error);
+                RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, "Failed when validating the model system! " + error + "\r\n" + modelSystemAsString);
                 return false;
             }
             _modelSystem = ms;
@@ -167,8 +167,15 @@ namespace XTMF2.Bus
 
         private static bool Convert(byte[] rawData, out string modelSystemAsString)
         {
-            modelSystemAsString = Encoding.Unicode.GetString(rawData);
-            return !String.IsNullOrWhiteSpace(modelSystemAsString);
+            try
+            {
+                modelSystemAsString = Encoding.UTF8.GetString(rawData);
+                return !String.IsNullOrWhiteSpace(modelSystemAsString);
+            }
+            catch(Exception e)
+            {
+                throw new Exception("Failed when converting model system to a string! + \r\n" + e.Message);
+            }
         }
 
         /// <summary>
@@ -180,10 +187,17 @@ namespace XTMF2.Bus
         public RunError? StartRun()
         {
             string? error = null, moduleName = null, stackTrace = string.Empty;
-            if (!ValidateModelSystem(ref error) || !GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error)
-                || startingMss == null)
+            if (!ValidateModelSystem(ref error))
             {
-                return new RunError(RunErrorType.Validation, error, moduleName, stackTrace);
+                return new RunError(RunErrorType.Validation, $"Failed when validating the model system! {error}", moduleName, stackTrace);
+            }
+            if(!GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error))
+            {
+                return new RunError(RunErrorType.Validation, $"Failed when getting the start point! {error}", moduleName, stackTrace);
+            }
+            if(startingMss == null)
+            {
+                return new RunError(RunErrorType.Validation, "Unable to find the starting point for this run!", moduleName, stackTrace);
             }
             var originalDir = Directory.GetCurrentDirectory();
             try

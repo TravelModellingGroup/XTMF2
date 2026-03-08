@@ -87,13 +87,14 @@ namespace XTMF2
         /// <summary>
         /// The nodes which are allowed to be used as a variable for parameter expressions
         /// </summary>
-        public IList<Node> Variables { get; internal set; } = Array.Empty<Node>();
+        public ObservableCollection<Node> Variables { get; private set; } = new ObservableCollection<Node>();
 
         private const string GlobalBoundaryName = "global";
         private const string IndexProperty = "Index";
         private const string TypeProperty = "Type";
         private const string TypesProperty = "Types";
         private const string BoundariesProperty = "Boundaries";
+        private const string VariablesProperty = "Variables";
 
         /// <summary>
         /// The lock that must be acquired before editing the model system's attributes.
@@ -149,7 +150,8 @@ namespace XTMF2
                 var typeDictionary = GlobalBoundary.GetUsedTypes();
                 writer.WriteStartObject();
                 WriteTypes(writer, typeDictionary);
-                WriteBoundaries(writer, typeDictionary);
+                var nodeDictionary = WriteBoundaries(writer, typeDictionary);
+                WriteVariables(writer, nodeDictionary);
                 writer.WriteEndObject();
                 return true;
             }
@@ -203,13 +205,26 @@ namespace XTMF2
             return Save(ref error, saveTo, true);
         }
 
-        private void WriteBoundaries(Utf8JsonWriter writer, Dictionary<Type, int> typeDictionary)
+        private Dictionary<Node, int> WriteBoundaries(Utf8JsonWriter writer, Dictionary<Type, int> typeDictionary)
         {
             int index = 0;
             writer.WritePropertyName(BoundariesProperty);
             writer.WriteStartArray();
             Dictionary<Node, int> nodeDictionary = new Dictionary<Node, int>();
             GlobalBoundary.Save(ref index, nodeDictionary, typeDictionary, writer);
+            writer.WriteEndArray();
+            return nodeDictionary;
+        }
+
+        private void WriteVariables(Utf8JsonWriter writer, Dictionary<Node, int> nodeDictionary)
+        {
+            writer.WritePropertyName(VariablesProperty);
+            writer.WriteStartArray();
+            foreach (var node in Variables)
+            {
+                if (nodeDictionary.TryGetValue(node, out var idx))
+                    writer.WriteNumberValue(idx);
+            }
             writer.WriteEndArray();
         }
 
@@ -246,9 +261,24 @@ namespace XTMF2
 
         internal static bool Load(string modelSystem, XTMFRuntime runtime, [NotNullWhen(true)] out ModelSystem? ms, [NotNullWhen(false)] ref string? error)
         {
-            using var stream = new MemoryStream(Encoding.Unicode.GetBytes(modelSystem));
+            byte[]? converted = null;
+            try
+            {
+                converted =  Encoding.UTF8.GetBytes(modelSystem);
+            }
+            catch(Exception e)
+            {
+                error = "Failed when converting model system to bytes! + \r\n" + e.Message;
+                ms = null;
+                return false;
+            }
+            using var stream = new MemoryStream(converted);
             var header = ModelSystemHeader.CreateRunHeader(runtime);
             ms = Load(stream, runtime.Modules, header, ref error);
+            if(error is not null)
+            {
+                error = "Failed when running the Load method of the model system! \r\n" + error;
+            }
             return ms != null;
         }
 
@@ -299,7 +329,9 @@ namespace XTMF2
                 var modelSystem = new ModelSystem(modelSystemHeader);
                 using var stream = new MemoryStream();
                 rawStream.CopyTo(stream);
-                var reader = new Utf8JsonReader(stream.GetBuffer().AsSpan());
+                // Use only the bytes that were actually written (GetBuffer returns the full allocation
+                // which may be padded with null bytes — those would cause JSON parse errors).
+                var reader = new Utf8JsonReader(stream.GetBuffer().AsSpan(0, (int)stream.Length));
                 var typeLookup = new Dictionary<int, Type>();
                 var nodes = new Dictionary<int, Node>();
                 List<(Node toAssignTo, string parameterExpression)> scriptedParameters = new();
@@ -320,13 +352,15 @@ namespace XTMF2
                             {
                                 return null;
                             }
-                            break;
                         }
-                        else
+                        else if (reader.ValueTextEquals(VariablesProperty))
                         {
-                            error = $"Unknown token found '{reader.GetString()}'";
-                            return null;
+                            if (!LoadVariables(nodes, ref reader, modelSystem, ref error))
+                            {
+                                return null;
+                            }
                         }
+                        // Unknown properties are silently skipped for forward compatibility.
                     }
                 }
                 // Now that all of the modules have been loaded we can process the scripted parameters
@@ -354,6 +388,24 @@ namespace XTMF2
         {
             error = message;
             return false;
+        }
+
+        private static bool LoadVariables(Dictionary<int, Node> nodes, ref Utf8JsonReader reader, ModelSystem modelSystem, [NotNullWhen(false)] ref string? error)
+        {
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+            {
+                return FailWith(out error, "Expected an array when loading variables!");
+            }
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                if (reader.TokenType == JsonTokenType.Number)
+                {
+                    var idx = reader.GetInt32();
+                    if (nodes.TryGetValue(idx, out var node))
+                        modelSystem.Variables.Add(node);
+                }
+            }
+            return true;
         }
 
         private static bool LoadTypes(Dictionary<int, Type> typeLookup, ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error)

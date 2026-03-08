@@ -882,6 +882,11 @@ namespace XTMF2.Editing
                 foreach (var link in outgoingLinks)
                     boundary.RemoveLink(link, out _);
 
+                // Also remove from model system variables if present, capturing position for undo.
+                var variableIndex = ModelSystem.Variables.IndexOf(node);
+                if (variableIndex >= 0)
+                    ModelSystem.Variables.RemoveAt(variableIndex);
+
                 if (boundary.RemoveNode(node, out error))
                 {
                     Buffer.AddUndo(new Command(() =>
@@ -892,6 +897,11 @@ namespace XTMF2.Editing
                             foreach (var link in outgoingLinks)
                                 boundary.AddLink(link, out e);
                             RestoreIncoming();
+                            if (variableIndex >= 0)
+                            {
+                                var restoreIdx = Math.Min(variableIndex, ModelSystem.Variables.Count);
+                                ModelSystem.Variables.Insert(restoreIdx, node);
+                            }
                             return (true, null);
                         }
                         return (false, e);
@@ -901,16 +911,22 @@ namespace XTMF2.Editing
                         RemoveIncoming();
                         foreach (var link in outgoingLinks)
                             boundary.RemoveLink(link, out _);
+                        ModelSystem.Variables.Remove(node);
                         return (boundary.RemoveNode(node, out var e), e);
                     }));
                     return true;
                 }
                 else
                 {
-                    // Node removal failed; roll back the link removals.
+                    // Node removal failed; roll back the link removals (and variable removal).
                     foreach (var link in outgoingLinks)
                         boundary.AddLink(link, out _);
                     RestoreIncoming();
+                    if (variableIndex >= 0)
+                    {
+                        var restoreIdx = Math.Min(variableIndex, ModelSystem.Variables.Count);
+                        ModelSystem.Variables.Insert(restoreIdx, node);
+                    }
                     return false;
                 }
             }
@@ -1176,6 +1192,78 @@ namespace XTMF2.Editing
                 return false;
             }
         }     
+
+        /// <summary>
+        /// Add a node to the model system's variable list, making it available for use
+        /// in parameter expressions.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="node">The node to add as a variable.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
+        public bool AddVariable(User user, Node node, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(node);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (ModelSystem.Variables.Contains(node))
+                {
+                    error = new CommandError("The node is already a model system variable.");
+                    return false;
+                }
+                ModelSystem.Variables.Add(node);
+                Buffer.AddUndo(new Command(
+                    () => { ModelSystem.Variables.Remove(node); return (true, null); },
+                    () => { ModelSystem.Variables.Add(node);    return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Remove a node from the model system's variable list.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="node">The node to remove.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
+        public bool RemoveVariable(User user, Node node, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(node);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var idx = ModelSystem.Variables.IndexOf(node);
+                if (idx < 0)
+                {
+                    error = new CommandError("The node is not a model system variable.");
+                    return false;
+                }
+                ModelSystem.Variables.RemoveAt(idx);
+                Buffer.AddUndo(new Command(
+                    () => {
+                        var restoreIdx = Math.Min(idx, ModelSystem.Variables.Count);
+                        ModelSystem.Variables.Insert(restoreIdx, node);
+                        return (true, null);
+                    },
+                    () => { ModelSystem.Variables.Remove(node); return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
 
         /// <summary>
         /// Set the node to the disabled state.

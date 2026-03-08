@@ -939,6 +939,26 @@ public sealed class ModelSystemCanvas : Control
                 vm.SelectLinkCommand.Execute(link);
             _ = vm.DeleteSelectedCommand.ExecuteAsync(null);
         };
+
+        // ── Variable list management ──────────────────────────────────────
+        if (element is NodeViewModel paramNode && paramNode.IsParameterNode)
+        {
+            bool alreadyVar = vm.IsNodeInVariables(paramNode);
+            var varHeader = alreadyVar
+                ? "Remove from Model System Variables"
+                : "Add to Model System Variables";
+            var varItem = new MenuItem { Header = varHeader };
+            varItem.Click += (_, _) =>
+            {
+                if (vm.IsNodeInVariables(paramNode))
+                    _ = vm.RemoveNodeFromVariablesAsync(paramNode);
+                else
+                    _ = vm.AddNodeToVariablesAsync(paramNode);
+            };
+            menu.Items.Add(varItem);
+            menu.Items.Add(new Separator());
+        }
+
         menu.Items.Add(deleteItem);
 
         ContextMenu = menu;

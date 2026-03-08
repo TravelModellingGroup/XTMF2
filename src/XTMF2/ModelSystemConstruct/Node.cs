@@ -419,7 +419,7 @@ namespace XTMF2.ModelSystemConstruct
             bool disabled = false;
             Rectangle point = new Rectangle();
             string description = string.Empty;
-            ParameterExpression? basicParameter = null;
+            string? basicParameterValue = null;
             string? scriptedParameter = null;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
@@ -475,7 +475,7 @@ namespace XTMF2.ModelSystemConstruct
                 else if (reader.ValueTextEquals(ParameterProperty))
                 {
                     reader.Read();
-                    basicParameter = ParameterExpression.CreateParameter(reader.GetString() ?? string.Empty, typeof(string));
+                    basicParameterValue = reader.GetString() ?? string.Empty;
                 }
                 else if (reader.ValueTextEquals(ParameterExpressionProperty))
                 {
@@ -513,6 +513,9 @@ namespace XTMF2.ModelSystemConstruct
             {
                 return FailWith(out mss, out error, $"When trying to create a node {name} we were unable to find a hook for type {type.FullName}!");
             }
+            var basicParameter = basicParameterValue is not null ?
+                ParameterExpression.CreateParameter(basicParameterValue, type.GenericTypeArguments[0]) 
+                : null;
             mss = new Node(name, type, boundary, hooks, point)
             {
                 Location = point,
