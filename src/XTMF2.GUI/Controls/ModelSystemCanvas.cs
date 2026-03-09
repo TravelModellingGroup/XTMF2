@@ -90,6 +90,9 @@ public sealed class ModelSystemCanvas : Control
     // Minimize-to-inline button on BasicParameter nodes
     private static readonly IBrush MinimizeBtnBg        = new SolidColorBrush(Color.FromArgb(0x60, 0x88, 0xCC, 0x55));
     private static readonly IBrush MinimizeBtnText      = new SolidColorBrush(Color.FromRgb(0xCC, 0xFF, 0xAA));
+    // Rubber-band (Ctrl+drag) multi-selection rectangle
+    private static readonly IBrush SelectionRectFill = new SolidColorBrush(Color.FromArgb(0x2E, 0x44, 0x88, 0xFF));
+    private static readonly DashStyle SelectionRectDash = new DashStyle([5, 4], 0);
 
     // ── Drawing constants ─────────────────────────────────────────────────
     private const double NodeCornerRadius    = 4.0;
@@ -295,6 +298,21 @@ public sealed class ModelSystemCanvas : Control
     /// <summary>Hook dot under the right-button press, if any (may be set alongside <see cref="_rightClickElement"/>).</summary>
     private (NodeViewModel Node, NodeHook Hook)? _rightClickHookHit;
 
+    // ── Multi-selection set ───────────────────────────────────────────────
+    /// <summary>
+    /// All canvas elements currently in the extended multi-selection (each has
+    /// <see cref="ICanvasElement.IsSelected"/> = <c>true</c>).
+    /// </summary>
+    private readonly HashSet<ICanvasElement> _multiSelection = new();
+    /// <summary>Cursor model-coordinate recorded at the start of each group-drag frame, used to compute per-frame deltas.</summary>
+    private Point _groupDragLastPos;
+
+    // ── Rubber-band (Ctrl+drag) selection rectangle ───────────────────────
+    /// <summary>Model-coord anchor of the in-progress Ctrl+drag selection rect, or <c>null</c> when idle.</summary>
+    private Point? _selRectStart;
+    /// <summary>Model-coord live end-point of the Ctrl+drag selection rect.</summary>
+    private Point _selRectCurrent;
+
     // ── DataContext wiring ────────────────────────────────────────────────
     protected override void OnDataContextChanged(EventArgs e)
     {
@@ -444,6 +462,7 @@ public sealed class ModelSystemCanvas : Control
             RenderNodes(ctx);
             RenderStarts(ctx);
             RenderPendingLink(ctx);
+            RenderSelectionRect(ctx);
         }
     }
 
@@ -1189,6 +1208,11 @@ public sealed class ModelSystemCanvas : Control
             ApplyScale(1.0);
             e.Handled = true;
         }
+        if(e.Key == Key.Escape)
+        {
+            ClearMultiSelection();
+            e.Handled = true;
+        }
     }
 
     // ── Scaling helpers ───────────────────────────────────────────────────
@@ -1288,17 +1312,17 @@ public sealed class ModelSystemCanvas : Control
                              && point.Properties.IsLeftButtonPressed
                              && (e.KeyModifiers & KeyModifiers.Control) != 0;
 
-        // Both right-click and Ctrl+left-click begin a link-creation drag.
-        bool isLinkDrag = isRightButton || isCtrlLeft;
+        // Right-click begins a link-creation drag.  Ctrl+left-click is reserved for multi-selection.
+        bool isLinkDrag = isRightButton;
 
         // ── Resize handle press (left button) ────────────────────────────
-        if (!isLinkDrag)
+        if (!isLinkDrag && !isCtrlLeft)
         {
             var resizeHit = HitTestResizeHandle(mpos);
             if (resizeHit is not null)
             {
-                // If editing, commit before selecting/dragging anything else.
                 if (_editingParamNode is not null) CommitParamEdit();
+                ClearMultiSelection();
                 _resizing       = resizeHit;
                 _resizeStartPos = mpos;
                 _resizeStartW   = ElementRenderWidth(resizeHit);
@@ -1312,7 +1336,7 @@ public sealed class ModelSystemCanvas : Control
         }
 
         // ── Minimize-to-inline button (BasicParameter header top-left) ───
-        if (!isLinkDrag)
+        if (!isLinkDrag && !isCtrlLeft)
         {
             var minimizeHit = HitTestMinimizeButton(mpos);
             if (minimizeHit is not null)
@@ -1326,7 +1350,7 @@ public sealed class ModelSystemCanvas : Control
         }
 
         // ── Inline parameter value edit (single left click on param row) ──
-        if (!isLinkDrag)
+        if (!isLinkDrag && !isCtrlLeft)
         {
             // Regular parameter value row (node is visible on canvas).
             var paramRowHit = HitTestParamValueRow(mpos);
@@ -1352,7 +1376,7 @@ public sealed class ModelSystemCanvas : Control
         }
 
         // ── Hook toggle icon click (left button, any click count) ─────────
-        if (!isLinkDrag)
+        if (!isLinkDrag && !isCtrlLeft)
         {
             var toggleHit = HitTestHookToggleIcon(mpos);
             if (toggleHit is not null)
@@ -1365,7 +1389,7 @@ public sealed class ModelSystemCanvas : Control
         }
 
         // ── Double-click on a hook dot: create + auto-link a new node ─────
-        if (!isLinkDrag && e.ClickCount == 2)
+        if (!isLinkDrag && !isCtrlLeft && e.ClickCount == 2)
         {
             var hookHit = HitTestHook(mpos);
             if (hookHit is { } hh)
@@ -1385,7 +1409,8 @@ public sealed class ModelSystemCanvas : Control
             }
         }
 
-        ICanvasElement? hit = HitTest(mpos, testComments: !isLinkDrag);
+        // For right-click (link creation) we exclude comment blocks; for all other paths we include them.
+        ICanvasElement? hit = HitTest(mpos, testComments: !isRightButton);
 
         if (isLinkDrag)
         {
@@ -1414,12 +1439,69 @@ public sealed class ModelSystemCanvas : Control
             return;
         }
 
+        // ── Ctrl+left-click: multi-selection or rubber-band rectangle ─────
+        if (isCtrlLeft)
+        {
+            // Always commit any open inline edit first.
+            if (_editingParamNode is not null) CommitParamEdit();
+
+            if (hit is NodeViewModel or CommentBlockViewModel)
+            {
+                // On the very first Ctrl+click, absorb the existing primary selection into the set.
+                if (_multiSelection.Count == 0 && _vm.SelectedElement is not null
+                    && !ReferenceEquals(_vm.SelectedElement, hit))
+                {
+                    _multiSelection.Add(_vm.SelectedElement);
+                    // _vm.SelectedElement.IsSelected is already true — no change needed
+                }
+
+                if (_multiSelection.Contains(hit))
+                {
+                    // Toggle off: remove from multi-selection.
+                    _multiSelection.Remove(hit);
+                    hit.IsSelected = false;
+                    // If the deselected element was the primary, pick the next available.
+                    if (ReferenceEquals(_vm.SelectedElement, hit))
+                        _vm.SelectedElement = _multiSelection.FirstOrDefault();
+                }
+                else
+                {
+                    // Toggle on: add to multi-selection.
+                    _multiSelection.Add(hit);
+                    hit.IsSelected = true;
+                    // Reflect the most recently touched element in the property panel.
+                    _vm.SelectedElement = hit;
+                }
+                InvalidateVisual();
+            }
+            else
+            {
+                // Ctrl+drag on empty space → begin a rubber-band selection rectangle.
+                ClearMultiSelection();
+                _vm.SelectElementCommand.Execute(null);
+                _selRectStart   = mpos;
+                _selRectCurrent = mpos;
+                e.Pointer.Capture(this);
+            }
+
+            Focus();
+            e.Handled = true;
+            return;
+        }
+
         // ── Left button: normal select + drag ─────────────────────────────
         if (hit is not null)
         {
-            _vm.SelectElementCommand.Execute(hit);
-            _dragging   = hit;
-            _dragOffset = new Point(mpos.X - hit.X, mpos.Y - hit.Y);
+            bool hitIsInMultiSel = _multiSelection.Contains(hit);
+            if (!hitIsInMultiSel)
+            {
+                // Clicking an element that is not part of the current group resets the selection.
+                ClearMultiSelection();
+                _vm.SelectElementCommand.Execute(hit);
+            }
+            _dragging         = hit;
+            _dragOffset       = new Point(mpos.X - hit.X, mpos.Y - hit.Y);
+            _groupDragLastPos = mpos;
             e.Pointer.Capture(this);
         }
         else
@@ -1428,11 +1510,13 @@ public sealed class ModelSystemCanvas : Control
             var linkHit = HitTestLink(mpos);
             if (linkHit is not null)
             {
+                ClearMultiSelection();
                 _vm.SelectLinkCommand.Execute(linkHit);
             }
             else
             {
-                // Truly empty space — deselect and begin canvas pan.
+                // Truly empty space — deselect all and begin canvas pan.
+                ClearMultiSelection();
                 _vm.SelectElementCommand.Execute(null);
                 var sv = GetScrollViewer();
                 if (sv is not null)
@@ -1496,6 +1580,15 @@ public sealed class ModelSystemCanvas : Control
             return;
         }
 
+        // ── Rubber-band selection rectangle (Ctrl+drag on empty space) ────
+        if (_selRectStart is not null)
+        {
+            _selRectCurrent = mpos;
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
         // ── Cursor feedback while idle ────────────────────────────────────
         if (_dragging is null)
         {
@@ -1506,12 +1599,31 @@ public sealed class ModelSystemCanvas : Control
 
         if (_dragging is null) return;
 
-        var newX = Math.Max(0, mpos.X - _dragOffset.X);
-        var newY = Math.Max(0, mpos.Y - _dragOffset.Y);
-
-        if (_dragging is NodeViewModel         nvm) nvm.MoveTo(newX, newY);
-        if (_dragging is StartViewModel         svm) svm.MoveTo(newX, newY);
-        if (_dragging is CommentBlockViewModel  cvm) cvm.MoveTo(newX, newY);
+        // ── Element drag (single or group) ────────────────────────────────
+        if (_multiSelection.Count > 1 && _multiSelection.Contains(_dragging))
+        {
+            // Group drag: move every element in the multi-selection by the per-frame delta.
+            var dx = mpos.X - _groupDragLastPos.X;
+            var dy = mpos.Y - _groupDragLastPos.Y;
+            _groupDragLastPos = mpos;
+            foreach (var el in _multiSelection)
+            {
+                double nx = Math.Max(0, el.X + dx);
+                double ny = Math.Max(0, el.Y + dy);
+                if      (el is NodeViewModel       gnvm) gnvm.MoveTo(nx, ny);
+                else if (el is StartViewModel       gsvm) gsvm.MoveTo(nx, ny);
+                else if (el is CommentBlockViewModel gcvm) gcvm.MoveTo(nx, ny);
+            }
+        }
+        else
+        {
+            // Single-element drag.
+            var newX = Math.Max(0, mpos.X - _dragOffset.X);
+            var newY = Math.Max(0, mpos.Y - _dragOffset.Y);
+            if (_dragging is NodeViewModel         nvm) nvm.MoveTo(newX, newY);
+            if (_dragging is StartViewModel         svm) svm.MoveTo(newX, newY);
+            if (_dragging is CommentBlockViewModel  cvm) cvm.MoveTo(newX, newY);
+        }
 
         InvalidateAndMeasure();
         e.Handled = true;
@@ -1579,6 +1691,46 @@ public sealed class ModelSystemCanvas : Control
             _panning = false;
             e.Pointer.Capture(null);
             Cursor = Cursor.Default;
+            e.Handled = true;
+            return;
+        }
+
+        // ── Left-button release: finalize rubber-band selection ───────────
+        if (_selRectStart is not null)
+        {
+            var finalRect = NormalizeRect(_selRectStart.Value, _selRectCurrent);
+            _selRectStart = null;
+            e.Pointer.Capture(null);
+
+            if (_vm is not null && (finalRect.Width > 2 || finalRect.Height > 2))
+            {
+                ICanvasElement? firstHit = null;
+                foreach (var node in _vm.Nodes)
+                {
+                    if (node.IsInlined) continue;
+                    var nr = new Rect(node.X, node.Y, NodeRenderWidth(node), NodeRenderHeight(node));
+                    if (finalRect.Intersects(nr))
+                    {
+                        _multiSelection.Add(node);
+                        node.IsSelected = true;
+                        firstHit ??= node;
+                    }
+                }
+                foreach (var comment in _vm.CommentBlocks)
+                {
+                    var cr = new Rect(comment.X, comment.Y, comment.Width, comment.Height);
+                    if (finalRect.Intersects(cr))
+                    {
+                        _multiSelection.Add(comment);
+                        comment.IsSelected = true;
+                        firstHit ??= comment;
+                    }
+                }
+                if (firstHit is not null)
+                    _vm.SelectedElement = firstHit;
+            }
+
+            InvalidateVisual();
             e.Handled = true;
             return;
         }
@@ -1967,5 +2119,40 @@ public sealed class ModelSystemCanvas : Control
         }
 
         return null;
+    }
+
+    // ── Multi-selection helpers ────────────────────────────────────────────────
+    /// <summary>
+    /// Clears the multi-selection set, restoring <see cref="ICanvasElement.IsSelected"/> to
+    /// <c>false</c> on every element that was in the set.
+    /// Call this before initiating a new single-element or empty-space selection.
+    /// </summary>
+    private void ClearMultiSelection()
+    {
+        foreach (var el in _multiSelection)
+            el.IsSelected = false;
+        _multiSelection.Clear();
+        _vm?.SelectedElement = null;
+    }
+
+    /// <summary>Returns a <see cref="Rect"/> that always has non-negative width and height,
+    /// regardless of the relative order of <paramref name="p1"/> and <paramref name="p2"/>.</summary>
+    private static Rect NormalizeRect(Point p1, Point p2) =>
+        new Rect(
+            Math.Min(p1.X, p2.X), Math.Min(p1.Y, p2.Y),
+            Math.Abs(p2.X - p1.X), Math.Abs(p2.Y - p1.Y));
+
+    /// <summary>
+    /// Draws the in-progress rubber-band selection rectangle (Ctrl+drag).
+    /// Uses a dashed blue outline with a semi-transparent fill tint.
+    /// Must be called inside a <see cref="DrawingContext.PushTransform"/> that maps model coords to
+    /// screen coords (i.e. the existing scale transform in <see cref="Render"/>).
+    /// </summary>
+    private void RenderSelectionRect(DrawingContext ctx)
+    {
+        if (_selRectStart is not { } start) return;
+        var rect = NormalizeRect(start, _selRectCurrent);
+        var pen  = new Pen(Brushes.CornflowerBlue, 1.5 / _scale, SelectionRectDash);
+        ctx.DrawRectangle(SelectionRectFill, pen, rect, 2 / _scale, 2 / _scale);
     }
 }
