@@ -22,6 +22,7 @@ using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using XTMF2.GUI.Controls;
 
 namespace XTMF2.GUI.Views;
 
@@ -135,7 +136,8 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
             ? (System.Collections.Generic.IEnumerable<Type>)_allTypes
             : _allTypes.Where(t =>
                 (t?.Name     ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                (t?.FullName ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase));
+                (t?.FullName ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                FriendlyTypeNameConverter.GetFriendlyName(t!).Contains(filter, StringComparison.OrdinalIgnoreCase));
 
         FilteredTypes = new ObservableCollection<Type>(source);
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasNoResults)));

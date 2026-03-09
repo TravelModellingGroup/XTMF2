@@ -367,7 +367,7 @@ namespace XTMF2.UnitTests
             try
             {
                 string errorString = null;
-                Assert.IsTrue(XTMF2.Bus.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, ref errorString,
+                Assert.IsTrue(XTMF2.Bus.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, out errorString,
                 () =>
                 {
                     if (startClientProcess)

@@ -23,6 +23,7 @@ using System.Text.Json;
 using System.Collections.ObjectModel;
 using System.Linq;
 using XTMF2.Editing;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -45,16 +46,17 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         public ReadOnlyObservableCollection<Node> Destinations => _destinationsView;
 
-        internal bool AddDestination(Node destination, out CommandError? error)
+        internal bool AddDestination(Node destination, [NotNullWhen(false)] out CommandError? error)
         {
             _Destinations.Add(destination);
             error = null;
             return true;
         }
 
-        internal bool AddDestination(Node destination, int index)
+        internal bool AddDestination(Node destination, int index, [NotNullWhen(false)] out CommandError? error)
         {
             _Destinations.Insert(index, destination);
+            error = null;   
             return true;
         }
 

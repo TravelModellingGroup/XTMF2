@@ -30,31 +30,34 @@ public partial class ModelSystemEditorView : UserControl
     private ModelSystemEditorViewModel? _vm;
 
     // ── Destination list drag-and-drop state ────────────────────────────
-    private int    _destDragIndex      = -1;   // index captured on pointer-press
-    private int    _destActiveDragFrom = -1;   // index that is currently being dragged
-    private bool   _destDragging       = false;
-    private double _destDragStartY     = 0;   // Y position at press, used for threshold
+    private int _destDragIndex = -1;   // index captured on pointer-press
+    private int _destActiveDragFrom = -1;   // index that is currently being dragged
+    private bool _destDragging = false;
+    private double _destDragStartY = 0;   // Y position at press, used for threshold
     private const double DestDragThreshold = 5.0;
 
     public ModelSystemEditorView()
     {
         InitializeComponent();
-        DataContextChanged    += OnDataContextChanged;
-        AttachedToVisualTree  += OnAttachedToVisualTree;
+        DataContextChanged += OnDataContextChanged;
+        AttachedToVisualTree += OnAttachedToVisualTree;
 
         // Pressing Enter in the name box commits the rename without requiring the Rename button.
         NameEditBox.KeyDown += OnNameEditBoxKeyDown;
+
+        // Pressing Enter in the parameter value box commits the value.
+        ParameterValueEditBox.KeyDown += OnParameterValueEditBoxKeyDown;
 
         // F2 anywhere in this view focuses the rename box (when an element is selected).
         KeyDown += OnViewKeyDown;
 
         // Enter in the node search box picks the first match and returns focus to the canvas.
-        NodeSearchBox.KeyDown        += OnNodeSearchBoxKeyDown;
+        NodeSearchBox.KeyDown += OnNodeSearchBoxKeyDown;
         NodeSearchBox.DropDownClosed += OnNodeSearchBoxDropDownClosed;
 
         // Destination list drag-and-drop for re-ordering MultiLink destinations.
-        DestinationListBox.PointerPressed  += OnDestListPointerPressed;
-        DestinationListBox.PointerMoved    += OnDestListPointerMoved;
+        DestinationListBox.PointerPressed += OnDestListPointerPressed;
+        DestinationListBox.PointerMoved += OnDestListPointerMoved;
         DestinationListBox.PointerReleased += OnDestListPointerReleased;
 
         // Double-tap a destination entry to navigate the canvas to that node.
@@ -83,12 +86,23 @@ public partial class ModelSystemEditorView : UserControl
             NodeSearchBox.Focus();
             e.Handled = true;
         }
+        else if (e.Key == Key.F5)
+        {
+            _vm?.RunModelSystemCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     private void OnNameEditBoxKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter)
             _vm?.CommitRenameCommand.Execute(null);
+    }
+
+    private void OnParameterValueEditBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+            _vm?.CommitParameterValueCommand.Execute(null);
     }
 
     private void OnAttachedToVisualTree(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
@@ -103,7 +117,7 @@ public partial class ModelSystemEditorView : UserControl
         // Unsubscribe from the old VM.
         if (_vm is not null)
         {
-            _vm.PropertyChanged       -= OnVmPropertyChanged;
+            _vm.PropertyChanged -= OnVmPropertyChanged;
             _vm.ScrollToNodeRequested -= OnScrollToNodeRequested;
         }
 
@@ -113,7 +127,7 @@ public partial class ModelSystemEditorView : UserControl
         if (_vm is not null)
         {
             _vm.ParentWindow = TopLevel.GetTopLevel(this) as Window;
-            _vm.PropertyChanged       += OnVmPropertyChanged;
+            _vm.PropertyChanged += OnVmPropertyChanged;
             _vm.ScrollToNodeRequested += OnScrollToNodeRequested;
         }
     }
@@ -121,8 +135,8 @@ public partial class ModelSystemEditorView : UserControl
     private void OnScrollToNodeRequested(NodeViewModel node)
     {
         var viewport = CanvasScrollViewer.Viewport;
-        var offsetX  = node.X + node.Width  / 2.0 - viewport.Width  / 2.0;
-        var offsetY  = node.Y + node.Height / 2.0 - viewport.Height / 2.0;
+        var offsetX = node.X + node.Width / 2.0 - viewport.Width / 2.0;
+        var offsetY = node.Y + node.Height / 2.0 - viewport.Height / 2.0;
         CanvasScrollViewer.Offset = new Avalonia.Vector(
             Math.Max(0, offsetX),
             Math.Max(0, offsetY));
@@ -197,11 +211,11 @@ public partial class ModelSystemEditorView : UserControl
 
     private void OnDestListPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        _destDragging       = false;
+        _destDragging = false;
         _destActiveDragFrom = -1;
         if (e.Source is Control src && src.DataContext is LinkDestinationViewModel item)
         {
-            _destDragIndex  = _vm?.SelectedLinkDestinationEntries.IndexOf(item) ?? -1;
+            _destDragIndex = _vm?.SelectedLinkDestinationEntries.IndexOf(item) ?? -1;
             _destDragStartY = e.GetPosition(DestinationListBox).Y;
             if (_destDragIndex >= 0)
                 e.Pointer.Capture(DestinationListBox);
@@ -228,7 +242,7 @@ public partial class ModelSystemEditorView : UserControl
         {
             if (Math.Abs(pt.Position.Y - _destDragStartY) < DestDragThreshold)
                 return;
-            _destDragging       = true;
+            _destDragging = true;
             _destActiveDragFrom = _destDragIndex;
         }
 
@@ -243,12 +257,12 @@ public partial class ModelSystemEditorView : UserControl
         if (!_destDragging || _destActiveDragFrom < 0)
         {
             _destDragIndex = -1;
-            _destDragging  = false;
+            _destDragging = false;
             return;
         }
 
-        var fromIndex       = _destActiveDragFrom;
-        var insertBefore    = GetDropInsertIndex(e.GetPosition(DestinationListBox));
+        var fromIndex = _destActiveDragFrom;
+        var insertBefore = GetDropInsertIndex(e.GetPosition(DestinationListBox));
 
         // MoveDestination(from, to) removes the item first then inserts at 'to', so the
         // effective target index shifts by -1 whenever the source was before the insert point.
@@ -258,8 +272,8 @@ public partial class ModelSystemEditorView : UserControl
         if (_vm is not null && fromIndex != toIndex)
             _vm.MoveLinkDestination(fromIndex, toIndex);
 
-        _destDragIndex      = -1;
-        _destDragging       = false;
+        _destDragIndex = -1;
+        _destDragging = false;
         _destActiveDragFrom = -1;
     }
 
@@ -298,7 +312,7 @@ public partial class ModelSystemEditorView : UserControl
 
         if (indicatorY is null) return;
 
-        DestDropIndicator.Width     = DestinationListBox.Bounds.Width;
+        DestDropIndicator.Width = DestinationListBox.Bounds.Width;
         Avalonia.Controls.Canvas.SetTop(DestDropIndicator, indicatorY.Value - 1);
         DestDropIndicator.IsVisible = true;
     }

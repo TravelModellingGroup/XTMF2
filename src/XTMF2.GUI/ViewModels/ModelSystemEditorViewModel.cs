@@ -30,9 +30,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XTMF2;
 using XTMF2.Editing;
+using XTMF2.GUI.Controls;
 using XTMF2.GUI.Resources;
 using XTMF2.GUI.Views;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -47,6 +49,22 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     // ── Session / model ────────────────────────────────────────────────────
     /// <summary>The active editing session for the model system.</summary>
     public ModelSystemSession Session { get; }
+
+    // ── Run support ───────────────────────────────────────────────────────
+    /// <summary>
+    /// Optional run controller used to submit model system runs.
+    /// When null the Run button is disabled.
+    /// </summary>
+    private readonly RunController? _runController;
+
+    /// <summary>True when a <see cref="RunController"/> is available.</summary>
+    public bool CanRun => _runController is not null;
+
+    /// <summary>
+    /// Optional callback invoked on the UI thread after a run is successfully submitted.
+    /// Set by <see cref="MainWindow"/> to switch the active document to the Runs view.
+    /// </summary>
+    public Action? RunStarted { get; set; }
 
     /// <summary>The user who owns this editing session.</summary>
     public User User { get; }
@@ -104,6 +122,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     /// <summary>Observable wrappers around <see cref="Boundary.CommentBlocks"/>.</summary>
     public ObservableCollection<CommentBlockViewModel> CommentBlocks { get; } = new();
+
+    /// <summary>Observable view-models for the model system's variable list.</summary>
+    public ObservableCollection<ModelSystemVariableViewModel> ModelSystemVariables { get; } = new();
 
     /// <summary>The currently selected link, if any. Mutually exclusive with <see cref="SelectedElement"/>.</summary>
     [ObservableProperty]
@@ -168,6 +189,20 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public bool SelectedElementIsNode => SelectedElement is NodeViewModel;
 
     /// <summary>
+    /// True when the selected node is a BasicParameter or ScriptedParameter,
+    /// used to gate the parameter value editor in the property panel.
+    /// </summary>
+    public bool SelectedElementIsParameter
+        => SelectedElement is NodeViewModel pnvm && pnvm.IsParameterNode;
+
+    /// <summary>
+    /// Mutable copy of the selected parameter node's current value string,
+    /// bound two-way to the parameter value text box.
+    /// </summary>
+    [ObservableProperty]
+    private string _selectedElementParameterValue = string.Empty;
+
+    /// <summary>
     /// Human-readable type string shown in the property panel's "Type:" row.
     /// Automatically updates when the node's type changes.
     /// </summary>
@@ -207,12 +242,22 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         OnPropertyChanged(nameof(SelectedElementFieldLabel));
         OnPropertyChanged(nameof(SelectedElementTypeName));
         OnPropertyChanged(nameof(SelectedElementIsNode));
+        OnPropertyChanged(nameof(SelectedElementIsParameter));
+        SelectedElementParameterValue =
+            value is NodeViewModel pnvm && pnvm.IsParameterNode
+                ? pnvm.ParameterValueRepresentation
+                : string.Empty;
     }
 
     private void OnSelectedElementPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(NodeViewModel.TypeName))
             OnPropertyChanged(nameof(SelectedElementTypeName));
+        if (e.PropertyName == nameof(NodeViewModel.ParameterValueRepresentation))
+        {
+            if (SelectedElement is NodeViewModel nvm && nvm.IsParameterNode)
+                SelectedElementParameterValue = nvm.ParameterValueRepresentation;
+        }
     }
 
     // ── Parent window reference (set by the view) ─────────────────────────
@@ -243,18 +288,24 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     private const float PlacementStep = 80f;
 
     // =====================================================================
-    public ModelSystemEditorViewModel(ModelSystemSession session, User user)
+    public ModelSystemEditorViewModel(ModelSystemSession session, User user, RunController? runController = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(user);
         Session = session;
         User = user;
+        _runController = runController;
 
         // Build initial VM collections from the active boundary.
         _currentBoundary = GlobalBoundary;
         BuildFromBoundary(_currentBoundary);
         SubscribeToBoundary(_currentBoundary);
         RebuildBoundaryNavItems();
+
+        // Build the variables collection and keep it in sync.
+        SyncModelSystemVariables();
+        ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.Variables)
+            .CollectionChanged += OnModelSystemVariablesChanged;
     }
 
     // ── Collection sync ───────────────────────────────────────────────────
@@ -527,7 +578,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
 
         var location = NextPlacement(Nodes.Count);
-        Session.AddNode(User, _currentBoundary, name, selectedType, location, out _, out _);
+        Session.AddNodeGenerateParameters(User, _currentBoundary, name, selectedType, location, out _, out _, out _);
         // The ObservableCollection event from the boundary automatically adds the NodeViewModel.
     }
 
@@ -566,8 +617,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             : hook.Type;
 
         // Build a filtered, read-only collection of compatible types.
+        // This includes both closed registered types and constructions of open-generic
+        // module types (e.g. BasicParameter<bool> for an IFunction<bool> hook).
         var compatibleList = new ObservableCollection<Type>(
-            Session.LoadedModuleTypes.Where(t => hookElementType.IsAssignableFrom(t)));
+            Session.GetCompatibleModuleTypes(hookElementType).Distinct());
         var filteredTypes = new ReadOnlyObservableCollection<Type>(compatibleList);
 
         if (filteredTypes.Count == 0)
@@ -603,7 +656,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             (float)hookAnchorY - NodePlacementOffsetY,
             120f, 50f);
 
-        if (!Session.AddNode(User, _currentBoundary, name, selectedType, location, out var newNode, out var nodeError))
+        if (!Session.AddNodeGenerateParameters(User, _currentBoundary, name, selectedType, location, out var newNode, out _, out var nodeError))
         {
             await ShowError("Add Module Failed", nodeError);
             return;
@@ -696,6 +749,153 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // On success the boundary CollectionChanged fires and TryAddLinkViewModel wires up the new link.
     }
 
+    /// <summary>
+    /// Apply the value in <see cref="SelectedElementParameterValue"/> to the
+    /// selected BasicParameter / ScriptedParameter node.
+    /// </summary>
+    [RelayCommand]
+    private void CommitParameterValue()
+    {
+        if (SelectedElement is not NodeViewModel nvm) return;
+        if (!Session.SetParameterValue(User, nvm.UnderlyingNode,
+                SelectedElementParameterValue, out var error))
+            ShowToast(error?.Message ?? "Failed to set parameter value.",
+                      isError: true, durationMs: 5000);
+    }
+
+    /// <summary>
+    /// Opens the parameter editor dialog for a BasicParameter or ScriptedParameter node,
+    /// allowing the user to set the value and optionally switch between Basic and Scripted modes.
+    /// </summary>
+    public async Task EditParameterNodeAsync(NodeViewModel nvm)
+    {
+        if (ParentWindow is null) return;
+
+        var node      = nvm.UnderlyingNode;
+        var nodeType  = node.Type;
+        if (nodeType is null) return;
+
+        // Determine the inner type T from BasicParameter<T> / ScriptedParameter<T>
+        var innerType = nodeType.GetGenericArguments().FirstOrDefault();
+        if (innerType is null) return;
+
+        var innerTypeName      = FriendlyTypeNameConverter.GetFriendlyName(innerType);
+        var currentValue       = node.ParameterValue?.Representation ?? string.Empty;
+        var isCurrentlyScripted =
+            nodeType.IsGenericType &&
+            nodeType.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
+
+        // Basic validator: use ArbitraryParameterParser
+        string? BasicValidator(string v)
+        {
+            string? err = null;
+            return ArbitraryParameterParser.Check(innerType, v, ref err) ? null : (err ?? $"'{v}' is not valid for type {innerTypeName}.");
+        }
+
+        // Scripted validator: accept any non-empty text; the session will catch compile errors.
+        string? ScriptedValidator(string v) =>
+            string.IsNullOrWhiteSpace(v) ? "Expression cannot be empty." : null;
+
+        var dialog = new ParameterEditorDialog(
+            innerTypeName:      innerTypeName,
+            currentValue:       currentValue,
+            isCurrentlyScripted: isCurrentlyScripted,
+            basicValidator:     BasicValidator,
+            scriptedValidator:  ScriptedValidator);
+
+        await dialog.ShowDialog(ParentWindow);
+
+        if (dialog.WasCancelled) return;
+
+        if (dialog.ResultIsScripted)
+        {
+            if (!Session.SetParameterExpression(User, node, dialog.ResultValue, out var error))
+                await ShowError("Set Expression Failed", error);
+        }
+        else
+        {
+            if (!Session.SetParameterValue(User, node, dialog.ResultValue, out var error))
+                await ShowError("Set Value Failed", error);
+        }
+    }
+
+    // ── Model system variables ────────────────────────────────────────────
+
+    /// <summary>Returns true when <paramref name="nvm"/> is in the model system variable list.</summary>
+    public bool IsNodeInVariables(NodeViewModel nvm) =>
+        Session.ModelSystem.Variables.Contains(nvm.UnderlyingNode);
+
+    /// <summary>True when the model system variable list is empty (drives the empty-state label).</summary>
+    public bool HasNoModelSystemVariables => ModelSystemVariables.Count == 0;
+
+    /// <summary>
+    /// Adds the given parameter node to the model system's variable list.
+    /// Called from the canvas context menu.
+    /// </summary>
+    public async Task AddNodeToVariablesAsync(NodeViewModel nvm)
+    {
+        if (!Session.AddVariable(User, nvm.UnderlyingNode, out var error))
+            await ShowError("Add Variable Failed", error);
+    }
+
+    /// <summary>
+    /// Removes the given parameter node from the model system's variable list.
+    /// Called from the canvas context menu.
+    /// </summary>
+    public async Task RemoveNodeFromVariablesAsync(NodeViewModel nvm)
+    {
+        if (!Session.RemoveVariable(User, nvm.UnderlyingNode, out var error))
+            await ShowError("Remove Variable Failed", error);
+    }
+
+    /// <summary>
+    /// Removes the given variable entry from the model system's variable list.
+    /// Bound to the "Remove" button in the variables panel.
+    /// </summary>
+    [RelayCommand]
+    private async Task RemoveVariableNode(ModelSystemVariableViewModel varVm)
+    {
+        if (!Session.RemoveVariable(User, varVm.UnderlyingNode, out var error))
+            await ShowError("Remove Variable Failed", error);
+    }
+
+    /// <summary>
+    /// Navigates to the boundary containing the variable's node and selects it.
+    /// Bound to the "Go To" button in the variables panel.
+    /// </summary>
+    [RelayCommand]
+    private void GoToVariableNode(ModelSystemVariableViewModel varVm)
+    {
+        var targetBoundary = varVm.UnderlyingNode.ContainedWithin;
+        if (targetBoundary is not null)
+            SwitchToBoundary(targetBoundary);
+
+        // Find the NodeViewModel for this node in the current boundary's Nodes collection.
+        var nvm = Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, varVm.UnderlyingNode));
+        if (nvm is not null)
+        {
+            SelectElement(nvm);
+            ScrollToNodeRequested?.Invoke(nvm);
+        }
+    }
+
+    /// <summary>Rebuilds <see cref="ModelSystemVariables"/> from the current Variables list.</summary>
+    private void SyncModelSystemVariables()
+    {
+        foreach (var old in ModelSystemVariables) old.Detach();
+        ModelSystemVariables.Clear();
+        foreach (var node in Session.ModelSystem.Variables)
+            ModelSystemVariables.Add(new ModelSystemVariableViewModel(node));
+    }
+
+    private void OnModelSystemVariablesChanged(object? sender,
+        System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        // Full rebuild keeps the code simple; the list is expected to be small.
+        SyncModelSystemVariables();
+        OnPropertyChanged(nameof(HasNoModelSystemVariables));
+    }
+
     /// <summary>Commit the name/comment currently in <see cref="SelectedElementEditName"/> back to the model.</summary>
     [RelayCommand]
     private async Task CommitRename()
@@ -748,6 +948,65 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Session.AddCommentBlock(User, _currentBoundary, $"Comment {++_commentCounter}", location, out _, out _);
     }
 
+    /// <summary>
+    /// Prompts for a run name and start to execute, then submits the run to the
+    /// <see cref="RunController"/>.
+    /// </summary>
+    [RelayCommand]
+    private async Task RunModelSystem()
+    {
+        if (ParentWindow is null || _runController is null) return;
+
+        // Collect available starts from the global boundary.
+        var availableStarts = Session.ModelSystem.GlobalBoundary.Starts.ToList();
+        if (availableStarts.Count == 0)
+        {
+            ShowToast("No starts are defined in this model system.", isError: true, durationMs: 5000);
+            return;
+        }
+
+        // Prompt for the run name.
+        var defaultRunName = $"{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var runNameDialog = new InputDialog(
+            title: "Run Model System",
+            prompt: "Enter a name for this run:",
+            defaultText: defaultRunName);
+        await runNameDialog.ShowDialog(ParentWindow);
+        if (runNameDialog.WasCancelled) return;
+        var runName = runNameDialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(runName)) return;
+
+        // Determine which start to execute.
+        string startToExecute;
+        if (availableStarts.Count == 1)
+        {
+            startToExecute = availableStarts[0].Name;
+        }
+        else
+        {
+            // Multiple starts: ask the user to type the start name (listing the options).
+            var startList = string.Join(", ", availableStarts.Select(s => s.Name));
+            var startDialog = new InputDialog(
+                title: "Select Start",
+                prompt: $"Available starts: {startList}\nEnter the start to execute:",
+                defaultText: availableStarts[0].Name);
+            await startDialog.ShowDialog(ParentWindow);
+            if (startDialog.WasCancelled) return;
+            startToExecute = startDialog.InputText?.Trim() ?? availableStarts[0].Name;
+            if (string.IsNullOrEmpty(startToExecute)) return;
+        }
+
+        var project = Session.Project;
+        if (!_runController.SendRun(project, Session, startToExecute, runName, out _, out var runError))
+        {
+            ShowToast($"Failed to start run: {runError?.Message}", isError: true, durationMs: 6000);
+            return;
+        }
+
+        ShowToast($"Run '{runName}' started.", durationMs: 3000);
+        RunStarted?.Invoke();
+    }
+
     /// <summary>Save the model system to its project file.</summary>
     [RelayCommand]
     private async Task SaveModelSystem()
@@ -787,8 +1046,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         if (file is null) return;
 
-        await using var stream = await file.OpenWriteAsync();
-        if (!Session.Save(out var error, stream)) await ShowError("Export Failed", error);
+        if(!Session.ExportModelSystem(User, file.Path.AbsolutePath, out var error))
+        {
+            await ShowError("Export Failed", error);
+        }
     }
 
     /// <summary>
@@ -848,7 +1109,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// Display a toast message that automatically dismisses after <paramref name="durationMs"/> ms.
     /// Calling this again before the previous toast has dismissed resets the timer.
     /// </summary>
-    private void ShowToast(string message, bool isError = false, int durationMs = 3000)
+    internal void ShowToast(string message, bool isError = false, int durationMs = 3000)
     {
         // Cancel any existing dismiss timer.
         _toastCts?.Cancel();
@@ -1070,6 +1331,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (_disposed) return;
         _disposed = true;
+
+        ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.Variables)
+            .CollectionChanged -= OnModelSystemVariablesChanged;
+
+        foreach (var varVm in ModelSystemVariables) varVm.Detach();
 
         UnsubscribeFromBoundary(_currentBoundary);
 

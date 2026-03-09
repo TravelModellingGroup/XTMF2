@@ -35,9 +35,14 @@ namespace XTMF2.Editing
 
         private readonly ProjectSession _session;
 
-        private readonly object _sessionLock = new object();
+        private readonly Lock _sessionLock = new ();
 
         public ModelSystemHeader ModelSystemHeader { get; private set; }
+
+        /// <summary>
+        /// The project that this model system session belongs to.
+        /// </summary>
+        public Project Project => _session.Project;
 
         private readonly CommandBuffer Buffer = new CommandBuffer();
 
@@ -66,6 +71,27 @@ namespace XTMF2.Editing
             => GetModuleRepository().LoadedModuleTypes;
 
         /// <summary>
+        /// Snapshot of open-generic module types registered in the runtime (e.g.
+        /// <c>BasicParameter&lt;&gt;</c>).  Use <see cref="GetCompatibleModuleTypes"/> to
+        /// obtain the full set of types (closed + constructed) that satisfy a specific hook.
+        /// </summary>
+        public System.Collections.Generic.IReadOnlyList<Type> OpenGenericModuleTypes
+            => GetModuleRepository().OpenGenericModuleTypes;
+
+        /// <summary>
+        /// Returns every module type that is compatible with <paramref name="hookType"/>:
+        /// closed types already in <see cref="LoadedModuleTypes"/> that are directly assignable,
+        /// plus any closed generics that can be constructed from open-generic module types.
+        /// </summary>
+        public System.Collections.Generic.IEnumerable<Type> GetCompatibleModuleTypes(Type hookType)
+        {
+            var repo = GetModuleRepository();
+            return repo.LoadedModuleTypes
+                       .Where(t => hookType.IsAssignableFrom(t))
+                       .Concat(repo.GetCompatibleConstructedTypes(hookType));
+        }
+
+        /// <summary>
         /// Change the type of an existing node, with full undo/redo support.
         /// </summary>
         /// <param name="user">The user issuing the command.</param>
@@ -73,7 +99,7 @@ namespace XTMF2.Editing
         /// <param name="type">The new module type.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeded, false with a message otherwise.</returns>
-        public bool SetNodeType(User user, Node node, Type type, out CommandError? error)
+        public bool SetNodeType(User user, Node node, Type type, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(node);
@@ -117,7 +143,7 @@ namespace XTMF2.Editing
         /// <param name="name">The new name to assign to the boundary, must be unique.</param>
         /// <param name="error">An error message if the operation fails with the reason why.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
-        public bool SetBoundaryName(User user, Boundary boundary, string name, out CommandError? error)
+        public bool SetBoundaryName(User user, Boundary boundary, string name, [NotNullWhen(false)] out CommandError? error)
         {
             error = null;
             ArgumentNullException.ThrowIfNull(user);
@@ -159,7 +185,7 @@ namespace XTMF2.Editing
         /// <param name="description">The new description to assign to the boundary.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
-        public bool SetBoundaryDescription(User user, Boundary boundary, string description, out CommandError? error)
+        public bool SetBoundaryDescription(User user, Boundary boundary, string description, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
@@ -196,7 +222,7 @@ namespace XTMF2.Editing
         /// <param name="boundary">The resulting boundary</param>
         /// <param name="error">An error message if the operation fails</param>
         /// <returns>True if the operation works, false otherwise with an error message.</returns>
-        public bool AddBoundary(User user, Boundary parentBoundary, string name, out Boundary? boundary, out CommandError? error)
+        public bool AddBoundary(User user, Boundary parentBoundary, string name, out Boundary? boundary, [NotNullWhen(false)] out CommandError? error)
         {
             boundary = null;
             ArgumentNullException.ThrowIfNull(user);
@@ -239,7 +265,7 @@ namespace XTMF2.Editing
         /// <param name="error">The error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
         public bool AddCommentBlock(User user, Boundary boundary, string comment, Rectangle location, out CommentBlock? block,
-            out CommandError? error)
+            [NotNullWhen(false)] out CommandError? error)
         {
             block = null;
             ArgumentNullException.ThrowIfNull(user);
@@ -289,7 +315,7 @@ namespace XTMF2.Editing
         /// <param name="block">The comment block to remove.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
-        public bool RemoveCommentBlock(User user, Boundary boundary, CommentBlock block, out CommandError? error)
+        public bool RemoveCommentBlock(User user, Boundary boundary, CommentBlock block, [NotNullWhen(false)]out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
@@ -325,7 +351,7 @@ namespace XTMF2.Editing
         /// <param name="newLocation">The location to set the comment block to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SetCommentBlockLocation(User user, CommentBlock commentBlock, Rectangle newLocation, out CommandError? error)
+        public bool SetCommentBlockLocation(User user, CommentBlock commentBlock, Rectangle newLocation, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(commentBlock);
@@ -361,7 +387,7 @@ namespace XTMF2.Editing
         /// <param name="newText">The new text to set.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SetCommentBlockText(User user, CommentBlock commentBlock, string newText, out CommandError? error)
+        public bool SetCommentBlockText(User user, CommentBlock commentBlock, string newText, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(commentBlock);
@@ -402,7 +428,7 @@ namespace XTMF2.Editing
         /// <param name="boundary">The boundary to remove</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false with an error message otherwise.</returns>
-        public bool RemoveBoundary(User user, Boundary parentBoundary, Boundary boundary, out CommandError? error)
+        public bool RemoveBoundary(User user, Boundary parentBoundary, Boundary boundary, [NotNullWhen(false)]out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(parentBoundary);
@@ -435,7 +461,7 @@ namespace XTMF2.Editing
                             multiLinkHelper[ml] = list;
                         }
                     }
-                    bool RemoveLinks(out CommandError? error2)
+                    bool RemoveLinks([NotNullWhen(false)] out CommandError? error2)
                     {
                         foreach (var link in linksGoingToRemovedBoundary)
                         {
@@ -481,7 +507,10 @@ namespace XTMF2.Editing
                                     var list = multiLinkHelper[ml];
                                     foreach (var (Index, MSS) in list)
                                     {
-                                        ml.AddDestination(MSS, Index);
+                                        if(!ml.AddDestination(MSS, Index, out e))
+                                        {                                            
+                                            return (false, e);
+                                        }
                                     }
                                 }
                             }
@@ -499,6 +528,7 @@ namespace XTMF2.Editing
                     return true;
                 }
             }
+            error = new CommandError("Failed to remove the boundary.");
             return false;
         }
 
@@ -511,7 +541,7 @@ namespace XTMF2.Editing
         /// <param name="start">The newly created start node</param>
         /// <param name="error">A message describing why the start node was rejected.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
-        public bool AddModelSystemStart(User user, Boundary boundary, string startName, Rectangle location, out Start? start, out CommandError? error)
+        public bool AddModelSystemStart(User user, Boundary boundary, string startName, Rectangle location, out Start? start, [NotNullWhen(false)]out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
@@ -558,7 +588,7 @@ namespace XTMF2.Editing
         /// <param name="start"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        public bool RemoveStart(User user, Start start, out CommandError? error)
+        public bool RemoveStart(User user, Start start, [NotNullWhen(false)]out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(start);
@@ -597,7 +627,7 @@ namespace XTMF2.Editing
         /// <param name="node">The resulting node if the operation succeeds, null if the operation fails.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
-        public bool AddNode(User user, Boundary boundary, string name, Type type, Rectangle location, out Node? node, out CommandError? error)
+        public bool AddNode(User user, Boundary boundary, string name, Type type, Rectangle location, out Node? node, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
@@ -641,7 +671,7 @@ namespace XTMF2.Editing
         /// <param name="error"></param>
         /// <returns></returns>
         public bool AddNodeGenerateParameters(User user, Boundary boundary, string name, Type type,
-            Rectangle location, out Node? node, out List<Node>? children, out CommandError? error)
+            Rectangle location, out Node? node, out List<Node>? children, [NotNullWhen(false)]out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
@@ -734,14 +764,10 @@ namespace XTMF2.Editing
                         if (child?.SetParameterValue(ParameterExpression.CreateParameter(hook.DefaultValue!, genericParameters[0]), out var error) == true)
                         {
                             nodes.Add(child);
-                            if (boundary.AddLink(baseNode, hook, child, out var link, out error))
-                            {
-                                links.Add(link!);
-                            }
-                            else
-                            {
-                                nodes.Remove(child);
-                            }
+                            // Construct the link object directly without adding it to the boundary.
+                            // Add() will first add child nodes (creating NodeViewModels) and THEN
+                            // add links, so that TryAddLinkViewModel can resolve the destination.
+                            links.Add(new SingleLink(baseNode, hook, child, false));
                         }
                     }
                 }
@@ -760,7 +786,7 @@ namespace XTMF2.Editing
         /// <param name="node">The node to be removed.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RemoveNode(User user, Node node, out CommandError? error)
+        public bool RemoveNode(User user, Node node, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(node);
@@ -839,7 +865,10 @@ namespace XTMF2.Editing
                             // Re-insert destination entries in original order (front-to-back).
                             var list = multiLinkRestoreInfo[ml];
                             for (int i = 0; i < list.Count; i++)
-                                ml.AddDestination(list[i].Dest, list[i].Index);
+                            {
+                                if(!ml.AddDestination(list[i].Dest, list[i].Index, out var e))
+                                    return;
+                            }
                         }
                     }
                 }
@@ -848,6 +877,11 @@ namespace XTMF2.Editing
                 RemoveIncoming();
                 foreach (var link in outgoingLinks)
                     boundary.RemoveLink(link, out _);
+
+                // Also remove from model system variables if present, capturing position for undo.
+                var variableIndex = ModelSystem.Variables.IndexOf(node);
+                if (variableIndex >= 0)
+                    ModelSystem.Variables.RemoveAt(variableIndex);
 
                 if (boundary.RemoveNode(node, out error))
                 {
@@ -859,6 +893,11 @@ namespace XTMF2.Editing
                             foreach (var link in outgoingLinks)
                                 boundary.AddLink(link, out e);
                             RestoreIncoming();
+                            if (variableIndex >= 0)
+                            {
+                                var restoreIdx = Math.Min(variableIndex, ModelSystem.Variables.Count);
+                                ModelSystem.Variables.Insert(restoreIdx, node);
+                            }
                             return (true, null);
                         }
                         return (false, e);
@@ -868,16 +907,22 @@ namespace XTMF2.Editing
                         RemoveIncoming();
                         foreach (var link in outgoingLinks)
                             boundary.RemoveLink(link, out _);
+                        ModelSystem.Variables.Remove(node);
                         return (boundary.RemoveNode(node, out var e), e);
                     }));
                     return true;
                 }
                 else
                 {
-                    // Node removal failed; roll back the link removals.
+                    // Node removal failed; roll back the link removals (and variable removal).
                     foreach (var link in outgoingLinks)
                         boundary.AddLink(link, out _);
                     RestoreIncoming();
+                    if (variableIndex >= 0)
+                    {
+                        var restoreIdx = Math.Min(variableIndex, ModelSystem.Variables.Count);
+                        ModelSystem.Variables.Insert(restoreIdx, node);
+                    }
                     return false;
                 }
             }
@@ -890,7 +935,7 @@ namespace XTMF2.Editing
         /// <param name="node">The node to remove.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, False with an error message otherwise.</returns>
-        public bool RemoveNodeGenerateParameters(User user, Node node, out CommandError? error)
+        public bool RemoveNodeGenerateParameters(User user, Node node, [NotNullWhen(false)]out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(node);
@@ -990,7 +1035,7 @@ namespace XTMF2.Editing
         /// <param name="name">The new name to assign.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise.</returns>
-        public bool SetNodeName(User user, Node node, string name, out CommandError? error)
+        public bool SetNodeName(User user, Node node, string name, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(node);
@@ -1025,7 +1070,7 @@ namespace XTMF2.Editing
             }
         }
 
-        public bool SetNodeLocation(User user, Node mss, Rectangle newLocation, out CommandError? error)
+        public bool SetNodeLocation(User user, Node mss, Rectangle newLocation, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(mss);
@@ -1070,7 +1115,7 @@ namespace XTMF2.Editing
         /// <param name="value">The value to set the parameter to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SetParameterValue(User user, Node basicParameter, string value, out CommandError? error)
+        public bool SetParameterValue(User user, Node basicParameter, string value, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(basicParameter);
@@ -1107,7 +1152,7 @@ namespace XTMF2.Editing
         /// <param name="value">The value to set the parameter to.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool SetParameterExpression(User user, Node basicParameter, string expression, [NotNullWhen(false)]out CommandError? error)
+        public bool SetParameterExpression(User user, Node basicParameter, string expression, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(basicParameter);
@@ -1145,6 +1190,78 @@ namespace XTMF2.Editing
         }     
 
         /// <summary>
+        /// Add a node to the model system's variable list, making it available for use
+        /// in parameter expressions.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="node">The node to add as a variable.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
+        public bool AddVariable(User user, Node node, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(node);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (ModelSystem.Variables.Contains(node))
+                {
+                    error = new CommandError("The node is already a model system variable.");
+                    return false;
+                }
+                ModelSystem.Variables.Add(node);
+                Buffer.AddUndo(new Command(
+                    () => { ModelSystem.Variables.Remove(node); return (true, null); },
+                    () => { ModelSystem.Variables.Add(node);    return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Remove a node from the model system's variable list.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="node">The node to remove.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if successful, false otherwise with an error message.</returns>
+        public bool RemoveVariable(User user, Node node, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(node);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var idx = ModelSystem.Variables.IndexOf(node);
+                if (idx < 0)
+                {
+                    error = new CommandError("The node is not a model system variable.");
+                    return false;
+                }
+                ModelSystem.Variables.RemoveAt(idx);
+                Buffer.AddUndo(new Command(
+                    () => {
+                        var restoreIdx = Math.Min(idx, ModelSystem.Variables.Count);
+                        ModelSystem.Variables.Insert(restoreIdx, node);
+                        return (true, null);
+                    },
+                    () => { ModelSystem.Variables.Remove(node); return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Set the node to the disabled state.
         /// </summary>
         /// <param name="user">The user issuing the command</param>
@@ -1152,7 +1269,7 @@ namespace XTMF2.Editing
         /// <param name="disabled">If it should be disabled (true) or not (false).</param>
         /// <param name="error">An error message explaining why the operation failed.</param>
         /// <returns>True if the operation completed successfully, false otherwise.</returns>
-        public bool SetNodeDisabled(User user, Node node, bool disabled, out CommandError? error)
+        public bool SetNodeDisabled(User user, Node node, bool disabled, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(node);
@@ -1188,7 +1305,7 @@ namespace XTMF2.Editing
         /// <param name="disabled">If it should be disabled (true) or not (false).</param>
         /// <param name="error">An error message explaining why the operation failed.</param>
         /// <returns>True if the operation completed successfully, false otherwise.</returns>
-        public bool SetLinkDisabled(User user, Link link, bool disabled, out CommandError? error)
+        public bool SetLinkDisabled(User user, Link link, bool disabled, [NotNullWhen(false)]out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(link);
@@ -1241,7 +1358,7 @@ namespace XTMF2.Editing
         /// <param name="error">An error message if something goes wrong saving the model system.</param>
         /// <param name="saveTo">The stream to save the model system to.</param>
         /// <returns>True if the model system was saved successfully.</returns>
-        public bool Save(out CommandError? error, Stream saveTo)
+        public bool Save([NotNullWhen(false)] out CommandError? error, Stream saveTo)
         {
             lock (_sessionLock)
             {
@@ -1263,7 +1380,7 @@ namespace XTMF2.Editing
         /// <param name="link">The link to remove.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool RemoveLink(User user, Link link, out CommandError? error)
+        public bool RemoveLink(User user, Link link, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(link);
@@ -1392,7 +1509,7 @@ namespace XTMF2.Editing
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         /// <exception cref="ArgumentNullException">Thrown if the user or boundary are null.</exception>
-        public bool AddFunctionTemplate(User user, Boundary boundary, string functionTemplateName, out FunctionTemplate? functionTemplate, out CommandError? error)
+        public bool AddFunctionTemplate(User user, Boundary boundary, string functionTemplateName, out FunctionTemplate? functionTemplate, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
@@ -1436,7 +1553,7 @@ namespace XTMF2.Editing
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         /// <exception cref="ArgumentNullException">Thrown if the user, boundary, or function template are null.</exception>
-        public bool RemoveFunctionTemplate(User user, Boundary boundary, FunctionTemplate functionTemplate, out CommandError? error)
+        public bool RemoveFunctionTemplate(User user, Boundary boundary, FunctionTemplate functionTemplate, [NotNullWhen(false)]  out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
@@ -1452,6 +1569,7 @@ namespace XTMF2.Editing
                 }
                 if (!boundary.RemoveFunctionTemplate(functionTemplate, out error))
                 {
+                    error = new CommandError($"Failed to remove function template {functionTemplate.Name} from boundary {boundary.Name}: {error?.Message}");
                     return false;
                 }
                 Buffer.AddUndo(new Command(() =>
@@ -1502,7 +1620,7 @@ namespace XTMF2.Editing
         /// <param name="user">The user requesting the redo.</param>
         /// <param name="error">An error message if the redo fails.</param>
         /// <returns>True if the redo succeeds, false otherwise with an error message.</returns>
-        public bool Redo(User user, out CommandError? error)
+        public bool Redo(User user, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
 
@@ -1525,7 +1643,7 @@ namespace XTMF2.Editing
         /// <summary>
         /// Moves a destination within a multi-link from one index to another.
         /// </summary>
-        public bool MoveLinkDestination(User user, Link multiLink, int fromIndex, int toIndex, out CommandError? error)
+        public bool MoveLinkDestination(User user, Link multiLink, int fromIndex, int toIndex, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(multiLink);
@@ -1559,7 +1677,7 @@ namespace XTMF2.Editing
             }
         }
 
-        public bool RemoveLinkDestination(User user, Link multiLink, int index, out CommandError? error)
+        public bool RemoveLinkDestination(User user, Link multiLink, int index, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(multiLink);
@@ -1584,7 +1702,7 @@ namespace XTMF2.Editing
                     ml.RemoveDestination(index);
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (ml.AddDestination(toRemove, index), null);
+                        return (ml.AddDestination(toRemove, index, out var e), e);
                     }, () =>
                     {
                         ml.RemoveDestination(index);
@@ -1597,6 +1715,25 @@ namespace XTMF2.Editing
             {
                 error = new CommandError("The link was not a multi-link!");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Export the model system to a file at the given path.
+        /// </summary>
+        /// <param name="user">The user performing the export.</param>
+        /// <param name="exportPath">The path to export the model system to.</param>
+        /// <param name="error">The error message if the export fails.</param>
+        /// <returns>True if the export was successful, false otherwise with error message.</returns>
+        public bool ExportModelSystem(User user, string exportPath, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(exportPath);
+            error = null;
+
+            lock (_sessionLock)
+            {
+                return ModelSystemFile.ExportModelSystemFromSession(user, this, exportPath, out error);
             }
         }
     }

@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
-using System.Reflection;
 using System.Threading.Tasks;
 using XTMF2;
 using XTMF2.GUI.Resources;
@@ -16,6 +15,12 @@ public partial class App : Application
     /// The XTMF Runtime instance
     /// </summary>
     public XTMFRuntime? Runtime { get; private set; }
+
+    /// <summary>
+    /// The single RunController for this GUI session.
+    /// Created after the runtime is ready; disposed on application shutdown.
+    /// </summary>
+    private RunController? _runController;
 
     public override void Initialize()
     {
@@ -76,18 +81,36 @@ public partial class App : Application
                 
                 // Get or create the default user
                 var users = Runtime.UserController.Users;
-                
+
+                // Initialise the RunController on the background thread (I/O: creates a named pipe
+                // and spawns the client process).  If it fails we pass null and the GUI continues
+                // without run support.
+                string? runControllerError = null;
+                RunController.InitializeRunController(Runtime, out _runController, ref runControllerError);
+                if (_runController is null)
+                    System.Diagnostics.Debug.WriteLine($"[RunController] Failed to initialise: {runControllerError}");
+
                 // Initialize the main window with the runtime on the UI thread
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    mainWindow.InitializeWithRuntime(Runtime);
+                    mainWindow.InitializeWithRuntime(Runtime, _runController);
                 });
             });
             
             // Shutdown XTMF when the application exits
             desktop.ShutdownRequested += (s, e) =>
             {
+                _runController?.Dispose();
+                _runController = null;
                 Runtime?.Shutdown();
+            };
+
+            // Exit fires unconditionally when the process is actually ending,
+            // catching cases where ShutdownRequested was cancelled or bypassed.
+            desktop.Exit += (s, e) =>
+            {
+                _runController?.Dispose();
+                _runController = null;
             };
         }
 

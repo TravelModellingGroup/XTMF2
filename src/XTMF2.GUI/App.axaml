@@ -17,6 +17,10 @@
         <DataTemplate DataType="vm:ModelSystemEditorViewModel">
             <views:ModelSystemEditorView />
         </DataTemplate>
+        <!-- ItemsSource dock template: RunsViewModel -> RunsView -->
+        <DataTemplate DataType="vm:RunsViewModel">
+            <views:RunsView />
+        </DataTemplate>
     </Application.DataTemplates>
 
     <Application.Resources>

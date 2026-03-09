@@ -41,6 +41,12 @@ internal sealed class IntegerVariable : Variable
     internal override Result GetResult(IModule caller)
     {
         string? error = null;
+        // Check to see if we're dealing with a variable that can change.
+        if(_backingNode.Module is ISetableValue<int> setable)
+        {
+            return new IntegerResult(setable.Get());
+        }
+        // If it is not a variable that can change, we can use the parameter value as the expression for the variable.
         var expression = _backingNode.ParameterValue;
         if (expression is null || expression?.IsCompatible(typeof(int), ref error) != true)
         {

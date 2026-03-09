@@ -68,7 +68,7 @@ namespace XTMF2.Client
                         Stream? serverStream = null;
                         try
                         {
-                            if (!CreateStreams.CreateNamedPipeClient(args[i], out serverStream, ref error))
+                            if (!CreateStreams.CreateNamedPipeClient(args[i], out serverStream, out error))
                             {
                                 Console.WriteLine("Error creating run client\r\n" + error);
                                 return;

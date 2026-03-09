@@ -16,11 +16,14 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using XTMF2;
 using XTMF2.Configuration;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -59,10 +62,41 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     [ObservableProperty] private bool _isSelected;
 
     /// <summary>
+    /// When <c>true</c> all hooks (including optional ones) are shown on this node.
+    /// Required hooks (cardinality <c>Single</c> or <c>AtLeastOne</c>)
+    /// are always visible regardless of this flag.
+    /// </summary>
+    [ObservableProperty] private bool _showHooks;
+
+    /// <summary>
     /// The short name of the module type currently assigned to this node
     /// (e.g. "BasicParameter`1"). Updates automatically when the type changes.
     /// </summary>
     public string TypeName => UnderlyingNode.Type?.Name ?? "Unknown";
+
+    /// <summary>
+    /// True when the node's type is <see cref="BasicParameter{T}"/> or
+    /// <see cref="ScriptedParameter{T}"/>, meaning it carries a string
+    /// parameter value the user can view and edit.
+    /// </summary>
+    public bool IsParameterNode
+    {
+        get
+        {
+            var t = UnderlyingNode.Type;
+            if (t is null || !t.IsGenericType) return false;
+            var td = t.GetGenericTypeDefinition();
+            return td == typeof(BasicParameter<>) || td == typeof(ScriptedParameter<>)
+                || td == typeof(SetableParameter<>);
+        }
+    }
+
+    /// <summary>
+    /// The string representation of the node's current parameter value,
+    /// or <see cref="string.Empty"/> when no value has been assigned.
+    /// </summary>
+    public string ParameterValueRepresentation
+        => UnderlyingNode.ParameterValue?.Representation ?? string.Empty;
 
     public NodeViewModel(Node node, ModelSystemSession session, User user)
     {
@@ -84,6 +118,10 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
                 break;
             case nameof(Node.Type):
                 OnPropertyChanged(nameof(TypeName));
+                OnPropertyChanged(nameof(IsParameterNode));
+                break;
+            case nameof(Node.ParameterValue):
+                OnPropertyChanged(nameof(ParameterValueRepresentation));
                 break;
             case nameof(Node.Location):
                 OnPropertyChanged(nameof(X));
@@ -92,6 +130,7 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
                 OnPropertyChanged(nameof(Height));
                 OnPropertyChanged(nameof(CenterX));
                 OnPropertyChanged(nameof(CenterY));
+                OnPropertyChanged(nameof(IsInlined));
                 break;
         }
     }
@@ -108,5 +147,162 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
         _session.SetNodeLocation(_user, UnderlyingNode, new Rectangle((float)x, (float)y, w, h), out _);
         // OnModelPropertyChanged("Location") is fired by the model; it raises
         // PropertyChanged for X, Y, CenterX, CenterY automatically.
+    }
+
+    /// <summary>
+    /// Resize the node, persisting the change via the session (supports undo/redo).
+    /// Width is clamped to a minimum of 120; height to a minimum of 28.
+    /// </summary>
+    public void ResizeTo(double w, double h)
+    {
+        const float minW = 120f;
+        const float minH = 28f;
+        var loc = UnderlyingNode.Location;
+        _session.SetNodeLocation(_user, UnderlyingNode,
+            new Rectangle(loc.X, loc.Y, Math.Max(minW, (float)w), Math.Max(minH, (float)h)),
+            out _);
+    }
+
+    /// <summary>
+    /// Applies <paramref name="value"/> as the parameter value for this (Basic/Scripted) parameter
+    /// node, using the session so the change is undo-able.
+    /// <para>
+    /// If the underlying node type is <see cref="ScriptedParameter{T}"/>, the value is treated as
+    /// an expression string and routed through
+    /// <see cref="ModelSystemSession.SetParameterExpression"/> so that a <c>ScriptedParameter</c>
+    /// instance is kept rather than being silently replaced with a <c>BasicParameter</c>.
+    /// </para>
+    /// Returns <c>false</c> and populates <paramref name="error"/> when the value is invalid.
+    /// </summary>
+    public bool SetParameterValue(string value, out CommandError? error)
+    {
+        var t = UnderlyingNode.Type;
+        bool isScripted = t is not null && t.IsGenericType
+                          && t.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
+
+        if (isScripted)
+            return _session.SetParameterExpression(_user, UnderlyingNode, value, out error);
+
+        return _session.SetParameterValue(_user, UnderlyingNode, value, out error);
+    }
+
+    /// <summary>
+    /// <c>true</c> when this node's location is <see cref="Rectangle.Hidden"/>, meaning it is
+    /// rendered inline inside another node's hook row rather than as a standalone canvas element.
+    /// </summary>
+    public bool IsInlined => UnderlyingNode.Location.Equals(Rectangle.Hidden);
+
+    /// <summary>True when this node's type is <see cref="BasicParameter{T}"/>.</summary>
+    public bool IsBasicParameter
+    {
+        get
+        {
+            var t = UnderlyingNode.Type;
+            return t is not null && t.IsGenericType
+                   && t.GetGenericTypeDefinition() == typeof(BasicParameter<>);
+        }
+    }
+
+    /// <summary>True when this node's type is <see cref="ScriptedParameter{T}"/>.</summary>
+    public bool IsScriptedParameter
+    {
+        get
+        {
+            var t = UnderlyingNode.Type;
+            return t is not null && t.IsGenericType
+                   && t.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
+        }
+    }
+
+    /// <summary>
+    /// Attempts to switch this node between <see cref="BasicParameter{T}"/> and
+    /// <see cref="ScriptedParameter{T}"/>, carrying the current value over.
+    /// <para>
+    /// When switching from <c>ScriptedParameter</c> to <c>BasicParameter</c>, the current
+    /// expression string is validated with <see cref="ArbitraryParameterParser"/> to ensure
+    /// it can be represented as a plain value of type <c>T</c>.  If validation fails the
+    /// method returns <c>false</c> and <paramref name="error"/> describes the problem.
+    /// </para>
+    /// </summary>
+    public bool SwitchParameterType(out CommandError? error)
+    {
+        var t = UnderlyingNode.Type;
+        if (t is null || !t.IsGenericType)
+        {
+            error = new CommandError("Node has no generic type assigned.");
+            return false;
+        }
+
+        var td      = t.GetGenericTypeDefinition();
+        var typeArg = t.GetGenericArguments()[0];
+        // Capture the current value before the type change.
+        var currentValue = UnderlyingNode.ParameterValue?.Representation ?? string.Empty;
+
+        bool toBasic;
+        Type targetOpenGeneric;
+        if (td == typeof(BasicParameter<>))
+        {
+            targetOpenGeneric = typeof(ScriptedParameter<>);
+            toBasic           = false;
+        }
+        else if (td == typeof(ScriptedParameter<>))
+        {
+            targetOpenGeneric = typeof(BasicParameter<>);
+            toBasic           = true;
+        }
+        else
+        {
+            error = new CommandError("Node is not a BasicParameter or ScriptedParameter.");
+            return false;
+        }
+
+        // When switching to BasicParameter, verify the expression string is parseable as T.
+        if (toBasic)
+        {
+            string? parseError = null;
+            var (success, _) = ArbitraryParameterParser.ArbitraryParameterParse(typeArg, currentValue, ref parseError);
+            if (!success)
+            {
+                error = new CommandError(
+                    $"The value \u2018{currentValue}\u2019 cannot be represented as a {typeArg.Name} "
+                    + $"in a Basic Parameter: {parseError}");
+                return false;
+            }
+        }
+
+        var targetType = targetOpenGeneric.MakeGenericType(typeArg);
+
+        // Step 1 – change the node type.
+        if (!_session.SetNodeType(_user, UnderlyingNode, targetType, out error))
+            return false;
+
+        // Step 2 – re-apply the value in the new type's format.
+        if (toBasic)
+            return _session.SetParameterValue(_user, UnderlyingNode, currentValue, out error);
+        else
+            return _session.SetParameterExpression(_user, UnderlyingNode, currentValue, out error);
+    }
+
+    /// <summary>
+    /// Hides this node from the canvas by setting its location to <see cref="Rectangle.Hidden"/>.
+    /// The node's value continues to be displayed inline within the connected origin node's hook row.
+    /// </summary>
+    public void InlineBasicParameter()
+    {
+        _session.SetNodeLocation(_user, UnderlyingNode, Rectangle.Hidden, out _);
+    }
+
+    /// <summary>
+    /// Expands this previously-inlined parameter node back onto the canvas at
+    /// (<paramref name="x"/>, <paramref name="y"/>), restoring its previous width/height
+    /// (or sensible defaults when the stored dimensions are invalid).
+    /// </summary>
+    public void ExpandToCanvas(double x, double y)
+    {
+        var loc = UnderlyingNode.Location;
+        var w = loc.Width  > 0 ? loc.Width  : 120f;
+        var h = loc.Height > 0 ? loc.Height : 50f;
+        _session.SetNodeLocation(_user, UnderlyingNode,
+            new Rectangle((float)x, (float)y, w, h), out _);
     }
 }

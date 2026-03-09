@@ -43,32 +43,46 @@ namespace XTMF2.Bus
         /// Create a new Scheduler to process the given client bus.
         /// </summary>
         /// <param name="bus">The bus to listen to.</param>
-        public Scheduler(RunServerBus bus)
+        public Scheduler(RunServerBus bus, bool runLocal)
         {
             _Bus = bus;
             _CancelExecutionEngine = new CancellationTokenSource();
             var token = _CancelExecutionEngine.Token;
-            Task.Factory.StartNew(()=>
+            Task.Factory.StartNew(() =>
             {
-                while(!token.IsCancellationRequested)
+                while (!token.IsCancellationRequested)
                 {
-                    Current = null;
-                    _RunsToGo.Wait(token);
-                    if(token.IsCancellationRequested)
+                    try
+                    {
+                        Current = null;
+                        _RunsToGo.Wait(token);
+                        if (token.IsCancellationRequested)
+                        {
+                            return;
+                        }
+                        if (_ToRun.TryDequeue(out var context))
+                        {
+                            try
+                            {
+                                Current = context;
+                                if (runLocal)
+                                {
+                                    context.RunInCurrentProcess(_Bus);
+                                }
+                                else
+                                {
+                                    context.RunInNewProcess(_Bus);
+                                }
+                            }
+                            catch (Exception e)
+                            {
+                                _Bus.ModelRunFailed(context.ID, e.Message, e.StackTrace);
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException)
                     {
                         return;
-                    }
-                    if (_ToRun.TryDequeue(out var context))
-                    {
-                        try
-                        {
-                            Current = context;
-                            context.RunInNewProcess(_Bus);
-                        }
-                        catch (Exception e)
-                        {
-                            _Bus.ModelRunFailed(context.ID, e.Message, e.StackTrace);
-                        }
                     }
                     Interlocked.MemoryBarrier();
                 }
@@ -77,7 +91,7 @@ namespace XTMF2.Bus
 
         private void Dispose(bool managed)
         {
-            if(managed)
+            if (managed)
             {
                 GC.SuppressFinalize(this);
             }

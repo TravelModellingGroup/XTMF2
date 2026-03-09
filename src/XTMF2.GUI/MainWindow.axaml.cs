@@ -48,6 +48,12 @@ public partial class MainWindow : Window
     private SettingsWindow? _settingsWindow;
 
     /// <summary>
+    /// The single RunController instance for this GUI session.
+    /// Initialized when the runtime loads; null until then.
+    /// </summary>
+    private RunController? _runController;
+
+    /// <summary>
     /// The collection of document view models displayed in the dock.
     /// Starts empty; the Projects tab is added once the runtime is loaded.
     /// </summary>
@@ -166,13 +172,24 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Initialize the window with the runtime once it's loaded
+    /// Initialize the window with the runtime once it's loaded.
     /// </summary>
-    public void InitializeWithRuntime(XTMFRuntime runtime)
+    /// <param name="runtime">The fully initialised XTMF runtime.</param>
+    /// <param name="runController">
+    /// The already-initialised <see cref="RunController"/>.
+    /// Pass <c>null</c> when the controller could not be created; the Run button
+    /// will be disabled but all other functionality remains available.
+    /// </param>
+    public void InitializeWithRuntime(XTMFRuntime runtime, RunController? runController)
     {
         _runtime = runtime;
+        _runController = runController;
         _isLoading = false;
         UpdateLoadingState();
+
+        // Add the Runs tab so it is always visible.
+        if (_runController is not null)
+            Documents.Add(_runController.RunsViewModel);
 
         // Add the Projects tab as the permanent first document
         Documents.Add(new ProjectsViewModel(runtime));
@@ -263,7 +280,20 @@ public partial class MainWindow : Window
             return;
         }
 
-        Documents.Add(new ModelSystemEditorViewModel(session, user));
+        var editor = new ModelSystemEditorViewModel(session, user, _runController);
+        editor.RunStarted = SwitchToRunsDocument;
+        Documents.Add(editor);
+    }
+
+    /// <summary>
+    /// Switches the active document to the Runs tab.
+    /// </summary>
+    private void SwitchToRunsDocument()
+    {
+        if (_runController is null) return;
+        var (dock, doc) = GetViewAndDocFromModel(DockControl.Layout!, _runController.RunsViewModel);
+        if (doc is not null)
+            dock!.ActiveDockable = doc;
     }
 
     /// <summary>

@@ -189,6 +189,93 @@ namespace XTMF2
         }
 
         /// <summary>
+        /// Export the model system from the given editing session. The session should be for a project that has already been exported, and the model system file should have already been extracted.
+        /// </summary>
+        /// <param name="user">The use that is exporting. Permissions are not checked.</param>
+        /// <param name="session">The model system session to export.</param>
+        /// <param name="exportPath">The path to export the model system to.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        internal static bool ExportModelSystemFromSession(User user, ModelSystemSession session, string exportPath, [NotNullWhen(false)] out CommandError? error)
+        {
+            var tempDirName = string.Empty;
+            try
+            {
+                tempDirName = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "XTMF-" + session.ModelSystemHeader.Name + Guid.NewGuid());
+                System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                FileVersionInfo fvi = FileVersionInfo.GetVersionInfo(assembly.Location);
+                var tempDir = new DirectoryInfo(tempDirName);
+                if (!tempDir.Exists)
+                {
+                    tempDir.Create();
+                }
+                
+                // Save the current session to file
+                using(var modelSystemStream = File.OpenWrite(System.IO.Path.Combine(tempDir.FullName, ModelSystemFilePath)))
+                {
+                    if(!session.Save(out error, modelSystemStream))
+                    {
+                        return false;
+                    }
+                }
+                
+                // File.Copy(modelSystemHeader.ModelSystemPath, System.IO.Path.Combine(tempDir.FullName, ModelSystemFilePath));
+                using (var metadataStream = File.OpenWrite(System.IO.Path.Combine(tempDir.FullName, MetaDataFilePath)))
+                using (var writer = new Utf8JsonWriter(metadataStream))
+                {
+                    var header = session.ModelSystemHeader;
+                    writer.WriteStartObject();
+                    writer.WriteString(PropertyName, header.Name);
+                    writer.WriteString(PropertyDescription, header.Description);
+                    writer.WriteString(PropertyExportedOn, DateTime.UtcNow);
+                    writer.WriteString(PropertyExportedBy, user.UserName);
+                    writer.WriteNumber(PropertyVersionMajor, fvi.FileMajorPart);
+                    writer.WriteNumber(PropertyVersionMinor, fvi.FileMinorPart);
+                    writer.WriteEndObject();
+                }
+                // Zip the temporary directory and store it, delete the file if it already exists.
+                var fileInfo = new FileInfo(exportPath);
+                if (fileInfo.Exists)
+                {
+                    fileInfo.Delete();
+                }
+                ZipFile.CreateFromDirectory(tempDirName, exportPath);
+                error = null;
+                return true;
+            }
+            catch (IOException e)
+            {
+                error = new CommandError(e.Message);
+                return false;
+            }
+            finally
+            {
+                // Try to clean up the temporary directory if it still exists.
+                try
+                {
+                    var tempDir = new DirectoryInfo(tempDirName);
+                    if (tempDir.Exists)
+                    {
+                        tempDir.Delete(true);
+                    }
+                }
+                /*
+                 * This will warn that we should catch a more specific exception however there is no recovery in any case.
+                 * The operation has already been successful even if we are unable to clean up the temporary storage.
+                 */
+#pragma warning disable CA1031
+                catch (IOException)
+
+                {
+                    // If we don't have access to the temporary storage there is nothing else that we can do.
+                }
+#pragma warning restore CA1031
+            }
+        }
+
+        
+
+        /// <summary>
         /// Loads a reference to the model system file, and loads its meta-data.
         /// </summary>
         /// <param name="filePath">The path to the model system file.</param>

@@ -101,6 +101,15 @@
                                 </StackPanel>
                             </Button>
 
+                            <!-- Run -->
+                            <Button Command="{Binding RunModelSystemCommand}"
+                                    IsEnabled="{Binding CanRun}"
+                                    ToolTip.Tip="Run this model system (save first to apply changes)">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                    <TextBlock Text="▶" FontSize="18" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+
                         </StackPanel>
                     </Border>
 
@@ -170,6 +179,25 @@
                                         HorizontalContentAlignment="Center"
                                         FontSize="12"
                                         Margin="0,4,0,0"/>
+
+                                <!-- ── Parameter value editor ──────────────── -->
+                                <StackPanel Spacing="4"
+                                            IsVisible="{Binding SelectedElementIsParameter}"
+                                            Margin="0,4,0,0">
+                                    <Separator Margin="0,4"/>
+                                    <TextBlock Text="Value:"
+                                               FontSize="12"
+                                               Opacity="0.7"/>
+                                    <TextBox x:Name="ParameterValueEditBox"
+                                             Text="{Binding SelectedElementParameterValue, Mode=TwoWay}"
+                                             FontSize="12"
+                                             Watermark="Enter value…"/>
+                                    <Button Content="Apply Value"
+                                            Command="{Binding CommitParameterValueCommand}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            FontSize="12"/>
+                                </StackPanel>
                             </StackPanel>
 
                             <!-- Section: MultiLink destinations -->
@@ -203,6 +231,57 @@
                                     </Canvas>
                                 </Grid>
                             </StackPanel>
+
+                            <!-- ── Model System Variables ─────────────────── -->
+                            <Separator Margin="0,8"/>
+                            <TextBlock Text="Model System Variables"
+                                       FontWeight="SemiBold"
+                                       FontSize="13"
+                                       Margin="0,0,0,2"/>
+                            <TextBlock Text="Right-click a parameter node to add it."
+                                       FontSize="10"
+                                       Opacity="0.6"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,4"/>
+                            <ListBox ItemsSource="{Binding ModelSystemVariables}"
+                                     MaxHeight="200"
+                                     SelectionMode="Single">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ModelSystemVariableViewModel">
+                                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="12"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding BoundaryPath}"
+                                                           FontSize="10"
+                                                           Opacity="0.55"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    Content="→"
+                                                    ToolTip.Tip="Go to node"
+                                                    Padding="6,2"
+                                                    Margin="4,0,2,0"
+                                                    FontSize="12"
+                                                    Command="{Binding $parent[UserControl].((vm:ModelSystemEditorViewModel)DataContext).GoToVariableNodeCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Grid.Column="2"
+                                                    Content="✕"
+                                                    ToolTip.Tip="Remove from variables"
+                                                    Padding="6,2"
+                                                    FontSize="12"
+                                                    Command="{Binding $parent[UserControl].((vm:ModelSystemEditorViewModel)DataContext).RemoveVariableNodeCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock Text="(no variables defined)"
+                                       FontSize="11"
+                                       Opacity="0.45"
+                                       IsVisible="{Binding HasNoModelSystemVariables}"
+                                       Margin="0,2,0,0"/>
 
                             <TextBlock Text="Nothing selected."
                                        FontSize="12"

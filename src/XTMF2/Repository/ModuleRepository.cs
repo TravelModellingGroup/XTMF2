@@ -40,6 +40,14 @@ namespace XTMF2.Repository
         private readonly ObservableCollection<Type> _moduleTypes = new ObservableCollection<Type>();
 
         /// <summary>
+        /// Open-generic module types (e.g. <c>BasicParameter&lt;&gt;</c>) that carry a
+        /// <see cref="ModuleAttribute"/> but cannot be directly instantiated.
+        /// GUI code can call <see cref="GetCompatibleConstructedTypes"/> to obtain a list of
+        /// concrete closed-generic constructions that are compatible with a given hook type.
+        /// </summary>
+        private readonly List<Type> _openGenericModuleTypes = new();
+
+        /// <summary>
         /// An observable, read-only list of every module <see cref="Type"/> currently loaded
         /// into this repository.  Consumers can bind to this collection; it is updated on the
         /// thread that calls <see cref="Add"/> or <see cref="AddIfModuleType"/>.
@@ -47,9 +55,127 @@ namespace XTMF2.Repository
         public ReadOnlyObservableCollection<Type> LoadedModuleTypes { get; }
             = null!; // assigned in constructor
 
+        /// <summary>
+        /// Snapshot of every open-generic module type that has been registered
+        /// (e.g. <c>BasicParameter&lt;&gt;</c>, <c>ScriptedParameter&lt;&gt;</c>).
+        /// Use <see cref="GetCompatibleConstructedTypes"/> to build closed generics for a hook.
+        /// </summary>
+        public IReadOnlyList<Type> OpenGenericModuleTypes
+        {
+            get { lock (_moduleTypesLock) { return _openGenericModuleTypes.ToList(); } }
+        }
+
         public ModuleRepository()
         {
             LoadedModuleTypes = new ReadOnlyObservableCollection<Type>(_moduleTypes);
+        }
+
+        /// <summary>
+        /// Returns all closed-generic constructions of registered open-generic module types that
+        /// are assignable to <paramref name="requiredType"/>.
+        /// For example, if the hook requires <c>IFunction&lt;bool&gt;</c>, this yields
+        /// <c>BasicParameter&lt;bool&gt;</c>, <c>ScriptedParameter&lt;bool&gt;</c>, etc.
+        /// </summary>
+        public IEnumerable<Type> GetCompatibleConstructedTypes(Type requiredType)
+        {
+            IReadOnlyList<Type> openGenerics;
+            lock (_moduleTypesLock) { openGenerics = _openGenericModuleTypes.ToList(); }
+
+            foreach (var og in openGenerics)
+            {
+                if (TryConstructToSatisfy(og, requiredType, out var constructed))
+                    yield return constructed!;
+            }
+        }
+
+        /// <summary>
+        /// Attempts to construct a closed generic type from <paramref name="openGeneric"/> such
+        /// that the result is assignable to (or implements) <paramref name="requiredType"/>.
+        /// </summary>
+        private static bool TryConstructToSatisfy(Type openGeneric, Type requiredType, out Type? constructed)
+        {
+            constructed = null;
+            if (!openGeneric.IsGenericTypeDefinition) return false;
+            if (!requiredType.IsGenericType) return false;
+
+            var reqGenDef  = requiredType.GetGenericTypeDefinition();
+            var reqArgs    = requiredType.GetGenericArguments();
+            var typeParams = openGeneric.GetGenericArguments();
+
+            // Walk all interfaces + base types of the open generic looking for one whose
+            // generic definition matches reqGenDef.
+            var candidates = openGeneric.GetInterfaces()
+                .Concat(GetBaseChain(openGeneric))
+                .Where(t => t is not null && t.IsGenericType && t.GetGenericTypeDefinition() == reqGenDef);
+
+            foreach (var candidate in candidates)
+            {
+                var mapping = new Dictionary<Type, Type>();
+                if (TryBuildTypeMapping(typeParams, candidate!.GetGenericArguments(), reqArgs, mapping)
+                    && typeParams.All(tp => mapping.ContainsKey(tp)))
+                {
+                    try
+                    {
+                        constructed = openGeneric.MakeGenericType(typeParams.Select(tp => mapping[tp]).ToArray());
+                        return true;
+                    }
+                    catch { /* generic constraints violated – try next candidate */ }
+                }
+            }
+            return false;
+        }
+
+        private static IEnumerable<Type> GetBaseChain(Type t)
+        {
+            var current = t.BaseType;
+            while (current != null && current != typeof(object))
+            {
+                yield return current;
+                current = current.BaseType;
+            }
+        }
+
+        /// <summary>
+        /// Recursively maps the open generic type parameters in <paramref name="ifaceArgs"/>
+        /// to the concrete types in <paramref name="reqArgs"/>.
+        /// </summary>
+        private static bool TryBuildTypeMapping(Type[] typeParams, Type[] ifaceArgs, Type[] reqArgs,
+            Dictionary<Type, Type> mapping)
+        {
+            if (ifaceArgs.Length != reqArgs.Length) return false;
+            for (int i = 0; i < ifaceArgs.Length; i++)
+            {
+                var ifaceArg = ifaceArgs[i];
+                var reqArg   = reqArgs[i];
+
+                if (ifaceArg.IsGenericParameter)
+                {
+                    // Validate generic constraints on the type parameter.
+                    foreach (var constraint in ifaceArg.GetGenericParameterConstraints())
+                        if (!constraint.IsAssignableFrom(reqArg)) return false;
+
+                    if (mapping.TryGetValue(ifaceArg, out var existing))
+                    {
+                        if (existing != reqArg) return false; // conflicting mapping
+                    }
+                    else
+                    {
+                        mapping[ifaceArg] = reqArg;
+                    }
+                }
+                else if (ifaceArg.IsGenericType && reqArg.IsGenericType)
+                {
+                    // Recurse for nested generic arguments.
+                    if (ifaceArg.GetGenericTypeDefinition() != reqArg.GetGenericTypeDefinition()) return false;
+                    if (!TryBuildTypeMapping(typeParams, ifaceArg.GetGenericArguments(),
+                                            reqArg.GetGenericArguments(), mapping)) return false;
+                }
+                else if (ifaceArg != reqArg)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /// <summary>
@@ -94,13 +220,26 @@ namespace XTMF2.Repository
             {
                 throw new ArgumentNullException(nameof(type));
             }
-            if(!(type.IsAbstract || type.IsInterface))
+            if (type.IsAbstract || type.IsInterface)
+                return;
+
+            if (type.IsGenericTypeDefinition)
             {
-                if (IModuleTypeInfo.IsAssignableFrom(type))
+                // Open generic types cannot be assigned to IModule directly; track them
+                // separately so the GUI can construct compatible closed types for hooks.
+                if (type.GetCustomAttribute<ModuleAttribute>() != null)
                 {
-                    _Data[type] = GetTypeData(type);
-                    TrackType(type);
+                    lock (_moduleTypesLock)
+                    {
+                        if (!_openGenericModuleTypes.Contains(type))
+                            _openGenericModuleTypes.Add(type);
+                    }
                 }
+            }
+            else if (IModuleTypeInfo.IsAssignableFrom(type))
+            {
+                _Data[type] = GetTypeData(type);
+                TrackType(type);
             }
         }
 

@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using XTMF2.Editing;
@@ -105,5 +106,19 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
         _session.SetCommentBlockLocation(_user, UnderlyingBlock,
             new Rectangle((float)x, (float)y, w, h), out _);
         // OnModelPropertyChanged("Location") fires automatically and propagates X/Y changes.
+    }
+
+    /// <summary>
+    /// Resize the comment block, persisting the change via the session (supports undo/redo).
+    /// Width is clamped to a minimum of 60; height to a minimum of 30.
+    /// </summary>
+    public void ResizeTo(double w, double h)
+    {
+        const float minW = 60f;
+        const float minH = 30f;
+        var loc = UnderlyingBlock.Location;
+        _session.SetCommentBlockLocation(_user, UnderlyingBlock,
+            new Rectangle(loc.X, loc.Y, Math.Max(minW, (float)w), Math.Max(minH, (float)h)),
+            out _);
     }
 }

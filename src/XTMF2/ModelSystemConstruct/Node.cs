@@ -114,7 +114,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="name">The name to change it to</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        internal bool SetName(string name, out CommandError? error)
+        internal bool SetName(string name, [NotNullWhen(false)] out CommandError? error)
         {
             if (String.IsNullOrWhiteSpace(name))
             {
@@ -133,7 +133,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="value">The value to change the parameter to.</param>
         /// <param name="error">A description of the error if one occurs</param>
         /// <returns>True if the operation was successful, false otherwise</returns>
-        internal bool SetParameterValue(ParameterExpression? value, out CommandError? error)
+        internal bool SetParameterValue(ParameterExpression? value, [NotNullWhen(false)] out CommandError? error)
         {
             // ensure that the value is allowed
             if (Type == null)
@@ -219,10 +219,6 @@ namespace XTMF2.ModelSystemConstruct
 
         private static readonly Type[] RuntimeConstructor = new Type[] { typeof(XTMFRuntime) };
 
-        private static readonly Type GenericParameter = typeof(BasicParameter<>);
-
-        private static readonly ConcurrentDictionary<Type, FieldInfo> GenericValue = new ConcurrentDictionary<Type, FieldInfo>();
-
         /// <summary>
         /// Setup the module as defined in this node.
         /// </summary>
@@ -243,26 +239,32 @@ namespace XTMF2.ModelSystemConstruct
             }
             Module = module;
             Module.Name = Name;
-            if (_type.IsConstructedGenericType && _type.GetGenericTypeDefinition() == GenericParameter)
+            // We need to determine if this is a basic parameter or a scripted one.
+            if (ParameterValue is not null)
             {
-                var paramType = _type.GenericTypeArguments[0];
-                var paramValue = ParameterValue?.GetValue(module, paramType, ref error);
-                if (paramValue is not null)
-                {
-                    if (!GenericValue.TryGetValue(_type, out var info))
-                    {
-                        info = _type.GetRuntimeField("Value");
-                        if (info == null)
-                        {
-                            return FailWith(out error, $"Unable find a field named 'Value' on type {_type.FullName} in order to assign a value to it!");
-                        }
-                        GenericValue[paramType] = info;
-                    }
-                    info.SetValue(Module, paramValue);
-                }
+                return ParameterValue.AssignToParameter(module, ref error);
             }
             error = null;
             return true;
+        }
+
+        internal void ConstructEmptyLinks(ref string? error)
+        {
+            if (_type is null)
+            {
+                error = $"Unable to construct a module named {Name} without a type!";
+                return;
+            }
+            foreach (var hook in Hooks)
+            {
+                if (hook.Cardinality == HookCardinality.AnyNumber)
+                {
+                    if (!hook.AnyInstalled(this.Module!))
+                    {
+                        hook.CreateArray(this.Module!, 0);
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -306,7 +308,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="modelSystemSession">The model system session</param>
         /// <param name="disabled"></param>
         /// <returns></returns>
-        internal bool SetDisabled(bool disabled, out CommandError? error)
+        internal bool SetDisabled(bool disabled, [NotNullWhen(false)] out CommandError? error)
         {
             IsDisabled = disabled;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
@@ -403,7 +405,7 @@ namespace XTMF2.ModelSystemConstruct
             bool disabled = false;
             Rectangle point = new Rectangle();
             string description = string.Empty;
-            ParameterExpression? basicParameter = null;
+            string? basicParameterValue = null;
             string? scriptedParameter = null;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
@@ -459,7 +461,7 @@ namespace XTMF2.ModelSystemConstruct
                 else if (reader.ValueTextEquals(ParameterProperty))
                 {
                     reader.Read();
-                    basicParameter = ParameterExpression.CreateParameter(reader.GetString() ?? string.Empty, typeof(string));
+                    basicParameterValue = reader.GetString() ?? string.Empty;
                 }
                 else if (reader.ValueTextEquals(ParameterExpressionProperty))
                 {
@@ -497,6 +499,9 @@ namespace XTMF2.ModelSystemConstruct
             {
                 return FailWith(out mss, out error, $"When trying to create a node {name} we were unable to find a hook for type {type.FullName}!");
             }
+            var basicParameter = basicParameterValue is not null ?
+                ParameterExpression.CreateParameter(basicParameterValue, type.GenericTypeArguments[0]) 
+                : null;
             mss = new Node(name, type, boundary, hooks, point)
             {
                 Location = point,
@@ -505,7 +510,7 @@ namespace XTMF2.ModelSystemConstruct
                 IsDisabled = disabled
             };
             nodes.Add(index, mss);
-            if(scriptedParameter is not null)
+            if (scriptedParameter is not null)
             {
                 scriptedParameters.Add((mss, scriptedParameter));
             }
