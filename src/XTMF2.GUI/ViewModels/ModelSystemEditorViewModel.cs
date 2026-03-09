@@ -128,6 +128,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     /// <summary>The currently selected link, if any. Mutually exclusive with <see cref="SelectedElement"/>.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NothingSelected))]
     private LinkViewModel? _selectedLink;
 
     /// <summary>In-order list of destination entries for the currently selected Multi-Link.</summary>
@@ -165,6 +166,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     // ── Selection ─────────────────────────────────────────────────────────
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NothingSelected))]
     private ICanvasElement? _selectedElement;
 
     /// <summary>
