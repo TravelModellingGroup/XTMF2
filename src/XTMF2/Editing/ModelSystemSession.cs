@@ -20,13 +20,16 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.ComponentModel;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.Repository;
 
 namespace XTMF2.Editing
 {
-    public sealed class ModelSystemSession : IDisposable
+    public sealed class ModelSystemSession : IDisposable, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
+
         private int _References = 0;
 
         public int References => _References;
@@ -51,6 +54,13 @@ namespace XTMF2.Editing
             ModelSystem = modelSystem;
             ModelSystemHeader = modelSystem.Header;
             _session = session.AddReference();
+            ((INotifyPropertyChanged)Buffer).PropertyChanged += OnBufferPropertyChanged;
+        }
+
+        private void OnBufferPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(CanUndo) or nameof(CanRedo))
+                PropertyChanged?.Invoke(this, e);
         }
 
         public void Dispose()
@@ -1631,6 +1641,12 @@ namespace XTMF2.Editing
             }
             return Buffer.RedoCommands(out error);
         }
+
+        /// <summary>True when there is at least one command that can be undone.</summary>
+        public bool CanUndo => Buffer.CanUndo;
+
+        /// <summary>True when there is at least one command that can be redone.</summary>
+        public bool CanRedo => Buffer.CanRedo;
 
         /// <summary>
         /// Remove a single destination of a MultiLink

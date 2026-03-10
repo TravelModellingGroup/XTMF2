@@ -227,6 +227,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     [ObservableProperty]
     private bool _showAllHooks;
 
+    // ── Undo / Redo state ─────────────────────────────────────────────────
+    /// <summary>True when there is at least one undoable command.</summary>
+    [ObservableProperty]
+    private bool _canUndo;
+
+    /// <summary>True when there is at least one redoable command.</summary>
+    [ObservableProperty]
+    private bool _canRedo;
+
     // Unsubscribe from the outgoing element before the field changes.
     partial void OnSelectedElementChanging(ICanvasElement? value)
     {
@@ -308,6 +317,17 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         SyncModelSystemVariables();
         ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.Variables)
             .CollectionChanged += OnModelSystemVariablesChanged;
+
+        // Mirror CanUndo/CanRedo from the session reactively.
+        _canUndo = Session.CanUndo;
+        _canRedo = Session.CanRedo;
+        ((System.ComponentModel.INotifyPropertyChanged)Session).PropertyChanged += OnSessionPropertyChanged;
+    }
+
+    private void OnSessionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(Session.CanUndo))      CanUndo = Session.CanUndo;
+        else if (e.PropertyName == nameof(Session.CanRedo)) CanRedo = Session.CanRedo;
     }
 
     // ── Collection sync ───────────────────────────────────────────────────
@@ -1272,6 +1292,24 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 lvm.IsSelected = selected;
     }
 
+    // ── Undo / Redo commands ──────────────────────────────────────────────
+
+    /// <summary>Undo the last command in the session buffer.</summary>
+    [RelayCommand]
+    private async Task Undo()
+    {
+        if (!Session.Undo(User, out var error))
+            await ShowError("Undo Failed", error!);
+    }
+
+    /// <summary>Redo the previously undone command.</summary>
+    [RelayCommand]
+    private async Task Redo()
+    {
+        if (!Session.Redo(User, out var error))
+            await ShowError("Redo Failed", error!);
+    }
+
     /// <summary>
     /// Deletes all elements in <paramref name="elements"/> in one batch.
     /// Called by the canvas when the Delete key is pressed with a multi-selection active.
@@ -1366,6 +1404,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.Variables)
             .CollectionChanged -= OnModelSystemVariablesChanged;
+
+        ((System.ComponentModel.INotifyPropertyChanged)Session).PropertyChanged -= OnSessionPropertyChanged;
 
         foreach (var varVm in ModelSystemVariables) varVm.Detach();
 

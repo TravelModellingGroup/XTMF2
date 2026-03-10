@@ -19,6 +19,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 
@@ -27,8 +28,9 @@ namespace XTMF2.Editing
     /// <summary>
     /// Provides support for a rolling stack
     /// </summary>
-    public sealed class EditingStack : ICollection<CommandBatch>
+    public sealed class EditingStack : ICollection<CommandBatch>, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
         public EditingStack(int capacity)
         {
             Capacity = capacity;
@@ -71,6 +73,7 @@ namespace XTMF2.Editing
                     Count = Capacity;
                 }
             }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Count)));
         }
 
         /// <summary>
@@ -93,18 +96,25 @@ namespace XTMF2.Editing
         /// <returns>If the pop was successful</returns>
         public bool TryPop(out CommandBatch? command)
         {
+            bool popped;
             lock (_DataLock)
             {
-                if(Count > 0)
+                if (Count > 0)
                 {
                     Count--;
                     command = _Data[_Head];
                     _Head = (_Head - 1) % Capacity;
-                    return true;
+                    popped = true;
                 }
-                command = null;
-                return false;
+                else
+                {
+                    command = null;
+                    popped = false;
+                }
             }
+            if (popped)
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Count)));
+            return popped;
         }
 
         /// <summary>
@@ -112,11 +122,15 @@ namespace XTMF2.Editing
         /// </summary>
         public void Clear()
         {
+            bool hadItems;
             lock (_DataLock)
             {
+                hadItems = Count > 0;
                 Array.Clear(_Data, 0, _Data.Length);
                 Count = 0;
             }
+            if (hadItems)
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Count)));
         }
 
         /// <summary>
