@@ -1198,17 +1198,27 @@ public sealed class ModelSystemCanvas : Control
     {
         base.OnKeyDown(e);
         if (_vm is null) return;
-        if (e.Key is Key.Delete or Key.Back)
+        else if (e.Key is Key.Delete or Key.Back)
         {
-            _vm.DeleteSelectedCommand.Execute(null);
+            if (_multiSelection.Count > 1)
+            {
+                // Snapshot the set before clearing so deletions don't mutate it mid-loop.
+                var toDelete = _multiSelection.ToList();
+                ClearMultiSelection();
+                _ = _vm.DeleteMultipleAsync(toDelete);
+            }
+            else
+            {
+                _vm.DeleteSelectedCommand.Execute(null);
+            }
             e.Handled = true;
         }
-        if (e.Key == Key.D0 && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        else if (e.Key == Key.D0 && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
             ApplyScale(1.0);
             e.Handled = true;
         }
-        if(e.Key == Key.Escape)
+        else if (e.Key == Key.Escape)
         {
             ClearMultiSelection();
             e.Handled = true;
