@@ -1867,6 +1867,37 @@ public sealed class ModelSystemCanvas : Control
             menu.Items.Add(new Separator());
         }
 
+        // ── IFunction<T> → Create linked ExecuteWithContext ───────────────
+        if (element is NodeViewModel funcNode)
+        {
+            var nodeType = funcNode.UnderlyingNode.Type;
+            var iFunctionOpen = typeof(IFunction<>);
+            Type? returnType = null;
+            if (nodeType is not null)
+            {
+                foreach (var iface in nodeType.GetInterfaces())
+                {
+                    if (iface.IsGenericType && iface.GetGenericTypeDefinition() == iFunctionOpen)
+                    {
+                        returnType = iface.GetGenericArguments()[0];
+                        break;
+                    }
+                }
+            }
+
+            if (returnType is not null)
+            {
+                var capturedFuncNode = funcNode;
+                var wrapItem = new MenuItem
+                {
+                    Header = $"Create ExecuteWithContext<{returnType.Name}> (linked)"
+                };
+                wrapItem.Click += (_, _) => _ = vm.CreateExecuteWithContextAsync(capturedFuncNode);
+                menu.Items.Add(wrapItem);
+                menu.Items.Add(new Separator());
+            }
+        }
+
         menu.Items.Add(deleteItem);
 
         ContextMenu = menu;
