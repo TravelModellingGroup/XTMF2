@@ -690,6 +690,103 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// If <paramref name="nodeType"/> implements <c>IAction&lt;Context&gt;</c>, returns
+    /// <c>Context</c>; otherwise returns <c>null</c>.
+    /// </summary>
+    private static Type? GetIActionContextType(Type? nodeType)
+    {
+        if (nodeType is null) return null;
+        var open = typeof(IAction<>);
+        foreach (var iface in nodeType.GetInterfaces())
+        {
+            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == open)
+                return iface.GetGenericArguments()[0];
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// If <paramref name="nodeType"/> implements <c>IFunction&lt;Context, Return&gt;</c>,
+    /// returns <c>(contextType, returnType)</c>; otherwise returns <c>null</c>.
+    /// Only the first matching interface is returned.
+    /// </summary>
+    private static (Type Context, Type Return)? GetIFunction2Types(Type? nodeType)
+    {
+        if (nodeType is null) return null;
+        var open = typeof(IFunction<,>);
+        foreach (var iface in nodeType.GetInterfaces())
+        {
+            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == open)
+            {
+                var args = iface.GetGenericArguments();
+                return (args[0], args[1]);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// If <paramref name="nodeType"/> implements <c>IFunction&lt;T&gt;</c>, returns <c>T</c>;
+    /// otherwise returns <c>null</c>.
+    /// </summary>
+    private static Type? GetIFunctionReturnType(Type? nodeType)
+    {
+        if (nodeType is null) return null;
+        var iFunctionOpen = typeof(IFunction<>);
+        foreach (var iface in nodeType.GetInterfaces())
+        {
+            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == iFunctionOpen)
+                return iface.GetGenericArguments()[0];
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="Execute{T}"/> node whose generic parameter
+    /// matches the return type <c>T</c> that <paramref name="sourceNode"/>'s module implements
+    /// via <c>IFunction&lt;T&gt;</c>.  The new node is positioned to the right of
+    /// <paramref name="sourceNode"/> and its <em>Context</em> hook is linked back to the source.
+    /// </summary>
+    public async Task CreateExecuteWithContextAsync(NodeViewModel sourceNode)
+    {
+        if (ParentWindow is null) return;
+
+        var returnType = GetIFunctionReturnType(sourceNode.UnderlyingNode.Type);
+        if (returnType is null) return;
+
+        var executeWithContextType = typeof(Execute<>).MakeGenericType(returnType);
+
+        var nameDialog = new InputDialog(
+            title: $"Add Execute With Context<{returnType.Name}> Module",
+            prompt: "Enter module name:",
+            defaultText: executeWithContextType.Name);
+        await nameDialog.ShowDialog(ParentWindow);
+        var name = nameDialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
+
+        const float PlacementGap = 30f;
+        var location = new Rectangle(
+            sourceNode.UnderlyingNode.Location.X + sourceNode.UnderlyingNode.Location.Width + PlacementGap,
+            sourceNode.UnderlyingNode.Location.Y,
+            120f, 50f);
+
+        if (!Session.AddNodeGenerateParameters(User, _currentBoundary, name, executeWithContextType,
+                location, out var newNode, out _, out var nodeError))
+        {
+            await ShowError("Add Module Failed", nodeError);
+            return;
+        }
+
+        // Find the "Context" hook on the new ExecuteWithContext node and link it to sourceNode.
+        var contextHook = newNode!.Hooks.FirstOrDefault(h => h.Name == "Context");
+        if (contextHook is not null)
+        {
+            if (!Session.AddLink(User, newNode, contextHook, sourceNode.UnderlyingNode, out _, out var linkError))
+                await ShowError("Create Link Failed", linkError);
+        }
+    }
+
+    /// <summary>
     /// Attempt to create a link from <paramref name="originElement"/> to <paramref name="destVm"/>.
     /// If any compatible hooks are found, either uses the sole hook automatically or
     /// presents a <see cref="HookPickerDialog"/> when there are multiple options.
@@ -723,6 +820,30 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         if (compatible.Count == 0)
         {
+            // Special case: origin implements IFunction<Context,Return> and destination
+            // implements IFunction<Context> → inject a ReturnUsingContext<Context,Return>.
+            if (originElement is NodeViewModel originNvm
+                && GetIFunction2Types(originNode.Type) is { } f2
+                && destType is not null
+                && typeof(IFunction<>).MakeGenericType(f2.Context).IsAssignableFrom(destType))
+            {
+                await InjectReturnUsingContextAsync(originNvm, destVm, f2.Context, f2.Return);
+                return;
+            }
+
+            // Special case: origin implements IAction<ContextBase> and destination
+            // implements IFunction<ContextDerived> where ContextBase.IsAssignableFrom(ContextDerived)
+            // → inject a WithContext<ContextDerived, ContextBase>.
+            if (originElement is NodeViewModel originNvmAction
+                && GetIActionContextType(originNode.Type) is { } contextBase
+                && destType is not null
+                && GetIFunctionReturnType(destType) is { } contextDerived
+                && contextBase.IsAssignableFrom(contextDerived))
+            {
+                await InjectWithContextAsync(originNvmAction, destVm, contextBase, contextDerived);
+                return;
+            }
+
             await ShowError("Incompatible Types",
                 new CommandError($"No hooks on '{originNode.Name}' are compatible with type '{destType?.Name ?? "Unknown"}'."));
             return;
@@ -745,6 +866,115 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (!Session.AddLink(User, originNode, selectedHook, destVm.UnderlyingNode, out _, out var error))
             await ShowError("Create Link Failed", error);
         // On success the boundary CollectionChanged fires and TryAddLinkViewModel wires up the new link.
+    }
+
+    /// <summary>
+    /// Injects a <see cref="ReturnUsingContext{Context,Return}"/> node between
+    /// <paramref name="originNode"/> (an <c>IFunction&lt;Context,Return&gt;</c> provider)
+    /// and <paramref name="contextNode"/> (an <c>IFunction&lt;Context&gt;</c> provider).
+    /// The injected node is placed to the right of the origin.
+    /// </summary>
+    private async Task InjectReturnUsingContextAsync(
+        NodeViewModel originNode, NodeViewModel contextNode, Type contextType, Type returnType)
+    {
+        if (ParentWindow is null) return;
+
+        var injectedType = typeof(ReturnUsingContext<,>).MakeGenericType(contextType, returnType);
+
+        var nameDialog = new InputDialog(
+            title: $"Add ReturnUsingContext<{contextType.Name},{returnType.Name}> Module",
+            prompt: "Enter module name:",
+            defaultText: $"Return {returnType.Name} Using {contextType.Name}");
+        await nameDialog.ShowDialog(ParentWindow);
+        var name = nameDialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
+
+        const float PlacementGap = 30f;
+        var location = new Rectangle(
+            originNode.UnderlyingNode.Location.X + originNode.UnderlyingNode.Location.Width + PlacementGap,
+            originNode.UnderlyingNode.Location.Y,
+            120f, 50f);
+
+        if (!Session.AddNodeGenerateParameters(User, _currentBoundary, name, injectedType,
+                location, out var newNode, out _, out var nodeError))
+        {
+            await ShowError("Add Module Failed", nodeError);
+            return;
+        }
+
+        // Wire "To Execute" hook → originNode (IFunction<Context,Return>)
+        var toExecuteHook = newNode!.Hooks.FirstOrDefault(h => h.Name == "To Execute");
+        if (toExecuteHook is not null)
+        {
+            if (!Session.AddLink(User, newNode, toExecuteHook, originNode.UnderlyingNode, out _, out var le1))
+            {
+                await ShowError("Create Link Failed", le1);
+                return;
+            }
+        }
+
+        // Wire "Get Context" hook → contextNode (IFunction<Context>)
+        var getContextHook = newNode!.Hooks.FirstOrDefault(h => h.Name == "Get Context");
+        if (getContextHook is not null)
+        {
+            if (!Session.AddLink(User, newNode, getContextHook, contextNode.UnderlyingNode, out _, out var le2))
+                await ShowError("Create Link Failed", le2);
+        }
+    }
+
+    /// <summary>
+    /// Injects a <see cref="WithContext{ContextDerived, ContextBase}"/> node between
+    /// <paramref name="originNode"/> (an <c>IAction&lt;ContextBase&gt;</c> consumer) and
+    /// <paramref name="contextNode"/> (an <c>IFunction&lt;ContextDerived&gt;</c> provider
+    /// where <c>ContextDerived</c> derives from / implements <c>ContextBase</c>).
+    /// The injected node is placed to the right of the origin.
+    /// </summary>
+    private async Task InjectWithContextAsync(
+        NodeViewModel originNode, NodeViewModel contextNode, Type contextBase, Type contextDerived)
+    {
+        if (ParentWindow is null) return;
+
+        var injectedType = typeof(WithContext<,>).MakeGenericType(contextDerived, contextBase);
+
+        var nameDialog = new InputDialog(
+            title: $"Add WithContext<{contextDerived.Name},{contextBase.Name}> Module",
+            prompt: "Enter module name:",
+            defaultText: $"With {contextDerived.Name} As {contextBase.Name}");
+        await nameDialog.ShowDialog(ParentWindow);
+        var name = nameDialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
+
+        const float PlacementGap = 30f;
+        var location = new Rectangle(
+            originNode.UnderlyingNode.Location.X + originNode.UnderlyingNode.Location.Width + PlacementGap,
+            originNode.UnderlyingNode.Location.Y,
+            120f, 50f);
+
+        if (!Session.AddNodeGenerateParameters(User, _currentBoundary, name, injectedType,
+                location, out var newNode, out _, out var nodeError))
+        {
+            await ShowError("Add Module Failed", nodeError);
+            return;
+        }
+
+        // Wire "To Execute" hook → originNode (IAction<ContextBase>)
+        var toExecuteHook = newNode!.Hooks.FirstOrDefault(h => h.Name == "To Execute");
+        if (toExecuteHook is not null)
+        {
+            if (!Session.AddLink(User, newNode, toExecuteHook, originNode.UnderlyingNode, out _, out var le1))
+            {
+                await ShowError("Create Link Failed", le1);
+                return;
+            }
+        }
+
+        // Wire "Get Context" hook → contextNode (IFunction<ContextDerived>)
+        var getContextHook = newNode!.Hooks.FirstOrDefault(h => h.Name == "Get Context");
+        if (getContextHook is not null)
+        {
+            if (!Session.AddLink(User, newNode, getContextHook, contextNode.UnderlyingNode, out _, out var le2))
+                await ShowError("Create Link Failed", le2);
+        }
     }
 
     /// <summary>
