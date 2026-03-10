@@ -1272,6 +1272,36 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 lvm.IsSelected = selected;
     }
 
+    /// <summary>
+    /// Deletes all elements in <paramref name="elements"/> in one batch.
+    /// Called by the canvas when the Delete key is pressed with a multi-selection active.
+    /// Nodes, Starts, and CommentBlocks are supported; any other element types are silently skipped.
+    /// The first error encountered (if any) is shown to the user after all removals are attempted.
+    /// </summary>
+    public async Task DeleteMultipleAsync(IReadOnlyList<ICanvasElement> elements)
+    {
+        // Clear the primary selection so the property panel de-focuses immediately.
+        SelectElement(null);
+
+        CommandError? firstError = null;
+        foreach (var el in elements)
+        {
+            CommandError? err = null;
+            bool ok = el switch
+            {
+                NodeViewModel         nvm => Session.RemoveNode(User, nvm.UnderlyingNode, out err),
+                StartViewModel        svm => Session.RemoveStart(User, svm.UnderlyingStart, out err),
+                CommentBlockViewModel cvm => Session.RemoveCommentBlock(User, _currentBoundary, cvm.UnderlyingBlock, out err),
+                _                        => true,
+            };
+            if (!ok && err is not null)
+                firstError ??= err;
+        }
+
+        if (firstError is not null)
+            await ShowError("Delete Failed", firstError);
+    }
+
     /// <summary>Delete whichever element or link is currently selected.</summary>
     [RelayCommand]
     private async Task DeleteSelected()
