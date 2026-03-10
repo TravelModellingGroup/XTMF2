@@ -25,6 +25,10 @@
             <MenuItem Header="{res:Localize MainWindow_MenuFile}">
                 <MenuItem Header="{res:Localize MainWindow_MenuExit}" Click="Exit_Click"/>
             </MenuItem>
+            <MenuItem Header="Edit">
+                <MenuItem Header="Undo" Command="{Binding UndoCommand}" InputGesture="Ctrl+Z"/>
+                <MenuItem Header="Redo" Command="{Binding RedoCommand}" InputGesture="Ctrl+Y"/>
+            </MenuItem>
             <MenuItem Header="{res:Localize MainWindow_MenuTools}">
                 <MenuItem Header="{res:Localize MainWindow_MenuSettings}" Click="Settings_Click"/>
             </MenuItem>

@@ -13,6 +13,8 @@
 
     <UserControl.KeyBindings>
         <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveModelSystemCommand}"/>
+        <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}"/>
+        <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoCommand}"/>
     </UserControl.KeyBindings>
 
     <Grid RowDefinitions="Auto,*" Margin="10">
@@ -57,7 +59,12 @@
         </Grid>
 
         <!-- ── Main content: toolbox + canvas ──────────────────────── -->
-        <Grid Grid.Row="1" ColumnDefinitions="220,Auto,*">
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="275"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
             <!-- Left: Toolbox -->
             <Border Grid.Column="0"
@@ -75,7 +82,22 @@
                             Margin="0,8,0,0">
                         <StackPanel Orientation="Horizontal"
                                     HorizontalAlignment="Center"
-                                    Spacing="6">
+                                    Spacing="6"
+                                    >
+
+                            <!-- Undo -->
+                            <Button Command="{Binding UndoCommand}"
+                                    IsEnabled="{Binding CanUndo}"
+                                    ToolTip.Tip="Undo (Ctrl+Z)">
+                                <TextBlock Text="&#x21B6;" FontSize="18" HorizontalAlignment="Center"/>
+                            </Button>
+
+                            <!-- Redo -->
+                            <Button Command="{Binding RedoCommand}"
+                                    IsEnabled="{Binding CanRedo}"
+                                    ToolTip.Tip="Redo (Ctrl+Y)">
+                                <TextBlock Text="&#x21B7;" FontSize="18" HorizontalAlignment="Center"/>
+                            </Button>
 
                             <!-- Save -->
                             <Button Command="{Binding SaveModelSystemCommand}"
@@ -115,7 +137,7 @@
 
                     <!-- ── Scrollable toolbox content (fills remaining space) ── -->
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="6" Margin="0,0,10,0">
 
                             <!-- Section: Add elements -->
                             <TextBlock Text="Toolbox"

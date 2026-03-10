@@ -18,16 +18,27 @@
 */
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Text;
 
 namespace XTMF2.Editing
 {
-    public sealed class CommandBuffer
+    public sealed class CommandBuffer : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
+
         private const int MaxCapacity = 20;
         private readonly EditingStack _undo = new EditingStack(MaxCapacity);
         private readonly EditingStack _redo = new EditingStack(MaxCapacity);
         private readonly object _executionLock = new object();
+
+        public CommandBuffer()
+        {
+            _undo.PropertyChanged += (_, _) =>
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanUndo)));
+            _redo.PropertyChanged += (_, _) =>
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanRedo)));
+        }
 
         public bool UndoCommands(out CommandError? error)
         {
@@ -74,7 +85,14 @@ namespace XTMF2.Editing
             lock(_executionLock)
             {
                 _undo.Add(new CommandBatch(command));
+                _redo.Clear();
             }
         }
+
+        /// <summary>True when there is at least one undoable command.</summary>
+        public bool CanUndo => _undo.Count > 0;
+
+        /// <summary>True when there is at least one redoable command.</summary>
+        public bool CanRedo => _redo.Count > 0;
     }
 }

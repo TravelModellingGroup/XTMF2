@@ -31,6 +31,7 @@ using Dock.Model.Core;
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using XTMF2;
@@ -70,6 +71,8 @@ public partial class MainWindow : Window
     private DocumentDock? _documentDock;
     /// <summary>Guard to prevent circular syncing between Documents and VisibleDockables.</summary>
     private bool _suppressDocumentsSync;
+    /// <summary>The <see cref="ModelSystemEditorViewModel"/> in the currently active dock tab, or null.</summary>
+    private ModelSystemEditorViewModel? _activeEditorVm;
 
     private void InitializeDock()
     {
@@ -98,6 +101,9 @@ public partial class MainWindow : Window
         // Reverse-sync: when the dock itself closes a tab, remove it from Documents
         if (_documentDock.VisibleDockables is INotifyCollectionChanged notifyDockables)
             notifyDockables.CollectionChanged += OnVisibleDockablesChanged;
+
+        // Track which tab is active so Undo/Redo can delegate to the right editor.
+        ((INotifyPropertyChanged)_documentDock).PropertyChanged += OnDocumentDockPropertyChanged;
     }
 
     private void OnDocumentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -329,6 +335,45 @@ public partial class MainWindow : Window
         var aboutDialog = new AboutDialog();
         aboutDialog.ShowDialog(this);
     }
+
+    /// <summary>Updates the active editor when the dock's active document changes.</summary>
+    private void OnDocumentDockPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(IDock.ActiveDockable)) return;
+
+        var newVm = (_documentDock?.ActiveDockable as IDocument)?.Context as ModelSystemEditorViewModel;
+        if (ReferenceEquals(_activeEditorVm, newVm)) return;
+
+        if (_activeEditorVm is INotifyPropertyChanged oldNpc)
+            oldNpc.PropertyChanged -= OnActiveEditorPropertyChanged;
+
+        _activeEditorVm = newVm;
+
+        if (_activeEditorVm is INotifyPropertyChanged newNpc)
+            newNpc.PropertyChanged += OnActiveEditorPropertyChanged;
+
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>Refreshes undo/redo can-execute state when the active editor's state changes.</summary>
+    private void OnActiveEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ModelSystemEditorViewModel.CanUndo)
+                           or nameof(ModelSystemEditorViewModel.CanRedo))
+        {
+            UndoCommand.NotifyCanExecuteChanged();
+            RedoCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExecuteUndo))]
+    private void Undo() => _activeEditorVm?.UndoCommand.Execute(null);
+    private bool CanExecuteUndo() => _activeEditorVm?.CanUndo ?? false;
+
+    [RelayCommand(CanExecute = nameof(CanExecuteRedo))]
+    private void Redo() => _activeEditorVm?.RedoCommand.Execute(null);
+    private bool CanExecuteRedo() => _activeEditorVm?.CanRedo ?? false;
 
     private void Exit_Click(object? sender, RoutedEventArgs e) => Close();
 
