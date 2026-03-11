@@ -81,7 +81,12 @@ namespace XTMF2.ModelSystemConstruct
 
         internal override bool Construct(ref string? error)
         {
-            var moduleCount = _Destinations.Count(d => !d.IsDisabled);
+            // Count enabled destinations, resolving ghost nodes to their real targets.
+            var moduleCount = _Destinations.Count(d =>
+            {
+                var effective = d is GhostNode gn ? gn.ReferencedNode : d;
+                return !effective.IsDisabled;
+            });
             if(OriginHook!.Cardinality == HookCardinality.AtLeastOne)
             {
                 if (moduleCount <= 0)
@@ -101,9 +106,10 @@ namespace XTMF2.ModelSystemConstruct
                 int index = 0;
                 for (int i = 0; i < _Destinations.Count; i++)
                 {
-                    if (!_Destinations[i].IsDisabled)
+                    var effectiveDest = _Destinations[i] is GhostNode gn ? gn.ReferencedNode : _Destinations[i];
+                    if (!effectiveDest.IsDisabled)
                     {
-                        OriginHook.Install(Origin!, _Destinations[i], index++);
+                        OriginHook.Install(Origin!, effectiveDest, index++);
                     }
                 }
             }

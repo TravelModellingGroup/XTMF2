@@ -38,6 +38,15 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         public Boundary ContainedWithin { get; protected set; }
 
+        /// <summary>
+        /// Transfers this node to a different containing boundary.
+        /// Only called by <see cref="Editing.ModelSystemSession"/> during move operations.
+        /// </summary>
+        internal void UpdateContainedWithin(Boundary newBoundary)
+        {
+            ContainedWithin = newBoundary;
+        }
+
         protected const string NameProperty = "Name";
         protected const string DescriptionProperty = "Description";
         protected const string XProperty = "X";
@@ -371,7 +380,12 @@ namespace XTMF2.ModelSystemConstruct
 
         internal virtual void Save(ref int index, Dictionary<Node, int> moduleDictionary, Dictionary<Type, int> typeDictionary, Utf8JsonWriter writer)
         {
-            moduleDictionary.Add(this, index);
+            // Support pre-indexed nodes (PreAssignNodeIndices was called before Save).
+            if (!moduleDictionary.TryGetValue(this, out var myIndex))
+            {
+                myIndex = index++;
+                moduleDictionary[this] = myIndex;
+            }
             writer.WriteStartObject();
             writer.WriteString(NameProperty, Name);
             writer.WriteString(DescriptionProperty, Description);
@@ -380,7 +394,7 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteNumber(YProperty, Location.Y);
             writer.WriteNumber(WidthProperty, Location.Width);
             writer.WriteNumber(HeightProperty, Location.Height);
-            writer.WriteNumber(IndexProperty, index++);
+            writer.WriteNumber(IndexProperty, myIndex);
             if (ParameterValue is not null)
             {
                 ParameterValue.Save(writer);
