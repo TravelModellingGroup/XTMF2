@@ -742,7 +742,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
-    /// Creates a new <see cref="Execute{T}"/> node whose generic parameter
+    /// Creates a new <see cref="ExecuteWithContext{T}"/> node whose generic parameter
     /// matches the return type <c>T</c> that <paramref name="sourceNode"/>'s module implements
     /// via <c>IFunction&lt;T&gt;</c>.  The new node is positioned to the right of
     /// <paramref name="sourceNode"/> and its <em>Context</em> hook is linked back to the source.
@@ -754,7 +754,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var returnType = GetIFunctionReturnType(sourceNode.UnderlyingNode.Type);
         if (returnType is null) return;
 
-        var executeWithContextType = typeof(Execute<>).MakeGenericType(returnType);
+        var executeWithContextType = typeof(ExecuteWithContext<>).MakeGenericType(returnType);
 
         var nameDialog = new InputDialog(
             title: $"Add Execute With Context<{returnType.Name}> Module",
@@ -778,7 +778,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         // Find the "Context" hook on the new ExecuteWithContext node and link it to sourceNode.
-        var contextHook = newNode!.Hooks.FirstOrDefault(h => h.Name == "Context");
+        var contextHook = newNode!.Hooks.FirstOrDefault(h => h.Name == "Get Context");
         if (contextHook is not null)
         {
             if (!Session.AddLink(User, newNode, contextHook, sourceNode.UnderlyingNode, out _, out var linkError))
