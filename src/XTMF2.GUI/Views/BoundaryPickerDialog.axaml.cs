@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.GUI.ViewModels;
@@ -47,6 +48,7 @@ public enum BoundaryPickerResult
 public partial class BoundaryPickerDialog : Window, INotifyPropertyChanged
 {
     private BoundaryBrowseItem? _selectedBrowseItem;
+    private List<BoundaryBrowseItem> _allBrowseItems = new();
 
     // ── Result ────────────────────────────────────────────────────────────
     /// <summary>How the dialog was closed.</summary>
@@ -108,18 +110,67 @@ public partial class BoundaryPickerDialog : Window, INotifyPropertyChanged
                 preSelect = item;
         }
 
+        _allBrowseItems = new List<BoundaryBrowseItem>(BrowseItems);
+
         // Pre-select the current boundary once the window is open and the list is rendered.
-        if (preSelect is not null)
+        Opened += (_, _) =>
         {
-            Opened += (_, _) =>
+            if (preSelect is not null)
             {
                 SelectedBrowseItem = preSelect;
                 BoundaryListBox.ScrollIntoView(preSelect);
-            };
+            }
+            SearchBox.Focus();
+        };
+
+        Activated += (_, _) => SearchBox.Focus();
+
+        SearchBox.TextChanged += SearchBox_TextChanged;
+        SearchBox.KeyDown     += SearchBox_KeyDown;
+    }
+
+    // ── Search ────────────────────────────────────────────────────────────
+
+    private void SearchBox_TextChanged(object? sender, TextChangedEventArgs e)
+    {
+        var query = SearchBox.Text?.Trim() ?? string.Empty;
+        BrowseItems.Clear();
+        foreach (var item in _allBrowseItems)
+        {
+            if (string.IsNullOrEmpty(query) ||
+                item.Boundary.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                BrowseItems.Add(item);
+            }
+        }
+        // Keep first visible item selected so the user can immediately press Enter.
+        if (BrowseItems.Count > 0 && (SelectedBrowseItem is null || !BrowseItems.Contains(SelectedBrowseItem)))
+            SelectedBrowseItem = BrowseItems[0];
+        else if (BrowseItems.Count == 0)
+            SelectedBrowseItem = null;
+    }
+
+    private void SearchBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && BrowseItems.Count > 0)
+        {
+            SelectedBrowseItem = BrowseItems[0];
+            Result             = BoundaryPickerResult.Navigate;
+            SelectedBoundary   = SelectedBrowseItem.Boundary;
+            Close();
+            e.Handled = true;
         }
     }
 
     // ── Button handlers ───────────────────────────────────────────────────
+
+    private void BoundaryListBox_DoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e)
+    {
+        if (SelectedBrowseItem is null) return;
+        Result           = BoundaryPickerResult.Navigate;
+        SelectedBoundary = SelectedBrowseItem.Boundary;
+        Close();
+    }
 
     private void Navigate_Click(object? sender, RoutedEventArgs e)
     {

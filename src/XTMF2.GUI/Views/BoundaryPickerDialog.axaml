@@ -12,24 +12,31 @@
         MinHeight="300"
         WindowStartupLocation="CenterOwner">
 
-    <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="16">
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" Margin="16">
 
         <!-- Instructions -->
         <TextBlock Grid.Row="0"
                    Text="Select a boundary to navigate to, or create a new child boundary below."
                    FontSize="13"
                    TextWrapping="Wrap"
-                   Margin="0,0,0,10"/>
+                   Margin="0,0,0,8"/>
+
+        <!-- Search box -->
+        <TextBox Grid.Row="1"
+                 x:Name="SearchBox"
+                 Watermark="Search boundaries…"
+                 Margin="0,0,0,8"/>
 
         <!-- Boundary list -->
-        <Border Grid.Row="1"
+        <Border Grid.Row="2"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                 BorderThickness="1"
                 CornerRadius="4">
             <ListBox x:Name="BoundaryListBox"
                      ItemsSource="{Binding BrowseItems}"
                      SelectedItem="{Binding SelectedBrowseItem, Mode=TwoWay}"
-                     SelectionMode="Single">
+                     SelectionMode="Single"
+                     DoubleTapped="BoundaryListBox_DoubleTapped">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:BoundaryBrowseItem">
                         <TextBlock Text="{Binding Boundary.Name}"
@@ -41,7 +48,7 @@
         </Border>
 
         <!-- Create new boundary section -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Margin="0,10,0,0"
                 Padding="0,8,0,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
@@ -60,7 +67,7 @@
         </Border>
 
         <!-- Dialog buttons -->
-        <StackPanel Grid.Row="3"
+        <StackPanel Grid.Row="4"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="10"
