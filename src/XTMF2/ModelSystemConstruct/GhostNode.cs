@@ -22,183 +22,182 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
-namespace XTMF2.ModelSystemConstruct
+namespace XTMF2.ModelSystemConstruct;
+
+/// <summary>
+/// A visual alias for another <see cref="Node"/> that may reside on a different
+/// <see cref="Boundary"/>.
+/// <para>
+/// Ghost nodes always mirror the name of their referenced node, expose no hooks,
+/// and are rendered on the canvas with a dashed outline.  They can be link
+/// <em>destinations</em> (links drawn to them are displayed on the canvas) but
+/// they never act as link origins.  When the real node is deleted all ghost nodes
+/// that reference it are automatically removed.
+/// </para>
+/// </summary>
+public sealed class GhostNode : Node
 {
+    // ── JSON property names (only what is unique to GhostNode) ───────
+    internal const string ReferencedNodeProperty = "ReferencedNode";
+
+    /// <summary>The real node that this ghost node visually represents.</summary>
+    public Node ReferencedNode { get; }
+
     /// <summary>
-    /// A visual alias for another <see cref="Node"/> that may reside on a different
-    /// <see cref="Boundary"/>.
-    /// <para>
-    /// Ghost nodes always mirror the name of their referenced node, expose no hooks,
-    /// and are rendered on the canvas with a dashed outline.  They can be link
-    /// <em>destinations</em> (links drawn to them are displayed on the canvas) but
-    /// they never act as link origins.  When the real node is deleted all ghost nodes
-    /// that reference it are automatically removed.
-    /// </para>
+    /// Creates a ghost node that mirrors <paramref name="referencedNode"/>,
+    /// placed at <paramref name="location"/> inside <paramref name="containedWithin"/>.
     /// </summary>
-    public sealed class GhostNode : Node
+    internal GhostNode(Node referencedNode, Boundary containedWithin, Rectangle location)
+        : base(referencedNode.Name, null!, containedWithin, Array.Empty<NodeHook>(), location)
     {
-        // ── JSON property names (only what is unique to GhostNode) ───────
-        internal const string ReferencedNodeProperty = "ReferencedNode";
+        ReferencedNode = referencedNode;
+        // Track name changes on the referenced node.
+        ((INotifyPropertyChanged)referencedNode).PropertyChanged += OnReferencedNodePropertyChanged;
+    }
 
-        /// <summary>The real node that this ghost node visually represents.</summary>
-        public Node ReferencedNode { get; }
-
-        /// <summary>
-        /// Creates a ghost node that mirrors <paramref name="referencedNode"/>,
-        /// placed at <paramref name="location"/> inside <paramref name="containedWithin"/>.
-        /// </summary>
-        internal GhostNode(Node referencedNode, Boundary containedWithin, Rectangle location)
-            : base(referencedNode.Name, null!, containedWithin, Array.Empty<NodeHook>(), location)
+    private void OnReferencedNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(Name))
         {
-            ReferencedNode = referencedNode;
-            // Track name changes on the referenced node.
-            ((INotifyPropertyChanged)referencedNode).PropertyChanged += OnReferencedNodePropertyChanged;
+            Name = ReferencedNode.Name;
+            // The Name setter in Node already fires PropertyChanged for Name.
+        }
+    }
+
+    /// <summary>
+    /// Ghost nodes do not write themselves in a boundary's Nodes array.
+    /// They are indexed here (so links can reference them) and serialised
+    /// by <see cref="Boundary"/> in a dedicated GhostNodes array.
+    /// </summary>
+    internal override void Save(ref int index, Dictionary<Node, int> nodeDictionary,
+        Dictionary<Type, int> typeDictionary, Utf8JsonWriter writer)
+    {
+        // Index this ghost node so links can reference it by index.
+        // The actual JSON object is written separately by Boundary.SaveGhostNodes.
+        if (!nodeDictionary.TryGetValue(this, out _))
+            nodeDictionary[this] = index++;
+    }
+
+    /// <summary>
+    /// Writes the standalone JSON object for this ghost node.
+    /// Called by <see cref="Boundary"/> during save after all regular nodes and child
+    /// boundaries have been assigned their indices.
+    /// </summary>
+    internal void SaveObject(Dictionary<Node, int> nodeDictionary, Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject();
+        writer.WriteNumber(ReferencedNodeProperty, nodeDictionary[ReferencedNode]);
+        writer.WriteNumber(XProperty, Location.X);
+        writer.WriteNumber(YProperty, Location.Y);
+        writer.WriteNumber(WidthProperty, Location.Width);
+        writer.WriteNumber(HeightProperty, Location.Height);
+        writer.WriteNumber(IndexProperty, nodeDictionary[this]);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>
+    /// Reads a ghost node entry from JSON and appends a deferred-resolution record.
+    /// The ghost node is fully constructed later by <see cref="Resolve"/> once all
+    /// node indices are available.
+    /// </summary>
+    internal static bool LoadDeferred(
+        ref Utf8JsonReader reader,
+        Boundary boundary,
+        List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferreds,
+        [NotNullWhen(false)] ref string? error)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            error = "Expected a start object when loading a ghost node.";
+            return false;
         }
 
-        private void OnReferencedNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        int refIndex = -1, selfIndex = -1;
+        Rectangle location = new Rectangle();
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
-            if (e.PropertyName == nameof(Name))
+            if (reader.TokenType == JsonTokenType.Comment) continue;
+            if (reader.TokenType != JsonTokenType.PropertyName)
             {
-                Name = ReferencedNode.Name;
-                // The Name setter in Node already fires PropertyChanged for Name.
-            }
-        }
-
-        /// <summary>
-        /// Ghost nodes do not write themselves in a boundary's Nodes array.
-        /// They are indexed here (so links can reference them) and serialised
-        /// by <see cref="Boundary"/> in a dedicated GhostNodes array.
-        /// </summary>
-        internal override void Save(ref int index, Dictionary<Node, int> nodeDictionary,
-            Dictionary<Type, int> typeDictionary, Utf8JsonWriter writer)
-        {
-            // Index this ghost node so links can reference it by index.
-            // The actual JSON object is written separately by Boundary.SaveGhostNodes.
-            if (!nodeDictionary.TryGetValue(this, out _))
-                nodeDictionary[this] = index++;
-        }
-
-        /// <summary>
-        /// Writes the standalone JSON object for this ghost node.
-        /// Called by <see cref="Boundary"/> during save after all regular nodes and child
-        /// boundaries have been assigned their indices.
-        /// </summary>
-        internal void SaveObject(Dictionary<Node, int> nodeDictionary, Utf8JsonWriter writer)
-        {
-            writer.WriteStartObject();
-            writer.WriteNumber(ReferencedNodeProperty, nodeDictionary[ReferencedNode]);
-            writer.WriteNumber(XProperty, Location.X);
-            writer.WriteNumber(YProperty, Location.Y);
-            writer.WriteNumber(WidthProperty, Location.Width);
-            writer.WriteNumber(HeightProperty, Location.Height);
-            writer.WriteNumber(IndexProperty, nodeDictionary[this]);
-            writer.WriteEndObject();
-        }
-
-        /// <summary>
-        /// Reads a ghost node entry from JSON and appends a deferred-resolution record.
-        /// The ghost node is fully constructed later by <see cref="Resolve"/> once all
-        /// node indices are available.
-        /// </summary>
-        internal static bool LoadDeferred(
-            ref Utf8JsonReader reader,
-            Boundary boundary,
-            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferreds,
-            [NotNullWhen(false)] ref string? error)
-        {
-            if (reader.TokenType != JsonTokenType.StartObject)
-            {
-                error = "Expected a start object when loading a ghost node.";
+                error = "Invalid token when loading a ghost node.";
                 return false;
             }
 
-            int refIndex = -1, selfIndex = -1;
-            Rectangle location = new Rectangle();
-
-            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            if (reader.ValueTextEquals(ReferencedNodeProperty))
             {
-                if (reader.TokenType == JsonTokenType.Comment) continue;
-                if (reader.TokenType != JsonTokenType.PropertyName)
-                {
-                    error = "Invalid token when loading a ghost node.";
-                    return false;
-                }
-
-                if (reader.ValueTextEquals(ReferencedNodeProperty))
-                {
-                    reader.Read();
-                    refIndex = reader.GetInt32();
-                }
-                else if (reader.ValueTextEquals(XProperty))
-                {
-                    reader.Read();
-                    location = new Rectangle(reader.GetSingle(), location.Y, location.Width, location.Height);
-                }
-                else if (reader.ValueTextEquals(YProperty))
-                {
-                    reader.Read();
-                    location = new Rectangle(location.X, reader.GetSingle(), location.Width, location.Height);
-                }
-                else if (reader.ValueTextEquals(WidthProperty))
-                {
-                    reader.Read();
-                    location = new Rectangle(location.X, location.Y, reader.GetSingle(), location.Height);
-                }
-                else if (reader.ValueTextEquals(HeightProperty))
-                {
-                    reader.Read();
-                    location = new Rectangle(location.X, location.Y, location.Width, reader.GetSingle());
-                }
-                else if (reader.ValueTextEquals(IndexProperty))
-                {
-                    reader.Read();
-                    selfIndex = reader.GetInt32();
-                }
-                else
-                {
-                    // Skip unknown fields for forward compatibility.
-                    reader.Read();
-                }
+                reader.Read();
+                refIndex = reader.GetInt32();
             }
-
-            if (refIndex < 0)
+            else if (reader.ValueTextEquals(XProperty))
             {
-                error = "Ghost node is missing its referenced node index.";
-                return false;
+                reader.Read();
+                location = new Rectangle(reader.GetSingle(), location.Y, location.Width, location.Height);
             }
-            if (selfIndex < 0)
+            else if (reader.ValueTextEquals(YProperty))
             {
-                error = "Ghost node is missing its own index.";
-                return false;
+                reader.Read();
+                location = new Rectangle(location.X, reader.GetSingle(), location.Width, location.Height);
             }
-
-            deferreds.Add((boundary, refIndex, selfIndex, location));
-            return true;
+            else if (reader.ValueTextEquals(WidthProperty))
+            {
+                reader.Read();
+                location = new Rectangle(location.X, location.Y, reader.GetSingle(), location.Height);
+            }
+            else if (reader.ValueTextEquals(HeightProperty))
+            {
+                reader.Read();
+                location = new Rectangle(location.X, location.Y, location.Width, reader.GetSingle());
+            }
+            else if (reader.ValueTextEquals(IndexProperty))
+            {
+                reader.Read();
+                selfIndex = reader.GetInt32();
+            }
+            else
+            {
+                // Skip unknown fields for forward compatibility.
+                reader.Read();
+            }
         }
 
-        /// <summary>
-        /// Resolves a previously deferred ghost node, creating the object and
-        /// inserting it into the global <paramref name="nodes"/> dictionary.
-        /// </summary>
-        internal static bool Resolve(
-            Dictionary<int, Node> nodes,
-            Boundary containedIn,
-            int refIndex,
-            int selfIndex,
-            Rectangle location,
-            [NotNullWhen(true)] out GhostNode? ghost,
-            [NotNullWhen(false)] ref string? error)
+        if (refIndex < 0)
         {
-            if (!nodes.TryGetValue(refIndex, out var refNode))
-            {
-                ghost = null;
-                error = $"Ghost node references unknown node index {refIndex}.";
-                return false;
-            }
-
-            ghost = new GhostNode(refNode, containedIn, location);
-            nodes[selfIndex] = ghost;
-            return true;
+            error = "Ghost node is missing its referenced node index.";
+            return false;
         }
+        if (selfIndex < 0)
+        {
+            error = "Ghost node is missing its own index.";
+            return false;
+        }
+
+        deferreds.Add((boundary, refIndex, selfIndex, location));
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves a previously deferred ghost node, creating the object and
+    /// inserting it into the global <paramref name="nodes"/> dictionary.
+    /// </summary>
+    internal static bool Resolve(
+        Dictionary<int, Node> nodes,
+        Boundary containedIn,
+        int refIndex,
+        int selfIndex,
+        Rectangle location,
+        [NotNullWhen(true)] out GhostNode? ghost,
+        [NotNullWhen(false)] ref string? error)
+    {
+        if (!nodes.TryGetValue(refIndex, out var refNode))
+        {
+            ghost = null;
+            error = $"Ghost node references unknown node index {refIndex}.";
+            return false;
+        }
+
+        ghost = new GhostNode(refNode, containedIn, location);
+        nodes[selfIndex] = ghost;
+        return true;
     }
 }
