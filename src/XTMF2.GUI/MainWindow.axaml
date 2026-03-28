@@ -29,6 +29,11 @@
                 <MenuItem Header="Undo" Command="{Binding UndoCommand}" InputGesture="Ctrl+Z"/>
                 <MenuItem Header="Redo" Command="{Binding RedoCommand}" InputGesture="Ctrl+Y"/>
             </MenuItem>
+            <MenuItem Header="Navigate">
+                <MenuItem Header="Navigate Boundary…"
+                          Command="{Binding NavigateBoundaryCommand}"
+                          InputGesture="Ctrl+B"/>
+            </MenuItem>
             <MenuItem Header="{res:Localize MainWindow_MenuTools}">
                 <MenuItem Header="{res:Localize MainWindow_MenuSettings}" Click="Settings_Click"/>
             </MenuItem>
