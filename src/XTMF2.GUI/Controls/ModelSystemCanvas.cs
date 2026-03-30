@@ -1818,6 +1818,16 @@ public sealed class ModelSystemCanvas : Control
                         firstHit ??= ghost;
                     }
                 }
+                foreach (var start in _vm.Starts)
+                {
+                    var sr = new Rect(start.X, start.Y, start.Diameter, start.Diameter);
+                    if (finalRect.Intersects(sr))
+                    {
+                        _multiSelection.Add(start);
+                        start.IsSelected = true;
+                        firstHit ??= start;
+                    }
+                }
                 if (firstHit is not null)
                     _vm.SelectedElement = firstHit;
             }
