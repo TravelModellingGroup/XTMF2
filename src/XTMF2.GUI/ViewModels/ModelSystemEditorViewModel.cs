@@ -338,9 +338,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         foreach (var node in boundary.Modules)        Nodes.Add(new NodeViewModel(node, Session, User));
         foreach (var start in boundary.Starts)        Starts.Add(new StartViewModel(start, Session, User));
+        // Ghost nodes must be populated before links so that ResolveElement can find
+        // GhostNodeViewModel instances when a link destination is a GhostNode.
+        foreach (var ghost in boundary.GhostNodes)    GhostNodes.Add(new GhostNodeViewModel(ghost, Session, User));
         foreach (var link in boundary.Links)          TryAddLinkViewModel(link);
         foreach (var cb in boundary.CommentBlocks)    CommentBlocks.Add(new CommentBlockViewModel(cb, Session, User));
-        foreach (var ghost in boundary.GhostNodes)    GhostNodes.Add(new GhostNodeViewModel(ghost, Session, User));
     }
 
     // Cached reference to the current boundary's Boundaries collection so we can

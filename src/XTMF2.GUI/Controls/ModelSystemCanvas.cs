@@ -1008,12 +1008,14 @@ public sealed class ModelSystemCanvas : Control
     private double ElementRenderWidth(ICanvasElement el) =>
         el is NodeViewModel nvm ? NodeRenderWidth(nvm)
         : el is CommentBlockViewModel cvm ? cvm.Width
+        : el is GhostNodeViewModel gnvm ? gnvm.Width
         : 0;
 
     /// <summary>Returns the rendered height of any resizable canvas element.</summary>
     private double ElementRenderHeight(ICanvasElement el) =>
         el is NodeViewModel nvm ? NodeRenderHeight(nvm)
         : el is CommentBlockViewModel cvm ? cvm.Height
+        : el is GhostNodeViewModel gnvm ? gnvm.Height
         : 0;
 
     private void RenderNodes(DrawingContext ctx)
@@ -1638,6 +1640,8 @@ public sealed class ModelSystemCanvas : Control
                 resizingNode.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
             else if (_resizing is CommentBlockViewModel resizingComment)
                 resizingComment.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
+            else if (_resizing is GhostNodeViewModel resizingGhost)
+                resizingGhost.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
             InvalidateAndMeasure();
             e.Handled = true;
             return;
