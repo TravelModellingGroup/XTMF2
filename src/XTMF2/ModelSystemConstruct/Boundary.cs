@@ -52,6 +52,7 @@ namespace XTMF2.ModelSystemConstruct
         private const string LinksProperty = "Links";
         private const string CommentBlocksProperty = "CommentBlocks";
         private const string FunctionTemplateProperty = "FunctionTemplates";
+        private const string GhostNodesProperty = "GhostNodes";
 
         /// <summary>
         /// This lock must be obtained before changing any local settings.
@@ -63,11 +64,19 @@ namespace XTMF2.ModelSystemConstruct
         private readonly ObservableCollection<Link> _links = new ObservableCollection<Link>();
         private readonly ObservableCollection<CommentBlock> _commentBlocks = new ObservableCollection<CommentBlock>();
         private readonly ObservableCollection<FunctionTemplate> _functionTemplates = new ObservableCollection<FunctionTemplate>();
+        private readonly ObservableCollection<GhostNode> _ghostNodes = new ObservableCollection<GhostNode>();
 
         /// <summary>
         /// Get readonly access to the links contained in this boundary.
         /// </summary>
         public ReadOnlyObservableCollection<Link> Links => new ReadOnlyObservableCollection<Link>(_links);
+
+        /// <summary>
+        /// Get readonly access to the ghost nodes contained in this boundary.
+        /// Ghost nodes are visual aliases that point to real nodes which may reside
+        /// on a different boundary.
+        /// </summary>
+        public ReadOnlyObservableCollection<GhostNode> GhostNodes => new ReadOnlyObservableCollection<GhostNode>(_ghostNodes);
 
         /// <summary>
         /// Create a new boundary, optionally with a parent
@@ -611,6 +620,15 @@ namespace XTMF2.ModelSystemConstruct
                     functionTemplate.Save(ref index, nodeDictionary, typeDictionary, writer);
                 }
                 writer.WriteEndArray();
+                // Ghost nodes are written last so that all referenced nodes already have
+                // indices in nodeDictionary (pre-assigned by PreAssignNodeIndices).
+                writer.WritePropertyName(GhostNodesProperty);
+                writer.WriteStartArray();
+                foreach (var ghost in _ghostNodes)
+                {
+                    ghost.SaveObject(nodeDictionary, writer);
+                }
+                writer.WriteEndArray();
                 writer.WriteEndObject();
             }
         }
@@ -624,6 +642,63 @@ namespace XTMF2.ModelSystemConstruct
             }
             error = null;
             return true;
+        }
+
+        /// <summary>
+        /// Add a ghost node to this boundary.
+        /// </summary>
+        internal bool AddGhostNode(GhostNode ghostNode, [NotNullWhen(false)] out CommandError? error)
+        {
+            if (ghostNode is null) throw new ArgumentNullException(nameof(ghostNode));
+            lock (_writeLock)
+            {
+                if (_ghostNodes.Contains(ghostNode))
+                {
+                    error = new CommandError("The ghost node already exists in the boundary!");
+                    return false;
+                }
+                _ghostNodes.Add(ghostNode);
+            }
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Remove a ghost node from this boundary.
+        /// </summary>
+        internal bool RemoveGhostNode(GhostNode ghostNode, [NotNullWhen(false)] out CommandError? error)
+        {
+            if (ghostNode is null) throw new ArgumentNullException(nameof(ghostNode));
+            lock (_writeLock)
+            {
+                if (!_ghostNodes.Remove(ghostNode))
+                {
+                    error = new CommandError("Unable to find the ghost node to remove from the boundary!");
+                    return false;
+                }
+            }
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Pre-assigns sequential indices for all nodes (starts, modules, function template
+        /// internals) and ghost nodes in this boundary and all descendant boundaries.
+        /// This allows <see cref="Node.Save"/> to be called after all indices are known,
+        /// making it possible to write links whose destinations include ghost nodes.
+        /// </summary>
+        internal void PreAssignNodeIndices(ref int index, Dictionary<Node, int> nodeDictionary)
+        {
+            foreach (var start in _starts)
+                if (!nodeDictionary.ContainsKey(start)) nodeDictionary[start] = index++;
+            foreach (var module in _modules)
+                if (!nodeDictionary.ContainsKey(module)) nodeDictionary[module] = index++;
+            foreach (var child in _boundaries)
+                child.PreAssignNodeIndices(ref index, nodeDictionary);
+            foreach (var ft in _functionTemplates)
+                ft.InternalModules.PreAssignNodeIndices(ref index, nodeDictionary);
+            foreach (var ghost in _ghostNodes)
+                if (!nodeDictionary.ContainsKey(ghost)) nodeDictionary[ghost] = index++;
         }
 
         /// <summary>
@@ -657,6 +732,7 @@ namespace XTMF2.ModelSystemConstruct
         
 
         internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
+            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes,
             ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
@@ -735,7 +811,7 @@ namespace XTMF2.ModelSystemConstruct
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
                             var boundary = new Boundary(this);
-                            if (!boundary.Load(modules, typeLookup, node, scriptedParameters, ref reader, ref error))
+                            if (!boundary.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error))
                             {
                                 return false;
                             }
@@ -789,11 +865,29 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         if(reader.TokenType != JsonTokenType.Comment)
                         {
-                            if(!FunctionTemplate.Load(modules, typeLookup, node, scriptedParameters, ref reader, this, out var template, ref error))
+                            if(!FunctionTemplate.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, this, out var template, ref error))
                             {
                                 return false;
                             }
                             _functionTemplates.Add(template!);
+                        }
+                    }
+                }
+                else if (reader.ValueTextEquals(GhostNodesProperty))
+                {
+                    if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                    {
+                        return Helper.FailWith(out error, "Unexpected token when starting to read Ghost Nodes for a boundary.");
+                    }
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        if (reader.TokenType != JsonTokenType.Comment)
+                        {
+                            // Defer resolution until all nodes across all boundaries are loaded.
+                            if (!GhostNode.LoadDeferred(ref reader, this, deferredGhostNodes, ref error))
+                            {
+                                return false;
+                            }
                         }
                     }
                 }

@@ -211,6 +211,9 @@ namespace XTMF2
             writer.WritePropertyName(BoundariesProperty);
             writer.WriteStartArray();
             Dictionary<Node, int> nodeDictionary = new Dictionary<Node, int>();
+            // Pre-assign indices for ALL nodes (including ghost nodes that may reference
+            // siblings) so that link serialisation can reference any node by index.
+            GlobalBoundary.PreAssignNodeIndices(ref index, nodeDictionary);
             GlobalBoundary.Save(ref index, nodeDictionary, typeDictionary, writer);
             writer.WriteEndArray();
             return nodeDictionary;
@@ -335,6 +338,7 @@ namespace XTMF2
                 var typeLookup = new Dictionary<int, Type>();
                 var nodes = new Dictionary<int, Node>();
                 List<(Node toAssignTo, string parameterExpression)> scriptedParameters = new();
+                List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes = new();
                 while (reader.Read())
                 {
                     if (reader.TokenType == JsonTokenType.PropertyName)
@@ -348,7 +352,7 @@ namespace XTMF2
                         }
                         else if (reader.ValueTextEquals(BoundariesProperty))
                         {
-                            if (!LoadBoundaries(modules, typeLookup, nodes, scriptedParameters, ref reader, modelSystem.GlobalBoundary, ref error))
+                            if (!LoadBoundaries(modules, typeLookup, nodes, scriptedParameters, deferredGhostNodes, ref reader, modelSystem.GlobalBoundary, ref error))
                             {
                                 return null;
                             }
@@ -362,6 +366,16 @@ namespace XTMF2
                         }
                         // Unknown properties are silently skipped for forward compatibility.
                     }
+                }
+                // Resolve deferred ghost nodes now that all boundaries and nodes are loaded.
+                foreach (var (containedIn, refIndex, selfIndex, location) in deferredGhostNodes)
+                {
+                    if (!GhostNode.Resolve(nodes, containedIn, refIndex, selfIndex, location, out var ghost, ref error))
+                    {
+                        // Non-fatal: skip ghost nodes that can't be resolved (e.g. referenced node was removed).
+                        continue;
+                    }
+                    containedIn.AddGhostNode(ghost!, out _);
                 }
                 // Now that all of the modules have been loaded we can process the scripted parameters
                 foreach (var (toAssignTo, parameterExpression) in scriptedParameters)
@@ -462,7 +476,9 @@ namespace XTMF2
         }
 
         private static bool LoadBoundaries(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
-            List<(Node toAssignTo, string parameterExpression)> scriptedParameters, ref Utf8JsonReader reader, Boundary global, [NotNullWhen(false)] ref string? error)
+            List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
+            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes,
+            ref Utf8JsonReader reader, Boundary global, [NotNullWhen(false)] ref string? error)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
@@ -474,7 +490,7 @@ namespace XTMF2
                 return FailWith(out error, "Unexpected end of file when loading boundaries!");
             }
 
-            if (!global.Load(modules, typeLookup, nodes, scriptedParameters, ref reader, ref error))
+            if (!global.Load(modules, typeLookup, nodes, scriptedParameters, deferredGhostNodes, ref reader, ref error))
             {
                 return false;
             }

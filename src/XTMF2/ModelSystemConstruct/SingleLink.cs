@@ -58,10 +58,13 @@ namespace XTMF2.ModelSystemConstruct
 
         internal override bool Construct(ref string? error)
         {
+            // Resolve ghost-node destinations to their real node at runtime.
+            var effectiveDest = Destination is GhostNode gn ? gn.ReferencedNode : Destination!;
+
             // if not optional
             if (OriginHook!.Cardinality == HookCardinality.Single)
             {
-                if (Destination!.IsDisabled)
+                if (effectiveDest.IsDisabled)
                 {
                     error = "A link destined for a disabled module was not optional.";
                     return false;
@@ -75,7 +78,7 @@ namespace XTMF2.ModelSystemConstruct
             if (!IsDisabled)
             {
                 // The index doesn't matter for this type
-                OriginHook.Install(Origin!, Destination!, 0);
+                OriginHook.Install(Origin!, effectiveDest, 0);
             }
             return true;
         }

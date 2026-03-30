@@ -796,6 +796,252 @@ namespace XTMF2.Editing
         /// <param name="node">The node to be removed.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        /// <summary>
+        /// Add a ghost node — a visual alias for <paramref name="referencedNode"/> —
+        /// to <paramref name="boundary"/> at <paramref name="location"/>.
+        /// Ghost nodes mirror their referenced node's name, have no hooks, and are
+        /// rendered with a dashed outline.  When the real node is deleted all ghost
+        /// nodes referencing it are automatically deleted as well.
+        /// </summary>
+        public bool AddGhostNode(User user, Boundary boundary, Node referencedNode, Rectangle location,
+            [NotNullWhen(true)] out GhostNode? ghostNode,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+            ArgumentNullException.ThrowIfNull(referencedNode);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    ghostNode = null;
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var ghost = new GhostNode(referencedNode, boundary, location);
+                if (!boundary.AddGhostNode(ghost, out error))
+                {
+                    ghostNode = null;
+                    return false;
+                }
+                ghostNode = ghost;
+
+                Buffer.AddUndo(new Command(() =>
+                {
+                    return (boundary.RemoveGhostNode(ghost, out var e), e);
+                }, () =>
+                {
+                    return (boundary.AddGhostNode(ghost, out var e), e);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Remove a ghost node from its boundary, also removing any incoming links.
+        /// </summary>
+        public bool RemoveGhostNode(User user, GhostNode ghostNode,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(ghostNode);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var boundary = ghostNode.ContainedWithin!;
+                var incomingLinks = GetLinksGoingTo(ghostNode);
+                var multiLinkInfo = BuildMultiLinkRestoreInfo(incomingLinks, ghostNode);
+
+                RemoveIncomingLinks(incomingLinks, ghostNode, multiLinkInfo);
+
+                if (boundary.RemoveGhostNode(ghostNode, out error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        if (boundary.AddGhostNode(ghostNode, out var e))
+                        {
+                            RestoreIncomingLinks(incomingLinks, ghostNode, multiLinkInfo);
+                            return (true, null);
+                        }
+                        return (false, e);
+                    }, () =>
+                    {
+                        RemoveIncomingLinks(incomingLinks, ghostNode, multiLinkInfo);
+                        return (boundary.RemoveGhostNode(ghostNode, out var e), e);
+                    }));
+                    return true;
+                }
+                else
+                {
+                    RestoreIncomingLinks(incomingLinks, ghostNode, multiLinkInfo);
+                    return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Moves a regular node (and all of its outgoing links) from its current boundary to
+        /// <paramref name="targetBoundary"/>.  The operation is undoable.
+        /// </summary>
+        public bool MoveNodeToBoundary(User user, Node node, Boundary targetBoundary,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(node);
+            ArgumentNullException.ThrowIfNull(targetBoundary);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var oldBoundary = node.ContainedWithin!;
+                if (ReferenceEquals(oldBoundary, targetBoundary)) { error = null; return true; }
+
+                // Outgoing links live in the origin node's boundary and must follow the node.
+                var outgoingLinks = oldBoundary.Links.Where(l => l.Origin == node).ToList();
+
+                // Collect hidden nodes: destination nodes of outgoing links whose location is
+                // Rectangle.Hidden (i.e. inlined parameter nodes).  These must travel with the node.
+                var hiddenNodes = outgoingLinks
+                    .SelectMany(l => l is SingleLink sl
+                        ? (sl.Destination is not null ? new[] { sl.Destination } : Array.Empty<Node>())
+                        : (l is MultiLink ml ? ml.Destinations.ToArray() : Array.Empty<Node>()))
+                    .Where(n => n.Location.Equals(Rectangle.Hidden) && ReferenceEquals(n.ContainedWithin, oldBoundary))
+                    .Distinct()
+                    .ToList();
+
+                if (!oldBoundary.RemoveNode(node, out error)) return false;
+
+                foreach (var link in outgoingLinks)
+                    oldBoundary.RemoveLink(link, out _);
+
+                foreach (var hidden in hiddenNodes)
+                    oldBoundary.RemoveNode(hidden, out _);
+
+                node.UpdateContainedWithin(targetBoundary);
+                foreach (var hidden in hiddenNodes)
+                    hidden.UpdateContainedWithin(targetBoundary);
+
+                if (!targetBoundary.AddNode(node, out error))
+                {
+                    // Roll back hidden nodes and links before returning.
+                    foreach (var hidden in hiddenNodes)
+                    {
+                        hidden.UpdateContainedWithin(oldBoundary);
+                        oldBoundary.AddNode(hidden, out _);
+                    }
+                    node.UpdateContainedWithin(oldBoundary);
+                    oldBoundary.AddNode(node, out _);
+                    foreach (var link in outgoingLinks)
+                        oldBoundary.AddLink(link, out _);
+                    return false;
+                }
+
+                foreach (var hidden in hiddenNodes)
+                    targetBoundary.AddNode(hidden, out _);
+
+                foreach (var link in outgoingLinks)
+                    targetBoundary.AddLink(link, out _);
+
+                Buffer.AddUndo(new Command(() =>
+                {
+                    foreach (var link in outgoingLinks) targetBoundary.RemoveLink(link, out _);
+                    foreach (var hidden in hiddenNodes)
+                    {
+                        targetBoundary.RemoveNode(hidden, out _);
+                        hidden.UpdateContainedWithin(oldBoundary);
+                        oldBoundary.AddNode(hidden, out _);
+                    }
+                    targetBoundary.RemoveNode(node, out _);
+                    node.UpdateContainedWithin(oldBoundary);
+                    oldBoundary.AddNode(node, out _);
+                    foreach (var link in outgoingLinks) oldBoundary.AddLink(link, out _);
+                    return (true, null);
+                }, () =>
+                {
+                    foreach (var link in outgoingLinks) oldBoundary.RemoveLink(link, out _);
+                    foreach (var hidden in hiddenNodes)
+                    {
+                        oldBoundary.RemoveNode(hidden, out _);
+                        hidden.UpdateContainedWithin(targetBoundary);
+                    }
+                    oldBoundary.RemoveNode(node, out _);
+                    node.UpdateContainedWithin(targetBoundary);
+                    targetBoundary.AddNode(node, out _);
+                    foreach (var hidden in hiddenNodes) targetBoundary.AddNode(hidden, out _);
+                    foreach (var link in outgoingLinks) targetBoundary.AddLink(link, out _);
+                    return (true, null);
+                }));
+
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Moves a ghost node from its current boundary to <paramref name="targetBoundary"/>.
+        /// The operation is undoable.
+        /// </summary>
+        public bool MoveGhostNodeToBoundary(User user, GhostNode ghostNode, Boundary targetBoundary,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(ghostNode);
+            ArgumentNullException.ThrowIfNull(targetBoundary);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var oldBoundary = ghostNode.ContainedWithin!;
+                if (ReferenceEquals(oldBoundary, targetBoundary)) { error = null; return true; }
+
+                if (!oldBoundary.RemoveGhostNode(ghostNode, out error)) return false;
+
+                ghostNode.UpdateContainedWithin(targetBoundary);
+
+                if (!targetBoundary.AddGhostNode(ghostNode, out error))
+                {
+                    ghostNode.UpdateContainedWithin(oldBoundary);
+                    oldBoundary.AddGhostNode(ghostNode, out _);
+                    return false;
+                }
+
+                Buffer.AddUndo(new Command(() =>
+                {
+                    targetBoundary.RemoveGhostNode(ghostNode, out _);
+                    ghostNode.UpdateContainedWithin(oldBoundary);
+                    oldBoundary.AddGhostNode(ghostNode, out _);
+                    return (true, null);
+                }, () =>
+                {
+                    oldBoundary.RemoveGhostNode(ghostNode, out _);
+                    ghostNode.UpdateContainedWithin(targetBoundary);
+                    targetBoundary.AddGhostNode(ghostNode, out _);
+                    return (true, null);
+                }));
+
+                error = null;
+                return true;
+            }
+        }
+
         public bool RemoveNode(User user, Node node, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
@@ -818,73 +1064,52 @@ namespace XTMF2.Editing
 
                 // For multi-links in the incoming set, record the exact destination indices
                 // that refer to 'node' so they can be faithfully restored on undo.
-                var multiLinkRestoreInfo = new Dictionary<MultiLink, List<(int Index, Node Dest)>>();
-                foreach (var link in incomingLinks)
-                {
-                    if (link is MultiLink ml)
+                var multiLinkRestoreInfo = BuildMultiLinkRestoreInfo(incomingLinks, node);
+
+                // Cascade: collect all ghost nodes referencing this node, plus their links.
+                var ghostsOfNode = GetAllGhostNodesOf(node);
+                // Per ghost: (ghost, incomingLinksToGhost, multiLinkRestoreInfo for ghost)
+                var ghostCascadeData = ghostsOfNode
+                    .Select(g =>
                     {
-                        var list = new List<(int Index, Node Dest)>();
-                        var dests = ml.Destinations;
-                        for (int i = 0; i < dests.Count; i++)
-                        {
-                            if (dests[i] == node)
-                                list.Add((i, dests[i]));
-                        }
-                        multiLinkRestoreInfo[ml] = list;
-                    }
-                }
+                        var gLinks = GetLinksGoingTo(g);
+                        return (Ghost: g, Links: gLinks, MultiInfo: BuildMultiLinkRestoreInfo(gLinks, g));
+                    })
+                    .ToList();
 
                 // Remove all incoming links (or just the relevant destination entries).
                 void RemoveIncoming()
                 {
-                    foreach (var link in incomingLinks)
-                    {
-                        if (link is SingleLink)
-                        {
-                            link.Origin!.ContainedWithin!.RemoveLink(link, out _);
-                        }
-                        else if (link is MultiLink ml)
-                        {
-                            // Remove back-to-front so indices remain valid during removal.
-                            var list = multiLinkRestoreInfo[ml];
-                            for (int i = list.Count - 1; i >= 0; i--)
-                                ml.RemoveDestination(list[i].Index);
-
-                            // If the multi-link is now empty, remove the link object itself.
-                            if (ml.Destinations.Count == 0)
-                                ml.Origin!.ContainedWithin!.RemoveLink(ml, out _);
-                        }
-                    }
+                    RemoveIncomingLinks(incomingLinks, node, multiLinkRestoreInfo);
                 }
 
                 // Restore all incoming links (inverse of RemoveIncoming).
                 void RestoreIncoming()
                 {
-                    foreach (var link in incomingLinks)
-                    {
-                        if (link is SingleLink)
-                        {
-                            link.Origin!.ContainedWithin!.AddLink(link, out _);
-                        }
-                        else if (link is MultiLink ml)
-                        {
-                            // If the link object was fully removed, re-add it first.
-                            if (!ml.Origin!.ContainedWithin!.Links.Contains(ml))
-                                ml.Origin.ContainedWithin.AddLink(ml, out _);
+                    RestoreIncomingLinks(incomingLinks, node, multiLinkRestoreInfo);
+                }
 
-                            // Re-insert destination entries in original order (front-to-back).
-                            var list = multiLinkRestoreInfo[ml];
-                            for (int i = 0; i < list.Count; i++)
-                            {
-                                if(!ml.AddDestination(list[i].Dest, list[i].Index, out var e))
-                                    return;
-                            }
-                        }
+                void RemoveGhostCascade()
+                {
+                    foreach (var (ghost, gLinks, gMultiInfo) in ghostCascadeData)
+                    {
+                        RemoveIncomingLinks(gLinks, ghost, gMultiInfo);
+                        ghost.ContainedWithin!.RemoveGhostNode(ghost, out _);
                     }
                 }
 
-                // Remove incoming links, then outgoing links, then the node itself.
+                void RestoreGhostCascade()
+                {
+                    foreach (var (ghost, gLinks, gMultiInfo) in ghostCascadeData)
+                    {
+                        ghost.ContainedWithin!.AddGhostNode(ghost, out _);
+                        RestoreIncomingLinks(gLinks, ghost, gMultiInfo);
+                    }
+                }
+
+                // Remove incoming links, then ghost cascade, then outgoing links, then the node itself.
                 RemoveIncoming();
+                RemoveGhostCascade();
                 foreach (var link in outgoingLinks)
                     boundary.RemoveLink(link, out _);
 
@@ -897,12 +1122,13 @@ namespace XTMF2.Editing
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
-                        // Undo: restore node first, then its outgoing links, then all incoming links.
+                        // Undo: restore node first, then its outgoing links, then all incoming links, then ghosts.
                         if (boundary.AddNode(node, out var e))
                         {
                             foreach (var link in outgoingLinks)
                                 boundary.AddLink(link, out e);
                             RestoreIncoming();
+                            RestoreGhostCascade();
                             if (variableIndex >= 0)
                             {
                                 var restoreIdx = Math.Min(variableIndex, ModelSystem.Variables.Count);
@@ -915,6 +1141,7 @@ namespace XTMF2.Editing
                     {
                         // Redo: same sequence as the original removal.
                         RemoveIncoming();
+                        RemoveGhostCascade();
                         foreach (var link in outgoingLinks)
                             boundary.RemoveLink(link, out _);
                         ModelSystem.Variables.Remove(node);
@@ -924,9 +1151,10 @@ namespace XTMF2.Editing
                 }
                 else
                 {
-                    // Node removal failed; roll back the link removals (and variable removal).
+                    // Node removal failed; roll back the link removals and ghost cascade.
                     foreach (var link in outgoingLinks)
                         boundary.AddLink(link, out _);
+                    RestoreGhostCascade();
                     RestoreIncoming();
                     if (variableIndex >= 0)
                     {
@@ -1115,6 +1343,108 @@ namespace XTMF2.Editing
             ret.AddRange(destBoundary.Links.Where(l => l.HasDestination(destNode)));
             ret.AddRange(ModelSystem.GlobalBoundary.GetLinksGoingToBoundary(destBoundary).Where(l => l.HasDestination(destNode)));
             return ret;
+        }
+
+        /// <summary>
+        /// Builds a restore-info dictionary for MultiLink entries that point to
+        /// <paramref name="destNode"/> in <paramref name="incomingLinks"/>.
+        /// </summary>
+        private static Dictionary<MultiLink, List<(int Index, Node Dest)>> BuildMultiLinkRestoreInfo(
+            List<Link> incomingLinks, Node destNode)
+        {
+            var info = new Dictionary<MultiLink, List<(int Index, Node Dest)>>();
+            foreach (var link in incomingLinks)
+            {
+                if (link is MultiLink ml)
+                {
+                    var list = new List<(int Index, Node Dest)>();
+                    var dests = ml.Destinations;
+                    for (int i = 0; i < dests.Count; i++)
+                    {
+                        if (dests[i] == destNode)
+                            list.Add((i, dests[i]));
+                    }
+                    info[ml] = list;
+                }
+            }
+            return info;
+        }
+
+        /// <summary>
+        /// Removes incoming links that target <paramref name="destNode"/> from their
+        /// respective boundaries, using pre-computed multi-link restore info.
+        /// </summary>
+        private static void RemoveIncomingLinks(
+            List<Link> incomingLinks, Node destNode,
+            Dictionary<MultiLink, List<(int Index, Node Dest)>> multiLinkInfo)
+        {
+            foreach (var link in incomingLinks)
+            {
+                if (link is SingleLink)
+                {
+                    link.Origin!.ContainedWithin!.RemoveLink(link, out _);
+                }
+                else if (link is MultiLink ml && multiLinkInfo.TryGetValue(ml, out var list))
+                {
+                    // Remove back-to-front so indices remain valid.
+                    for (int i = list.Count - 1; i >= 0; i--)
+                        ml.RemoveDestination(list[i].Index);
+
+                    if (ml.Destinations.Count == 0)
+                        ml.Origin!.ContainedWithin!.RemoveLink(ml, out _);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Restores incoming links that were previously removed by
+        /// <see cref="RemoveIncomingLinks"/>.
+        /// </summary>
+        private static void RestoreIncomingLinks(
+            List<Link> incomingLinks, Node destNode,
+            Dictionary<MultiLink, List<(int Index, Node Dest)>> multiLinkInfo)
+        {
+            foreach (var link in incomingLinks)
+            {
+                if (link is SingleLink)
+                {
+                    link.Origin!.ContainedWithin!.AddLink(link, out _);
+                }
+                else if (link is MultiLink ml && multiLinkInfo.TryGetValue(ml, out var list))
+                {
+                    // Re-add the link object if it was fully removed.
+                    if (!ml.Origin!.ContainedWithin!.Links.Contains(ml))
+                        ml.Origin.ContainedWithin.AddLink(ml, out _);
+
+                    // Re-insert destinations in original order.
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        if (!ml.AddDestination(list[i].Dest, list[i].Index, out _))
+                            return;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns every <see cref="GhostNode"/> anywhere in the model system that
+        /// references <paramref name="realNode"/>.
+        /// </summary>
+        private List<GhostNode> GetAllGhostNodesOf(Node realNode)
+        {
+            var result = new List<GhostNode>();
+            var stack = new Stack<Boundary>();
+            stack.Push(ModelSystem.GlobalBoundary);
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+                foreach (var child in current.Boundaries)
+                    stack.Push(child);
+                foreach (var ghost in current.GhostNodes)
+                    if (ghost.ReferencedNode == realNode)
+                        result.Add(ghost);
+            }
+            return result;
         }
 
         /// <summary>

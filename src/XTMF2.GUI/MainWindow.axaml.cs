@@ -354,6 +354,7 @@ public partial class MainWindow : Window
 
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        NavigateBoundaryCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>Refreshes undo/redo can-execute state when the active editor's state changes.</summary>
@@ -374,6 +375,10 @@ public partial class MainWindow : Window
     [RelayCommand(CanExecute = nameof(CanExecuteRedo))]
     private void Redo() => _activeEditorVm?.RedoCommand.Execute(null);
     private bool CanExecuteRedo() => _activeEditorVm?.CanRedo ?? false;
+
+    [RelayCommand(CanExecute = nameof(CanExecuteNavigateBoundary))]
+    private void NavigateBoundary() => _activeEditorVm?.BrowseBoundariesCommand.Execute(null);
+    private bool CanExecuteNavigateBoundary() => _activeEditorVm is not null;
 
     private void Exit_Click(object? sender, RoutedEventArgs e) => Close();
 

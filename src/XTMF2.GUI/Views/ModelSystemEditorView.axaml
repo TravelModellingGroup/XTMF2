@@ -15,6 +15,7 @@
         <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveModelSystemCommand}"/>
         <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}"/>
         <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoCommand}"/>
+        <KeyBinding Gesture="Ctrl+B" Command="{Binding BrowseBoundariesCommand}"/>
     </UserControl.KeyBindings>
 
     <Grid RowDefinitions="Auto,*" Margin="10">
@@ -39,7 +40,7 @@
                       Width="200"
                       VerticalAlignment="Center"
                       Margin="0,0,8,0"
-                      ToolTip.Tip="Navigate to a boundary">
+                      ToolTip.Tip="Navigate to a boundary  (Ctrl+B)">
                 <ComboBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:BoundaryNavigationItem">
                         <TextBlock Text="{Binding Label}"/>

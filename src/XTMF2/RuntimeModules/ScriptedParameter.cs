@@ -65,5 +65,19 @@ namespace XTMF2.RuntimeModules
         {
             throw new XTMFRuntimeException(this, $"Unable to get a {typeof(T).FullName} value from expression '{Expression.Representation}'!");
         }
+
+        public override bool RuntimeValidation(ref string? error)
+        {
+            if(!base.RuntimeValidation(ref error))
+            {
+                return false;
+            }
+            if (Expression is null)
+            {
+                error = "Expression is not set!";
+                return false;
+            }
+            return true;
+        }
     }
 }

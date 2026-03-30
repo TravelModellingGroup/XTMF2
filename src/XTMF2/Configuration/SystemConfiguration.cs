@@ -114,11 +114,12 @@ public class SystemConfiguration
     public void LoadAssemblies(string path, List<string> toExclude)
     {
         var dirInfo = new DirectoryInfo(path);
-        foreach (var dllFile in dirInfo.EnumerateFiles("*.dll"))
+        var toLoad = dirInfo.EnumerateFiles("*.dll").Where(file => !toExclude.Contains(file.Name)).ToList();
+        foreach (var dllFile in toLoad)
         {
             if (!toExclude.Contains(dllFile.Name))
             {
-                LoadAssembly(AssemblyLoadContext.Default.LoadFromAssemblyPath(dllFile.FullName));
+                LoadAssembly(Assembly.LoadFrom(dllFile.FullName));
             }
         }
     }

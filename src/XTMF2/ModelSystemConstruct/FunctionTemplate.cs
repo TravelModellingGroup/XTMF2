@@ -102,6 +102,14 @@ namespace XTMF2.ModelSystemConstruct
         internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             ref Utf8JsonReader reader, Boundary parent, [NotNullWhen(true)] out FunctionTemplate? template, [NotNullWhen(false)] ref string? error)
         {
+            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes = new();
+            return Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, parent, out template, ref error);
+        }
+
+        internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
+            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes,
+            ref Utf8JsonReader reader, Boundary parent, [NotNullWhen(true)] out FunctionTemplate? template, [NotNullWhen(false)] ref string? error)
+        {
             template = null;
             string? name = null;
             var innerModules = new Boundary(parent);
@@ -123,7 +131,7 @@ namespace XTMF2.ModelSystemConstruct
                 else if(reader.ValueTextEquals(nameof(InternalModules)))
                 {
                     reader.Read();
-                    if(!innerModules.Load(modules, typeLookup, node, scriptedParameters, ref reader, ref error))
+                    if(!innerModules.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error))
                     {
                         return false;
                     }

@@ -43,11 +43,16 @@ namespace XTMF2.ModelSystemConstruct
 
         internal override void Save(ref int index, Dictionary<Node, int> moduleDictionary, Dictionary<Type, int> typeDictionary, Utf8JsonWriter writer)
         {
-            moduleDictionary.Add(this, index);
+            // Support pre-indexed nodes (PreAssignNodeIndices was called before Save).
+            if (!moduleDictionary.TryGetValue(this, out var myIndex))
+            {
+                myIndex = index++;
+                moduleDictionary[this] = myIndex;
+            }
             writer.WriteStartObject();
             writer.WriteString(NameProperty, Name);
             writer.WriteString(DescriptionProperty, Description);
-            writer.WriteNumber(IndexProperty, index++);
+            writer.WriteNumber(IndexProperty, myIndex);
             writer.WriteNumber(XProperty, Location.X);
             writer.WriteNumber(YProperty, Location.Y);
             writer.WriteEndObject();

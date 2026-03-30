@@ -58,6 +58,11 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush LinkSelBrush       = Brushes.OrangeRed;
     private static readonly IBrush PendingLinkBrush   = new SolidColorBrush(Color.FromRgb(0x2E, 0xCC, 0x71));
     private static readonly DashStyle PendingLinkDash = new DashStyle([6, 4], 0);
+    // Ghost node styling
+    private static readonly IBrush GhostNodeFill      = new SolidColorBrush(Color.FromArgb(0x50, 0x2C, 0x3E, 0x50));
+    private static readonly IBrush GhostNodeBorderBrush = new SolidColorBrush(Color.FromRgb(0x77, 0x88, 0x99));
+    private static readonly IBrush GhostNodeSelBrush  = Brushes.DodgerBlue;
+    private static readonly DashStyle GhostNodeDash   = new DashStyle([6, 4], 0);
 
     // Parameter value row
     private static readonly IBrush ParamValueTextBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xE0, 0x82));
@@ -330,12 +335,14 @@ public sealed class ModelSystemCanvas : Control
         _vm.Starts.CollectionChanged       += OnCollectionChanged;
         _vm.Links.CollectionChanged        += OnCollectionChanged;
         _vm.CommentBlocks.CollectionChanged += OnCollectionChanged;
+        _vm.GhostNodes.CollectionChanged   += OnCollectionChanged;
         _vm.PropertyChanged                += OnViewModelPropertyChanged;
 
         foreach (var n in _vm.Nodes)         ((INotifyPropertyChanged)n).PropertyChanged += OnElementPropertyChanged;
         foreach (var s in _vm.Starts)        ((INotifyPropertyChanged)s).PropertyChanged += OnElementPropertyChanged;
         foreach (var l in _vm.Links)         ((INotifyPropertyChanged)l).PropertyChanged += OnElementPropertyChanged;
         foreach (var c in _vm.CommentBlocks) ((INotifyPropertyChanged)c).PropertyChanged += OnElementPropertyChanged;
+        foreach (var g in _vm.GhostNodes)    ((INotifyPropertyChanged)g).PropertyChanged += OnElementPropertyChanged;
     }
 
     private void Detach()
@@ -345,12 +352,14 @@ public sealed class ModelSystemCanvas : Control
         _vm.Starts.CollectionChanged       -= OnCollectionChanged;
         _vm.Links.CollectionChanged        -= OnCollectionChanged;
         _vm.CommentBlocks.CollectionChanged -= OnCollectionChanged;
+        _vm.GhostNodes.CollectionChanged   -= OnCollectionChanged;
         _vm.PropertyChanged                -= OnViewModelPropertyChanged;
 
         foreach (var n in _vm.Nodes)         ((INotifyPropertyChanged)n).PropertyChanged -= OnElementPropertyChanged;
         foreach (var s in _vm.Starts)        ((INotifyPropertyChanged)s).PropertyChanged -= OnElementPropertyChanged;
         foreach (var l in _vm.Links)         ((INotifyPropertyChanged)l).PropertyChanged -= OnElementPropertyChanged;
         foreach (var c in _vm.CommentBlocks) ((INotifyPropertyChanged)c).PropertyChanged -= OnElementPropertyChanged;
+        foreach (var g in _vm.GhostNodes)    ((INotifyPropertyChanged)g).PropertyChanged -= OnElementPropertyChanged;
     }
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -460,6 +469,7 @@ public sealed class ModelSystemCanvas : Control
             RenderCommentBlocks(ctx);
             RenderLinks(ctx);
             RenderNodes(ctx);
+            RenderGhostNodes(ctx);
             RenderStarts(ctx);
             RenderPendingLink(ctx);
             RenderSelectionRect(ctx);
@@ -596,6 +606,13 @@ public sealed class ModelSystemCanvas : Control
                 if (midXInHSpan)
                     borderY  = p1.Y <= destCenter.Y ? dRect.Y : dRect.Bottom;
             }
+            else if (link.Destination is GhostNodeViewModel ghostDestH)
+            {
+                var dRect    = new Rect(ghostDestH.X, ghostDestH.Y, ghostDestH.Width, ghostDestH.Height);
+                midXInHSpan  = midX >= dRect.X && midX <= dRect.Right;
+                if (midXInHSpan)
+                    borderY  = p1.Y <= destCenter.Y ? dRect.Y : dRect.Bottom;
+            }
 
             if (midXInHSpan)
             {
@@ -631,6 +648,13 @@ public sealed class ModelSystemCanvas : Control
             {
                 var dRect    = new Rect(destNodeV.X, destNodeV.Y,
                                         NodeRenderWidth(destNodeV), NodeRenderHeight(destNodeV));
+                midYInVSpan  = midY >= dRect.Y && midY <= dRect.Bottom;
+                if (midYInVSpan)
+                    borderX  = p1.X <= destCenter.X ? dRect.X : dRect.Right;
+            }
+            else if (link.Destination is GhostNodeViewModel ghostDestV)
+            {
+                var dRect    = new Rect(ghostDestV.X, ghostDestV.Y, ghostDestV.Width, ghostDestV.Height);
                 midYInVSpan  = midY >= dRect.Y && midY <= dRect.Bottom;
                 if (midYInVSpan)
                     borderX  = p1.X <= destCenter.X ? dRect.X : dRect.Right;
@@ -689,6 +713,12 @@ public sealed class ModelSystemCanvas : Control
         if (element is NodeViewModel nvm)
         {
             var rect = new Rect(nvm.X, nvm.Y, NodeRenderWidth(nvm), NodeRenderHeight(nvm));
+            return ClipLineToRect(other, rect);
+        }
+
+        if (element is GhostNodeViewModel gnvm)
+        {
+            var rect = new Rect(gnvm.X, gnvm.Y, gnvm.Width, gnvm.Height);
             return ClipLineToRect(other, rect);
         }
 
@@ -978,12 +1008,14 @@ public sealed class ModelSystemCanvas : Control
     private double ElementRenderWidth(ICanvasElement el) =>
         el is NodeViewModel nvm ? NodeRenderWidth(nvm)
         : el is CommentBlockViewModel cvm ? cvm.Width
+        : el is GhostNodeViewModel gnvm ? gnvm.Width
         : 0;
 
     /// <summary>Returns the rendered height of any resizable canvas element.</summary>
     private double ElementRenderHeight(ICanvasElement el) =>
         el is NodeViewModel nvm ? NodeRenderHeight(nvm)
         : el is CommentBlockViewModel cvm ? cvm.Height
+        : el is GhostNodeViewModel gnvm ? gnvm.Height
         : 0;
 
     private void RenderNodes(DrawingContext ctx)
@@ -1165,6 +1197,46 @@ public sealed class ModelSystemCanvas : Control
     /// Updates <see cref="_hoveredParameterNode"/> based on which node (if any) the
     /// pointer currently sits over, and invalidates the visual when the value changes.
     /// </summary>
+    private void RenderGhostNodes(DrawingContext ctx)
+    {
+        foreach (var ghost in _vm!.GhostNodes)
+        {
+            double rw = ghost.Width;
+            double rh = ghost.Height;
+            var rect  = new Rect(ghost.X, ghost.Y, rw, rh);
+
+            // Fill is semi-transparent; border is dashed.
+            var borderBrush = ghost.IsSelected ? GhostNodeSelBrush : GhostNodeBorderBrush;
+            var border      = new Pen(borderBrush, NodeBorderThickness, dashStyle: GhostNodeDash);
+
+            ctx.DrawRectangle(GhostNodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
+
+            // Ghost icon prefix ("⊙ ") to distinguish from real nodes at a glance.
+            var labelText = "\u2299 " + ghost.Name;
+            var ft = MakeText(labelText, NodeFontSize, NodeTextBrush);
+            var tx = ghost.X + (rw      - ft.Width)  / 2;
+            var ty = ghost.Y + (NodeHeaderHeight - ft.Height) / 2;
+
+            using (ctx.PushClip(new Rect(ghost.X + 4, ghost.Y, rw - 8, NodeHeaderHeight)))
+                ctx.DrawText(ft, new Point(tx, ty));
+
+            // Resize grip dots (bottom-right corner).
+            {
+                double dotR = 2.0;
+                double bx   = ghost.X + rw;
+                double by   = ghost.Y + rh;
+                for (int d = 0; d < 3; d++)
+                {
+                    double offset = 4.0 + d * 4.0;
+                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                        new Point(bx - offset + dotR, by - dotR), dotR, dotR);
+                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                        new Point(bx - dotR,           by - offset + dotR), dotR, dotR);
+                }
+            }
+        }
+    }
+
     private void RenderStarts(DrawingContext ctx)
     {
         foreach (var start in _vm!.Starts)
@@ -1455,7 +1527,7 @@ public sealed class ModelSystemCanvas : Control
             // Always commit any open inline edit first.
             if (_editingParamNode is not null) CommitParamEdit();
 
-            if (hit is NodeViewModel or CommentBlockViewModel)
+            if (hit is NodeViewModel or CommentBlockViewModel or GhostNodeViewModel)
             {
                 // On the very first Ctrl+click, absorb the existing primary selection into the set.
                 if (_multiSelection.Count == 0 && _vm.SelectedElement is not null
@@ -1568,6 +1640,8 @@ public sealed class ModelSystemCanvas : Control
                 resizingNode.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
             else if (_resizing is CommentBlockViewModel resizingComment)
                 resizingComment.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
+            else if (_resizing is GhostNodeViewModel resizingGhost)
+                resizingGhost.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
             InvalidateAndMeasure();
             e.Handled = true;
             return;
@@ -1623,6 +1697,7 @@ public sealed class ModelSystemCanvas : Control
                 if      (el is NodeViewModel       gnvm) gnvm.MoveTo(nx, ny);
                 else if (el is StartViewModel       gsvm) gsvm.MoveTo(nx, ny);
                 else if (el is CommentBlockViewModel gcvm) gcvm.MoveTo(nx, ny);
+                else if (el is GhostNodeViewModel   ggvm) ggvm.MoveTo(nx, ny);
             }
         }
         else
@@ -1633,6 +1708,7 @@ public sealed class ModelSystemCanvas : Control
             if (_dragging is NodeViewModel         nvm) nvm.MoveTo(newX, newY);
             if (_dragging is StartViewModel         svm) svm.MoveTo(newX, newY);
             if (_dragging is CommentBlockViewModel  cvm) cvm.MoveTo(newX, newY);
+            if (_dragging is GhostNodeViewModel    gvm) gvm.MoveTo(newX, newY);
         }
 
         InvalidateAndMeasure();
@@ -1734,6 +1810,26 @@ public sealed class ModelSystemCanvas : Control
                         _multiSelection.Add(comment);
                         comment.IsSelected = true;
                         firstHit ??= comment;
+                    }
+                }
+                foreach (var ghost in _vm.GhostNodes)
+                {
+                    var gr = new Rect(ghost.X, ghost.Y, ghost.Width, ghost.Height);
+                    if (finalRect.Intersects(gr))
+                    {
+                        _multiSelection.Add(ghost);
+                        ghost.IsSelected = true;
+                        firstHit ??= ghost;
+                    }
+                }
+                foreach (var start in _vm.Starts)
+                {
+                    var sr = new Rect(start.X, start.Y, start.Diameter, start.Diameter);
+                    if (finalRect.Intersects(sr))
+                    {
+                        _multiSelection.Add(start);
+                        start.IsSelected = true;
+                        firstHit ??= start;
                     }
                 }
                 if (firstHit is not null)
@@ -1898,6 +1994,49 @@ public sealed class ModelSystemCanvas : Control
             }
         }
 
+        // ── Create Ghost Node + Move to Boundary (regular nodes) ───────────────────
+        if (element is NodeViewModel ghostSourceNode)
+        {
+            var capturedGhostSource = ghostSourceNode;
+
+            var ghostItem = new MenuItem { Header = "Create Ghost Node" };
+            ghostItem.Click += (_, _) =>
+            {
+                double rw = NodeRenderWidth(capturedGhostSource);
+                double rh = NodeRenderHeight(capturedGhostSource);
+                const double gap = 30.0;
+                int gx = (int)(capturedGhostSource.X + rw + gap);
+                int gy = (int)capturedGhostSource.Y;
+                int gw = (int)rw;
+                int gh = (int)rh;
+                vm.CreateGhostNode(capturedGhostSource, gx, gy, gw, gh);
+            };
+
+            var moveNodeItem = new MenuItem { Header = "Move to Boundary…" };
+            moveNodeItem.Click += async (_, _) =>
+            {
+                await vm.MoveNodeToBoundaryAsync(capturedGhostSource);
+                InvalidateAndMeasure();
+            };
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(ghostItem);
+            menu.Items.Add(moveNodeItem);
+        }
+
+        // ── Move to Boundary (ghost nodes) ────────────────────────────────────
+        if (element is GhostNodeViewModel capturedGhost)
+        {
+            var moveGhostItem = new MenuItem { Header = "Move to Boundary…" };
+            moveGhostItem.Click += async (_, _) =>
+            {
+                await vm.MoveGhostNodeToBoundaryAsync(capturedGhost);
+                InvalidateAndMeasure();
+            };
+            menu.Items.Add(new Separator());
+            menu.Items.Add(moveGhostItem);
+        }
+
         menu.Items.Add(deleteItem);
 
         ContextMenu = menu;
@@ -2029,6 +2168,16 @@ public sealed class ModelSystemCanvas : Control
             if (handle.Contains(pos))
                 return comment;
         }
+        foreach (var ghost in _vm.GhostNodes)
+        {
+            var handle = new Rect(
+                ghost.X + ghost.Width  - ResizeHandleSize,
+                ghost.Y + ghost.Height - ResizeHandleSize,
+                ResizeHandleSize,
+                ResizeHandleSize);
+            if (handle.Contains(pos))
+                return ghost;
+        }
         return null;
     }
 
@@ -2149,6 +2298,13 @@ public sealed class ModelSystemCanvas : Control
                 return node;
         }
 
+        // Ghost nodes
+        foreach (var ghost in _vm.GhostNodes)
+        {
+            if (new Rect(ghost.X, ghost.Y, ghost.Width, ghost.Height).Contains(pos))
+                return ghost;
+        }
+
         // Comment blocks (background layer)
         if (testComments)
         {
@@ -2173,7 +2329,15 @@ public sealed class ModelSystemCanvas : Control
         foreach (var el in _multiSelection)
             el.IsSelected = false;
         _multiSelection.Clear();
-        _vm?.SelectedElement = null;
+        // Also clear IsSelected on the primary selected element (which may not be in
+        // _multiSelection when using single-select).  This must happen before zeroing
+        // SelectedElement so callers that immediately invoke SelectElementCommand or
+        // SelectLinkCommand don't skip the IsSelected reset (those commands guard on
+        // SelectedElement being non-null, but it will already be null after this method).
+        if (_vm?.SelectedElement is { } primary)
+            primary.IsSelected = false;
+        if (_vm is not null)
+            _vm.SelectedElement = null;
     }
 
     /// <summary>Returns a <see cref="Rect"/> that always has non-negative width and height,

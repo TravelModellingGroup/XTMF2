@@ -123,6 +123,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>Observable wrappers around <see cref="Boundary.CommentBlocks"/>.</summary>
     public ObservableCollection<CommentBlockViewModel> CommentBlocks { get; } = new();
 
+    /// <summary>Observable wrappers around <see cref="Boundary.GhostNodes"/>.</summary>
+    public ObservableCollection<GhostNodeViewModel> GhostNodes { get; } = new();
+
     /// <summary>Observable view-models for the model system's variable list.</summary>
     public ObservableCollection<ModelSystemVariableViewModel> ModelSystemVariables { get; } = new();
 
@@ -335,6 +338,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         foreach (var node in boundary.Modules)        Nodes.Add(new NodeViewModel(node, Session, User));
         foreach (var start in boundary.Starts)        Starts.Add(new StartViewModel(start, Session, User));
+        // Ghost nodes must be populated before links so that ResolveElement can find
+        // GhostNodeViewModel instances when a link destination is a GhostNode.
+        foreach (var ghost in boundary.GhostNodes)    GhostNodes.Add(new GhostNodeViewModel(ghost, Session, User));
         foreach (var link in boundary.Links)          TryAddLinkViewModel(link);
         foreach (var cb in boundary.CommentBlocks)    CommentBlocks.Add(new CommentBlockViewModel(cb, Session, User));
     }
@@ -349,6 +355,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         ((INotifyCollectionChanged)boundary.Starts).CollectionChanged        += OnStartsChanged;
         ((INotifyCollectionChanged)boundary.Links).CollectionChanged         += OnLinksChanged;
         ((INotifyCollectionChanged)boundary.CommentBlocks).CollectionChanged += OnCommentBlocksChanged;
+        ((INotifyCollectionChanged)boundary.GhostNodes).CollectionChanged    += OnGhostNodesChanged;
 
         // Keep the same wrapper instance so we can correctly remove the handler later.
         _subscribedChildBoundaries  = boundary.Boundaries;
@@ -361,6 +368,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         ((INotifyCollectionChanged)boundary.Starts).CollectionChanged        -= OnStartsChanged;
         ((INotifyCollectionChanged)boundary.Links).CollectionChanged         -= OnLinksChanged;
         ((INotifyCollectionChanged)boundary.CommentBlocks).CollectionChanged -= OnCommentBlocksChanged;
+        ((INotifyCollectionChanged)boundary.GhostNodes).CollectionChanged    -= OnGhostNodesChanged;
 
         if (_subscribedChildBoundaries is not null)
         {
@@ -390,6 +398,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Starts.Clear();
         Links.Clear();
         CommentBlocks.Clear();
+        GhostNodes.Clear();
 
         _currentBoundary = boundary;
         OnPropertyChanged(nameof(CurrentBoundary));
@@ -492,6 +501,20 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             }
     }
 
+    private void OnGhostNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems is not null)
+            foreach (GhostNode g in e.NewItems)
+                GhostNodes.Add(new GhostNodeViewModel(g, Session, User));
+
+        if (e.OldItems is not null)
+            foreach (GhostNode g in e.OldItems)
+            {
+                var vm = GhostNodes.FirstOrDefault(v => v.UnderlyingGhostNode == g);
+                if (vm is not null) GhostNodes.Remove(vm);
+            }
+    }
+
     private void TryAddLinkViewModel(Link link)
     {
         var originElement = ResolveElement(link.Origin);
@@ -544,9 +567,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     private ICanvasElement? ResolveElement(Node? node)
     {
         if (node is null) return null;
+        if (node is GhostNode ghost)
+            return GhostNodes.FirstOrDefault(g => g.UnderlyingGhostNode == ghost);
         if (node is Start start)
             return Starts.FirstOrDefault(s => s.UnderlyingStart == start);
-        return Nodes.FirstOrDefault(n => n.UnderlyingNode == node);
+        var directVm = Nodes.FirstOrDefault(n => n.UnderlyingNode == node);
+        if (directVm is not null) return directVm;
+        // The real node lives in another boundary — use a ghost referencing it if one is visible here.
+        return GhostNodes.FirstOrDefault(g => g.UnderlyingGhostNode.ReferencedNode == node);
     }
 
     // ── Commands ──────────────────────────────────────────────────────────
@@ -742,7 +770,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
-    /// Creates a new <see cref="Execute{T}"/> node whose generic parameter
+    /// Creates a new <see cref="ExecuteWithContext{T}"/> node whose generic parameter
     /// matches the return type <c>T</c> that <paramref name="sourceNode"/>'s module implements
     /// via <c>IFunction&lt;T&gt;</c>.  The new node is positioned to the right of
     /// <paramref name="sourceNode"/> and its <em>Context</em> hook is linked back to the source.
@@ -754,7 +782,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var returnType = GetIFunctionReturnType(sourceNode.UnderlyingNode.Type);
         if (returnType is null) return;
 
-        var executeWithContextType = typeof(Execute<>).MakeGenericType(returnType);
+        var executeWithContextType = typeof(ExecuteWithContext<>).MakeGenericType(returnType);
 
         var nameDialog = new InputDialog(
             title: $"Add Execute With Context<{returnType.Name}> Module",
@@ -778,12 +806,54 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         // Find the "Context" hook on the new ExecuteWithContext node and link it to sourceNode.
-        var contextHook = newNode!.Hooks.FirstOrDefault(h => h.Name == "Context");
+        var contextHook = newNode!.Hooks.FirstOrDefault(h => h.Name == "Get Context");
         if (contextHook is not null)
         {
             if (!Session.AddLink(User, newNode, contextHook, sourceNode.UnderlyingNode, out _, out var linkError))
                 await ShowError("Create Link Failed", linkError);
         }
+    }
+
+    /// <summary>
+    /// Creates a ghost node referencing <paramref name="nvm"/> on the current boundary,
+    /// placed at the specified canvas coordinates.
+    /// Called directly by the canvas (not a RelayCommand because it requires typed parameters).
+    /// </summary>
+    internal void CreateGhostNode(NodeViewModel nvm, int x, int y, int w, int h)
+    {
+        var location = new Rectangle(x, y, w, h);
+        if (!Session.AddGhostNode(User, _currentBoundary, nvm.UnderlyingNode, location,
+                out _, out var error))
+            ShowToast(error?.Message ?? "Failed to create ghost node.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>
+    /// Shows a boundary picker and moves the given regular node (and its outgoing links) to the
+    /// chosen boundary.
+    /// </summary>
+    internal async Task MoveNodeToBoundaryAsync(NodeViewModel nvm)
+    {
+        if (ParentWindow is null) return;
+        var dialog = new Views.BoundaryPickerDialog(GetAllBoundaries(GlobalBoundary), _currentBoundary);
+        await dialog.ShowDialog(ParentWindow);
+        if (dialog.Result != Views.BoundaryPickerResult.Navigate || dialog.SelectedBoundary is null) return;
+        if (ReferenceEquals(dialog.SelectedBoundary, nvm.UnderlyingNode.ContainedWithin)) return;
+        if (!Session.MoveNodeToBoundary(User, nvm.UnderlyingNode, dialog.SelectedBoundary, out var error))
+            ShowToast(error?.Message ?? "Failed to move node.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>
+    /// Shows a boundary picker and moves the given ghost node reference to the chosen boundary.
+    /// </summary>
+    internal async Task MoveGhostNodeToBoundaryAsync(GhostNodeViewModel gvm)
+    {
+        if (ParentWindow is null) return;
+        var dialog = new Views.BoundaryPickerDialog(GetAllBoundaries(GlobalBoundary), _currentBoundary);
+        await dialog.ShowDialog(ParentWindow);
+        if (dialog.Result != Views.BoundaryPickerResult.Navigate || dialog.SelectedBoundary is null) return;
+        if (ReferenceEquals(dialog.SelectedBoundary, gvm.UnderlyingGhostNode.ContainedWithin)) return;
+        if (!Session.MoveGhostNodeToBoundary(User, gvm.UnderlyingGhostNode, dialog.SelectedBoundary, out var error))
+            ShowToast(error?.Message ?? "Failed to move ghost node.", isError: true, durationMs: 4000);
     }
 
     /// <summary>
