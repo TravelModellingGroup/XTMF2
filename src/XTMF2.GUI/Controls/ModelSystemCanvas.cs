@@ -441,6 +441,7 @@ public sealed class ModelSystemCanvas : Control
         // Position the inline editor at the stored row location (scaled to screen coords).
         if (_editingParamNode is not null && _editingParamEditorW > 0)
         {
+            _inlineEditor.FontSize = HookFontSize * _scale;
             _inlineEditor.Arrange(new Rect(
                 _editingParamEditorX * _scale,
                 _editingParamEditorY * _scale,
