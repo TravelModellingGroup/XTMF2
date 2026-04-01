@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.Unicode;
 using System.Threading;
 
 namespace XTMF2.RuntimeModules
@@ -47,7 +48,8 @@ Description = "Provides functionality for synchronizing the writing of events to
                     {
                         // Check to see if we need to always flush the stream.
                         _alwaysFlush = writeStream is RunStatusStream;
-                        _writer = new StreamWriter(writeStream, Encoding.UTF8, 0x4000, false);
+                        var encoding = _alwaysFlush ? new UTF8Encoding(false, true) : Encoding.UTF8;
+                        _writer = new StreamWriter(writeStream, encoding, 0x4000, false);
                     }
                     else
                     {
