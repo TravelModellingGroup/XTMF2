@@ -89,24 +89,26 @@ namespace XTMF2.Bus
             return true;
         }
 
-        private Stream? CreateRunBusLocal(RunServerBus clientBus)
+        private (RunBus runBus, Task readerTask) CreateRunBusLocal(RunServerBus clientBus)
         {
             var pipeName = Guid.NewGuid().ToString();
             string? error = null;
             Stream? clientToRunStream = null;
+            RunBus? runBus = null;
+            Task? readerTask = null;
             CreateStreams.CreateNewNamedPipeHost(pipeName, out clientToRunStream, out error, () =>
             {
-                clientBus.StartProcessingRequestFromRun(ID, clientToRunStream!);
+                // Start the reader task. It takes ownership of clientToRunStream and disposes it
+                // when it exits (leaveOpen=false in the BinaryReader inside StartProcessingRequestFromRun).
+                readerTask = clientBus.StartProcessingRequestFromRun(ID, clientToRunStream!);
                 if (CreateStreams.CreateNamedPipeClient(pipeName, out var runToClientStream, out error))
                 {
-                    Task.Factory.StartNew(() =>
-                    {
-                        using var rb = new RunBus(ID, runToClientStream!, true, _runtime);
-                        rb.ProcessRequests();
-                    }, TaskCreationOptions.LongRunning);
+                    // Construct RunBus synchronously so that _runtime.RunBus is set before
+                    // CreateRunBusLocal returns and Run.StartRun() is called.
+                    runBus = new RunBus(ID, runToClientStream!, true, _runtime);
                 }
             });
-            return clientToRunStream;
+            return (runBus!, readerTask!);
         }
 
         private (Stream clientToRunStream, Process runProcess) CreateRunBusRemote(RunServerBus clientBus)
@@ -164,8 +166,30 @@ namespace XTMF2.Bus
 
         public void RunInCurrentProcess(RunServerBus client)
         {
-            using var stream = CreateRunBusLocal(client);
-            new Run(ID, _modelSystem, StartToExecute, _runtime, _currentWorkingDirectory).StartRun();
+            (RunBus runBus, Task readerTask) = CreateRunBusLocal(client);
+            using (runBus)
+            {
+                var error = new Run(ID, _modelSystem, StartToExecute, _runtime, _currentWorkingDirectory).StartRun();
+                // Send the terminal message through RunBus so the reader task can forward it to
+                // RunServerBus (and on to HostBus) and then exit cleanly.
+                switch (error?.Type)
+                {
+                    case RunErrorType.Validation:
+                    case RunErrorType.RuntimeValidation:
+                        runBus.ModelRunFailedValidation(error.Message);
+                        break;
+                    case RunErrorType.Runtime:
+                        runBus.ModelRunFailed(error.Message, error.StackTrace);
+                        break;
+                    default:
+                        runBus.ModelRunComplete();
+                        break;
+                }
+            }
+            // Wait for the reader task to finish draining and forwarding all messages
+            // (including the terminal one above) before returning. This ensures no messages
+            // are lost due to early stream disposal.
+            readerTask.Wait(5000);
         }
     }
 }

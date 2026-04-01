@@ -117,7 +117,7 @@ namespace XTMF2.Bus
         /// <summary>
         /// This must be obtained before sending any data to the host
         /// </summary>
-        private readonly object _writeLock = new object();
+        private readonly Lock _writeLock = new();
 
         private void Write(Action<BinaryWriter> writeWith)
         {
@@ -128,11 +128,12 @@ namespace XTMF2.Bus
             }
         }
 
-        internal void StartProcessingRequestFromRun(string id, Stream clientToRunStream)
+        internal Task StartProcessingRequestFromRun(string id, Stream clientToRunStream)
         {
-            Task.Factory.StartNew(() =>
+            return Task.Factory.StartNew(() =>
             {
-                var reader = new BinaryReader(clientToRunStream, Encoding.UTF8, true);
+                // leaveOpen=false so the stream is disposed when the reader exits.
+                using var reader = new BinaryReader(clientToRunStream, Encoding.UTF8, false);
                 try
                 {
                     while (true)
@@ -156,7 +157,7 @@ namespace XTMF2.Bus
                                 return;
                             case Out.ProgressUpdate:
                                 SendProgressUpdate(reader.ReadString(), reader.ReadSingle());
-                                return;
+                                break;
                             default:
                                 return;
                         }

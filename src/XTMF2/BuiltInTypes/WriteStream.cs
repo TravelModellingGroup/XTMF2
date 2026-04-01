@@ -21,7 +21,7 @@ using System.IO;
 
 namespace XTMF2
 {
-    public sealed class WriteStream : Stream
+    public class WriteStream : Stream
     {
         private readonly Stream BaseStream;
 
@@ -32,6 +32,15 @@ namespace XTMF2
             {
                 throw new InvalidDataException("Unable to create a WriteStream from a stream that can not read!");
             }
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WriteStream"/> class.
+        /// Call this when writing to something that doesn't have a backing stream.
+        /// </summary>
+        internal WriteStream()
+        {
+            BaseStream = Stream.Null;    
         }
 
         public override bool CanRead => false;
