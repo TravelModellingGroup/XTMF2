@@ -99,6 +99,10 @@ public sealed class ModelSystemCanvas : Control
     // Rubber-band (Ctrl+drag) multi-selection rectangle
     private static readonly IBrush SelectionRectFill = new SolidColorBrush(Color.FromArgb(0x2E, 0x44, 0x88, 0xFF));
     private static readonly DashStyle SelectionRectDash = new DashStyle([5, 4], 0);
+    // Graph-paper background grid
+    private static readonly Pen GridPen = new Pen(new SolidColorBrush(Color.FromArgb(0x38, 0x55, 0x77, 0xAA)), 0.5);
+    /// <summary>1 cm expressed in Avalonia logical pixels (96 DPI basis).</summary>
+    private const double GridSpacingDip = 96.0 / 2.54;
 
     // ── Drawing constants ─────────────────────────────────────────────────
     private const double NodeCornerRadius    = 4.0;
@@ -464,6 +468,7 @@ public sealed class ModelSystemCanvas : Control
         BuildHookAnchorCache();
         var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height);
         ctx.DrawRectangle(CanvasBackground, null, bounds);
+        DrawGridBackground(ctx, bounds);
 
         if (_vm is null) return;
 
@@ -477,6 +482,33 @@ public sealed class ModelSystemCanvas : Control
             RenderPendingLink(ctx);
             RenderSelectionRect(ctx);
         }
+    }
+
+    /// <summary>
+    /// Draws a graph-paper grid over the canvas background. Grid lines are spaced 1 cm apart in
+    /// logical pixels and shift with the <see cref="ScrollViewer"/> offset so they remain anchored
+    /// to model space as the user pans.
+    /// </summary>
+    private void DrawGridBackground(DrawingContext ctx, Rect bounds)
+    {
+        var sv = GetScrollViewer();
+        double scrollX = sv?.Offset.X ?? 0;
+        double scrollY = sv?.Offset.Y ?? 0;
+
+        // Scale the 1 cm spacing by the current zoom level so lines stay 1 cm apart in model space.
+        double step = GridSpacingDip * _scale;
+
+        // Phase offset: shift lines so they stay aligned to model-space origin as the user pans.
+        double phaseX = scrollX % step;
+        double phaseY = scrollY % step;
+
+        // Vertical lines
+        for (double x = -phaseX; x < bounds.Width; x += step)
+            ctx.DrawLine(GridPen, new Point(x, 0), new Point(x, bounds.Height));
+
+        // Horizontal lines
+        for (double y = -phaseY; y < bounds.Height; y += step)
+            ctx.DrawLine(GridPen, new Point(0, y), new Point(bounds.Width, y));
     }
 
     private void RenderCommentBlocks(DrawingContext ctx)
