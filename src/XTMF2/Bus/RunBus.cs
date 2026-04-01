@@ -71,7 +71,7 @@ namespace XTMF2.Bus
         /// <summary>
         /// This must be obtained before sending any data to the host
         /// </summary>
-        private readonly object _writeLock = new object();
+        private readonly Lock _writeLock = new();
 
         private void Write(Action<BinaryWriter> writeWith)
         {
@@ -81,8 +81,6 @@ namespace XTMF2.Bus
                 writeWith(writer);
             }
         }
-
-
 
         /// <summary>
         /// Signal to the host that the run failed in the validation step.
@@ -161,18 +159,18 @@ namespace XTMF2.Bus
             using var reader = new BinaryReader(_toClient, Encoding.UTF8, false);
             while (!_Exit)
             {
-                switch ((In)reader.ReadInt32())
+                var commandNumber = (In)reader.ReadInt32();
+                switch (commandNumber)
                 {
                     case In.RunModelSystem:
                         {
-                            
                             _id = reader.ReadString();
                             var cwd = reader.ReadString();
                             var start = reader.ReadString();
                             var msSize = (int)reader.ReadInt64();
                             using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
                             var run = new Run(_id, mem.ToArray(), start, _runtime, cwd);
-                            Task.Run(() =>
+                            Task.Factory.StartNew(() =>
                             {
                                 try
                                 {
@@ -199,7 +197,7 @@ namespace XTMF2.Bus
                                     Console.WriteLine(e.Message + "\r\n" + e.StackTrace);
                                 }
                                 Environment.Exit(0);
-                            });
+                            }, TaskCreationOptions.LongRunning);
                         }
                         break;
                     case In.KillRun:
@@ -208,7 +206,7 @@ namespace XTMF2.Bus
                         break;
                     // failsafe
                     default:
-                        return;
+                        throw new InvalidOperationException($"Received an invalid command from the host! #{(int)commandNumber}");
                 }
                 Interlocked.MemoryBarrier();
             }
@@ -219,6 +217,7 @@ namespace XTMF2.Bus
 
         void Dispose(bool disposing)
         {
+            _Exit = true;
             if (!disposedValue)
             {
                 if (disposing)

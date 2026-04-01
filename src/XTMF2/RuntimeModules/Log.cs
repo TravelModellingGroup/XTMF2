@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 
 namespace XTMF2.RuntimeModules
 {
@@ -30,9 +31,11 @@ Description = "Provides functionality for synchronizing the writing of events to
         [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.", Index = 0)]
         public IFunction<WriteStream>? LogStream;
 
-        private readonly object _writeLock = new object();
+        private readonly Lock _writeLock = new();
 
         private StreamWriter? _writer;
+
+        private bool _alwaysFlush = false;
 
         public override void Invoke(string message)
         {
@@ -42,7 +45,9 @@ Description = "Provides functionality for synchronizing the writing of events to
                 {
                     if (LogStream?.Invoke() is WriteStream writeStream)
                     {
-                        _writer = new StreamWriter(writeStream, Encoding.Unicode, 0x4000, false);
+                        // Check to see if we need to always flush the stream.
+                        _alwaysFlush = writeStream is RunStatusStream;
+                        _writer = new StreamWriter(writeStream, Encoding.UTF8, 0x4000, false);
                     }
                     else
                     {
@@ -50,14 +55,18 @@ Description = "Provides functionality for synchronizing the writing of events to
                     }
                 }
                 // don't block while writing
-                _writer.WriteLineAsync(TimeStampMessage(message));
+                _writer.Write(TimeStampMessage(message));
+                if (_alwaysFlush)
+                {
+                    _writer.Flush();
+                }
             }
         }
 
         private static string TimeStampMessage(string message)
         {
             var now = DateTime.Now;
-            return $"[{now.Hour}:{now.Minute}:{now.Second}] {message}";
+            return $"[{now.Hour:D2}:{now.Minute:D2}:{now.Second:D2}] {message}";
         }
 
         private void Dispose(bool managed)
