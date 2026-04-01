@@ -32,6 +32,7 @@ using Avalonia.Layout;
 using Avalonia.VisualTree;
 using XTMF2;
 using XTMF2.GUI.ViewModels;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.GUI.Controls;
 
@@ -120,6 +121,8 @@ public sealed class ModelSystemCanvas : Control
     private const double ResizeHandleSize         = 14.0;
     // Minimize-to-inline button on BasicParameter node header top-left
     private const double InlineMinimizeButtonSize = NodeHeaderHeight - 8.0;
+    // Multi-link destination index label
+    private const double LinkIndexFontSize = 9.0;
     // Elbow routing
     private const double ElbowMinOffset   = 16.0;
     private const double MaxStraightLineDistance = 50.0;
@@ -537,19 +540,48 @@ public sealed class ModelSystemCanvas : Control
             // line from the natural exit point of the origin to the nearest border
             // of the destination (bypassing the forced midX offset in ComputeElbow).
             double cdx = link.X2 - link.X1, cdy = link.Y2 - link.Y1;
+            Point approachFrom, arrowTip, shaftEnd;
             if (Math.Sqrt(cdx * cdx + cdy * cdy) < MaxStraightLineDistance)
             {
                 var (sp1, sp2) = ComputeDirectLine(link);
-                var shaftEnd = DrawArrow(ctx, brush, sp1, sp2);
+                shaftEnd     = DrawArrow(ctx, brush, sp1, sp2);
                 ctx.DrawLine(pen, sp1, shaftEnd);
+                approachFrom = sp1;
+                arrowTip     = sp2;
             }
             else
             {
                 var (p1, mid1, mid2, p2) = ComputeElbow(link);
-                var shaftEnd = DrawArrow(ctx, brush, mid2, p2);
+                shaftEnd     = DrawArrow(ctx, brush, mid2, p2);
                 ctx.DrawLine(pen, p1,   mid1);
                 ctx.DrawLine(pen, mid1, mid2);
                 ctx.DrawLine(pen, mid2, shaftEnd);
+                approachFrom = mid2;
+                arrowTip     = p2;
+            }
+
+            // For multi-link destinations draw a small 1-based index number
+            // beside the arrowhead so the user can see the hook slot ordering.
+            if (link.UnderlyingLink is MultiLink ml
+                && link.Destination is NodeViewModel indexDestNode)
+            {
+                int idx = ml.Destinations.IndexOf(indexDestNode.UnderlyingNode);
+                if (idx >= 0)
+                {
+                    var ft = MakeText((idx + 1).ToString(), LinkIndexFontSize, brush);
+                    double dx = arrowTip.X - approachFrom.X;
+                    double dy = arrowTip.Y - approachFrom.Y;
+                    double dlen = Math.Sqrt(dx * dx + dy * dy);
+                    if (dlen >= 1)
+                    {
+                        double ux = dx / dlen, uy = dy / dlen;
+                        double nx = -uy, ny = ux; // 90° CCW perpendicular unit vector
+                        double offset = ft.Height * 0.5 + 3;
+                        double lx = shaftEnd.X - ft.Width  * 0.5 + nx * offset;
+                        double ly = shaftEnd.Y - ft.Height * 0.5 + ny * offset;
+                        ctx.DrawText(ft, new Point(lx, ly));
+                    }
+                }
             }
         }
     }
