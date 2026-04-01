@@ -1,5 +1,5 @@
 
-![CI](https://github.com/TravelModellingGroup/XTMF2/workflows/CI/badge.svg?branch=dev)
+[![CI](https://github.com/TravelModellingGroup/XTMF2/actions/workflows/blank.yml/badge.svg)](https://github.com/TravelModellingGroup/XTMF2/actions/workflows/blank.yml)
 
 # XTMF2
 The eXtensible Travel Modelling Framework 2
