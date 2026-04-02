@@ -1963,11 +1963,11 @@ public sealed class ModelSystemCanvas : Control
             var dw = mpos.X - _resizeStartPos.X;
             var dh = mpos.Y - _resizeStartPos.Y;
             if (_resizing is NodeViewModel resizingNode)
-                resizingNode.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
+                resizingNode.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             else if (_resizing is CommentBlockViewModel resizingComment)
-                resizingComment.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
+                resizingComment.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             else if (_resizing is GhostNodeViewModel resizingGhost)
-                resizingGhost.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
+                resizingGhost.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             InvalidateAndMeasure();
             e.Handled = true;
             return;
@@ -2089,6 +2089,13 @@ public sealed class ModelSystemCanvas : Control
         // ── Left-button release: end resize drag ─────────────────────────
         if (_resizing is not null)
         {
+            // Commit the final size to the session (single undo entry).
+            if (_resizing is NodeViewModel committingNode)
+                committingNode.CommitResize();
+            else if (_resizing is CommentBlockViewModel committingComment)
+                committingComment.CommitResize();
+            else if (_resizing is GhostNodeViewModel committingGhost)
+                committingGhost.CommitResize();
             _resizing = null;
             e.Pointer.Capture(null);
             Cursor = Cursor.Default;
