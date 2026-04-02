@@ -165,6 +165,20 @@ public sealed class ModelSystemCanvas : Control
     /// <summary>Screen position and width of the inline editor overlay (set in <see cref="BeginParamEdit"/>).</summary>
     private double _editingParamEditorX, _editingParamEditorY, _editingParamEditorW;
 
+    // ── Scripted-parameter variable autocomplete dropdown ─────────────────
+    /// <summary>Overlay border that contains the variable-name suggestion list.</summary>
+    private readonly Border     _varDropdownBorder;
+    /// <summary>Stack of <see cref="TextBlock"/> rows inside the dropdown.</summary>
+    private readonly StackPanel _varDropdownStack;
+    /// <summary><c>true</c> while the variable autocomplete dropdown is open.</summary>
+    private bool _varDropdownVisible;
+    /// <summary>Character offset in <see cref="TextBox.Text"/> where the current token starts.</summary>
+    private int  _varTokenStart;
+    /// <summary>Index of the currently highlighted row in the dropdown.</summary>
+    private int  _varSelectedIndex;
+    /// <summary>Maximum number of suggestions shown at once.</summary>
+    private const int MaxVarDropdownItems = 8;
+
     // ── Inline comment editor ─────────────────────────────────────────────
     /// <summary>Overlay multi-line TextBox used for in-canvas comment block editing.</summary>
     private readonly TextBox _commentEditor;
@@ -217,11 +231,28 @@ public sealed class ModelSystemCanvas : Control
             VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
             IsVisible         = false,
         };
-        _inlineEditor.KeyDown   += OnInlineEditorKeyDown;
-        _inlineEditor.LostFocus += OnInlineEditorLostFocus;
+        _inlineEditor.KeyDown    += OnInlineEditorKeyDown;
+        _inlineEditor.LostFocus  += OnInlineEditorLostFocus;
+        _inlineEditor.TextChanged += OnInlineEditorTextChanged;
 
         LogicalChildren.Add(_inlineEditor);
         VisualChildren.Add(_inlineEditor);
+
+        // Build the scripted-parameter variable autocomplete dropdown.
+        // TextBlock items are non-focusable by default, so clicking them does not
+        // steal focus from _inlineEditor and will not trigger CommitParamEdit.
+        _varDropdownStack  = new StackPanel { Orientation = Orientation.Vertical };
+        _varDropdownBorder = new Border
+        {
+            Child           = _varDropdownStack,
+            Background      = new SolidColorBrush(Color.FromRgb(0x1E, 0x2E, 0x3E)),
+            BorderBrush     = new SolidColorBrush(Color.FromRgb(0x44, 0x88, 0xCC)),
+            BorderThickness = new Thickness(1),
+            CornerRadius    = new CornerRadius(3),
+            IsVisible       = false,
+        };
+        LogicalChildren.Add(_varDropdownBorder);
+        VisualChildren.Add(_varDropdownBorder);
 
         // Build the multi-line comment editor; Enter inserts a newline, Ctrl+Enter commits.
         _commentEditor = new TextBox
@@ -496,6 +527,12 @@ public sealed class ModelSystemCanvas : Control
                                                                      : NodeRenderWidth(_editingParamNode) * _scale,
                                            HookRowHeight * _scale));
         }
+        // Measure the variable autocomplete dropdown.
+        if (_varDropdownVisible && _editingParamNode is not null)
+        {
+            double ddW = Math.Max(180.0, _editingParamEditorW) * _scale;
+            _varDropdownBorder.Measure(new Size(ddW, 200));
+        }
         // Measure the comment editor.
         if (_editingCommentBlock is not null)
         {
@@ -522,6 +559,14 @@ public sealed class ModelSystemCanvas : Control
                 _editingParamEditorY * _scale,
                 _editingParamEditorW * _scale,
                 HookRowHeight * _scale));
+        }
+        // Position the variable autocomplete dropdown just below the inline editor.
+        if (_varDropdownVisible && _editingParamNode is not null)
+        {
+            double ddW = Math.Max(180.0, _editingParamEditorW) * _scale;
+            double ddX = _editingParamEditorX * _scale;
+            double ddY = (_editingParamEditorY + HookRowHeight) * _scale;
+            _varDropdownBorder.Arrange(new Rect(ddX, ddY, ddW, _varDropdownBorder.DesiredSize.Height));
         }
         // Position the comment editor over the comment block being edited.
         if (_editingCommentBlock is not null)
@@ -1656,9 +1701,14 @@ public sealed class ModelSystemCanvas : Control
                 return;
             }
             // Clicking elsewhere commits any open edit.
-            if (_editingParamNode    is not null) CommitParamEdit();
-            if (_editingCommentBlock is not null) CommitCommentEdit();
-            if (_editingNameElement  is not null) CommitNameEdit();
+            // Guard: if the click was already handled by a child (e.g. the variable
+            // autocomplete dropdown's TextBlock items), do not commit the edit.
+            if (!e.Handled)
+            {
+                if (_editingParamNode    is not null) CommitParamEdit();
+                if (_editingCommentBlock is not null) CommitCommentEdit();
+                if (_editingNameElement  is not null) CommitNameEdit();
+            }
         }
 
         // ── Hook toggle icon click (left button, any click count) ─────────
@@ -2325,6 +2375,7 @@ public sealed class ModelSystemCanvas : Control
     /// <param name="rowW">Override width of the editor overlay (use -1 to auto-derive).</param>
     private void BeginParamEdit(NodeViewModel node, double rowX = -1, double rowY = -1, double rowW = -1)
     {
+        HideVarDropdown();
         _editingParamNode = node;
         _editingParamEditorX = rowX >= 0 ? rowX : node.X;
         _editingParamEditorY = rowY >= 0 ? rowY : node.Y + NodeHeaderHeight;
@@ -2344,6 +2395,7 @@ public sealed class ModelSystemCanvas : Control
     /// <summary>Commits the current editor text as the new parameter value.</summary>
     private void CommitParamEdit()
     {
+        HideVarDropdown();
         if (_editingParamNode is null) return;
         var node  = _editingParamNode;
         var value = _inlineEditor.Text ?? string.Empty;
@@ -2359,6 +2411,7 @@ public sealed class ModelSystemCanvas : Control
     /// <summary>Discards the current edit without saving.</summary>
     private void CancelParamEdit()
     {
+        HideVarDropdown();
         _editingParamNode       = null;
         _inlineEditor.IsVisible = false;
         InvalidateAndMeasure();
@@ -2367,6 +2420,46 @@ public sealed class ModelSystemCanvas : Control
 
     private void OnInlineEditorKeyDown(object? sender, KeyEventArgs e)
     {
+        // ── Variable autocomplete dropdown navigation ─────────────────────
+        if (_varDropdownVisible)
+        {
+            int count = _varDropdownStack.Children.Count;
+            if (e.Key == Key.Down)
+            {
+                _varSelectedIndex = Math.Min(_varSelectedIndex + 1, count - 1);
+                UpdateDropdownHighlight();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.Up)
+            {
+                _varSelectedIndex = Math.Max(_varSelectedIndex - 1, 0);
+                UpdateDropdownHighlight();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.Tab)
+            {
+                SelectCurrentDropdownItem();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key is Key.Return or Key.Enter)
+            {
+                // Complete with the highlighted item; do NOT commit the whole edit.
+                SelectCurrentDropdownItem();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.Escape)
+            {
+                HideVarDropdown();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // ── Standard inline-editor keys ───────────────────────────────────
         if (e.Key is Key.Return or Key.Enter)
         {
             CommitParamEdit();
@@ -2380,8 +2473,179 @@ public sealed class ModelSystemCanvas : Control
         }
     }
 
+    // ── Variable autocomplete helpers ─────────────────────────────────────
+
+    /// <summary>
+    /// Returns <c>true</c> for characters that terminate a variable token
+    /// in a scripted-parameter expression.
+    /// </summary>
+    private static bool IsExpressionSpecialChar(char c) =>
+        c is '+' or '-' or '*' or '/' or '^' or '?' or ':'
+           or '&' or '|' or '<' or '>' or '=' or '!' or '(' or ')' or '"';
+
+    /// <summary>
+    /// Called whenever the inline-editor text changes.  When editing a
+    /// <see cref="NodeViewModel.IsScriptedParameter"/> node, extracts the
+    /// token at the caret and populates (or hides) the autocomplete dropdown.
+    /// </summary>
+    private void OnInlineEditorTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (_editingParamNode is null || !_editingParamNode.IsScriptedParameter || _vm is null)
+        {
+            HideVarDropdown();
+            return;
+        }
+
+        var text  = _inlineEditor.Text ?? string.Empty;
+        var caret = Math.Clamp(_inlineEditor.CaretIndex, 0, text.Length);
+
+        // Walk backwards from the caret to find the start of the current token.
+        int tokenStart = caret;
+        while (tokenStart > 0)
+        {
+            char ch = text[tokenStart - 1];
+            if (char.IsWhiteSpace(ch) || IsExpressionSpecialChar(ch))
+                break;
+            tokenStart--;
+        }
+
+        var token = text[tokenStart..caret];
+        _varTokenStart = tokenStart;
+
+        if (token.Length == 0)
+        {
+            HideVarDropdown();
+            return;
+        }
+
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+
+        var matches = _vm.ModelSystemVariables
+            .Where(v => v.Name.Contains(token, StringComparison.OrdinalIgnoreCase))
+            .Select(v => v.Name)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxVarDropdownItems)
+            .ToList();
+
+        if (matches.Count == 0)
+        {
+            HideVarDropdown();
+            return;
+        }
+
+        var normalBg  = isLight
+            ? new SolidColorBrush(Color.FromRgb(0xF8, 0xF9, 0xFF))
+            : new SolidColorBrush(Color.FromRgb(0x1E, 0x2E, 0x3E));
+        IBrush normalFg = isLight ? Brushes.Black  : Brushes.White;
+
+        _varDropdownBorder.Background = normalBg;
+        _varDropdownBorder.BorderBrush = isLight
+            ? new SolidColorBrush(Color.FromRgb(0x88, 0xAA, 0xCC))
+            : new SolidColorBrush(Color.FromRgb(0x44, 0x88, 0xCC));
+
+        _varDropdownStack.Children.Clear();
+        foreach (var name in matches)
+        {
+            var captured = name;
+            var tb = new TextBlock
+            {
+                Text       = captured,
+                Padding    = new Thickness(8, 3, 8, 3),
+                Foreground = normalFg,
+                Background = normalBg,
+                FontSize   = HookFontSize,
+                FontFamily = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            };
+            tb.PointerEntered += (_, _) =>
+            {
+                tb.Background = new SolidColorBrush(Color.FromRgb(0x20, 0x60, 0xA0));
+                tb.Foreground = Brushes.White;
+            };
+            tb.PointerExited += (_, _) =>
+            {
+                // UpdateDropdownHighlight will repaint based on _varSelectedIndex.
+                UpdateDropdownHighlight();
+            };
+            tb.PointerPressed += (_, pe) =>
+            {
+                CompleteVariable(captured);
+                pe.Handled = true;
+            };
+            _varDropdownStack.Children.Add(tb);
+        }
+
+        _varSelectedIndex = 0;
+        UpdateDropdownHighlight();
+        _varDropdownBorder.IsVisible = true;
+        _varDropdownVisible = true;
+        InvalidateMeasure();
+    }
+
+    /// <summary>Repaints the selection highlight so only the row at <see cref="_varSelectedIndex"/> is highlighted.</summary>
+    private void UpdateDropdownHighlight()
+    {
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        var normalBg  = isLight
+            ? new SolidColorBrush(Color.FromRgb(0xF8, 0xF9, 0xFF))
+            : new SolidColorBrush(Color.FromRgb(0x1E, 0x2E, 0x3E));
+        var selBg = new SolidColorBrush(Color.FromRgb(0x20, 0x60, 0xA0));
+        IBrush normalFg = isLight ? Brushes.Black  : Brushes.White;
+
+        for (int i = 0; i < _varDropdownStack.Children.Count; i++)
+        {
+            if (_varDropdownStack.Children[i] is not TextBlock tb) continue;
+            bool sel = i == _varSelectedIndex;
+            tb.Background = sel ? selBg  : normalBg;
+            tb.Foreground = sel ? Brushes.White : normalFg;
+        }
+    }
+
+    /// <summary>Completes the current token with the currently highlighted dropdown item.</summary>
+    private void SelectCurrentDropdownItem()
+    {
+        int count = _varDropdownStack.Children.Count;
+        if (_varSelectedIndex < 0 || _varSelectedIndex >= count) return;
+        if (_varDropdownStack.Children[_varSelectedIndex] is TextBlock tb && tb.Text is { } name)
+            CompleteVariable(name);
+    }
+
+    /// <summary>
+    /// Replaces the token starting at <see cref="_varTokenStart"/> up to the current
+    /// caret position with <paramref name="name"/>, then closes the dropdown.
+    /// The editor remains open so the user can continue typing.
+    /// </summary>
+    private void CompleteVariable(string name)
+    {
+        var text  = _inlineEditor.Text ?? string.Empty;
+        var caret = Math.Clamp(_inlineEditor.CaretIndex, 0, text.Length);
+        _inlineEditor.Text       = text[.._varTokenStart] + name + text[caret..];
+        _inlineEditor.CaretIndex = _varTokenStart + name.Length;
+        HideVarDropdown();
+        // Clicking a TextBlock item shifted focus to the canvas; return it to the
+        // inline editor so the user can keep typing without clicking again.
+        Avalonia.Threading.Dispatcher.UIThread.Post(
+            () => _inlineEditor.Focus(),
+            Avalonia.Threading.DispatcherPriority.Input);
+    }
+
+    /// <summary>Hides and clears the variable autocomplete dropdown.</summary>
+    private void HideVarDropdown()
+    {
+        if (!_varDropdownVisible) return;
+        _varDropdownVisible          = false;
+        _varDropdownBorder.IsVisible = false;
+        _varDropdownStack.Children.Clear();
+        InvalidateMeasure();
+    }
+
     private void OnInlineEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        // When the variable autocomplete dropdown is visible the user may have clicked
+        // a suggestion item. TextBlock items are non-focusable, so focus falls to the
+        // canvas. We must NOT commit here; CompleteVariable() keeps the session open
+        // and will immediately return focus to the inline editor.
+        if (_varDropdownVisible) return;
+
         // Commit on focus loss (e.g. user clicks away to another element).
         if (_editingParamNode is not null)
             CommitParamEdit();
