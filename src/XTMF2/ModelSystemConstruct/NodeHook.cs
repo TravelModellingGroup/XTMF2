@@ -81,6 +81,12 @@ namespace XTMF2
         internal abstract void Install(Node origin, Node destination, int index);
 
         /// <summary>
+        /// Install pre-resolved module instances directly, bypassing <see cref="Node.Module"/>.
+        /// Called when constructing per-instance FunctionInstance clones at runtime.
+        /// </summary>
+        internal abstract void Install(IModule origin, IModule destination, int index);
+
+        /// <summary>
         /// Create the array of data with the given size
         /// </summary>
         /// <param name="length">The number of modules that will be installed</param>
@@ -164,6 +170,24 @@ namespace XTMF2
             }
         }
 
+        internal override void Install(IModule origin, IModule destination, int index)
+        {
+            switch (Cardinality)
+            {
+                case HookCardinality.Single:
+                case HookCardinality.SingleOptional:
+                    Property.SetValue(origin, destination);
+                    break;
+                case HookCardinality.AnyNumber:
+                case HookCardinality.AtLeastOne:
+                    if (Property.GetValue(origin) is Array data)
+                        data.SetValue(destination, index);
+                    break;
+                default:
+                    throw new NotImplementedException("Unknown Cardinality!");
+            }
+        }
+
         internal override bool AnyInstalled(IModule module)
         {
             return Property.GetValue(module) is not null;
@@ -224,6 +248,24 @@ namespace XTMF2
                             data.SetValue(destination.Module, index);
                         }
                     }
+                    break;
+                default:
+                    throw new NotImplementedException("Unknown Cardinality!");
+            }
+        }
+
+        internal override void Install(IModule origin, IModule destination, int index)
+        {
+            switch (Cardinality)
+            {
+                case HookCardinality.Single:
+                case HookCardinality.SingleOptional:
+                    Field.SetValue(origin, destination);
+                    break;
+                case HookCardinality.AnyNumber:
+                case HookCardinality.AtLeastOne:
+                    if (Field.GetValue(origin) is Array data)
+                        data.SetValue(destination, index);
                     break;
                 default:
                     throw new NotImplementedException("Unknown Cardinality!");

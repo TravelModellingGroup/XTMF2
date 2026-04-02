@@ -58,8 +58,25 @@ namespace XTMF2.ModelSystemConstruct
 
         internal override bool Construct(ref string? error)
         {
-            // Resolve ghost-node destinations to their real node at runtime.
-            var effectiveDest = Destination is GhostNode gn ? gn.ReferencedNode : Destination!;
+            // Resolve ghost-node destinations to their real node.
+            var resolved = Destination is GhostNode gn ? gn.ReferencedNode : Destination!;
+
+            // Determine the effective destination node (for cardinality/disabled checks)
+            // and the actual IModule to wire (per-instance clone for FunctionInstances).
+            Node effectiveDest;
+            IModule? destModule;
+            if (resolved is FunctionInstance fi)
+            {
+                effectiveDest = fi.Template.EntryNode ?? resolved;
+                destModule    = fi.Template.EntryNode is not null
+                    ? fi.GetRuntimeModule(fi.Template.EntryNode)
+                    : null;
+            }
+            else
+            {
+                effectiveDest = resolved;
+                destModule    = resolved.Module;
+            }
 
             // if not optional
             if (OriginHook!.Cardinality == HookCardinality.Single)
@@ -75,10 +92,9 @@ namespace XTMF2.ModelSystemConstruct
                     return false;
                 }
             }
-            if (!IsDisabled)
+            if (!IsDisabled && destModule is not null)
             {
-                // The index doesn't matter for this type
-                OriginHook.Install(Origin!, effectiveDest, 0);
+                OriginHook.Install(Origin!.Module!, destModule, 0);
             }
             return true;
         }

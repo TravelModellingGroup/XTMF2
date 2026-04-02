@@ -93,12 +93,28 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             var parts = new System.Collections.Generic.List<string>();
             var b = _currentBoundary;
             while (b is not null) { parts.Insert(0, b.Name); b = b.Parent; }
+            // When inside a function template's InternalModules, append the template indicator.
+            if (_currentFunctionTemplate is { } ft)
+                parts[^1] = $"[{ft.Name}]";
             return string.Join(" › ", parts);
         }
     }
 
     /// <summary><c>true</c> when the current boundary is the global (root) boundary.</summary>
     public bool IsAtRootBoundary => ReferenceEquals(_currentBoundary, GlobalBoundary);
+
+    // ── Function-template navigation ──────────────────────────────────────
+    /// <summary>
+    /// The function template whose <see cref="FunctionTemplate.InternalModules"/> is currently
+    /// being shown on the canvas, or <c>null</c> when viewing a regular boundary.
+    /// </summary>
+    private FunctionTemplateViewModel? _currentFunctionTemplate;
+
+    /// <summary><c>true</c> when the canvas is showing the inside of a function template.</summary>
+    public bool IsInsideFunctionTemplate => _currentFunctionTemplate is not null;
+
+    /// <summary>The function template currently being edited inside, or <c>null</c> when on a regular boundary.</summary>
+    public FunctionTemplateViewModel? CurrentFunctionTemplate => _currentFunctionTemplate;
 
     /// <summary>Items shown in the boundary navigation dropdown.</summary>
     public ObservableCollection<BoundaryNavigationItem> BoundaryNavigationItems { get; } = new();
@@ -125,6 +141,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     /// <summary>Observable wrappers around <see cref="Boundary.GhostNodes"/>.</summary>
     public ObservableCollection<GhostNodeViewModel> GhostNodes { get; } = new();
+
+    /// <summary>Observable wrappers around <see cref="Boundary.FunctionTemplates"/>.</summary>
+    public ObservableCollection<FunctionTemplateViewModel> FunctionTemplates { get; } = new();
+
+    /// <summary>Observable wrappers around <see cref="Boundary.FunctionInstances"/>.</summary>
+    public ObservableCollection<FunctionInstanceViewModel> FunctionInstances { get; } = new();
 
     /// <summary>Observable view-models for the model system's variable list.</summary>
     public ObservableCollection<ModelSystemVariableViewModel> ModelSystemVariables { get; } = new();
@@ -247,8 +269,53 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         StartViewModel             => "Start (entry point)",
         NodeViewModel nvm          => $"Module\n{nvm.TypeName}",
         CommentBlockViewModel      => "Comment Block",
+        FunctionTemplateViewModel  => "Function Template",
+        FunctionInstanceViewModel  => "Function Instance",
         _                          => string.Empty
     };
+
+    /// <summary>True when the selected element is a <see cref="FunctionTemplateViewModel"/>.</summary>
+    public bool SelectedElementIsFunctionTemplate => SelectedElement is FunctionTemplateViewModel;
+
+    /// <summary>True when the selected element is a <see cref="FunctionInstanceViewModel"/>.</summary>
+    public bool SelectedElementIsFunctionInstance => SelectedElement is FunctionInstanceViewModel;
+
+    /// <summary>
+    /// The name of the template referenced by the currently selected function instance,
+    /// or an empty string when nothing (or a non-instance element) is selected.
+    /// </summary>
+    public string SelectedFunctionInstanceTemplateName
+        => (SelectedElement as FunctionInstanceViewModel)?.TemplateName ?? string.Empty;
+
+    /// <summary>
+    /// The exposed hook nodes of the template referenced by the currently selected
+    /// function instance, or an empty collection.
+    /// </summary>
+    public System.Collections.Generic.IEnumerable<ModelSystemConstruct.Node> SelectedFunctionInstanceExposedHooks
+        => (SelectedElement as FunctionInstanceViewModel)?.ExposedHooks
+           ?? System.Linq.Enumerable.Empty<ModelSystemConstruct.Node>();
+
+    /// <summary>
+    /// <c>true</c> when the selected function instance's template has no exposed hook nodes —
+    /// drives the "(none)" hint text in the properties panel.
+    /// </summary>
+    public bool SelectedFunctionInstanceHasNoExposedHooks
+        => SelectedElement is not FunctionInstanceViewModel fi || fi.ExposedHooks.Count == 0;
+
+    /// <summary>
+    /// The exposed-node list of the currently selected function template, or an empty list
+    /// when nothing (or a non-template element) is selected. Bound by the toolbox panel.
+    /// </summary>
+    public IEnumerable<Node> SelectedFunctionTemplateExposedNodes
+        => (SelectedElement as FunctionTemplateViewModel)?.ExposedNodes
+           ?? System.Linq.Enumerable.Empty<Node>();
+
+    /// <summary>
+    /// <c>true</c> when the selected function template has no exposed hook nodes —
+    /// drives the "(none)" hint text in the properties panel.
+    /// </summary>
+    public bool SelectedFunctionTemplateHasNoExposedNodes
+        => SelectedElement is not FunctionTemplateViewModel ft || ft.ExposedNodes.Count == 0;
 
     /// <summary>All module types currently registered in the runtime.</summary>
     public System.Collections.ObjectModel.ReadOnlyObservableCollection<Type> AvailableModuleTypes
@@ -290,6 +357,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         OnPropertyChanged(nameof(SelectedElementIsComment));
         OnPropertyChanged(nameof(SelectedElementIsNotComment));
         OnPropertyChanged(nameof(SelectedElementIsParameter));
+        OnPropertyChanged(nameof(SelectedElementIsFunctionTemplate));
+        OnPropertyChanged(nameof(SelectedFunctionTemplateExposedNodes));
+        OnPropertyChanged(nameof(SelectedFunctionTemplateHasNoExposedNodes));
+        OnPropertyChanged(nameof(SelectedElementIsFunctionInstance));
+        OnPropertyChanged(nameof(SelectedFunctionInstanceTemplateName));
+        OnPropertyChanged(nameof(SelectedFunctionInstanceExposedHooks));
+        OnPropertyChanged(nameof(SelectedFunctionInstanceHasNoExposedHooks));
         SelectedElementParameterValue =
             value is NodeViewModel pnvm && pnvm.IsParameterNode
                 ? pnvm.ParameterValueRepresentation
@@ -371,9 +445,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         foreach (var node in boundary.Modules)        Nodes.Add(new NodeViewModel(node, Session, User));
         foreach (var start in boundary.Starts)        Starts.Add(new StartViewModel(start, Session, User));
-        // Ghost nodes must be populated before links so that ResolveElement can find
-        // GhostNodeViewModel instances when a link destination is a GhostNode.
+        // Ghost nodes and FunctionInstances must be populated before links so that
+        // ResolveElement can find their view-models when wiring up link destinations.
         foreach (var ghost in boundary.GhostNodes)    GhostNodes.Add(new GhostNodeViewModel(ghost, Session, User));
+        foreach (var ft in boundary.FunctionTemplates) FunctionTemplates.Add(new FunctionTemplateViewModel(ft, Session, User));
+        foreach (var fi in boundary.FunctionInstances) FunctionInstances.Add(new FunctionInstanceViewModel(fi, Session, User));
         foreach (var link in boundary.Links)          TryAddLinkViewModel(link);
         foreach (var cb in boundary.CommentBlocks)    CommentBlocks.Add(new CommentBlockViewModel(cb, Session, User));
     }
@@ -389,6 +465,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         ((INotifyCollectionChanged)boundary.Links).CollectionChanged         += OnLinksChanged;
         ((INotifyCollectionChanged)boundary.CommentBlocks).CollectionChanged += OnCommentBlocksChanged;
         ((INotifyCollectionChanged)boundary.GhostNodes).CollectionChanged    += OnGhostNodesChanged;
+        ((INotifyCollectionChanged)boundary.FunctionTemplates).CollectionChanged += OnFunctionTemplatesChanged;
+        ((INotifyCollectionChanged)boundary.FunctionInstances).CollectionChanged += OnFunctionInstancesChanged;
 
         // Keep the same wrapper instance so we can correctly remove the handler later.
         _subscribedChildBoundaries  = boundary.Boundaries;
@@ -402,6 +480,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         ((INotifyCollectionChanged)boundary.Links).CollectionChanged         -= OnLinksChanged;
         ((INotifyCollectionChanged)boundary.CommentBlocks).CollectionChanged -= OnCommentBlocksChanged;
         ((INotifyCollectionChanged)boundary.GhostNodes).CollectionChanged    -= OnGhostNodesChanged;
+        ((INotifyCollectionChanged)boundary.FunctionTemplates).CollectionChanged -= OnFunctionTemplatesChanged;
+        ((INotifyCollectionChanged)boundary.FunctionInstances).CollectionChanged -= OnFunctionInstancesChanged;
 
         if (_subscribedChildBoundaries is not null)
         {
@@ -432,11 +512,23 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Links.Clear();
         CommentBlocks.Clear();
         GhostNodes.Clear();
+        foreach (var ft in FunctionTemplates) ft.Detach();
+        FunctionTemplates.Clear();
+        foreach (var fi in FunctionInstances) fi.Detach();
+        FunctionInstances.Clear();
 
         _currentBoundary = boundary;
         OnPropertyChanged(nameof(CurrentBoundary));
         OnPropertyChanged(nameof(CurrentBoundaryLabel));
         OnPropertyChanged(nameof(IsAtRootBoundary));
+        // If the new boundary is not the InternalModules of the tracked template, leave FT mode.
+        if (_currentFunctionTemplate is not null
+            && !ReferenceEquals(boundary, _currentFunctionTemplate.UnderlyingTemplate.InternalModules))
+        {
+            _currentFunctionTemplate = null;
+            OnPropertyChanged(nameof(IsInsideFunctionTemplate));
+            ExitFunctionTemplateCommand.NotifyCanExecuteChanged();
+        }
 
         SubscribeToBoundary(_currentBoundary);
         BuildFromBoundary(_currentBoundary);
@@ -548,6 +640,42 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             }
     }
 
+    private void OnFunctionTemplatesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems is not null)
+            foreach (FunctionTemplate ft in e.NewItems)
+                FunctionTemplates.Add(new FunctionTemplateViewModel(ft, Session, User));
+
+        if (e.OldItems is not null)
+            foreach (FunctionTemplate ft in e.OldItems)
+            {
+                var vm = FunctionTemplates.FirstOrDefault(v => v.UnderlyingTemplate == ft);
+                if (vm is not null)
+                {
+                    vm.Detach();
+                    FunctionTemplates.Remove(vm);
+                }
+            }
+    }
+
+    private void OnFunctionInstancesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems is not null)
+            foreach (FunctionInstance fi in e.NewItems)
+                FunctionInstances.Add(new FunctionInstanceViewModel(fi, Session, User));
+
+        if (e.OldItems is not null)
+            foreach (FunctionInstance fi in e.OldItems)
+            {
+                var vm = FunctionInstances.FirstOrDefault(v => v.UnderlyingInstance == fi);
+                if (vm is not null)
+                {
+                    vm.Detach();
+                    FunctionInstances.Remove(vm);
+                }
+            }
+    }
+
     private void TryAddLinkViewModel(Link link)
     {
         var originElement = ResolveElement(link.Origin);
@@ -604,6 +732,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return GhostNodes.FirstOrDefault(g => g.UnderlyingGhostNode == ghost);
         if (node is Start start)
             return Starts.FirstOrDefault(s => s.UnderlyingStart == start);
+        if (node is FunctionInstance fi)
+            return FunctionInstances.FirstOrDefault(fivm => fivm.UnderlyingInstance == fi);
         var directVm = Nodes.FirstOrDefault(n => n.UnderlyingNode == node);
         if (directVm is not null) return directVm;
         // The real node lives in another boundary — use a ghost referencing it if one is visible here.
@@ -895,6 +1025,68 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// presents a <see cref="HookPickerDialog"/> when there are multiple options.
     /// Called directly by the canvas (not a RelayCommand because it requires typed parameters).
     /// </summary>
+    /// <summary>
+    /// Creates a link whose destination is a <see cref="FunctionInstanceViewModel"/>.
+    /// The FunctionInstance acts as a node whose type is its template's EntryNode type.
+    /// </summary>
+    public async Task CreateLinkAsync(ICanvasElement originElement, FunctionInstanceViewModel destFi)
+    {
+        if (ParentWindow is null) return;
+
+        var destNode = destFi.UnderlyingInstance; // FunctionInstance : Node
+        var destType = destNode.Type;             // Template.EntryNode?.Type ?? typeof(object)
+
+        if (destType == typeof(object))
+        {
+            await ShowError("No Entry Node",
+                new CommandError($"'{destFi.Name}' has no entry node designated and cannot be used as a link destination."));
+            return;
+        }
+
+        // Resolve the underlying origin node.
+        Node? originNode = originElement switch
+        {
+            NodeViewModel  nvm => nvm.UnderlyingNode,
+            StartViewModel svm => svm.UnderlyingStart,
+            _                  => null
+        };
+        if (originNode is null) return;
+
+        var compatible = new List<NodeHook>();
+        foreach (var hook in originNode.Hooks)
+        {
+            Type hookElementType = (hook.Cardinality is HookCardinality.AtLeastOne or HookCardinality.AnyNumber)
+                ? (hook.Type.GetElementType() ?? hook.Type)
+                : hook.Type;
+            if (hookElementType.IsAssignableFrom(destType))
+                compatible.Add(hook);
+        }
+
+        if (compatible.Count == 0)
+        {
+            await ShowError("Incompatible Types",
+                new CommandError($"No hooks on '{originNode.Name}' are compatible with '{destFi.Name}' (type '{destType.Name}')."));
+            return;
+        }
+
+        NodeHook selectedHook;
+        if (compatible.Count == 1)
+        {
+            selectedHook = compatible[0];
+        }
+        else
+        {
+            var dialog = new HookPickerDialog(compatible,
+                $"Select which hook on '{originNode.Name}' to connect to '{destFi.Name}':");
+            await dialog.ShowDialog(ParentWindow);
+            if (dialog.WasCancelled || dialog.SelectedHook is null) return;
+            selectedHook = dialog.SelectedHook;
+        }
+
+        if (!Session.AddLink(User, originNode, selectedHook, destNode, out _, out var error))
+            await ShowError("Create Link Failed", error);
+    }
+
     public async Task CreateLinkAsync(ICanvasElement originElement, NodeViewModel destVm)
     {
         if (ParentWindow is null) return;
@@ -1304,6 +1496,286 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Session.AddCommentBlock(User, _currentBoundary, $"Comment {++_commentCounter}", location, out _, out _);
     }
 
+    // ── Function-template commands ─────────────────────────────────────────
+
+    /// <summary>
+    /// Prompts for a name and creates a new <see cref="FunctionTemplate"/> in the
+    /// current boundary. The template is given a default canvas position near the
+    /// top-left of the existing content.
+    /// </summary>
+    [RelayCommand]
+    private async Task AddFunctionTemplate()
+    {
+        if (ParentWindow is null) return;
+
+        var dialog = new InputDialog(
+            title: "Add Function Template",
+            prompt: "Enter the function template name:",
+            defaultText: $"FunctionTemplate{FunctionTemplates.Count + 1}");
+        await dialog.ShowDialog(ParentWindow);
+
+        var name = dialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(name) || dialog.WasCancelled) return;
+
+        // Place it in the upper area of the canvas.
+        var offset = FunctionTemplates.Count * 60;
+        var ftLocation = new Rectangle(60f + offset % 600, 60f + (offset / 600) * 160f, 220f, 140f);
+
+        if (!Session.AddFunctionTemplate(User, _currentBoundary, name,
+                out var ft, out var error))
+        {
+            await ShowError("Add Function Template Failed", error);
+            return;
+        }
+
+        // Set canvas position (the default location set by the model constructor is fine,
+        // but we override with a better-spread position).
+        Session.SetFunctionTemplateLocation(User, ft!, ftLocation, out _);
+    }
+
+    /// <summary>
+    /// Prompts for a new name and renames the given function template.
+    /// </summary>
+    public async Task RenameFunctionTemplateAsync(FunctionTemplateViewModel ftvm)
+    {
+        if (ParentWindow is null) return;
+
+        var dialog = new InputDialog(
+            title: "Rename Function Template",
+            prompt: "Enter the new name:",
+            defaultText: ftvm.Name);
+        await dialog.ShowDialog(ParentWindow);
+
+        var newName = dialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(newName) || dialog.WasCancelled) return;
+        if (newName == ftvm.Name) return;
+
+        if (!Session.RenameFunctionTemplate(User, ftvm.UnderlyingTemplate, newName, out var error))
+            await ShowError("Rename Function Template Failed", error);
+    }
+
+    /// <summary>
+    /// Deletes the given function template from the current boundary (with undo support).
+    /// </summary>
+    public async Task DeleteFunctionTemplateAsync(FunctionTemplateViewModel ftvm)
+    {
+        if (!Session.RemoveFunctionTemplate(User, _currentBoundary, ftvm.UnderlyingTemplate, out var error))
+            await ShowError("Delete Function Template Failed", error);
+    }
+
+    // ── Function-instance commands ─────────────────────────────────────────
+
+    /// <summary>
+    /// Prompts the user to pick a <see cref="FunctionTemplate"/> from the current boundary
+    /// and a name, then places a new <see cref="FunctionInstance"/> on the canvas.
+    /// </summary>
+    [RelayCommand]
+    private async Task AddFunctionInstance()
+    {
+        if (ParentWindow is null) return;
+
+        var availableTemplates = new List<FunctionTemplate>();
+        _currentBoundary.CollectAccessibleFunctionTemplates(availableTemplates);
+        if (availableTemplates.Count == 0)
+        {
+            ShowToast("No function templates are defined in this boundary or its children.", isError: true, durationMs: 4000);
+            return;
+        }
+
+        // Build display names that include the child-boundary path when needed.
+        var templateDisplayNames = availableTemplates
+            .Select(ft => Boundary.GetQualifiedTemplateName(_currentBoundary, ft) ?? ft.Name)
+            .ToList();
+
+        // Pick a template (skip the picker if only one template exists).
+        FunctionTemplate selectedTemplate;
+        if (availableTemplates.Count == 1)
+        {
+            selectedTemplate = availableTemplates[0];
+        }
+        else
+        {
+            var picker = new StartPickerDialog(
+                title: "Add Function Instance",
+                prompt: "Select the function template to instantiate:",
+                startNames: templateDisplayNames,
+                defaultStart: templateDisplayNames[0]);
+            await picker.ShowDialog(ParentWindow);
+            if (picker.WasCancelled) return;
+            var picked = picker.SelectedStartName ?? templateDisplayNames[0];
+            var pickedIdx = templateDisplayNames.IndexOf(picked);
+            selectedTemplate = availableTemplates[pickedIdx >= 0 ? pickedIdx : 0];
+        }
+
+        // Ask for the instance name.
+        var nameDialog = new InputDialog(
+            title: "Add Function Instance",
+            prompt: $"Enter the instance name ({selectedTemplate.Name}):",
+            defaultText: $"{selectedTemplate.Name}{FunctionInstances.Count + 1}");
+        await nameDialog.ShowDialog(ParentWindow);
+
+        var name = nameDialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
+
+        var offset = FunctionInstances.Count * 40;
+        var location = new Rectangle(80f + offset % 800, 80f + (offset / 800) * 100f, 160f, 70f);
+
+        if (!Session.AddFunctionInstance(User, _currentBoundary, selectedTemplate, name, location,
+                out _, out var error))
+        {
+            await ShowError("Add Function Instance Failed", error);
+        }
+    }
+
+    /// <summary>
+    /// Renames the given function instance after prompting the user for a new name.
+    /// </summary>
+    public async Task RenameFunctionInstanceAsync(FunctionInstanceViewModel fivm)
+    {
+        if (ParentWindow is null) return;
+
+        var dialog = new InputDialog(
+            title: "Rename Function Instance",
+            prompt: "Enter the new name:",
+            defaultText: fivm.Name);
+        await dialog.ShowDialog(ParentWindow);
+
+        var newName = dialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(newName) || dialog.WasCancelled) return;
+        if (newName == fivm.Name) return;
+
+        if (!Session.RenameFunctionInstance(User, fivm.UnderlyingInstance, newName, out var error))
+            await ShowError("Rename Function Instance Failed", error);
+    }
+
+    /// <summary>
+    /// Deletes the given function instance from the current boundary (with undo support).
+    /// </summary>
+    public async Task DeleteFunctionInstanceAsync(FunctionInstanceViewModel fivm)
+    {
+        if (!Session.RemoveFunctionInstance(User, fivm.UnderlyingInstance, out var error))
+            await ShowError("Delete Function Instance Failed", error);
+    }
+
+    /// <summary>
+    /// Navigates the canvas into <paramref name="ftvm"/>'s
+    /// <see cref="FunctionTemplate.InternalModules"/> boundary so the user can
+    /// edit the nodes contained within the function template.
+    /// </summary>
+    public void NavigateIntoFunctionTemplate(FunctionTemplateViewModel ftvm)
+    {
+        _currentFunctionTemplate = ftvm;
+        OnPropertyChanged(nameof(IsInsideFunctionTemplate));
+        ExitFunctionTemplateCommand.NotifyCanExecuteChanged();
+        SwitchToBoundary(ftvm.UnderlyingTemplate.InternalModules);
+    }
+
+    /// <summary>
+    /// ICommand wrapper for <see cref="NavigateIntoFunctionTemplate"/> so the AXAML
+    /// properties panel can bind to it via <c>CommandParameter="{Binding SelectedElement}"</c>.
+    /// </summary>
+    [RelayCommand]
+    private void NavigateIntoFunctionTemplateBinding(object? parameter)
+    {
+        if (parameter is FunctionTemplateViewModel ftvm)
+            NavigateIntoFunctionTemplate(ftvm);
+    }
+
+    /// <summary>
+    /// ICommand wrapper for <see cref="RenameFunctionTemplateAsync"/> usable from AXAML
+    /// with <c>CommandParameter="{Binding SelectedElement}"</c>.
+    /// </summary>
+    [RelayCommand]
+    private async Task RenameFunctionTemplateBinding(object? parameter)
+    {
+        if (parameter is FunctionTemplateViewModel ftvm)
+            await RenameFunctionTemplateAsync(ftvm);
+    }
+
+    /// <summary>
+    /// ICommand wrapper for <see cref="DeleteFunctionTemplateAsync"/> usable from AXAML
+    /// with <c>CommandParameter="{Binding SelectedElement}"</c>.
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteFunctionTemplateBinding(object? parameter)
+    {
+        if (parameter is FunctionTemplateViewModel ftvm)
+            await DeleteFunctionTemplateAsync(ftvm);
+    }
+
+    /// <summary>
+    /// ICommand wrapper for <see cref="RenameFunctionInstanceAsync"/> usable from AXAML
+    /// with <c>CommandParameter="{Binding SelectedElement}"</c>.
+    /// </summary>
+    [RelayCommand]
+    private async Task RenameFunctionInstanceBinding(object? parameter)
+    {
+        if (parameter is FunctionInstanceViewModel fivm)
+            await RenameFunctionInstanceAsync(fivm);
+    }
+
+    /// <summary>
+    /// ICommand wrapper for <see cref="DeleteFunctionInstanceAsync"/> usable from AXAML
+    /// with <c>CommandParameter="{Binding SelectedElement}"</c>.
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteFunctionInstanceBinding(object? parameter)
+    {
+        if (parameter is FunctionInstanceViewModel fivm)
+            await DeleteFunctionInstanceAsync(fivm);
+    }
+
+    /// <summary>
+    /// Exits the current function template's <see cref="FunctionTemplate.InternalModules"/>
+    /// and returns the canvas to the parent boundary.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(IsInsideFunctionTemplate))]
+    private void ExitFunctionTemplate()
+    {
+        if (_currentFunctionTemplate is null) return;
+        var parentBoundary = _currentFunctionTemplate.UnderlyingTemplate.Parent;
+        _currentFunctionTemplate = null;
+        OnPropertyChanged(nameof(IsInsideFunctionTemplate));
+        ExitFunctionTemplateCommand.NotifyCanExecuteChanged();
+        SwitchToBoundary(parentBoundary);
+    }
+
+    /// <summary>
+    /// Toggles whether <paramref name="nvm"/> (a node in the current
+    /// <see cref="FunctionTemplate.InternalModules"/>) is exposed as an external hook
+    /// on the template's canvas container.
+    /// <para>
+    /// Only available when the canvas is inside a function template (i.e.
+    /// <see cref="IsInsideFunctionTemplate"/> is <c>true</c>).
+    /// </para>
+    /// </summary>
+    public async Task ToggleFunctionTemplateExposedNodeAsync(NodeViewModel nvm)
+    {
+        if (_currentFunctionTemplate is null) return;
+
+        if (!Session.ToggleFunctionTemplateExposedNode(
+                User, _currentFunctionTemplate.UnderlyingTemplate, nvm.UnderlyingNode, out var error))
+            await ShowError("Toggle Exposed Hook Failed", error);
+    }
+
+    /// <summary>
+    /// Designates <paramref name="nvm"/>'s underlying node as the
+    /// <see cref="FunctionTemplate.EntryNode"/> of the current function template.
+    /// If the node is already the entry node the assignment is cleared instead
+    /// (i.e. this method toggles the entry-node designation).
+    /// </summary>
+    public async Task SetFunctionTemplateEntryNodeAsync(NodeViewModel nvm)
+    {
+        if (_currentFunctionTemplate is null) return;
+        var template = _currentFunctionTemplate.UnderlyingTemplate;
+        // Toggle: clear when the node is already the entry node, otherwise assign it.
+        var newEntry = ReferenceEquals(template.EntryNode, nvm.UnderlyingNode)
+            ? null
+            : nvm.UnderlyingNode;
+        if (!Session.SetFunctionTemplateEntryNode(User, template, newEntry, out var error))
+            await ShowError("Set Entry Node Failed", error);
+    }
+
     /// <summary>
     /// Prompts for a run name and start to execute, then submits the run to the
     /// <see cref="RunController"/>.
@@ -1668,6 +2140,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 NodeViewModel         nvm => Session.RemoveNode(User, nvm.UnderlyingNode, out err),
                 StartViewModel        svm => Session.RemoveStart(User, svm.UnderlyingStart, out err),
                 CommentBlockViewModel cvm => Session.RemoveCommentBlock(User, _currentBoundary, cvm.UnderlyingBlock, out err),
+                FunctionTemplateViewModel ftvm => Session.RemoveFunctionTemplate(User, _currentBoundary, ftvm.UnderlyingTemplate, out err),
                 _                        => true,
             };
             if (!ok && err is not null)
@@ -1699,6 +2172,23 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         {
             SelectElement(null);
             success = Session.RemoveCommentBlock(User, _currentBoundary, cvm.UnderlyingBlock, out error);
+        }
+        else if (SelectedElement is FunctionTemplateViewModel ftvm)
+        {
+            SelectElement(null);
+            await DeleteFunctionTemplateAsync(ftvm);
+            return;
+        }
+        else if (SelectedElement is FunctionInstanceViewModel fivm)
+        {
+            SelectElement(null);
+            await DeleteFunctionInstanceAsync(fivm);
+            return;
+        }
+        else if (SelectedElement is GhostNodeViewModel ghostVm)
+        {
+            SelectElement(null);
+            success = Session.RemoveGhostNode(User, ghostVm.UnderlyingGhostNode, out error);
         }
         else if (SelectedLink is { } lvm)
         {
@@ -1746,6 +2236,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         ((System.ComponentModel.INotifyPropertyChanged)Session).PropertyChanged -= OnSessionPropertyChanged;
 
         foreach (var varVm in ModelSystemVariables) varVm.Detach();
+
+        foreach (var ft in FunctionTemplates) ft.Detach();
 
         UnsubscribeFromBoundary(_currentBoundary);
 

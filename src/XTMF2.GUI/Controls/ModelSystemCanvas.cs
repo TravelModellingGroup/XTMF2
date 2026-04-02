@@ -32,6 +32,7 @@ using Avalonia.Layout;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using XTMF2;
+using XTMF2.Editing;
 using XTMF2.GUI.ViewModels;
 using XTMF2.ModelSystemConstruct;
 
@@ -110,6 +111,35 @@ public sealed class ModelSystemCanvas : Control
     // Rubber-band (Ctrl+drag) multi-selection rectangle
     private static readonly IBrush SelectionRectFill = new SolidColorBrush(Color.FromArgb(0x2E, 0x44, 0x88, 0xFF));
     private static readonly DashStyle SelectionRectDash = new DashStyle([5, 4], 0);
+
+    // Function-template container box
+    private static readonly IBrush FtFill            = new SolidColorBrush(Color.FromRgb(0x20, 0x12, 0x38));
+    private static readonly IBrush FtHeaderFill      = new SolidColorBrush(Color.FromRgb(0x4A, 0x28, 0x6E));
+    private static readonly IBrush FtBorderBrush     = new SolidColorBrush(Color.FromRgb(0x7B, 0x45, 0xBD));
+    private static readonly IBrush FtSelBorderBrush  = Brushes.DodgerBlue;
+    private static readonly IBrush FtTextBrush       = new SolidColorBrush(Color.FromRgb(0xDD, 0xCC, 0xFF));
+    private static readonly IBrush FtHookTextBrush   = new SolidColorBrush(Color.FromRgb(0xCC, 0xAA, 0xFF));
+    private static readonly IBrush FtCountTextBrush  = new SolidColorBrush(Color.FromArgb(0x90, 0xCC, 0xAA, 0xFF));
+    private static readonly DashStyle FtBorderDash   = new DashStyle([8, 3], 0);
+    private const double FtHeaderHeight  = 28.0;
+    private const double FtHookRowHeight = 16.0;
+    private const double FtNameFontSize  = 11.0;
+    private const double FtCornerRadius  = 6.0;
+    // Function-instance box (teal/green palette, solid border to distinguish from template)
+    private static readonly IBrush FiFill           = new SolidColorBrush(Color.FromRgb(0x07, 0x24, 0x24));
+    private static readonly IBrush FiHeaderFill     = new SolidColorBrush(Color.FromRgb(0x0E, 0x4A, 0x44));
+    private static readonly IBrush FiBorderBrush    = new SolidColorBrush(Color.FromRgb(0x00, 0xBF, 0xA5));
+    private static readonly IBrush FiSelBorderBrush = new SolidColorBrush(Color.FromRgb(0x64, 0xFF, 0xDA));
+    private static readonly IBrush FiTextBrush      = new SolidColorBrush(Color.FromRgb(0xB2, 0xFF, 0xF0));
+    private static readonly IBrush FiSubTextBrush   = new SolidColorBrush(Color.FromArgb(0xB0, 0x80, 0xE8, 0xD0));
+    private static readonly IBrush FiHookTextBrush  = new SolidColorBrush(Color.FromRgb(0x80, 0xCB, 0xC4));
+    private const double FiCornerRadius = 6.0;
+    // Entry-node highlight: gold ring + label (shown when viewing InternalModules of a FunctionTemplate)
+    private static readonly IBrush EntryNodeRingBrush  = new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x00));
+    private static readonly IBrush EntryNodeLabelBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x00));
+    private const double EntryNodeRingExtra     = 3.0;   // px of expansion each side beyond node rect
+    private const double EntryNodeRingThick     = 2.5;   // pen width of the outer ring
+    private const double EntryNodeLabelFontSize = 8.0;   // font size for the "▶ Entry Point" badge
     // Graph-paper background grid
     private static readonly Pen GridPen      = new Pen(new SolidColorBrush(Color.FromArgb(0x38, 0x55, 0x77, 0xAA)), 0.5);
     private static readonly Pen GridPenLight = new Pen(new SolidColorBrush(Color.FromArgb(0x60, 0x88, 0xAA, 0xCC)), 0.5);
@@ -459,35 +489,43 @@ public sealed class ModelSystemCanvas : Control
     private void Attach()
     {
         if (_vm is null) return;
-        _vm.Nodes.CollectionChanged        += OnCollectionChanged;
-        _vm.Starts.CollectionChanged       += OnCollectionChanged;
-        _vm.Links.CollectionChanged        += OnCollectionChanged;
-        _vm.CommentBlocks.CollectionChanged += OnCollectionChanged;
-        _vm.GhostNodes.CollectionChanged   += OnCollectionChanged;
-        _vm.PropertyChanged                += OnViewModelPropertyChanged;
+        _vm.Nodes.CollectionChanged             += OnCollectionChanged;
+        _vm.Starts.CollectionChanged            += OnCollectionChanged;
+        _vm.Links.CollectionChanged             += OnCollectionChanged;
+        _vm.CommentBlocks.CollectionChanged     += OnCollectionChanged;
+        _vm.GhostNodes.CollectionChanged        += OnCollectionChanged;
+        _vm.FunctionTemplates.CollectionChanged += OnCollectionChanged;
+        _vm.FunctionInstances.CollectionChanged += OnCollectionChanged;
+        _vm.PropertyChanged                     += OnViewModelPropertyChanged;
 
-        foreach (var n in _vm.Nodes)         ((INotifyPropertyChanged)n).PropertyChanged += OnElementPropertyChanged;
-        foreach (var s in _vm.Starts)        ((INotifyPropertyChanged)s).PropertyChanged += OnElementPropertyChanged;
-        foreach (var l in _vm.Links)         ((INotifyPropertyChanged)l).PropertyChanged += OnElementPropertyChanged;
-        foreach (var c in _vm.CommentBlocks) ((INotifyPropertyChanged)c).PropertyChanged += OnElementPropertyChanged;
-        foreach (var g in _vm.GhostNodes)    ((INotifyPropertyChanged)g).PropertyChanged += OnElementPropertyChanged;
+        foreach (var n in _vm.Nodes)             ((INotifyPropertyChanged)n).PropertyChanged += OnElementPropertyChanged;
+        foreach (var s in _vm.Starts)            ((INotifyPropertyChanged)s).PropertyChanged += OnElementPropertyChanged;
+        foreach (var l in _vm.Links)             ((INotifyPropertyChanged)l).PropertyChanged += OnElementPropertyChanged;
+        foreach (var c in _vm.CommentBlocks)     ((INotifyPropertyChanged)c).PropertyChanged += OnElementPropertyChanged;
+        foreach (var g in _vm.GhostNodes)        ((INotifyPropertyChanged)g).PropertyChanged += OnElementPropertyChanged;
+        foreach (var f in _vm.FunctionTemplates) ((INotifyPropertyChanged)f).PropertyChanged += OnElementPropertyChanged;
+        foreach (var fi in _vm.FunctionInstances) ((INotifyPropertyChanged)fi).PropertyChanged += OnElementPropertyChanged;
     }
 
     private void Detach()
     {
         if (_vm is null) return;
-        _vm.Nodes.CollectionChanged        -= OnCollectionChanged;
-        _vm.Starts.CollectionChanged       -= OnCollectionChanged;
-        _vm.Links.CollectionChanged        -= OnCollectionChanged;
-        _vm.CommentBlocks.CollectionChanged -= OnCollectionChanged;
-        _vm.GhostNodes.CollectionChanged   -= OnCollectionChanged;
-        _vm.PropertyChanged                -= OnViewModelPropertyChanged;
+        _vm.Nodes.CollectionChanged             -= OnCollectionChanged;
+        _vm.Starts.CollectionChanged            -= OnCollectionChanged;
+        _vm.Links.CollectionChanged             -= OnCollectionChanged;
+        _vm.CommentBlocks.CollectionChanged     -= OnCollectionChanged;
+        _vm.GhostNodes.CollectionChanged        -= OnCollectionChanged;
+        _vm.FunctionTemplates.CollectionChanged -= OnCollectionChanged;
+        _vm.FunctionInstances.CollectionChanged -= OnCollectionChanged;
+        _vm.PropertyChanged                     -= OnViewModelPropertyChanged;
 
-        foreach (var n in _vm.Nodes)         ((INotifyPropertyChanged)n).PropertyChanged -= OnElementPropertyChanged;
-        foreach (var s in _vm.Starts)        ((INotifyPropertyChanged)s).PropertyChanged -= OnElementPropertyChanged;
-        foreach (var l in _vm.Links)         ((INotifyPropertyChanged)l).PropertyChanged -= OnElementPropertyChanged;
-        foreach (var c in _vm.CommentBlocks) ((INotifyPropertyChanged)c).PropertyChanged -= OnElementPropertyChanged;
-        foreach (var g in _vm.GhostNodes)    ((INotifyPropertyChanged)g).PropertyChanged -= OnElementPropertyChanged;
+        foreach (var n in _vm.Nodes)             ((INotifyPropertyChanged)n).PropertyChanged -= OnElementPropertyChanged;
+        foreach (var s in _vm.Starts)            ((INotifyPropertyChanged)s).PropertyChanged -= OnElementPropertyChanged;
+        foreach (var l in _vm.Links)             ((INotifyPropertyChanged)l).PropertyChanged -= OnElementPropertyChanged;
+        foreach (var c in _vm.CommentBlocks)     ((INotifyPropertyChanged)c).PropertyChanged -= OnElementPropertyChanged;
+        foreach (var g in _vm.GhostNodes)        ((INotifyPropertyChanged)g).PropertyChanged -= OnElementPropertyChanged;
+        foreach (var f in _vm.FunctionTemplates) ((INotifyPropertyChanged)f).PropertyChanged -= OnElementPropertyChanged;
+        foreach (var fi in _vm.FunctionInstances) ((INotifyPropertyChanged)fi).PropertyChanged -= OnElementPropertyChanged;
     }
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -543,6 +581,11 @@ public sealed class ModelSystemCanvas : Control
             {
                 maxX = Math.Max(maxX, c.X + c.Width  + 400);
                 maxY = Math.Max(maxY, c.Y + c.Height + 400);
+            }
+            foreach (var fi in _vm.FunctionInstances)
+            {
+                maxX = Math.Max(maxX, fi.X + fi.Width  + 400);
+                maxY = Math.Max(maxY, fi.Y + fi.Height + 400);
             }
         }
         // Measure the inline editor so Avalonia knows its desired size.
@@ -619,7 +662,9 @@ public sealed class ModelSystemCanvas : Control
         // Position the name editor over the element header being renamed.
         if (_editingNameElement is not null)
         {
-            _nameEditor.FontSize = NodeFontSize * _scale;
+            _nameEditor.FontSize = (_editingNameElement is FunctionTemplateViewModel
+                                  or FunctionInstanceViewModel
+                ? FtNameFontSize : NodeFontSize) * _scale;
             _nameEditor.Arrange(new Rect(
                 _nameEditorX * _scale,
                 _nameEditorY * _scale,
@@ -655,6 +700,8 @@ public sealed class ModelSystemCanvas : Control
         using (ctx.PushTransform(Matrix.CreateScale(_scale, _scale)))
         {
             RenderCommentBlocks(ctx);
+            RenderFunctionTemplates(ctx);
+            RenderFunctionInstances(ctx);
             RenderLinks(ctx);
             RenderNodes(ctx);
             RenderGhostNodes(ctx);
@@ -738,6 +785,181 @@ public sealed class ModelSystemCanvas : Control
         }
     }
 
+    /// <summary>
+    /// Draws function-template container boxes on the canvas. Each box shows the
+    /// template name in a violet header, exposed-node hook rows below, and a
+    /// module-count hint in the body. Double-clicking navigates into the template's
+    /// InternalModules.
+    /// </summary>
+    private void RenderFunctionTemplates(DrawingContext ctx)
+    {
+        foreach (var ft in _vm!.FunctionTemplates)
+        {
+            double rw  = ft.Width;
+            double rh  = ft.Height;
+            var rect   = new Rect(ft.X, ft.Y, rw, rh);
+
+            // Shadow + outer border (dashed to distinguish from a regular node or boundary)
+            var borderBrush = ft.IsSelected ? FtSelBorderBrush : FtBorderBrush;
+            var border      = new Pen(borderBrush, NodeBorderThickness + 0.5, dashStyle: FtBorderDash);
+            DrawRectShadow(ctx, rect, FtCornerRadius);
+            ctx.DrawRectangle(FtFill, border, rect, FtCornerRadius, FtCornerRadius);
+
+            // ── Header band ────────────────────────────────────────────────
+            // Draw header as a filled rectangle, then overdraw the bottom strip
+            // with the body fill so we effectively clip the rounded bottom corners.
+            ctx.DrawRectangle(FtHeaderFill, null, rect, FtCornerRadius, FtCornerRadius);
+            ctx.DrawRectangle(FtFill, null,
+                new Rect(ft.X, ft.Y + FtHeaderHeight, rw, rh - FtHeaderHeight));
+
+            // Re-draw the border on top so the header fill doesn't erase it.
+            ctx.DrawRectangle(null, border, rect, FtCornerRadius, FtCornerRadius);
+
+            // "⊞ TemplateName" label in the header
+            var labelText = "\u229e " + ft.Name;
+            var labelFt   = MakeText(labelText, FtNameFontSize, FtTextBrush);
+            var lx        = ft.X + 8.0;
+            var ly        = ft.Y + (FtHeaderHeight - labelFt.Height) / 2.0;
+            using (ctx.PushClip(new Rect(ft.X + 4, ft.Y, rw - 8, FtHeaderHeight)))
+                ctx.DrawText(labelFt, new Point(lx, ly));
+
+            // ── Exposed-node hook rows ─────────────────────────────────────
+            double rowY = ft.Y + FtHeaderHeight;
+            foreach (var exposedNode in ft.ExposedNodes)
+            {
+                ctx.DrawRectangle(InlineParamRowBg, null,
+                    new Rect(ft.X, rowY, rw, FtHookRowHeight));
+                ctx.DrawLine(new Pen(HookDividerBrush, 0.5),
+                    new Point(ft.X, rowY),
+                    new Point(ft.X + rw, rowY));
+
+                // Dot on the left edge (acts like a hook anchor)
+                double dotCx = ft.X + HookDotRadius + 4.0;
+                double dotCy = rowY + FtHookRowHeight / 2.0;
+                ctx.DrawEllipse(HookConnectedBrush, null,
+                    new Point(dotCx, dotCy), HookDotRadius, HookDotRadius);
+
+                // Node name
+                var nodeNameFt = MakeText(
+                    exposedNode.Name ?? string.Empty, HookFontSize, FtHookTextBrush);
+                double textLeft = ft.X + HookDotRadius * 2 + 9.0;
+                using (ctx.PushClip(new Rect(textLeft, rowY, rw - textLeft + ft.X, FtHookRowHeight)))
+                    ctx.DrawText(nodeNameFt,
+                        new Point(textLeft, rowY + (FtHookRowHeight - nodeNameFt.Height) / 2.0));
+
+                rowY += FtHookRowHeight;
+            }
+
+            // ── Body hint: module count ────────────────────────────────────
+            double bodyH = ft.Y + rh - rowY;
+            var moduleCount = ft.UnderlyingTemplate.InternalModules.Modules.Count;
+            var hint = moduleCount == 0
+                ? "Empty — double-click to edit"
+                : $"{moduleCount} module(s) — double-click to edit";
+            var hintFt = MakeText(hint, HookFontSize, FtCountTextBrush);
+            if (bodyH > FtHookRowHeight)
+            {
+                var hintX = ft.X + (rw - hintFt.Width) / 2.0;
+                var hintY = rowY + (bodyH - hintFt.Height) / 2.0;
+                using (ctx.PushClip(new Rect(ft.X + 4, rowY, rw - 8, bodyH)))
+                    ctx.DrawText(hintFt, new Point(hintX, hintY));
+            }
+
+            // ── Resize grip (bottom-right corner) ─────────────────────────
+            {
+                double dotR = 2.0;
+                double gx   = ft.X + rw;
+                double gy   = ft.Y + rh;
+                for (int d = 0; d < 3; d++)
+                {
+                    double off = 4.0 + d * 4.0;
+                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                        new Point(gx - off + dotR, gy - dotR), dotR, dotR);
+                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                        new Point(gx - dotR,        gy - off + dotR), dotR, dotR);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Draws function-instance boxes. Each box is styled in teal, shows the instance name
+    /// in the header and the template name as a subtitle, then lists exposed hooks below.
+    /// </summary>
+    private void RenderFunctionInstances(DrawingContext ctx)
+    {
+        foreach (var fi in _vm!.FunctionInstances)
+        {
+            double rw  = fi.Width;
+            double rh  = fi.Height;
+            var rect   = new Rect(fi.X, fi.Y, rw, rh);
+
+            var borderBrush = fi.IsSelected ? FiSelBorderBrush : FiBorderBrush;
+            var border      = new Pen(borderBrush, NodeBorderThickness);
+            DrawRectShadow(ctx, rect, FiCornerRadius);
+            ctx.DrawRectangle(FiFill, border, rect, FiCornerRadius, FiCornerRadius);
+
+            // ── Header band ────────────────────────────────────────────────
+            ctx.DrawRectangle(FiHeaderFill, null, rect, FiCornerRadius, FiCornerRadius);
+            ctx.DrawRectangle(FiFill, null,
+                new Rect(fi.X, fi.Y + FtHeaderHeight, rw, rh - FtHeaderHeight));
+            ctx.DrawRectangle(null, border, rect, FiCornerRadius, FiCornerRadius);
+
+            // "⊡ InstanceName" in header
+            var labelText = "\u22A1 " + fi.Name;
+            var labelFtText = MakeText(labelText, FtNameFontSize, FiTextBrush);
+            var lx  = fi.X + 8.0;
+            var ly  = fi.Y + (FtHeaderHeight - labelFtText.Height) / 2.0;
+            using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
+                ctx.DrawText(labelFtText, new Point(lx, ly));
+
+            // Template subtitle (small, muted) at the bottom of the header
+            var subText = MakeText("[" + fi.TemplateName + "]" + (fi.EntryNodeTypeName.Length > 0 ? " : " + fi.EntryNodeTypeName : ""), HookFontSize, FiSubTextBrush);
+            var subX = fi.X + rw - subText.Width - 8.0;
+            var subY = fi.Y + (FtHeaderHeight - subText.Height) / 2.0;
+            using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
+                ctx.DrawText(subText, new Point(Math.Max(lx + labelFtText.Width + 4, subX), subY));
+
+            // ── Exposed hook rows ──────────────────────────────────────────
+            double rowY = fi.Y + FtHeaderHeight;
+            foreach (var hookNode in fi.ExposedHooks)
+            {
+                ctx.DrawRectangle(InlineParamRowBg, null,
+                    new Rect(fi.X, rowY, rw, FtHookRowHeight));
+                ctx.DrawLine(new Pen(HookDividerBrush, 0.5),
+                    new Point(fi.X, rowY), new Point(fi.X + rw, rowY));
+
+                double dotCx = fi.X + HookDotRadius + 4.0;
+                double dotCy = rowY + FtHookRowHeight / 2.0;
+                ctx.DrawEllipse(HookConnectedBrush, null,
+                    new Point(dotCx, dotCy), HookDotRadius, HookDotRadius);
+
+                var hookNameFt = MakeText(hookNode.Name ?? string.Empty, HookFontSize, FiHookTextBrush);
+                double textLeft = fi.X + HookDotRadius * 2 + 9.0;
+                using (ctx.PushClip(new Rect(textLeft, rowY, rw - textLeft + fi.X, FtHookRowHeight)))
+                    ctx.DrawText(hookNameFt,
+                        new Point(textLeft, rowY + (FtHookRowHeight - hookNameFt.Height) / 2.0));
+
+                rowY += FtHookRowHeight;
+            }
+
+            // ── Resize grip ───────────────────────────────────────────────
+            {
+                double dotR = 2.0;
+                double gx   = fi.X + rw;
+                double gy   = fi.Y + rh;
+                for (int d = 0; d < 3; d++)
+                {
+                    double off = 4.0 + d * 4.0;
+                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                        new Point(gx - off + dotR, gy - dotR), dotR, dotR);
+                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                        new Point(gx - dotR,        gy - off + dotR), dotR, dotR);
+                }
+            }
+        }
+    }
+
     private void RenderLinks(DrawingContext ctx)
     {
         foreach (var link in _vm!.Links)
@@ -777,10 +999,14 @@ public sealed class ModelSystemCanvas : Control
 
             // For multi-link destinations draw a small 1-based index number
             // beside the arrowhead so the user can see the hook slot ordering.
-            if (link.UnderlyingLink is MultiLink ml
-                && link.Destination is NodeViewModel indexDestNode)
+            if (link.UnderlyingLink is MultiLink ml)
             {
-                int idx = ml.Destinations.IndexOf(indexDestNode.UnderlyingNode);
+                int idx = -1;
+                if (link.Destination is NodeViewModel indexDestNode)
+                    idx = ml.Destinations.IndexOf(indexDestNode.UnderlyingNode);
+                else if (link.Destination is FunctionInstanceViewModel indexDestFi)
+                    idx = ml.Destinations.IndexOf(indexDestFi.UnderlyingInstance);
+
                 if (idx >= 0)
                 {
                     var ft = MakeText((idx + 1).ToString(), LinkIndexFontSize, brush);
@@ -860,6 +1086,13 @@ public sealed class ModelSystemCanvas : Control
                 if (midXInHSpan)
                     borderY  = p1.Y <= destCenter.Y ? dRect.Y : dRect.Bottom;
             }
+            else if (link.Destination is FunctionInstanceViewModel fiDestH)
+            {
+                var dRect    = new Rect(fiDestH.X, fiDestH.Y, fiDestH.Width, fiDestH.Height);
+                midXInHSpan  = midX >= dRect.X && midX <= dRect.Right;
+                if (midXInHSpan)
+                    borderY  = p1.Y <= destCenter.Y ? dRect.Y : dRect.Bottom;
+            }
 
             if (midXInHSpan)
             {
@@ -902,6 +1135,13 @@ public sealed class ModelSystemCanvas : Control
             else if (link.Destination is GhostNodeViewModel ghostDestV)
             {
                 var dRect    = new Rect(ghostDestV.X, ghostDestV.Y, ghostDestV.Width, ghostDestV.Height);
+                midYInVSpan  = midY >= dRect.Y && midY <= dRect.Bottom;
+                if (midYInVSpan)
+                    borderX  = p1.X <= destCenter.X ? dRect.X : dRect.Right;
+            }
+            else if (link.Destination is FunctionInstanceViewModel fiDestV)
+            {
+                var dRect    = new Rect(fiDestV.X, fiDestV.Y, fiDestV.Width, fiDestV.Height);
                 midYInVSpan  = midY >= dRect.Y && midY <= dRect.Bottom;
                 if (midYInVSpan)
                     borderX  = p1.X <= destCenter.X ? dRect.X : dRect.Right;
@@ -966,6 +1206,12 @@ public sealed class ModelSystemCanvas : Control
         if (element is GhostNodeViewModel gnvm)
         {
             var rect = new Rect(gnvm.X, gnvm.Y, gnvm.Width, gnvm.Height);
+            return ClipLineToRect(other, rect);
+        }
+
+        if (element is FunctionInstanceViewModel fivm)
+        {
+            var rect = new Rect(fivm.X, fivm.Y, fivm.Width, fivm.Height);
             return ClipLineToRect(other, rect);
         }
 
@@ -1256,6 +1502,8 @@ public sealed class ModelSystemCanvas : Control
         el is NodeViewModel nvm ? NodeRenderWidth(nvm)
         : el is CommentBlockViewModel cvm ? cvm.Width
         : el is GhostNodeViewModel gnvm ? gnvm.Width
+        : el is FunctionTemplateViewModel ftvm ? ftvm.Width
+        : el is FunctionInstanceViewModel fivm ? fivm.Width
         : 0;
 
     /// <summary>Returns the rendered height of any resizable canvas element.</summary>
@@ -1263,6 +1511,8 @@ public sealed class ModelSystemCanvas : Control
         el is NodeViewModel nvm ? NodeRenderHeight(nvm)
         : el is CommentBlockViewModel cvm ? cvm.Height
         : el is GhostNodeViewModel gnvm ? gnvm.Height
+        : el is FunctionTemplateViewModel ftvm ? ftvm.Height
+        : el is FunctionInstanceViewModel fivm ? fivm.Height
         : 0;
 
     private void RenderNodes(DrawingContext ctx)
@@ -1275,18 +1525,49 @@ public sealed class ModelSystemCanvas : Control
             double rw = NodeRenderWidth(node);
             double rh = NodeRenderHeight(node);
             var rect   = new Rect(node.X, node.Y, rw, rh);
+
+            // Determine whether this node is the designated entry point of the current template.
+            bool isEntryNode = _vm.IsInsideFunctionTemplate
+                && _vm.CurrentFunctionTemplate?.UnderlyingTemplate.EntryNode == node.UnderlyingNode;
+
             var border = new Pen(node.IsSelected ? NodeSelBrush : NodeBorderBrush, NodeBorderThickness);
 
             // Node background + border
             DrawRectShadow(ctx, rect, NodeCornerRadius);
             ctx.DrawRectangle(NodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
+            // ── Entry-node gold ring (drawn over the normal border) ───────────
+            if (isEntryNode)
+            {
+                var outerRect = new Rect(
+                    node.X - EntryNodeRingExtra, node.Y - EntryNodeRingExtra,
+                    rw + EntryNodeRingExtra * 2, rh + EntryNodeRingExtra * 2);
+                ctx.DrawRectangle(null,
+                    new Pen(EntryNodeRingBrush, EntryNodeRingThick),
+                    outerRect,
+                    NodeCornerRadius + EntryNodeRingExtra,
+                    NodeCornerRadius + EntryNodeRingExtra);
+            }
+
             // ── Header: node name centred in the header band ──────────────
             double headerBottom = node.Y + NodeHeaderHeight;
             var ft = MakeText(node.Name, NodeFontSize, NodeTextBrush);
-            var tx = node.X + (rw       - ft.Width)  / 2;
-            var ty = node.Y + (NodeHeaderHeight - ft.Height) / 2;
+            double tx = node.X + (rw - ft.Width) / 2;
+            // Shift name to the upper portion of the header when a badge will be drawn below it.
+            double ty = isEntryNode
+                ? node.Y + 3.0
+                : node.Y + (NodeHeaderHeight - ft.Height) / 2;
             ctx.DrawText(ft, new Point(tx, ty));
+
+            // ── "▶ Entry Point" badge in the lower portion of the header ──────
+            if (isEntryNode)
+            {
+                var badge  = MakeText("▶ Entry Point", EntryNodeLabelFontSize, EntryNodeLabelBrush);
+                double blx = node.X + (rw - badge.Width) / 2.0;
+                double bly = node.Y + NodeHeaderHeight - badge.Height - 2.5;
+                using (ctx.PushClip(new Rect(node.X + 2, node.Y, rw - 4, NodeHeaderHeight)))
+                    ctx.DrawText(badge, new Point(blx, bly));
+            }
 
             // ── Resize handle (bottom-right corner) ───────────────────────
             // Three small diagonal dots — standard grip indicator.
@@ -1813,6 +2094,25 @@ public sealed class ModelSystemCanvas : Control
                 e.Handled = true;
                 return;
             }
+
+            // ── Double-click on a function template: navigate into it ─────
+            var ftHit = HitTest(mpos, testComments: false) as FunctionTemplateViewModel;
+            if (ftHit is not null)
+            {
+                _vm.NavigateIntoFunctionTemplate(ftHit);
+                e.Handled = true;
+                return;
+            }
+
+            // ── Double-click on a function instance: begin inline rename ──
+            var fiHit = HitTest(mpos, testComments: false) as FunctionInstanceViewModel;
+            if (fiHit is not null)
+            {
+                _vm.SelectElementCommand.Execute(fiHit);
+                BeginNameEdit(fiHit);
+                e.Handled = true;
+                return;
+            }
         }
 
         // For right-click (link creation) we exclude comment blocks; for all other paths we include them.
@@ -1968,6 +2268,10 @@ public sealed class ModelSystemCanvas : Control
                 resizingComment.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             else if (_resizing is GhostNodeViewModel resizingGhost)
                 resizingGhost.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
+            else if (_resizing is FunctionTemplateViewModel resizingFt)
+                resizingFt.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
+            else if (_resizing is FunctionInstanceViewModel resizingFi)
+                resizingFi.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             InvalidateAndMeasure();
             e.Handled = true;
             return;
@@ -2024,6 +2328,8 @@ public sealed class ModelSystemCanvas : Control
                 else if (el is StartViewModel       gsvm) gsvm.MoveToPreview(nx, ny);
                 else if (el is CommentBlockViewModel gcvm) gcvm.MoveToPreview(nx, ny);
                 else if (el is GhostNodeViewModel   ggvm) ggvm.MoveToPreview(nx, ny);
+                else if (el is FunctionTemplateViewModel gftvm) gftvm.MoveToPreview(nx, ny);
+                else if (el is FunctionInstanceViewModel gfivm) gfivm.MoveToPreview(nx, ny);
             }
         }
         else
@@ -2035,6 +2341,8 @@ public sealed class ModelSystemCanvas : Control
             if (_dragging is StartViewModel         svm) svm.MoveToPreview(newX, newY);
             if (_dragging is CommentBlockViewModel  cvm) cvm.MoveToPreview(newX, newY);
             if (_dragging is GhostNodeViewModel    gvm) gvm.MoveToPreview(newX, newY);
+            if (_dragging is FunctionTemplateViewModel ftvm) ftvm.MoveToPreview(newX, newY);
+            if (_dragging is FunctionInstanceViewModel fivm) fivm.MoveToPreview(newX, newY);
         }
 
         InvalidateAndMeasure();
@@ -2075,11 +2383,15 @@ public sealed class ModelSystemCanvas : Control
 
             if (_vm is not null)
             {
-                var pos  = e.GetCurrentPoint(this).Position;
-                var dest = HitTest(ToCanvasPos(pos), testComments: false) as NodeViewModel;
-                // A start is never a valid destination; dest must be a NodeViewModel.
-                if (dest is not null && !ReferenceEquals(dest, origin))
+                var pos = e.GetCurrentPoint(this).Position;
+                var hit = HitTest(ToCanvasPos(pos), testComments: false);
+                // Accepts NodeViewModel or FunctionInstanceViewModel as a link destination.
+                if (hit is NodeViewModel dest && !ReferenceEquals(dest, origin))
                     _ = _vm.CreateLinkAsync(origin, dest);
+                else if (hit is FunctionInstanceViewModel fiDest
+                    && !ReferenceEquals(fiDest, origin)
+                    && fiDest.UnderlyingInstance.Template.EntryNode is not null)
+                    _ = _vm.CreateLinkAsync(origin, fiDest);
             }
 
             e.Handled = true;
@@ -2096,6 +2408,10 @@ public sealed class ModelSystemCanvas : Control
                 committingComment.CommitResize();
             else if (_resizing is GhostNodeViewModel committingGhost)
                 committingGhost.CommitResize();
+            else if (_resizing is FunctionTemplateViewModel committingFt)
+                committingFt.CommitResize();
+            else if (_resizing is FunctionInstanceViewModel committingFi)
+                committingFi.CommitResize();
             _resizing = null;
             e.Pointer.Capture(null);
             Cursor = Cursor.Default;
@@ -2186,6 +2502,8 @@ public sealed class ModelSystemCanvas : Control
                 else if (el is StartViewModel       gsvm) gsvm.CommitMove();
                 else if (el is CommentBlockViewModel gcvm) gcvm.CommitMove();
                 else if (el is GhostNodeViewModel   ggvm) ggvm.CommitMove();
+                else if (el is FunctionTemplateViewModel gftvm) gftvm.CommitMove();
+                else if (el is FunctionInstanceViewModel gfivm) gfivm.CommitMove();
             }
         }
         else
@@ -2194,6 +2512,8 @@ public sealed class ModelSystemCanvas : Control
             else if (_dragging is StartViewModel        svm) svm.CommitMove();
             else if (_dragging is CommentBlockViewModel cvm) cvm.CommitMove();
             else if (_dragging is GhostNodeViewModel   gvm) gvm.CommitMove();
+            else if (_dragging is FunctionTemplateViewModel ftvm) ftvm.CommitMove();
+            else if (_dragging is FunctionInstanceViewModel fivm) fivm.CommitMove();
         }
 
         _dragging = null;
@@ -2388,6 +2708,77 @@ public sealed class ModelSystemCanvas : Control
             };
             menu.Items.Add(new Separator());
             menu.Items.Add(moveGhostItem);
+        }
+
+        // ── Function template – specific items ─────────────────────────────
+        if (element is FunctionTemplateViewModel capturedFt)
+        {
+            // Enter: navigate into the template's InternalModules
+            var enterItem = new MenuItem { Header = "Edit Contents (double-click)" };
+            enterItem.Click += (_, _) =>
+            {
+                vm.NavigateIntoFunctionTemplate(capturedFt);
+                InvalidateAndMeasure();
+            };
+
+            // Rename
+            var renameItem = new MenuItem { Header = "Rename…" };
+            renameItem.Click += async (_, _) =>
+            {
+                await vm.RenameFunctionTemplateAsync(capturedFt);
+                InvalidateAndMeasure();
+            };
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(enterItem);
+            menu.Items.Add(renameItem);
+        }
+
+        // ── Function instance – specific items ─────────────────────────────
+        if (element is FunctionInstanceViewModel capturedFi)
+        {
+            var renameItem = new MenuItem { Header = "Rename…" };
+            renameItem.Click += async (_, _) =>
+            {
+                await vm.RenameFunctionInstanceAsync(capturedFi);
+                InvalidateAndMeasure();
+            };
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(renameItem);
+        }
+
+        // ── "Expose as hook" option — when we're inside a function template ──
+        if (_vm.IsInsideFunctionTemplate && element is NodeViewModel exposeCandidateNode
+            && exposeCandidateNode.IsBasicParameter)
+        {
+            bool alreadyExposed = _vm.CurrentFunctionTemplate?.ExposedNodes.Contains(exposeCandidateNode.UnderlyingNode) ?? false;
+            var exposeHeader = alreadyExposed ? "Remove from Exposed Hooks" : "Expose as Hook on Template";
+            var exposeItem = new MenuItem { Header = exposeHeader };
+            exposeItem.Click += async (_, _) =>
+            {
+                await vm.ToggleFunctionTemplateExposedNodeAsync(exposeCandidateNode);
+                InvalidateAndMeasure();
+            };
+            menu.Items.Add(new Separator());
+            menu.Items.Add(exposeItem);
+        }
+
+        // ── "Set as Entry Node" — any node while viewing InternalModules ─────────
+        if (_vm.IsInsideFunctionTemplate && element is NodeViewModel entryNodeCandidate)
+        {
+            var currentEntry  = _vm.CurrentFunctionTemplate?.UnderlyingTemplate.EntryNode;
+            bool alreadyEntry = ReferenceEquals(currentEntry, entryNodeCandidate.UnderlyingNode);
+            var entryHeader   = alreadyEntry ? "Clear Entry Node" : "Set as Entry Node";
+            var capturedEntryCandidate = entryNodeCandidate;
+            var entryItem = new MenuItem { Header = entryHeader };
+            entryItem.Click += async (_, _) =>
+            {
+                await vm.SetFunctionTemplateEntryNodeAsync(capturedEntryCandidate);
+                InvalidateAndMeasure();
+            };
+            menu.Items.Add(new Separator());
+            menu.Items.Add(entryItem);
         }
 
         menu.Items.Add(deleteItem);
@@ -2901,6 +3292,20 @@ public sealed class ModelSystemCanvas : Control
             _nameEditorW = svm.Diameter + 20;
             _nameEditorH = NodeHeaderHeight;
         }
+        else if (element is FunctionTemplateViewModel ftvm)
+        {
+            _nameEditorX = ftvm.X;
+            _nameEditorY = ftvm.Y;
+            _nameEditorW = ftvm.Width;
+            _nameEditorH = FtHeaderHeight;
+        }
+        else if (element is FunctionInstanceViewModel fivm)
+        {
+            _nameEditorX = fivm.X;
+            _nameEditorY = fivm.Y;
+            _nameEditorW = fivm.Width;
+            _nameEditorH = FtHeaderHeight;
+        }
         else
         {
             return;
@@ -2927,12 +3332,17 @@ public sealed class ModelSystemCanvas : Control
         _nameEditor.IsVisible = false;
         if (!string.IsNullOrWhiteSpace(name))
         {
-            _ = element switch
+            CommandError? renameError = null;
+            bool ok = element switch
             {
-                NodeViewModel  nvm => nvm.SetName(name, out _),
-                StartViewModel svm => svm.SetName(name, out _),
-                _                  => true,
+                NodeViewModel             nvm  => nvm.SetName(name, out _),
+                StartViewModel            svm  => svm.SetName(name, out _),
+                FunctionTemplateViewModel ftvm => ftvm.SetName(name, out renameError),
+                FunctionInstanceViewModel fivm => fivm.SetName(name, out renameError),
+                _                             => true,
             };
+            if (!ok)
+                _vm?.ShowToast(renameError?.Message ?? "Failed to rename.", isError: true, durationMs: 4000);
         }
         InvalidateAndMeasure();
     }
@@ -2973,7 +3383,8 @@ public sealed class ModelSystemCanvas : Control
     /// </summary>
     public void BeginNameEditForSelected()
     {
-        if (_vm?.SelectedElement is NodeViewModel or StartViewModel)
+        if (_vm?.SelectedElement is NodeViewModel or StartViewModel
+                                 or FunctionTemplateViewModel or FunctionInstanceViewModel)
             BeginNameEdit(_vm.SelectedElement);
     }
 
@@ -3096,6 +3507,26 @@ public sealed class ModelSystemCanvas : Control
                 ResizeHandleSize);
             if (handle.Contains(pos))
                 return ghost;
+        }
+        foreach (var ft in _vm.FunctionTemplates)
+        {
+            var handle = new Rect(
+                ft.X + ft.Width  - ResizeHandleSize,
+                ft.Y + ft.Height - ResizeHandleSize,
+                ResizeHandleSize,
+                ResizeHandleSize);
+            if (handle.Contains(pos))
+                return ft;
+        }
+        foreach (var fi in _vm.FunctionInstances)
+        {
+            var handle = new Rect(
+                fi.X + fi.Width  - ResizeHandleSize,
+                fi.Y + fi.Height - ResizeHandleSize,
+                ResizeHandleSize,
+                ResizeHandleSize);
+            if (handle.Contains(pos))
+                return fi;
         }
         return null;
     }
@@ -3222,6 +3653,20 @@ public sealed class ModelSystemCanvas : Control
         {
             if (new Rect(ghost.X, ghost.Y, ghost.Width, ghost.Height).Contains(pos))
                 return ghost;
+        }
+
+        // Function-template containers (behind nodes but above comment blocks)
+        foreach (var ft in _vm.FunctionTemplates)
+        {
+            if (new Rect(ft.X, ft.Y, ft.Width, ft.Height).Contains(pos))
+                return ft;
+        }
+
+        // Function-instance boxes (between function templates and comment blocks)
+        foreach (var fi in _vm.FunctionInstances)
+        {
+            if (new Rect(fi.X, fi.Y, fi.Width, fi.Height).Contains(pos))
+                return fi;
         }
 
         // Comment blocks (background layer)

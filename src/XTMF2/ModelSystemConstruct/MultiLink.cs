@@ -81,11 +81,23 @@ namespace XTMF2.ModelSystemConstruct
 
         internal override bool Construct(ref string? error)
         {
-            // Count enabled destinations, resolving ghost nodes to their real targets.
+            // Resolves a destination to its effective Node and per-instance IModule,
+            // handling both GhostNode cross-boundary references and FunctionInstance clones.
+            static (Node effectiveNode, IModule? destModule) ResolveDest(Node d)
+            {
+                var r = d is GhostNode gn ? gn.ReferencedNode : d;
+                if (r is FunctionInstance fi)
+                {
+                    var entry = fi.Template.EntryNode;
+                    return (entry ?? r, entry is not null ? fi.GetRuntimeModule(entry) : null);
+                }
+                return (r, r.Module);
+            }
+
             var moduleCount = _Destinations.Count(d =>
             {
-                var effective = d is GhostNode gn ? gn.ReferencedNode : d;
-                return !effective.IsDisabled;
+                var (node, _) = ResolveDest(d);
+                return !node.IsDisabled;
             });
             if(OriginHook!.Cardinality == HookCardinality.AtLeastOne)
             {
@@ -106,10 +118,10 @@ namespace XTMF2.ModelSystemConstruct
                 int index = 0;
                 for (int i = 0; i < _Destinations.Count; i++)
                 {
-                    var effectiveDest = _Destinations[i] is GhostNode gn ? gn.ReferencedNode : _Destinations[i];
-                    if (!effectiveDest.IsDisabled)
+                    var (effectiveDest, destModule) = ResolveDest(_Destinations[i]);
+                    if (!effectiveDest.IsDisabled && destModule is not null)
                     {
-                        OriginHook.Install(Origin!, effectiveDest, index++);
+                        OriginHook.Install(Origin!.Module!, destModule, index++);
                     }
                 }
             }

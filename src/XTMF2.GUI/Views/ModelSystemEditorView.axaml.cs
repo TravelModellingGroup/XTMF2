@@ -21,6 +21,7 @@ using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using XTMF2.GUI.ViewModels;
 
 namespace XTMF2.GUI.Views;
@@ -107,6 +108,26 @@ public partial class ModelSystemEditorView : UserControl
             _vm.VariableFilter = string.Empty;
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// Handles the "Rename" button click in the function-template properties panel
+    /// by starting an inline header edit on the canvas (instead of a modal dialog).
+    /// </summary>
+    private void OnRenameFunctionTemplateClick(object? sender, RoutedEventArgs e)
+    {
+        TheCanvas.BeginNameEditForSelected();
+        TheCanvas.Focus();
+    }
+
+    /// <summary>
+    /// Handles the "Rename" button click in the function-instance properties panel
+    /// by starting an inline header edit on the canvas (instead of a modal dialog).
+    /// </summary>
+    private void OnRenameFunctionInstanceClick(object? sender, RoutedEventArgs e)
+    {
+        TheCanvas.BeginNameEditForSelected();
+        TheCanvas.Focus();
     }
 
     private void OnParameterValueEditBoxKeyDown(object? sender, KeyEventArgs e)

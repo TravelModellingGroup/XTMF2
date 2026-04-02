@@ -85,8 +85,12 @@ public sealed class GhostNode : Node
     /// </summary>
     internal void SaveObject(Dictionary<Node, int> nodeDictionary, Utf8JsonWriter writer)
     {
+        // Guard against a referenced node that was removed without cascade-deleting
+        // this ghost (should not happen in a healthy model, but avoids a hard crash).
+        if (!nodeDictionary.TryGetValue(ReferencedNode, out int refIdx))
+            return;
         writer.WriteStartObject();
-        writer.WriteNumber(ReferencedNodeProperty, nodeDictionary[ReferencedNode]);
+        writer.WriteNumber(ReferencedNodeProperty, refIdx);
         writer.WriteNumber(XProperty, Location.X);
         writer.WriteNumber(YProperty, Location.Y);
         writer.WriteNumber(WidthProperty, Location.Width);

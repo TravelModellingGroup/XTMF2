@@ -161,6 +161,26 @@
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Center"/>
 
+                            <Button Content="Add Function Template"
+                                    Command="{Binding AddFunctionTemplateCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    ToolTip.Tip="Create a reusable sub-graph template in this boundary"/>
+
+                            <Button Content="Add Function Instance"
+                                    Command="{Binding AddFunctionInstanceCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    ToolTip.Tip="Place an instance of a function template on the canvas"/>
+
+                            <!-- Back button: shown only when drilling inside a function template -->
+                            <Button Content="← Exit Function Template"
+                                    Command="{Binding ExitFunctionTemplateCommand}"
+                                    IsVisible="{Binding IsInsideFunctionTemplate}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    ToolTip.Tip="Return to the parent boundary"/>
+
                             <CheckBox Content="Show all hooks"
                                       IsChecked="{Binding ShowAllHooks}"
                                       FontSize="12"
@@ -190,6 +210,104 @@
                                         HorizontalContentAlignment="Center"
                                         FontSize="12"
                                         Margin="0,4,0,0"/>
+
+                                <!-- ── Function Instance actions ─────────────── -->
+                                <StackPanel Spacing="4"
+                                            IsVisible="{Binding SelectedElementIsFunctionInstance}"
+                                            Margin="0,4,0,0">
+                                    <Separator Margin="0,4"/>
+                                    <TextBlock Text="Function Instance"
+                                               FontWeight="SemiBold"
+                                               FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="Template:"
+                                                   FontSize="11"
+                                                   Opacity="0.7"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding SelectedFunctionInstanceTemplateName}"
+                                                   FontSize="11"
+                                                   FontStyle="Italic"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <Button Content="Rename…"
+                                            Click="OnRenameFunctionInstanceClick"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            FontSize="12"
+                                            ToolTip.Tip="Rename inline on the canvas (also F2)"/>
+                                    <Button Content="Delete Instance"
+                                            Command="{Binding DeleteFunctionInstanceBindingCommand}"
+                                            CommandParameter="{Binding SelectedElement}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            FontSize="12"/>
+                                    <TextBlock Text="Exposed hooks:"
+                                               FontSize="11"
+                                               Opacity="0.7"
+                                               Margin="0,4,0,0"/>
+                                    <ListBox ItemsSource="{Binding SelectedFunctionInstanceExposedHooks}"
+                                             MaxHeight="120"
+                                             FontSize="11">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" Padding="2,1"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <TextBlock Text="(none — add exposed hooks by editing the template)"
+                                               FontSize="10"
+                                               Opacity="0.55"
+                                               TextWrapping="Wrap"
+                                               IsVisible="{Binding SelectedFunctionInstanceHasNoExposedHooks}"/>
+                                </StackPanel>
+
+                                <!-- ── Function Template actions ─────────────── -->
+                                <StackPanel Spacing="4"
+                                            IsVisible="{Binding SelectedElementIsFunctionTemplate}"
+                                            Margin="0,4,0,0">
+                                    <Separator Margin="0,4"/>
+                                    <TextBlock Text="Function Template"
+                                               FontWeight="SemiBold"
+                                               FontSize="12"/>
+                                    <Button Content="Edit Contents"
+                                            Command="{Binding NavigateIntoFunctionTemplateBindingCommand}"
+                                            CommandParameter="{Binding SelectedElement}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            FontSize="12"
+                                            ToolTip.Tip="Drill into the template's internal boundary (also double-click the template on canvas)"/>
+                                    <Button Content="Rename…"
+                                            Click="OnRenameFunctionTemplateClick"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            FontSize="12"
+                                            ToolTip.Tip="Rename inline on the canvas (also F2)"/>
+                                    <Button Content="Delete Template"
+                                            Command="{Binding DeleteFunctionTemplateBindingCommand}"
+                                            CommandParameter="{Binding SelectedElement}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            FontSize="12"/>
+                                    <TextBlock Text="Exposed hooks:"
+                                               FontSize="11"
+                                               Opacity="0.7"
+                                               Margin="0,4,0,0"/>
+                                    <ListBox ItemsSource="{Binding SelectedFunctionTemplateExposedNodes}"
+                                             MaxHeight="120"
+                                             FontSize="11">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" Padding="2,1"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <TextBlock Text="(none — right-click a module inside the template to expose it)"
+                                               FontSize="10"
+                                               Opacity="0.55"
+                                               TextWrapping="Wrap"
+                                               IsVisible="{Binding SelectedFunctionTemplateHasNoExposedNodes}"/>
+                                </StackPanel>
 
                                 <!-- ── Parameter value editor ──────────────── -->
                                 <StackPanel Spacing="4"

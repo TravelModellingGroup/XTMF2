@@ -268,6 +268,11 @@ namespace XTMF2.Bus
                         }
                     }
                 }
+                foreach (var fi in current.FunctionInstances)
+                {
+                    if (!fi.ValidateRuntimeModules(ref moduleName, ref errorMessage))
+                        return false;
+                }
             }
             return true;
         }
