@@ -165,6 +165,9 @@ public sealed class ModelSystemCanvas : Control
     /// <summary>Screen position and width of the inline editor overlay (set in <see cref="BeginParamEdit"/>).</summary>
     private double _editingParamEditorX, _editingParamEditorY, _editingParamEditorW;
 
+    /// <summary><c>true</c> while <see cref="CommitParamEdit"/> is executing, used to suppress re-entrant LostFocus commits.</summary>
+    private bool _commitParamEditInProgress;
+
     // ── Scripted-parameter variable autocomplete dropdown ─────────────────
     /// <summary>Overlay border that contains the variable-name suggestion list.</summary>
     private readonly Border     _varDropdownBorder;
@@ -2393,19 +2396,43 @@ public sealed class ModelSystemCanvas : Control
     }
 
     /// <summary>Commits the current editor text as the new parameter value.</summary>
+    /// <remarks>
+    /// For ScriptedParameter nodes the value is validated before the editor is closed.
+    /// If the save fails the editor remains open so the user can correct the expression,
+    /// and an error toast is shown instead.
+    /// </remarks>
     private void CommitParamEdit()
     {
-        HideVarDropdown();
-        if (_editingParamNode is null) return;
-        var node  = _editingParamNode;
-        var value = _inlineEditor.Text ?? string.Empty;
-        // Clear first so LostFocus re-entry is guarded.
-        _editingParamNode       = null;
-        _inlineEditor.IsVisible = false;
-        if (!node.SetParameterValue(value, out var error))
-            _vm?.ShowToast(error?.Message ?? "Failed to set parameter value.",
-                           isError: true, durationMs: 5000);
-        InvalidateAndMeasure();
+        if (_commitParamEditInProgress) return;
+        _commitParamEditInProgress = true;
+        try
+        {
+            HideVarDropdown();
+            if (_editingParamNode is null) return;
+            var node  = _editingParamNode;
+            var value = _inlineEditor.Text ?? string.Empty;
+
+            // Attempt to save. For ScriptedParameter this validates the expression first.
+            if (!node.SetParameterValue(value, out var error))
+            {
+                // Save failed – keep the editor open, restore focus, show the error.
+                _vm?.ShowToast(error?.Message ?? "Failed to set parameter value.",
+                               isError: true, durationMs: 5000);
+                Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => _inlineEditor.Focus(),
+                    Avalonia.Threading.DispatcherPriority.Input);
+                return;
+            }
+
+            // Save succeeded – close the editor.
+            _editingParamNode       = null;
+            _inlineEditor.IsVisible = false;
+            InvalidateAndMeasure();
+        }
+        finally
+        {
+            _commitParamEditInProgress = false;
+        }
     }
 
     /// <summary>Discards the current edit without saving.</summary>
