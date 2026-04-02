@@ -69,6 +69,11 @@ public class Settings
 
     public string? Theme { get; set; } = "Dark";
     public string? Language { get; set; } = "en";
+    /// <summary>
+    /// When true the application will play a system sound for error toasts.
+    /// Defaults to false so the feature is opt-in.
+    /// </summary>
+    public bool PlaySystemSounds { get; set; } = false;
 
     public void Save()
     {
@@ -105,6 +110,7 @@ public class Settings
                 {
                     settings.Theme = loaded.Theme;
                     settings.Language = loaded.Language;
+                    settings.PlaySystemSounds = loaded.PlaySystemSounds;
                 }
             }
         }

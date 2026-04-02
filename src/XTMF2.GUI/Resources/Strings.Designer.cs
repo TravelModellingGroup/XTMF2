@@ -120,6 +120,7 @@ public static class Strings
     public static string Settings_Runtime => Get(nameof(Settings_Runtime));
     public static string Settings_VerboseLogging => Get(nameof(Settings_VerboseLogging));
     public static string Settings_AutoSave => Get(nameof(Settings_AutoSave));
+    public static string Settings_PlaySystemSounds => Get(nameof(Settings_PlaySystemSounds));
     public static string Settings_Cancel => Get(nameof(Settings_Cancel));
     public static string Settings_Save => Get(nameof(Settings_Save));
     public static string Settings_Language => Get(nameof(Settings_Language));

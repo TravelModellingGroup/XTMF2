@@ -103,6 +103,9 @@
                         <CheckBox Content="{res:Localize Settings_AutoSave}"
                                   x:Name="AutoSaveCheckBox"
                                   IsChecked="True"/>
+
+                        <CheckBox Content="{res:Localize Settings_PlaySystemSounds}"
+                                  x:Name="PlaySystemSoundsCheckBox"/>
                     </StackPanel>
                 </Border>
                 
