@@ -158,6 +158,58 @@ public class TestVariables
     }
 
     [TestMethod]
+    public void TestSpaceInVariableName()
+    {
+        TestHelper.RunInModelSystemContext("TestSpaceInVariableName", (User user, ProjectSession project, ModelSystemSession session) =>
+        {
+            string error = null;
+            var nodes = new List<Node>()
+            {
+                CreateNodeForVariable<string>(session, user, "my String Variable", "12345.6")
+            };
+            var text = "my String Variable";
+            Assert.IsTrue(ParameterCompiler.CreateExpression(nodes, text, out var expression, ref error), $"Failed to compile {text}");
+            Assert.IsNotNull(expression);
+            Assert.AreEqual(typeof(string), expression.Type);
+            Assert.IsTrue(ParameterCompiler.Evaluate(null, expression, out var result, ref error), error);
+            if (result is string strResult)
+            {
+                Assert.AreEqual("12345.6", strResult);
+            }
+            else
+            {
+                Assert.Fail("The result is not a string!");
+            }
+        });
+    }
+
+    [TestMethod]
+    public void TestSpaceInVariableNameWithSpecialCharacter()
+    {
+        TestHelper.RunInModelSystemContext("TestSpaceInVariableNameWithSpecialCharacter", (User user, ProjectSession project, ModelSystemSession session) =>
+        {
+            string error = null;
+            var nodes = new List<Node>()
+            {
+                CreateNodeForVariable<string>(session, user, "my String Variable", "12345.6")
+            };
+            var text = "my String Variable + \"1\"";
+            Assert.IsTrue(ParameterCompiler.CreateExpression(nodes, text, out var expression, ref error), $"Failed to compile {text}");
+            Assert.IsNotNull(expression);
+            Assert.AreEqual(typeof(string), expression.Type);
+            Assert.IsTrue(ParameterCompiler.Evaluate(null, expression, out var result, ref error), error);
+            if (result is string strResult)
+            {
+                Assert.AreEqual("12345.61", strResult);
+            }
+            else
+            {
+                Assert.Fail("The result is not a string!");
+            }
+        });
+    }
+
+    [TestMethod]
     public void TestBadVariableNames()
     {
         TestHelper.RunInModelSystemContext("TestBadVariableNames", (User user, ProjectSession project, ModelSystemSession session) =>
