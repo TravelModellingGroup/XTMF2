@@ -1,0 +1,48 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:XTMF2.GUI.Views"
+        x:Class="XTMF2.GUI.Views.StartPickerDialog"
+        x:CompileBindings="True"
+        x:DataType="local:StartPickerDialog"
+        Width="380"
+        Height="145"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="Auto,Auto,Auto" Margin="20">
+
+        <!-- Prompt -->
+        <TextBlock Grid.Row="0"
+                   Text="{Binding Prompt}"
+                   FontSize="14"
+                   Margin="0,0,0,12"
+                   TextWrapping="Wrap"/>
+
+        <!-- Start ComboBox -->
+        <ComboBox Grid.Row="1"
+                  x:Name="StartComboBox"
+                  ItemsSource="{Binding StartNames}"
+                  SelectedItem="{Binding SelectedStartName}"
+                  HorizontalAlignment="Stretch"/>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,15,0,0">
+            <Button Content="OK"
+                    Click="OK_Click"
+                    IsDefault="True"
+                    Padding="20,8"
+                    MinWidth="80"/>
+            <Button Content="Cancel"
+                    Click="Cancel_Click"
+                    IsCancel="True"
+                    Padding="20,8"
+                    MinWidth="80"/>
+        </StackPanel>
+
+    </Grid>
+
+</Window>

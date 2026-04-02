@@ -1314,15 +1314,16 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
         else
         {
-            // Multiple starts: ask the user to type the start name (listing the options).
-            var startList = string.Join(", ", availableStarts.Select(s => s.Name));
-            var startDialog = new InputDialog(
+            // Multiple starts: show a ComboBox so the user can pick one.
+            var startNames = availableStarts.Select(s => s.Name).ToList();
+            var startDialog = new StartPickerDialog(
                 title: "Select Start",
-                prompt: $"Available starts: {startList}\nEnter the start to execute:",
-                defaultText: availableStarts[0].Name);
+                prompt: "Select the start to execute:",
+                startNames: startNames,
+                defaultStart: startNames[0]);
             await startDialog.ShowDialog(ParentWindow);
             if (startDialog.WasCancelled) return;
-            startToExecute = startDialog.InputText?.Trim() ?? availableStarts[0].Name;
+            startToExecute = startDialog.SelectedStartName ?? startNames[0];
             if (string.IsNullOrEmpty(startToExecute)) return;
         }
 
