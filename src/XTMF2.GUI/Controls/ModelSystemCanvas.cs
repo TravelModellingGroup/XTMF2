@@ -1919,7 +1919,7 @@ public sealed class ModelSystemCanvas : Control
         // ── Element drag (single or group) ────────────────────────────────
         if (_multiSelection.Count > 1 && _multiSelection.Contains(_dragging))
         {
-            // Group drag: move every element in the multi-selection by the per-frame delta.
+            // Group drag: preview every element in the multi-selection by the per-frame delta.
             var dx = mpos.X - _groupDragLastPos.X;
             var dy = mpos.Y - _groupDragLastPos.Y;
             _groupDragLastPos = mpos;
@@ -1927,21 +1927,21 @@ public sealed class ModelSystemCanvas : Control
             {
                 double nx = Math.Max(0, el.X + dx);
                 double ny = Math.Max(0, el.Y + dy);
-                if      (el is NodeViewModel       gnvm) gnvm.MoveTo(nx, ny);
-                else if (el is StartViewModel       gsvm) gsvm.MoveTo(nx, ny);
-                else if (el is CommentBlockViewModel gcvm) gcvm.MoveTo(nx, ny);
-                else if (el is GhostNodeViewModel   ggvm) ggvm.MoveTo(nx, ny);
+                if      (el is NodeViewModel       gnvm) gnvm.MoveToPreview(nx, ny);
+                else if (el is StartViewModel       gsvm) gsvm.MoveToPreview(nx, ny);
+                else if (el is CommentBlockViewModel gcvm) gcvm.MoveToPreview(nx, ny);
+                else if (el is GhostNodeViewModel   ggvm) ggvm.MoveToPreview(nx, ny);
             }
         }
         else
         {
-            // Single-element drag.
+            // Single-element drag: preview only, no session command issued yet.
             var newX = Math.Max(0, mpos.X - _dragOffset.X);
             var newY = Math.Max(0, mpos.Y - _dragOffset.Y);
-            if (_dragging is NodeViewModel         nvm) nvm.MoveTo(newX, newY);
-            if (_dragging is StartViewModel         svm) svm.MoveTo(newX, newY);
-            if (_dragging is CommentBlockViewModel  cvm) cvm.MoveTo(newX, newY);
-            if (_dragging is GhostNodeViewModel    gvm) gvm.MoveTo(newX, newY);
+            if (_dragging is NodeViewModel         nvm) nvm.MoveToPreview(newX, newY);
+            if (_dragging is StartViewModel         svm) svm.MoveToPreview(newX, newY);
+            if (_dragging is CommentBlockViewModel  cvm) cvm.MoveToPreview(newX, newY);
+            if (_dragging is GhostNodeViewModel    gvm) gvm.MoveToPreview(newX, newY);
         }
 
         InvalidateAndMeasure();
@@ -2076,6 +2076,26 @@ public sealed class ModelSystemCanvas : Control
 
         // ── Left-button release: end element drag ─────────────────────────
         if (_dragging is null) return;
+
+        // Commit the preview position as a single session command (one undo entry).
+        if (_multiSelection.Count > 1 && _multiSelection.Contains(_dragging))
+        {
+            foreach (var el in _multiSelection)
+            {
+                if      (el is NodeViewModel       gnvm) gnvm.CommitMove();
+                else if (el is StartViewModel       gsvm) gsvm.CommitMove();
+                else if (el is CommentBlockViewModel gcvm) gcvm.CommitMove();
+                else if (el is GhostNodeViewModel   ggvm) ggvm.CommitMove();
+            }
+        }
+        else
+        {
+            if      (_dragging is NodeViewModel        nvm) nvm.CommitMove();
+            else if (_dragging is StartViewModel        svm) svm.CommitMove();
+            else if (_dragging is CommentBlockViewModel cvm) cvm.CommitMove();
+            else if (_dragging is GhostNodeViewModel   gvm) gvm.CommitMove();
+        }
+
         _dragging = null;
         e.Pointer.Capture(null);
         InvalidateAndMeasure();

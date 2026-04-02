@@ -39,12 +39,15 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     private readonly ModelSystemSession _session;
     private readonly User _user;
 
-    // ── Coordinates read directly from the underlying model ──────────────
-    /// <inheritdoc/>
-    public double X => (double)UnderlyingNode.Location.X;
+    // ── Coordinates read directly from the underlying model (or preview during drag) ─
+    private double? _previewX;
+    private double? _previewY;
 
     /// <inheritdoc/>
-    public double Y => (double)UnderlyingNode.Location.Y;
+    public double X => _previewX ?? (double)UnderlyingNode.Location.X;
+
+    /// <inheritdoc/>
+    public double Y => _previewY ?? (double)UnderlyingNode.Location.Y;
 
     /// <summary>Rendered width; falls back to 120 when the model value is 0.</summary>
     public double Width  => UnderlyingNode.Location.Width  is 0 ? 120.0 : (double)UnderlyingNode.Location.Width;
@@ -133,6 +136,34 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
                 OnPropertyChanged(nameof(IsInlined));
                 break;
         }
+    }
+
+    /// <summary>
+    /// Updates the visual position without touching the session (for drag preview).
+    /// Call <see cref="CommitMove"/> on mouse-up to persist the change.
+    /// </summary>
+    public void MoveToPreview(double x, double y)
+    {
+        _previewX = x;
+        _previewY = y;
+        OnPropertyChanged(nameof(X));
+        OnPropertyChanged(nameof(Y));
+        OnPropertyChanged(nameof(CenterX));
+        OnPropertyChanged(nameof(CenterY));
+    }
+
+    /// <summary>
+    /// Commits the current preview position to the session (call once on mouse-up).
+    /// Does nothing if no preview is active.
+    /// </summary>
+    public void CommitMove()
+    {
+        if (_previewX is null) return;
+        var x = _previewX.Value;
+        var y = _previewY!.Value;
+        _previewX = null;
+        _previewY = null;
+        MoveTo(x, y);
     }
 
     /// <summary>

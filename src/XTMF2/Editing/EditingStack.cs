@@ -89,7 +89,7 @@ namespace XTMF2.Editing
             return null;
         }
 
-        private static int SafeMode(int numerator, int denominator)
+        private static int SafeMod(int numerator, int denominator)
         {
             return ((numerator %= denominator) < 0) ? numerator + denominator : numerator;
         }
@@ -108,7 +108,7 @@ namespace XTMF2.Editing
                 {
                     Count--;
                     command = _Data[_Head];
-                    _Head = SafeMode(_Head - 1, Capacity);
+                    _Head = SafeMod(_Head - 1, Capacity);
                     popped = true;
                 }
                 else
@@ -153,7 +153,7 @@ namespace XTMF2.Editing
                 for(int i = 0; i < Count; i++)
                 {
                     var headoffset = (_Head - i);
-                    int index = SafeMode(headoffset, Capacity);
+                    int index = SafeMod(headoffset, Capacity);
                     if (_Data[index] == item)
                     {
                         return true;
