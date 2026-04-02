@@ -29,6 +29,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
 using Avalonia.Layout;
+using Avalonia.Styling;
 using Avalonia.VisualTree;
 using XTMF2;
 using XTMF2.GUI.ViewModels;
@@ -47,14 +48,16 @@ namespace XTMF2.GUI.Controls;
 public sealed class ModelSystemCanvas : Control
 {
     // ── Brushes / pens (shared, immutable) ───────────────────────────────
-    private static readonly IBrush CanvasBackground   = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E));
+    private static readonly IBrush CanvasBackground      = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E));
+    private static readonly IBrush CanvasBackgroundLight = new SolidColorBrush(Color.FromRgb(0xF0, 0xF4, 0xF8));
     private static readonly IBrush NodeFill           = new SolidColorBrush(Color.FromRgb(0x2C, 0x3E, 0x50));
     private static readonly IBrush NodeBorderBrush    = new SolidColorBrush(Color.FromRgb(0x77, 0x88, 0x99));
     private static readonly IBrush NodeSelBrush       = Brushes.DodgerBlue;
     private static readonly IBrush NodeTextBrush      = Brushes.White;
     private static readonly IBrush StartFill          = new SolidColorBrush(Color.FromRgb(0xE6, 0x7E, 0x22));
     private static readonly IBrush StartSelFill       = Brushes.DodgerBlue;
-    private static readonly IBrush StartTextBrush     = Brushes.White;
+    private static readonly IBrush StartTextBrush      = Brushes.White;
+    private static readonly IBrush StartTextBrushLight  = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E));
     private static readonly IBrush LinkBrush          = new SolidColorBrush(Color.FromRgb(0x7F, 0x8C, 0x8D));
     private static readonly IBrush LinkSelBrush       = Brushes.OrangeRed;
     private static readonly IBrush PendingLinkBrush   = new SolidColorBrush(Color.FromRgb(0x2E, 0xCC, 0x71));
@@ -100,9 +103,14 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush SelectionRectFill = new SolidColorBrush(Color.FromArgb(0x2E, 0x44, 0x88, 0xFF));
     private static readonly DashStyle SelectionRectDash = new DashStyle([5, 4], 0);
     // Graph-paper background grid
-    private static readonly Pen GridPen = new Pen(new SolidColorBrush(Color.FromArgb(0x38, 0x55, 0x77, 0xAA)), 0.5);
+    private static readonly Pen GridPen      = new Pen(new SolidColorBrush(Color.FromArgb(0x38, 0x55, 0x77, 0xAA)), 0.5);
+    private static readonly Pen GridPenLight = new Pen(new SolidColorBrush(Color.FromArgb(0x60, 0x88, 0xAA, 0xCC)), 0.5);
     /// <summary>1 cm expressed in Avalonia logical pixels (96 DPI basis).</summary>
     private const double GridSpacingDip = 96.0 / 2.54;
+    // Drop-shadow layers (three passes, loosest → tightest, to simulate a soft blur)
+    private static readonly IBrush ShadowBrush1 = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
+    private static readonly IBrush ShadowBrush2 = new SolidColorBrush(Color.FromArgb(0x22, 0, 0, 0));
+    private static readonly IBrush ShadowBrush3 = new SolidColorBrush(Color.FromArgb(0x30, 0, 0, 0));
 
     // ── Drawing constants ─────────────────────────────────────────────────
     private const double NodeCornerRadius    = 4.0;
@@ -468,8 +476,9 @@ public sealed class ModelSystemCanvas : Control
     {
         BuildHookAnchorCache();
         var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height);
-        ctx.DrawRectangle(CanvasBackground, null, bounds);
-        DrawGridBackground(ctx, bounds);
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        ctx.DrawRectangle(isLight ? CanvasBackgroundLight : CanvasBackground, null, bounds);
+        DrawGridBackground(ctx, bounds, isLight);
 
         if (_vm is null) return;
 
@@ -490,7 +499,7 @@ public sealed class ModelSystemCanvas : Control
     /// logical pixels and shift with the <see cref="ScrollViewer"/> offset so they remain anchored
     /// to model space as the user pans.
     /// </summary>
-    private void DrawGridBackground(DrawingContext ctx, Rect bounds)
+    private void DrawGridBackground(DrawingContext ctx, Rect bounds, bool isLight = false)
     {
         var sv = GetScrollViewer();
         double scrollX = sv?.Offset.X ?? 0;
@@ -503,13 +512,15 @@ public sealed class ModelSystemCanvas : Control
         double phaseX = scrollX % step;
         double phaseY = scrollY % step;
 
+        var pen = isLight ? GridPenLight : GridPen;
+
         // Vertical lines
         for (double x = -phaseX; x < bounds.Width; x += step)
-            ctx.DrawLine(GridPen, new Point(x, 0), new Point(x, bounds.Height));
+            ctx.DrawLine(pen, new Point(x, 0), new Point(x, bounds.Height));
 
         // Horizontal lines
         for (double y = -phaseY; y < bounds.Height; y += step)
-            ctx.DrawLine(GridPen, new Point(0, y), new Point(bounds.Width, y));
+            ctx.DrawLine(pen, new Point(0, y), new Point(bounds.Width, y));
     }
 
     private void RenderCommentBlocks(DrawingContext ctx)
@@ -520,6 +531,7 @@ public sealed class ModelSystemCanvas : Control
             var fill   = comment.IsSelected ? CommentSelFill   : CommentFill;
             var border = new Pen(comment.IsSelected ? CommentSelBorder : CommentBorderBrush, NodeBorderThickness, dashStyle: DashStyle.Dash);
 
+            DrawRectShadow(ctx, rect, NodeCornerRadius);
             ctx.DrawRectangle(fill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // Render wrapped comment text inside the block with clipping
@@ -1096,6 +1108,7 @@ public sealed class ModelSystemCanvas : Control
             var border = new Pen(node.IsSelected ? NodeSelBrush : NodeBorderBrush, NodeBorderThickness);
 
             // Node background + border
+            DrawRectShadow(ctx, rect, NodeCornerRadius);
             ctx.DrawRectangle(NodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // ── Header: node name centred in the header band ──────────────
@@ -1274,6 +1287,7 @@ public sealed class ModelSystemCanvas : Control
             var borderBrush = ghost.IsSelected ? GhostNodeSelBrush : GhostNodeBorderBrush;
             var border      = new Pen(borderBrush, NodeBorderThickness, dashStyle: GhostNodeDash);
 
+            DrawRectShadow(ctx, rect, NodeCornerRadius);
             ctx.DrawRectangle(GhostNodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // Ghost icon prefix ("⊙ ") to distinguish from real nodes at a glance.
@@ -1311,14 +1325,32 @@ public sealed class ModelSystemCanvas : Control
             var r      = StartViewModel.Radius;
             var border = new Pen(start.IsSelected ? NodeSelBrush : NodeBorderBrush, NodeBorderThickness);
 
+            DrawEllipseShadow(ctx, center, r, r);
             ctx.DrawEllipse(fill, border, center, r, r);
 
             // Label below the circle
-            var ft = MakeText(start.Name, StartFontSize, StartTextBrush);
+            bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+            var ft = MakeText(start.Name, StartFontSize, isLight ? StartTextBrushLight : StartTextBrush);
             var lx = start.X + (start.Diameter - ft.Width) / 2;
             var ly = start.Y + start.Diameter + 3;
             ctx.DrawText(ft, new Point(lx, ly));
         }
+    }
+
+    /// <summary>Draws a three-layer simulated drop shadow for a rounded rectangle.</summary>
+    private static void DrawRectShadow(DrawingContext ctx, Rect rect, double cornerRadius)
+    {
+        ctx.DrawRectangle(ShadowBrush1, null, rect.Translate(new Vector(6, 6)), cornerRadius, cornerRadius);
+        ctx.DrawRectangle(ShadowBrush2, null, rect.Translate(new Vector(4, 4)), cornerRadius, cornerRadius);
+        ctx.DrawRectangle(ShadowBrush3, null, rect.Translate(new Vector(2, 2)), cornerRadius, cornerRadius);
+    }
+
+    /// <summary>Draws a three-layer simulated drop shadow for an ellipse.</summary>
+    private static void DrawEllipseShadow(DrawingContext ctx, Point center, double rx, double ry)
+    {
+        ctx.DrawEllipse(ShadowBrush1, null, center + new Vector(6, 6), rx, ry);
+        ctx.DrawEllipse(ShadowBrush2, null, center + new Vector(4, 4), rx, ry);
+        ctx.DrawEllipse(ShadowBrush3, null, center + new Vector(2, 2), rx, ry);
     }
 
     private static FormattedText MakeText(string text, double size, IBrush foreground) =>
