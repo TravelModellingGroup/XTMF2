@@ -68,6 +68,14 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush GhostNodeSelBrush  = Brushes.DodgerBlue;
     private static readonly DashStyle GhostNodeDash   = new DashStyle([6, 4], 0);
 
+    // Scripted-parameter syntax-highlight token colours
+    private static readonly IBrush ScriptVarKnownBrush   = new SolidColorBrush(Color.FromRgb(0x44, 0xDD, 0x88)); // known variable → green
+    private static readonly IBrush ScriptVarUnknownBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x44, 0x44)); // unrecognised identifier → red
+    private static readonly IBrush ScriptOperatorBrush   = new SolidColorBrush(Color.FromRgb(0xAA, 0xBB, 0xCC)); // operators / punctuation → steel-blue
+    private static readonly IBrush ScriptNumberBrush     = new SolidColorBrush(Color.FromRgb(0xB8, 0xD7, 0xFF)); // numeric literals → light blue
+    private static readonly IBrush ScriptStringBrush     = new SolidColorBrush(Color.FromRgb(0xFF, 0xB8, 0x60)); // string literals → orange
+    private static readonly IBrush ScriptKeywordBrush    = new SolidColorBrush(Color.FromRgb(0xFF, 0xE0, 0x82)); // true / false → gold
+
     // Parameter value row
     private static readonly IBrush ParamValueTextBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xE0, 0x82));
     private static readonly IBrush ParamValueBg        = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
@@ -164,6 +172,18 @@ public sealed class ModelSystemCanvas : Control
     private NodeViewModel? _editingParamNode;
     /// <summary>Screen position and width of the inline editor overlay (set in <see cref="BeginParamEdit"/>).</summary>
     private double _editingParamEditorX, _editingParamEditorY, _editingParamEditorW;
+    /// <summary>
+    /// Transparent, non-interactive overlay that draws syntax-highlighted tokens
+    /// on top of the scripted-parameter TextBox. Added to VisualChildren after
+    /// <see cref="_inlineEditor"/> so it renders last (on top).
+    /// </summary>
+    private readonly ScriptSyntaxOverlay _scriptOverlay;
+    /// <summary>
+    /// Syntax-highlighted tokens for the scripted-parameter editor.
+    /// Each entry is a (text segment, brush) pair; painted left-to-right inside the TextBox region.
+    /// Empty when not editing a ScriptedParameter.
+    /// </summary>
+    private (string text, IBrush brush)[] _scriptTokens = Array.Empty<(string, IBrush)>();
 
     /// <summary><c>true</c> while <see cref="CommitParamEdit"/> is executing, used to suppress re-entrant LostFocus commits.</summary>
     private bool _commitParamEditInProgress;
@@ -241,9 +261,11 @@ public sealed class ModelSystemCanvas : Control
         LogicalChildren.Add(_inlineEditor);
         VisualChildren.Add(_inlineEditor);
 
-        // Build the scripted-parameter variable autocomplete dropdown.
-        // TextBlock items are non-focusable by default, so clicking them does not
-        // steal focus from _inlineEditor and will not trigger CommitParamEdit.
+        // Syntax-highlight overlay – must be added AFTER _inlineEditor so it
+        // renders on top of the TextBox, not underneath it.
+        _scriptOverlay = new ScriptSyntaxOverlay();
+        LogicalChildren.Add(_scriptOverlay);
+        VisualChildren.Add(_scriptOverlay);
         _varDropdownStack  = new StackPanel { Orientation = Orientation.Vertical };
         _varDropdownBorder = new Border
         {
@@ -530,6 +552,9 @@ public sealed class ModelSystemCanvas : Control
                                                                      : NodeRenderWidth(_editingParamNode) * _scale,
                                            HookRowHeight * _scale));
         }
+        // Measure the syntax-highlight overlay (same footprint as the TextBox).
+        if (_editingParamNode is { IsScriptedParameter: true })
+            _scriptOverlay.Measure(new Size(_editingParamEditorW * _scale, HookRowHeight * _scale));
         // Measure the variable autocomplete dropdown.
         if (_varDropdownVisible && _editingParamNode is not null)
         {
@@ -558,6 +583,16 @@ public sealed class ModelSystemCanvas : Control
         {
             _inlineEditor.FontSize = HookFontSize * _scale;
             _inlineEditor.Arrange(new Rect(
+                _editingParamEditorX * _scale,
+                _editingParamEditorY * _scale,
+                _editingParamEditorW * _scale,
+                HookRowHeight * _scale));
+        }
+        // Position the syntax-highlight overlay exactly over the TextBox.
+        if (_editingParamNode is { IsScriptedParameter: true })
+        {
+            _scriptOverlay.FontSize = HookFontSize * _scale;
+            _scriptOverlay.Arrange(new Rect(
                 _editingParamEditorX * _scale,
                 _editingParamEditorY * _scale,
                 _editingParamEditorW * _scale,
@@ -1323,12 +1358,17 @@ public sealed class ModelSystemCanvas : Control
                     new Rect(node.X + 1, node.Y + NodeHeaderHeight, rw - 2, HookRowHeight));
 
                 const double textPad = 6.0;
-                var display  = string.IsNullOrEmpty(paramValue) ? "(no value)" : paramValue;
-                var paramFt  = MakeText(display, HookFontSize, ParamValueTextBrush);
-                double maxW  = rw - textPad * 2;
-                double paramTy = rowMidY - paramFt.Height / 2.0;
-                using (ctx.PushClip(new Rect(node.X + textPad, paramTy, Math.Max(0, maxW), paramFt.Height + 1)))
-                    ctx.DrawText(paramFt, new Point(node.X + textPad, paramTy));
+                // Skip drawing the text while this exact node is being edited —
+                // the inline TextBox (and syntax overlay) already cover that row.
+                if (node != _editingParamNode)
+                {
+                    var display  = string.IsNullOrEmpty(paramValue) ? "(no value)" : paramValue;
+                    var paramFt  = MakeText(display, HookFontSize, ParamValueTextBrush);
+                    double maxW  = rw - textPad * 2;
+                    double paramTy = rowMidY - paramFt.Height / 2.0;
+                    using (ctx.PushClip(new Rect(node.X + textPad, paramTy, Math.Max(0, maxW), paramFt.Height + 1)))
+                        ctx.DrawText(paramFt, new Point(node.X + textPad, paramTy));
+                }
 
                 rowOffset = 1;
 
@@ -2384,6 +2424,28 @@ public sealed class ModelSystemCanvas : Control
         _editingParamEditorY = rowY >= 0 ? rowY : node.Y + NodeHeaderHeight;
         _editingParamEditorW = rowW >= 0 ? rowW : NodeRenderWidth(node);
         _inlineEditor.Text  = node.ParameterValueRepresentation;
+
+        // For scripted parameters the text is rendered by Render() with syntax colours;
+        // make the TextBox itself transparent so the coloured tokens show through.
+        if (node.IsScriptedParameter)
+        {
+            _inlineEditor.Foreground = Brushes.Transparent;
+            bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+            _inlineEditor.CaretBrush = isLight ? Brushes.Black : Brushes.White;
+            _scriptTokens = TokenizeScript(node.ParameterValueRepresentation);
+            _scriptOverlay.Tokens    = _scriptTokens;
+            _scriptOverlay.IsVisible = true;
+        }
+        else
+        {
+            _inlineEditor.Foreground = ParamValueTextBrush;
+            _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
+            _inlineEditor.CaretBrush = null; // default (uses Foreground)
+            _scriptTokens            = Array.Empty<(string, IBrush)>();
+            _scriptOverlay.Tokens    = _scriptTokens;
+            _scriptOverlay.IsVisible = false;
+        }
+
         _inlineEditor.IsVisible = true;
         // Re-layout so ArrangeOverride positions the TextBox at the right row.
         InvalidateMeasure();
@@ -2425,8 +2487,14 @@ public sealed class ModelSystemCanvas : Control
             }
 
             // Save succeeded – close the editor.
-            _editingParamNode       = null;
-            _inlineEditor.IsVisible = false;
+            _editingParamNode        = null;
+            _inlineEditor.IsVisible  = false;
+            _inlineEditor.Foreground = ParamValueTextBrush;
+            _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
+            _inlineEditor.CaretBrush = null;
+            _scriptTokens            = Array.Empty<(string, IBrush)>();
+            _scriptOverlay.Tokens    = _scriptTokens;
+            _scriptOverlay.IsVisible = false;
             InvalidateAndMeasure();
         }
         finally
@@ -2439,8 +2507,14 @@ public sealed class ModelSystemCanvas : Control
     private void CancelParamEdit()
     {
         HideVarDropdown();
-        _editingParamNode       = null;
-        _inlineEditor.IsVisible = false;
+        _editingParamNode        = null;
+        _inlineEditor.IsVisible  = false;
+        _inlineEditor.Foreground = ParamValueTextBrush;
+        _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
+        _inlineEditor.CaretBrush = null;
+        _scriptTokens            = Array.Empty<(string, IBrush)>();
+        _scriptOverlay.Tokens    = _scriptTokens;
+        _scriptOverlay.IsVisible = false;
         InvalidateAndMeasure();
         Focus();
     }
@@ -2502,6 +2576,101 @@ public sealed class ModelSystemCanvas : Control
 
     // ── Variable autocomplete helpers ─────────────────────────────────────
 
+    // ── Script syntax tokenizer ───────────────────────────────────────────
+
+    /// <summary>
+    /// Breaks <paramref name="text"/> into coloured segments for display in the
+    /// scripted-parameter inline editor.
+    /// <list type="bullet">
+    ///   <item>Known model-system variables → <see cref="ScriptVarKnownBrush"/> (green)</item>
+    ///   <item>Unrecognised identifiers   → <see cref="ScriptVarUnknownBrush"/> (red)</item>
+    ///   <item>Numeric literals            → <see cref="ScriptNumberBrush"/> (light-blue)</item>
+    ///   <item>String literals             → <see cref="ScriptStringBrush"/> (orange)</item>
+    ///   <item><c>true</c> / <c>false</c>  → <see cref="ScriptKeywordBrush"/> (gold)</item>
+    ///   <item>Operators &amp; punctuation → <see cref="ScriptOperatorBrush"/> (steel-blue)</item>
+    ///   <item>Whitespace                  → <see cref="ParamValueTextBrush"/> (neutral)</item>
+    /// </list>
+    /// </summary>
+    private (string text, IBrush brush)[] TokenizeScript(string text)
+    {
+        if (_vm is null || string.IsNullOrEmpty(text))
+            return Array.Empty<(string, IBrush)>();
+
+        var knownNames = new HashSet<string>(
+            _vm.ModelSystemVariables.Select(v => v.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        var tokens = new List<(string, IBrush)>();
+        int i = 0;
+        while (i < text.Length)
+        {
+            char c = text[i];
+
+            // ── String literal ─────────────────────────────────────────────
+            if (c == '"')
+            {
+                int start = i++;
+                while (i < text.Length && text[i] != '"') i++;
+                if (i < text.Length) i++; // consume closing quote
+                tokens.Add((text[start..i], ScriptStringBrush));
+                continue;
+            }
+
+            // ── Whitespace ────────────────────────────────────────────────
+            if (char.IsWhiteSpace(c))
+            {
+                int start = i;
+                while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
+                tokens.Add((text[start..i], ParamValueTextBrush));
+                continue;
+            }
+
+            // ── Identifier / keyword ───────────────────────────────────────
+            if (char.IsLetter(c) || c == '_')
+            {
+                int start = i;
+                while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_')) i++;
+                var word = text[start..i];
+                IBrush brush = word switch
+                {
+                    "true" or "false" => ScriptKeywordBrush,
+                    _                 => knownNames.Contains(word)
+                                         ? ScriptVarKnownBrush
+                                         : ScriptVarUnknownBrush,
+                };
+                tokens.Add((word, brush));
+                continue;
+            }
+
+            // ── Numeric literal ──────────────────────────────────────────
+            if (char.IsDigit(c))
+            {
+                int start = i;
+                while (i < text.Length && (char.IsDigit(text[i]) || text[i] == '.')) i++;
+                tokens.Add((text[start..i], ScriptNumberBrush));
+                continue;
+            }
+
+            // ── Operator / punctuation (single or double char) ────────────────
+            {
+                int start = i++;
+                // Absorb two-char operators: &&, ||, ==, !=, >=, <=
+                if (i < text.Length && (
+                    (c == '&' && text[i] == '&') ||
+                    (c == '|' && text[i] == '|') ||
+                    (c == '=' && text[i] == '=') ||
+                    (c == '!' && text[i] == '=') ||
+                    (c == '>' && text[i] == '=') ||
+                    (c == '<' && text[i] == '=')))
+                {
+                    i++;
+                }
+                tokens.Add((text[start..i], ScriptOperatorBrush));
+            }
+        }
+        return tokens.ToArray();
+    }
+
     /// <summary>
     /// Returns <c>true</c> for characters that terminate a variable token
     /// in a scripted-parameter expression.
@@ -2517,6 +2686,20 @@ public sealed class ModelSystemCanvas : Control
     /// </summary>
     private void OnInlineEditorTextChanged(object? sender, TextChangedEventArgs e)
     {
+        // ── Syntax-highlight tokens for scripted params ─────────────────────────
+        if (_editingParamNode is { IsScriptedParameter: true })
+        {
+            _scriptTokens = TokenizeScript(_inlineEditor.Text ?? string.Empty);
+            _scriptOverlay.Tokens = _scriptTokens;
+            _scriptOverlay.InvalidateVisual();
+        }
+        else
+        {
+            _scriptTokens = Array.Empty<(string, IBrush)>();
+            _scriptOverlay.Tokens = _scriptTokens;
+        }
+
+        // ── Variable autocomplete dropdown ──────────────────────────────────
         if (_editingParamNode is null || !_editingParamNode.IsScriptedParameter || _vm is null)
         {
             HideVarDropdown();
@@ -3089,4 +3272,5 @@ public sealed class ModelSystemCanvas : Control
         var pen  = new Pen(Brushes.CornflowerBlue, 1.5 / _scale, SelectionRectDash);
         ctx.DrawRectangle(SelectionRectFill, pen, rect, 2 / _scale, 2 / _scale);
     }
+
 }
