@@ -129,6 +129,31 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>Observable view-models for the model system's variable list.</summary>
     public ObservableCollection<ModelSystemVariableViewModel> ModelSystemVariables { get; } = new();
 
+    /// <summary>Text typed into the variables filter box; filters <see cref="FilteredModelSystemVariables"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FilteredModelSystemVariables))]
+    private string _variableFilter = string.Empty;
+
+    /// <summary>
+    /// Sorted (by name) and filtered (by <see cref="VariableFilter"/>) view of
+    /// <see cref="ModelSystemVariables"/>. Matches on name or boundary path.
+    /// </summary>
+    public IEnumerable<ModelSystemVariableViewModel> FilteredModelSystemVariables
+    {
+        get
+        {
+            var q = ModelSystemVariables.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(VariableFilter))
+            {
+                var f = VariableFilter.Trim();
+                q = q.Where(v =>
+                    v.Name.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                    v.BoundaryPath.Contains(f, StringComparison.OrdinalIgnoreCase));
+            }
+            return q.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>The currently selected link, if any. Mutually exclusive with <see cref="SelectedElement"/>.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NothingSelected))]
@@ -1224,6 +1249,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Full rebuild keeps the code simple; the list is expected to be small.
         SyncModelSystemVariables();
         OnPropertyChanged(nameof(HasNoModelSystemVariables));
+        OnPropertyChanged(nameof(FilteredModelSystemVariables));
     }
 
     /// <summary>Commit the name/comment currently in <see cref="SelectedElementEditName"/> back to the model.</summary>

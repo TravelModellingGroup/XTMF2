@@ -249,12 +249,18 @@
                                        FontWeight="SemiBold"
                                        FontSize="13"
                                        Margin="0,0,0,2"/>
-                            <TextBlock Text="Right-click a parameter node to add it."
+                            <TextBlock Text="Right-click a parameter node to add it. Type to filter."
                                        FontSize="10"
                                        Opacity="0.6"
                                        TextWrapping="Wrap"
                                        Margin="0,0,0,4"/>
-                            <ListBox ItemsSource="{Binding ModelSystemVariables}"
+                            <TextBox x:Name="VariableFilterBox"
+                                     Text="{Binding VariableFilter, Mode=TwoWay}"
+                                     Watermark="Filter variables…"
+                                     FontSize="12"
+                                     Margin="0,0,0,4"
+                                     IsVisible="{Binding !HasNoModelSystemVariables}"/>
+                            <ListBox ItemsSource="{Binding FilteredModelSystemVariables}"
                                      MaxHeight="200"
                                      SelectionMode="Single">
                                 <ListBox.ItemTemplate>

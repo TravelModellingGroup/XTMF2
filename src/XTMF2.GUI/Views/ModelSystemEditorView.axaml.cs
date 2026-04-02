@@ -45,6 +45,9 @@ public partial class ModelSystemEditorView : UserControl
         // Pressing Enter in the parameter value box commits the value.
         ParameterValueEditBox.KeyDown += OnParameterValueEditBoxKeyDown;
 
+        // Escape in the variable filter box clears the filter.
+        VariableFilterBox.KeyDown += OnVariableFilterBoxKeyDown;
+
         // F2 anywhere in this view focuses the rename box (when an element is selected).
         KeyDown += OnViewKeyDown;
 
@@ -93,6 +96,15 @@ public partial class ModelSystemEditorView : UserControl
         else if (e.Key == Key.F5)
         {
             _vm?.RunModelSystemCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private void OnVariableFilterBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && _vm is not null)
+        {
+            _vm.VariableFilter = string.Empty;
             e.Handled = true;
         }
     }
