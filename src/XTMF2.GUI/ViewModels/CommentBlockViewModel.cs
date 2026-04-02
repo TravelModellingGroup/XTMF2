@@ -109,6 +109,16 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
     }
 
     /// <summary>
+    /// Update the comment text, persisting the change via the session (supports undo/redo).
+    /// Whitespace-only text is ignored.
+    /// </summary>
+    public void SetText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        _session.SetCommentBlockText(_user, UnderlyingBlock, text, out _);
+    }
+
+    /// <summary>
     /// Resize the comment block, persisting the change via the session (supports undo/redo).
     /// Width is clamped to a minimum of 60; height to a minimum of 30.
     /// </summary>

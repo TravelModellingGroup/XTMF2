@@ -71,8 +71,16 @@ public partial class ModelSystemEditorView : UserControl
     {
         if (e.Key == Key.F2 && _vm?.SelectedElement is not null)
         {
-            NameEditBox.Focus();
-            NameEditBox.SelectAll();
+            if (_vm.SelectedElement is CommentBlockViewModel)
+            {
+                // Route F2 for comments to the inline canvas editor.
+                TheCanvas.BeginCommentEditForSelected();
+            }
+            else
+            {
+                NameEditBox.Focus();
+                NameEditBox.SelectAll();
+            }
             e.Handled = true;
         }
         else if (e.Key == Key.S && e.KeyModifiers.HasFlag(KeyModifiers.Control))

@@ -165,6 +165,14 @@ public sealed class ModelSystemCanvas : Control
     /// <summary>Screen position and width of the inline editor overlay (set in <see cref="BeginParamEdit"/>).</summary>
     private double _editingParamEditorX, _editingParamEditorY, _editingParamEditorW;
 
+    // ── Inline comment editor ─────────────────────────────────────────────
+    /// <summary>Overlay multi-line TextBox used for in-canvas comment block editing.</summary>
+    private readonly TextBox _commentEditor;
+    /// <summary>The comment block currently being edited, or <c>null</c> when idle.</summary>
+    private CommentBlockViewModel? _editingCommentBlock;
+    /// <summary>Model-space position and size of the comment editor overlay.</summary>
+    private double _editingCommentEditorX, _editingCommentEditorY, _editingCommentEditorW, _editingCommentEditorH;
+
     // ── Inlined BasicParameter caches (rebuilt by BuildHookAnchorCache) ───
     /// <summary>
     /// Maps (origin node, hook) → the BasicParameter node that is currently inlined
@@ -206,6 +214,28 @@ public sealed class ModelSystemCanvas : Control
 
         LogicalChildren.Add(_inlineEditor);
         VisualChildren.Add(_inlineEditor);
+
+        // Build the multi-line comment editor; Enter inserts a newline, Ctrl+Enter commits.
+        _commentEditor = new TextBox
+        {
+            FontFamily      = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize        = CommentFontSize,
+            Foreground      = CommentTextBrush,
+            Background      = new SolidColorBrush(Color.FromArgb(0xF2, 0xFF, 0xF0, 0x96)),
+            BorderThickness = new Thickness(1),
+            BorderBrush     = CommentBorderBrush,
+            Padding         = new Thickness(6, 4, 6, 4),
+            AcceptsReturn   = true,
+            TextWrapping    = TextWrapping.Wrap,
+            IsVisible       = false,
+        };
+        _commentEditor.LostFocus += OnCommentEditorLostFocus;
+        // Use the tunneling phase so Ctrl+Enter is intercepted before AcceptsReturn
+        // consumes the Enter keystroke and marks the event Handled.
+        _commentEditor.AddHandler(InputElement.KeyDownEvent, OnCommentEditorKeyDown,
+                                  Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        LogicalChildren.Add(_commentEditor);
+        VisualChildren.Add(_commentEditor);
 
         // ── Zoom control (pinned to viewport bottom-right) ────────────────
         _zoomTextBox = new TextBox
@@ -439,6 +469,11 @@ public sealed class ModelSystemCanvas : Control
                                                                      : NodeRenderWidth(_editingParamNode) * _scale,
                                            HookRowHeight * _scale));
         }
+        // Measure the comment editor.
+        if (_editingCommentBlock is not null)
+        {
+            _commentEditor.Measure(new Size(_editingCommentEditorW * _scale, _editingCommentEditorH * _scale));
+        }
         // Measure the zoom bar so ArrangeOverride can use its desired size.
         _zoomBar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         return new Size(maxX * _scale, maxY * _scale);
@@ -455,6 +490,16 @@ public sealed class ModelSystemCanvas : Control
                 _editingParamEditorY * _scale,
                 _editingParamEditorW * _scale,
                 HookRowHeight * _scale));
+        }
+        // Position the comment editor over the comment block being edited.
+        if (_editingCommentBlock is not null)
+        {
+            _commentEditor.FontSize = CommentFontSize * _scale;
+            _commentEditor.Arrange(new Rect(
+                _editingCommentEditorX * _scale,
+                _editingCommentEditorY * _scale,
+                _editingCommentEditorW * _scale,
+                _editingCommentEditorH * _scale));
         }
         // Pin the zoom control to the bottom-right of the visible viewport.
         var sv = GetScrollViewer();
@@ -1500,7 +1545,8 @@ public sealed class ModelSystemCanvas : Control
             var resizeHit = HitTestResizeHandle(mpos);
             if (resizeHit is not null)
             {
-                if (_editingParamNode is not null) CommitParamEdit();
+                if (_editingParamNode   is not null) CommitParamEdit();
+                if (_editingCommentBlock is not null) CommitCommentEdit();
                 ClearMultiSelection();
                 _resizing       = resizeHit;
                 _resizeStartPos = mpos;
@@ -1520,7 +1566,8 @@ public sealed class ModelSystemCanvas : Control
             var minimizeHit = HitTestMinimizeButton(mpos);
             if (minimizeHit is not null)
             {
-                if (_editingParamNode is not null) CommitParamEdit();
+                if (_editingParamNode   is not null) CommitParamEdit();
+                if (_editingCommentBlock is not null) CommitCommentEdit();
                 minimizeHit.InlineBasicParameter();
                 InvalidateAndMeasure();
                 e.Handled = true;
@@ -1551,7 +1598,8 @@ public sealed class ModelSystemCanvas : Control
                 return;
             }
             // Clicking elsewhere commits any open edit.
-            if (_editingParamNode is not null) CommitParamEdit();
+            if (_editingParamNode    is not null) CommitParamEdit();
+            if (_editingCommentBlock is not null) CommitCommentEdit();
         }
 
         // ── Hook toggle icon click (left button, any click count) ─────────
@@ -1583,6 +1631,16 @@ public sealed class ModelSystemCanvas : Control
             if (nodeHit is { IsParameterNode: true })
             {
                 _ = _vm.EditParameterNodeAsync(nodeHit);
+                e.Handled = true;
+                return;
+            }
+
+            // ── Double-click on a comment block: open the inline comment editor ──
+            var commentHit = HitTest(mpos, testComments: true) as CommentBlockViewModel;
+            if (commentHit is not null)
+            {
+                _vm.SelectElementCommand.Execute(commentHit);
+                BeginCommentEdit(commentHit);
                 e.Handled = true;
                 return;
             }
@@ -1622,7 +1680,8 @@ public sealed class ModelSystemCanvas : Control
         if (isCtrlLeft)
         {
             // Always commit any open inline edit first.
-            if (_editingParamNode is not null) CommitParamEdit();
+            if (_editingParamNode   is not null) CommitParamEdit();
+            if (_editingCommentBlock is not null) CommitCommentEdit();
 
             if (hit is NodeViewModel or CommentBlockViewModel or GhostNodeViewModel)
             {
@@ -2229,6 +2288,85 @@ public sealed class ModelSystemCanvas : Control
         // Commit on focus loss (e.g. user clicks away to another element).
         if (_editingParamNode is not null)
             CommitParamEdit();
+    }
+
+    /// <summary>
+    /// Opens the inline comment editor for the currently selected comment block.
+    /// Called externally (e.g. from the F2 key handler in the editor view).
+    /// Does nothing if the selected element is not a <see cref="CommentBlockViewModel"/>.
+    /// </summary>
+    public void BeginCommentEditForSelected()
+    {
+        if (_vm?.SelectedElement is CommentBlockViewModel comment)
+            BeginCommentEdit(comment);
+    }
+
+    /// <summary>Shows the multi-line comment editor over <paramref name="comment"/>.</summary>
+    private void BeginCommentEdit(CommentBlockViewModel comment)
+    {
+        _editingCommentBlock   = comment;
+        _editingCommentEditorX = comment.X;
+        _editingCommentEditorY = comment.Y;
+        _editingCommentEditorW = comment.Width;
+        _editingCommentEditorH = comment.Height;
+        _commentEditor.Text    = comment.Name;   // Name returns the underlying Comment text.
+        // Pick colours based on the active theme.
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        _commentEditor.Foreground = isLight
+            ? CommentTextBrush   // dark text on sticky-note yellow
+            : Brushes.White;     // white text on dark background
+        _commentEditor.Background = isLight
+            ? new SolidColorBrush(Color.FromArgb(0xF2, 0xFF, 0xF0, 0x96))   // sticky-note yellow
+            : new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x18));          // dark green-tinted panel
+        _commentEditor.IsVisible = true;
+        InvalidateMeasure();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _commentEditor.Focus();
+        }, Avalonia.Threading.DispatcherPriority.Render);
+    }
+
+    /// <summary>Saves the comment editor text and closes the editor.</summary>
+    private void CommitCommentEdit()
+    {
+        if (_editingCommentBlock is null) return;
+        var comment = _editingCommentBlock;
+        var text    = _commentEditor.Text ?? string.Empty;
+        _editingCommentBlock     = null;
+        _commentEditor.IsVisible = false;
+        comment.SetText(text);
+        InvalidateAndMeasure();
+    }
+
+    /// <summary>Discards the comment edit without saving.</summary>
+    private void CancelCommentEdit()
+    {
+        _editingCommentBlock     = null;
+        _commentEditor.IsVisible = false;
+        InvalidateAndMeasure();
+        Focus();
+    }
+
+    private void OnCommentEditorKeyDown(object? sender, KeyEventArgs e)
+    {
+        if ((e.Key is Key.Return or Key.Enter) && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            // Ctrl+Enter commits; plain Enter inserts a newline (default).
+            CommitCommentEdit();
+            Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CancelCommentEdit();
+            e.Handled = true;
+        }
+    }
+
+    private void OnCommentEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_editingCommentBlock is not null)
+            CommitCommentEdit();
     }
 
     /// <summary>

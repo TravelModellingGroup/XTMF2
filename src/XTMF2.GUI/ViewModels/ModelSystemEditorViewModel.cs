@@ -193,6 +193,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     public bool SelectedElementIsNode => SelectedElement is NodeViewModel;
 
+    /// <summary>True when the selected element is a <see cref="CommentBlockViewModel"/>.</summary>
+    public bool SelectedElementIsComment => SelectedElement is CommentBlockViewModel;
+
+    /// <summary>True when the selected element is NOT a <see cref="CommentBlockViewModel"/>, used to hide the rename box for comments.</summary>
+    public bool SelectedElementIsNotComment => SelectedElement is not CommentBlockViewModel;
+
     /// <summary>
     /// True when the selected node is a BasicParameter or ScriptedParameter,
     /// used to gate the parameter value editor in the property panel.
@@ -256,6 +262,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         OnPropertyChanged(nameof(SelectedElementFieldLabel));
         OnPropertyChanged(nameof(SelectedElementTypeName));
         OnPropertyChanged(nameof(SelectedElementIsNode));
+        OnPropertyChanged(nameof(SelectedElementIsComment));
+        OnPropertyChanged(nameof(SelectedElementIsNotComment));
         OnPropertyChanged(nameof(SelectedElementIsParameter));
         SelectedElementParameterValue =
             value is NodeViewModel pnvm && pnvm.IsParameterNode
