@@ -39,12 +39,15 @@ public sealed partial class StartViewModel : ObservableObject, ICanvasElement
     private readonly ModelSystemSession _session;
     private readonly User _user;
 
-    // ── Coordinates read directly from the underlying model ──────────────
-    /// <inheritdoc/>
-    public double X => (double)UnderlyingStart.Location.X;
+    // ── Coordinates read directly from the underlying model (or preview during drag) ─
+    private double? _previewX;
+    private double? _previewY;
 
     /// <inheritdoc/>
-    public double Y => (double)UnderlyingStart.Location.Y;
+    public double X => _previewX ?? (double)UnderlyingStart.Location.X;
+
+    /// <inheritdoc/>
+    public double Y => _previewY ?? (double)UnderlyingStart.Location.Y;
 
     /// <summary>Centre X of the circle.</summary>
     public double CenterX => X + Radius;
@@ -86,6 +89,34 @@ public sealed partial class StartViewModel : ObservableObject, ICanvasElement
     }
 
     /// <summary>
+    /// Updates the visual position without touching the session (for drag preview).
+    /// Call <see cref="CommitMove"/> on mouse-up to persist the change.
+    /// </summary>
+    public void MoveToPreview(double x, double y)
+    {
+        _previewX = x;
+        _previewY = y;
+        OnPropertyChanged(nameof(X));
+        OnPropertyChanged(nameof(Y));
+        OnPropertyChanged(nameof(CenterX));
+        OnPropertyChanged(nameof(CenterY));
+    }
+
+    /// <summary>
+    /// Commits the current preview position to the session (call once on mouse-up).
+    /// Does nothing if no preview is active.
+    /// </summary>
+    public void CommitMove()
+    {
+        if (_previewX is null) return;
+        var x = _previewX.Value;
+        var y = _previewY!.Value;
+        _previewX = null;
+        _previewY = null;
+        MoveTo(x, y);
+    }
+
+    /// <summary>
     /// Move the start to a new canvas position, persisting the change to the
     /// underlying model via the session (supports undo/redo).
     /// </summary>
@@ -96,4 +127,8 @@ public sealed partial class StartViewModel : ObservableObject, ICanvasElement
         // OnModelPropertyChanged("Location") is fired by the model; it raises
         // PropertyChanged for X, Y, CenterX, CenterY automatically.
     }
+
+    /// <summary>Rename the start, persisting the change via the session (supports undo/redo).</summary>
+    public bool SetName(string name, out CommandError? error)
+        => _session.SetNodeName(_user, UnderlyingStart, name, out error);
 }

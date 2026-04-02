@@ -29,6 +29,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
 using Avalonia.Layout;
+using Avalonia.Styling;
 using Avalonia.VisualTree;
 using XTMF2;
 using XTMF2.GUI.ViewModels;
@@ -47,14 +48,16 @@ namespace XTMF2.GUI.Controls;
 public sealed class ModelSystemCanvas : Control
 {
     // ── Brushes / pens (shared, immutable) ───────────────────────────────
-    private static readonly IBrush CanvasBackground   = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E));
+    private static readonly IBrush CanvasBackground      = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E));
+    private static readonly IBrush CanvasBackgroundLight = new SolidColorBrush(Color.FromRgb(0xF0, 0xF4, 0xF8));
     private static readonly IBrush NodeFill           = new SolidColorBrush(Color.FromRgb(0x2C, 0x3E, 0x50));
     private static readonly IBrush NodeBorderBrush    = new SolidColorBrush(Color.FromRgb(0x77, 0x88, 0x99));
     private static readonly IBrush NodeSelBrush       = Brushes.DodgerBlue;
     private static readonly IBrush NodeTextBrush      = Brushes.White;
     private static readonly IBrush StartFill          = new SolidColorBrush(Color.FromRgb(0xE6, 0x7E, 0x22));
     private static readonly IBrush StartSelFill       = Brushes.DodgerBlue;
-    private static readonly IBrush StartTextBrush     = Brushes.White;
+    private static readonly IBrush StartTextBrush      = Brushes.White;
+    private static readonly IBrush StartTextBrushLight  = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E));
     private static readonly IBrush LinkBrush          = new SolidColorBrush(Color.FromRgb(0x7F, 0x8C, 0x8D));
     private static readonly IBrush LinkSelBrush       = Brushes.OrangeRed;
     private static readonly IBrush PendingLinkBrush   = new SolidColorBrush(Color.FromRgb(0x2E, 0xCC, 0x71));
@@ -64,6 +67,14 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush GhostNodeBorderBrush = new SolidColorBrush(Color.FromRgb(0x77, 0x88, 0x99));
     private static readonly IBrush GhostNodeSelBrush  = Brushes.DodgerBlue;
     private static readonly DashStyle GhostNodeDash   = new DashStyle([6, 4], 0);
+
+    // Scripted-parameter syntax-highlight token colours
+    private static readonly IBrush ScriptVarKnownBrush   = new SolidColorBrush(Color.FromRgb(0x44, 0xDD, 0x88)); // known variable → green
+    private static readonly IBrush ScriptVarUnknownBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x44, 0x44)); // unrecognised identifier → red
+    private static readonly IBrush ScriptOperatorBrush   = new SolidColorBrush(Color.FromRgb(0xAA, 0xBB, 0xCC)); // operators / punctuation → steel-blue
+    private static readonly IBrush ScriptNumberBrush     = new SolidColorBrush(Color.FromRgb(0xB8, 0xD7, 0xFF)); // numeric literals → light blue
+    private static readonly IBrush ScriptStringBrush     = new SolidColorBrush(Color.FromRgb(0xFF, 0xB8, 0x60)); // string literals → orange
+    private static readonly IBrush ScriptKeywordBrush    = new SolidColorBrush(Color.FromRgb(0xFF, 0xE0, 0x82)); // true / false → gold
 
     // Parameter value row
     private static readonly IBrush ParamValueTextBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xE0, 0x82));
@@ -100,9 +111,14 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush SelectionRectFill = new SolidColorBrush(Color.FromArgb(0x2E, 0x44, 0x88, 0xFF));
     private static readonly DashStyle SelectionRectDash = new DashStyle([5, 4], 0);
     // Graph-paper background grid
-    private static readonly Pen GridPen = new Pen(new SolidColorBrush(Color.FromArgb(0x38, 0x55, 0x77, 0xAA)), 0.5);
+    private static readonly Pen GridPen      = new Pen(new SolidColorBrush(Color.FromArgb(0x38, 0x55, 0x77, 0xAA)), 0.5);
+    private static readonly Pen GridPenLight = new Pen(new SolidColorBrush(Color.FromArgb(0x60, 0x88, 0xAA, 0xCC)), 0.5);
     /// <summary>1 cm expressed in Avalonia logical pixels (96 DPI basis).</summary>
     private const double GridSpacingDip = 96.0 / 2.54;
+    // Drop-shadow layers (three passes, loosest → tightest, to simulate a soft blur)
+    private static readonly IBrush ShadowBrush1 = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
+    private static readonly IBrush ShadowBrush2 = new SolidColorBrush(Color.FromArgb(0x22, 0, 0, 0));
+    private static readonly IBrush ShadowBrush3 = new SolidColorBrush(Color.FromArgb(0x30, 0, 0, 0));
 
     // ── Drawing constants ─────────────────────────────────────────────────
     private const double NodeCornerRadius    = 4.0;
@@ -156,6 +172,51 @@ public sealed class ModelSystemCanvas : Control
     private NodeViewModel? _editingParamNode;
     /// <summary>Screen position and width of the inline editor overlay (set in <see cref="BeginParamEdit"/>).</summary>
     private double _editingParamEditorX, _editingParamEditorY, _editingParamEditorW;
+    /// <summary>
+    /// Transparent, non-interactive overlay that draws syntax-highlighted tokens
+    /// on top of the scripted-parameter TextBox. Added to VisualChildren after
+    /// <see cref="_inlineEditor"/> so it renders last (on top).
+    /// </summary>
+    private readonly ScriptSyntaxOverlay _scriptOverlay;
+    /// <summary>
+    /// Syntax-highlighted tokens for the scripted-parameter editor.
+    /// Each entry is a (text segment, brush) pair; painted left-to-right inside the TextBox region.
+    /// Empty when not editing a ScriptedParameter.
+    /// </summary>
+    private (string text, IBrush brush)[] _scriptTokens = Array.Empty<(string, IBrush)>();
+
+    /// <summary><c>true</c> while <see cref="CommitParamEdit"/> is executing, used to suppress re-entrant LostFocus commits.</summary>
+    private bool _commitParamEditInProgress;
+
+    // ── Scripted-parameter variable autocomplete dropdown ─────────────────
+    /// <summary>Overlay border that contains the variable-name suggestion list.</summary>
+    private readonly Border     _varDropdownBorder;
+    /// <summary>Stack of <see cref="TextBlock"/> rows inside the dropdown.</summary>
+    private readonly StackPanel _varDropdownStack;
+    /// <summary><c>true</c> while the variable autocomplete dropdown is open.</summary>
+    private bool _varDropdownVisible;
+    /// <summary>Character offset in <see cref="TextBox.Text"/> where the current token starts.</summary>
+    private int  _varTokenStart;
+    /// <summary>Index of the currently highlighted row in the dropdown.</summary>
+    private int  _varSelectedIndex;
+    /// <summary>Maximum number of suggestions shown at once.</summary>
+    private const int MaxVarDropdownItems = 8;
+
+    // ── Inline comment editor ─────────────────────────────────────────────
+    /// <summary>Overlay multi-line TextBox used for in-canvas comment block editing.</summary>
+    private readonly TextBox _commentEditor;
+    /// <summary>The comment block currently being edited, or <c>null</c> when idle.</summary>
+    private CommentBlockViewModel? _editingCommentBlock;
+    /// <summary>Model-space position and size of the comment editor overlay.</summary>
+    private double _editingCommentEditorX, _editingCommentEditorY, _editingCommentEditorW, _editingCommentEditorH;
+
+    // ── Inline name editor ───────────────────────────────────────────────────
+    /// <summary>Overlay single-line TextBox used for renaming nodes and starts.</summary>
+    private readonly TextBox _nameEditor;
+    /// <summary>The element currently being renamed, or <c>null</c> when idle.</summary>
+    private ICanvasElement? _editingNameElement;
+    /// <summary>Model-space position and size of the name editor overlay.</summary>
+    private double _nameEditorX, _nameEditorY, _nameEditorW, _nameEditorH;
 
     // ── Inlined BasicParameter caches (rebuilt by BuildHookAnchorCache) ───
     /// <summary>
@@ -193,11 +254,71 @@ public sealed class ModelSystemCanvas : Control
             VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
             IsVisible         = false,
         };
-        _inlineEditor.KeyDown   += OnInlineEditorKeyDown;
-        _inlineEditor.LostFocus += OnInlineEditorLostFocus;
+        _inlineEditor.KeyDown    += OnInlineEditorKeyDown;
+        _inlineEditor.LostFocus  += OnInlineEditorLostFocus;
+        _inlineEditor.TextChanged += OnInlineEditorTextChanged;
 
         LogicalChildren.Add(_inlineEditor);
         VisualChildren.Add(_inlineEditor);
+
+        // Syntax-highlight overlay – must be added AFTER _inlineEditor so it
+        // renders on top of the TextBox, not underneath it.
+        _scriptOverlay = new ScriptSyntaxOverlay();
+        LogicalChildren.Add(_scriptOverlay);
+        VisualChildren.Add(_scriptOverlay);
+        _varDropdownStack  = new StackPanel { Orientation = Orientation.Vertical };
+        _varDropdownBorder = new Border
+        {
+            Child           = _varDropdownStack,
+            Background      = new SolidColorBrush(Color.FromRgb(0x1E, 0x2E, 0x3E)),
+            BorderBrush     = new SolidColorBrush(Color.FromRgb(0x44, 0x88, 0xCC)),
+            BorderThickness = new Thickness(1),
+            CornerRadius    = new CornerRadius(3),
+            IsVisible       = false,
+        };
+        LogicalChildren.Add(_varDropdownBorder);
+        VisualChildren.Add(_varDropdownBorder);
+
+        // Build the multi-line comment editor; Enter inserts a newline, Ctrl+Enter commits.
+        _commentEditor = new TextBox
+        {
+            FontFamily      = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize        = CommentFontSize,
+            Foreground      = CommentTextBrush,
+            Background      = new SolidColorBrush(Color.FromArgb(0xF2, 0xFF, 0xF0, 0x96)),
+            BorderThickness = new Thickness(1),
+            BorderBrush     = CommentBorderBrush,
+            Padding         = new Thickness(6, 4, 6, 4),
+            AcceptsReturn   = true,
+            TextWrapping    = TextWrapping.Wrap,
+            IsVisible       = false,
+        };
+        _commentEditor.LostFocus += OnCommentEditorLostFocus;
+        // Use the tunneling phase so Ctrl+Enter is intercepted before AcceptsReturn
+        // consumes the Enter keystroke and marks the event Handled.
+        _commentEditor.AddHandler(InputElement.KeyDownEvent, OnCommentEditorKeyDown,
+                                  Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        LogicalChildren.Add(_commentEditor);
+        VisualChildren.Add(_commentEditor);
+
+        // Build the single-line name editor; Enter commits, Escape cancels.
+        _nameEditor = new TextBox
+        {
+            FontFamily               = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize                 = NodeFontSize,
+            Foreground               = NodeTextBrush,
+            Background               = new SolidColorBrush(Color.FromRgb(0x1A, 0x2C, 0x40)),
+            BorderThickness          = new Thickness(1),
+            BorderBrush              = NodeSelBrush,
+            Padding                  = new Thickness(4, 0, 4, 0),
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            IsVisible                = false,
+        };
+        _nameEditor.AddHandler(InputElement.KeyDownEvent, OnNameEditorKeyDown,
+                               Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        _nameEditor.LostFocus += OnNameEditorLostFocus;
+        LogicalChildren.Add(_nameEditor);
+        VisualChildren.Add(_nameEditor);
 
         // ── Zoom control (pinned to viewport bottom-right) ────────────────
         _zoomTextBox = new TextBox
@@ -431,6 +552,25 @@ public sealed class ModelSystemCanvas : Control
                                                                      : NodeRenderWidth(_editingParamNode) * _scale,
                                            HookRowHeight * _scale));
         }
+        // Measure the syntax-highlight overlay (same footprint as the TextBox).
+        if (_editingParamNode is { IsScriptedParameter: true })
+            _scriptOverlay.Measure(new Size(_editingParamEditorW * _scale, HookRowHeight * _scale));
+        // Measure the variable autocomplete dropdown.
+        if (_varDropdownVisible && _editingParamNode is not null)
+        {
+            double ddW = Math.Max(180.0, _editingParamEditorW) * _scale;
+            _varDropdownBorder.Measure(new Size(ddW, 200));
+        }
+        // Measure the comment editor.
+        if (_editingCommentBlock is not null)
+        {
+            _commentEditor.Measure(new Size(_editingCommentEditorW * _scale, _editingCommentEditorH * _scale));
+        }
+        // Measure the name editor.
+        if (_editingNameElement is not null)
+        {
+            _nameEditor.Measure(new Size(_nameEditorW * _scale, _nameEditorH * _scale));
+        }
         // Measure the zoom bar so ArrangeOverride can use its desired size.
         _zoomBar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         return new Size(maxX * _scale, maxY * _scale);
@@ -447,6 +587,44 @@ public sealed class ModelSystemCanvas : Control
                 _editingParamEditorY * _scale,
                 _editingParamEditorW * _scale,
                 HookRowHeight * _scale));
+        }
+        // Position the syntax-highlight overlay exactly over the TextBox.
+        if (_editingParamNode is { IsScriptedParameter: true })
+        {
+            _scriptOverlay.FontSize = HookFontSize * _scale;
+            _scriptOverlay.Arrange(new Rect(
+                _editingParamEditorX * _scale,
+                _editingParamEditorY * _scale,
+                _editingParamEditorW * _scale,
+                HookRowHeight * _scale));
+        }
+        // Position the variable autocomplete dropdown just below the inline editor.
+        if (_varDropdownVisible && _editingParamNode is not null)
+        {
+            double ddW = Math.Max(180.0, _editingParamEditorW) * _scale;
+            double ddX = _editingParamEditorX * _scale;
+            double ddY = (_editingParamEditorY + HookRowHeight) * _scale;
+            _varDropdownBorder.Arrange(new Rect(ddX, ddY, ddW, _varDropdownBorder.DesiredSize.Height));
+        }
+        // Position the comment editor over the comment block being edited.
+        if (_editingCommentBlock is not null)
+        {
+            _commentEditor.FontSize = CommentFontSize * _scale;
+            _commentEditor.Arrange(new Rect(
+                _editingCommentEditorX * _scale,
+                _editingCommentEditorY * _scale,
+                _editingCommentEditorW * _scale,
+                _editingCommentEditorH * _scale));
+        }
+        // Position the name editor over the element header being renamed.
+        if (_editingNameElement is not null)
+        {
+            _nameEditor.FontSize = NodeFontSize * _scale;
+            _nameEditor.Arrange(new Rect(
+                _nameEditorX * _scale,
+                _nameEditorY * _scale,
+                _nameEditorW * _scale,
+                _nameEditorH * _scale));
         }
         // Pin the zoom control to the bottom-right of the visible viewport.
         var sv = GetScrollViewer();
@@ -468,8 +646,9 @@ public sealed class ModelSystemCanvas : Control
     {
         BuildHookAnchorCache();
         var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height);
-        ctx.DrawRectangle(CanvasBackground, null, bounds);
-        DrawGridBackground(ctx, bounds);
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        ctx.DrawRectangle(isLight ? CanvasBackgroundLight : CanvasBackground, null, bounds);
+        DrawGridBackground(ctx, bounds, isLight);
 
         if (_vm is null) return;
 
@@ -490,7 +669,7 @@ public sealed class ModelSystemCanvas : Control
     /// logical pixels and shift with the <see cref="ScrollViewer"/> offset so they remain anchored
     /// to model space as the user pans.
     /// </summary>
-    private void DrawGridBackground(DrawingContext ctx, Rect bounds)
+    private void DrawGridBackground(DrawingContext ctx, Rect bounds, bool isLight = false)
     {
         var sv = GetScrollViewer();
         double scrollX = sv?.Offset.X ?? 0;
@@ -503,13 +682,15 @@ public sealed class ModelSystemCanvas : Control
         double phaseX = scrollX % step;
         double phaseY = scrollY % step;
 
+        var pen = isLight ? GridPenLight : GridPen;
+
         // Vertical lines
         for (double x = -phaseX; x < bounds.Width; x += step)
-            ctx.DrawLine(GridPen, new Point(x, 0), new Point(x, bounds.Height));
+            ctx.DrawLine(pen, new Point(x, 0), new Point(x, bounds.Height));
 
         // Horizontal lines
         for (double y = -phaseY; y < bounds.Height; y += step)
-            ctx.DrawLine(GridPen, new Point(0, y), new Point(bounds.Width, y));
+            ctx.DrawLine(pen, new Point(0, y), new Point(bounds.Width, y));
     }
 
     private void RenderCommentBlocks(DrawingContext ctx)
@@ -520,6 +701,7 @@ public sealed class ModelSystemCanvas : Control
             var fill   = comment.IsSelected ? CommentSelFill   : CommentFill;
             var border = new Pen(comment.IsSelected ? CommentSelBorder : CommentBorderBrush, NodeBorderThickness, dashStyle: DashStyle.Dash);
 
+            DrawRectShadow(ctx, rect, NodeCornerRadius);
             ctx.DrawRectangle(fill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // Render wrapped comment text inside the block with clipping
@@ -1096,6 +1278,7 @@ public sealed class ModelSystemCanvas : Control
             var border = new Pen(node.IsSelected ? NodeSelBrush : NodeBorderBrush, NodeBorderThickness);
 
             // Node background + border
+            DrawRectShadow(ctx, rect, NodeCornerRadius);
             ctx.DrawRectangle(NodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // ── Header: node name centred in the header band ──────────────
@@ -1175,12 +1358,17 @@ public sealed class ModelSystemCanvas : Control
                     new Rect(node.X + 1, node.Y + NodeHeaderHeight, rw - 2, HookRowHeight));
 
                 const double textPad = 6.0;
-                var display  = string.IsNullOrEmpty(paramValue) ? "(no value)" : paramValue;
-                var paramFt  = MakeText(display, HookFontSize, ParamValueTextBrush);
-                double maxW  = rw - textPad * 2;
-                double paramTy = rowMidY - paramFt.Height / 2.0;
-                using (ctx.PushClip(new Rect(node.X + textPad, paramTy, Math.Max(0, maxW), paramFt.Height + 1)))
-                    ctx.DrawText(paramFt, new Point(node.X + textPad, paramTy));
+                // Skip drawing the text while this exact node is being edited —
+                // the inline TextBox (and syntax overlay) already cover that row.
+                if (node != _editingParamNode)
+                {
+                    var display  = string.IsNullOrEmpty(paramValue) ? "(no value)" : paramValue;
+                    var paramFt  = MakeText(display, HookFontSize, ParamValueTextBrush);
+                    double maxW  = rw - textPad * 2;
+                    double paramTy = rowMidY - paramFt.Height / 2.0;
+                    using (ctx.PushClip(new Rect(node.X + textPad, paramTy, Math.Max(0, maxW), paramFt.Height + 1)))
+                        ctx.DrawText(paramFt, new Point(node.X + textPad, paramTy));
+                }
 
                 rowOffset = 1;
 
@@ -1274,6 +1462,7 @@ public sealed class ModelSystemCanvas : Control
             var borderBrush = ghost.IsSelected ? GhostNodeSelBrush : GhostNodeBorderBrush;
             var border      = new Pen(borderBrush, NodeBorderThickness, dashStyle: GhostNodeDash);
 
+            DrawRectShadow(ctx, rect, NodeCornerRadius);
             ctx.DrawRectangle(GhostNodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // Ghost icon prefix ("⊙ ") to distinguish from real nodes at a glance.
@@ -1311,14 +1500,32 @@ public sealed class ModelSystemCanvas : Control
             var r      = StartViewModel.Radius;
             var border = new Pen(start.IsSelected ? NodeSelBrush : NodeBorderBrush, NodeBorderThickness);
 
+            DrawEllipseShadow(ctx, center, r, r);
             ctx.DrawEllipse(fill, border, center, r, r);
 
             // Label below the circle
-            var ft = MakeText(start.Name, StartFontSize, StartTextBrush);
+            bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+            var ft = MakeText(start.Name, StartFontSize, isLight ? StartTextBrushLight : StartTextBrush);
             var lx = start.X + (start.Diameter - ft.Width) / 2;
             var ly = start.Y + start.Diameter + 3;
             ctx.DrawText(ft, new Point(lx, ly));
         }
+    }
+
+    /// <summary>Draws a three-layer simulated drop shadow for a rounded rectangle.</summary>
+    private static void DrawRectShadow(DrawingContext ctx, Rect rect, double cornerRadius)
+    {
+        ctx.DrawRectangle(ShadowBrush1, null, rect.Translate(new Vector(6, 6)), cornerRadius, cornerRadius);
+        ctx.DrawRectangle(ShadowBrush2, null, rect.Translate(new Vector(4, 4)), cornerRadius, cornerRadius);
+        ctx.DrawRectangle(ShadowBrush3, null, rect.Translate(new Vector(2, 2)), cornerRadius, cornerRadius);
+    }
+
+    /// <summary>Draws a three-layer simulated drop shadow for an ellipse.</summary>
+    private static void DrawEllipseShadow(DrawingContext ctx, Point center, double rx, double ry)
+    {
+        ctx.DrawEllipse(ShadowBrush1, null, center + new Vector(6, 6), rx, ry);
+        ctx.DrawEllipse(ShadowBrush2, null, center + new Vector(4, 4), rx, ry);
+        ctx.DrawEllipse(ShadowBrush3, null, center + new Vector(2, 2), rx, ry);
     }
 
     private static FormattedText MakeText(string text, double size, IBrush foreground) =>
@@ -1359,6 +1566,20 @@ public sealed class ModelSystemCanvas : Control
         {
             ClearMultiSelection();
             e.Handled = true;
+        }
+        else if (e.Key == Key.F2 && _vm?.SelectedElement is not null)
+        {
+            var sel = _vm.SelectedElement;
+            if (sel is NodeViewModel or StartViewModel)
+            {
+                BeginNameEdit(sel);
+                e.Handled = true;
+            }
+            else if (sel is CommentBlockViewModel cmt)
+            {
+                BeginCommentEdit(cmt);
+                e.Handled = true;
+            }
         }
     }
 
@@ -1468,7 +1689,9 @@ public sealed class ModelSystemCanvas : Control
             var resizeHit = HitTestResizeHandle(mpos);
             if (resizeHit is not null)
             {
-                if (_editingParamNode is not null) CommitParamEdit();
+                if (_editingParamNode    is not null) CommitParamEdit();
+                if (_editingCommentBlock is not null) CommitCommentEdit();
+                if (_editingNameElement  is not null) CommitNameEdit();
                 ClearMultiSelection();
                 _resizing       = resizeHit;
                 _resizeStartPos = mpos;
@@ -1488,7 +1711,9 @@ public sealed class ModelSystemCanvas : Control
             var minimizeHit = HitTestMinimizeButton(mpos);
             if (minimizeHit is not null)
             {
-                if (_editingParamNode is not null) CommitParamEdit();
+                if (_editingParamNode    is not null) CommitParamEdit();
+                if (_editingCommentBlock is not null) CommitCommentEdit();
+                if (_editingNameElement  is not null) CommitNameEdit();
                 minimizeHit.InlineBasicParameter();
                 InvalidateAndMeasure();
                 e.Handled = true;
@@ -1519,7 +1744,14 @@ public sealed class ModelSystemCanvas : Control
                 return;
             }
             // Clicking elsewhere commits any open edit.
-            if (_editingParamNode is not null) CommitParamEdit();
+            // Guard: if the click was already handled by a child (e.g. the variable
+            // autocomplete dropdown's TextBlock items), do not commit the edit.
+            if (!e.Handled)
+            {
+                if (_editingParamNode    is not null) CommitParamEdit();
+                if (_editingCommentBlock is not null) CommitCommentEdit();
+                if (_editingNameElement  is not null) CommitNameEdit();
+            }
         }
 
         // ── Hook toggle icon click (left button, any click count) ─────────
@@ -1551,6 +1783,33 @@ public sealed class ModelSystemCanvas : Control
             if (nodeHit is { IsParameterNode: true })
             {
                 _ = _vm.EditParameterNodeAsync(nodeHit);
+                e.Handled = true;
+                return;
+            }
+            // ── Double-click on a regular node: begin inline rename ────────
+            if (nodeHit is not null)
+            {
+                _vm.SelectElementCommand.Execute(nodeHit);
+                BeginNameEdit(nodeHit);
+                e.Handled = true;
+                return;
+            }
+            // ── Double-click on a start: begin inline rename ──────────────
+            var startHit = HitTest(mpos, testComments: false) as StartViewModel;
+            if (startHit is not null)
+            {
+                _vm.SelectElementCommand.Execute(startHit);
+                BeginNameEdit(startHit);
+                e.Handled = true;
+                return;
+            }
+
+            // ── Double-click on a comment block: open the inline comment editor ──
+            var commentHit = HitTest(mpos, testComments: true) as CommentBlockViewModel;
+            if (commentHit is not null)
+            {
+                _vm.SelectElementCommand.Execute(commentHit);
+                BeginCommentEdit(commentHit);
                 e.Handled = true;
                 return;
             }
@@ -1590,7 +1849,9 @@ public sealed class ModelSystemCanvas : Control
         if (isCtrlLeft)
         {
             // Always commit any open inline edit first.
-            if (_editingParamNode is not null) CommitParamEdit();
+            if (_editingParamNode    is not null) CommitParamEdit();
+            if (_editingCommentBlock is not null) CommitCommentEdit();
+            if (_editingNameElement  is not null) CommitNameEdit();
 
             if (hit is NodeViewModel or CommentBlockViewModel or GhostNodeViewModel)
             {
@@ -1702,11 +1963,11 @@ public sealed class ModelSystemCanvas : Control
             var dw = mpos.X - _resizeStartPos.X;
             var dh = mpos.Y - _resizeStartPos.Y;
             if (_resizing is NodeViewModel resizingNode)
-                resizingNode.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
+                resizingNode.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             else if (_resizing is CommentBlockViewModel resizingComment)
-                resizingComment.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
+                resizingComment.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             else if (_resizing is GhostNodeViewModel resizingGhost)
-                resizingGhost.ResizeTo(_resizeStartW + dw, _resizeStartH + dh);
+                resizingGhost.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             InvalidateAndMeasure();
             e.Handled = true;
             return;
@@ -1751,7 +2012,7 @@ public sealed class ModelSystemCanvas : Control
         // ── Element drag (single or group) ────────────────────────────────
         if (_multiSelection.Count > 1 && _multiSelection.Contains(_dragging))
         {
-            // Group drag: move every element in the multi-selection by the per-frame delta.
+            // Group drag: preview every element in the multi-selection by the per-frame delta.
             var dx = mpos.X - _groupDragLastPos.X;
             var dy = mpos.Y - _groupDragLastPos.Y;
             _groupDragLastPos = mpos;
@@ -1759,21 +2020,21 @@ public sealed class ModelSystemCanvas : Control
             {
                 double nx = Math.Max(0, el.X + dx);
                 double ny = Math.Max(0, el.Y + dy);
-                if      (el is NodeViewModel       gnvm) gnvm.MoveTo(nx, ny);
-                else if (el is StartViewModel       gsvm) gsvm.MoveTo(nx, ny);
-                else if (el is CommentBlockViewModel gcvm) gcvm.MoveTo(nx, ny);
-                else if (el is GhostNodeViewModel   ggvm) ggvm.MoveTo(nx, ny);
+                if      (el is NodeViewModel       gnvm) gnvm.MoveToPreview(nx, ny);
+                else if (el is StartViewModel       gsvm) gsvm.MoveToPreview(nx, ny);
+                else if (el is CommentBlockViewModel gcvm) gcvm.MoveToPreview(nx, ny);
+                else if (el is GhostNodeViewModel   ggvm) ggvm.MoveToPreview(nx, ny);
             }
         }
         else
         {
-            // Single-element drag.
+            // Single-element drag: preview only, no session command issued yet.
             var newX = Math.Max(0, mpos.X - _dragOffset.X);
             var newY = Math.Max(0, mpos.Y - _dragOffset.Y);
-            if (_dragging is NodeViewModel         nvm) nvm.MoveTo(newX, newY);
-            if (_dragging is StartViewModel         svm) svm.MoveTo(newX, newY);
-            if (_dragging is CommentBlockViewModel  cvm) cvm.MoveTo(newX, newY);
-            if (_dragging is GhostNodeViewModel    gvm) gvm.MoveTo(newX, newY);
+            if (_dragging is NodeViewModel         nvm) nvm.MoveToPreview(newX, newY);
+            if (_dragging is StartViewModel         svm) svm.MoveToPreview(newX, newY);
+            if (_dragging is CommentBlockViewModel  cvm) cvm.MoveToPreview(newX, newY);
+            if (_dragging is GhostNodeViewModel    gvm) gvm.MoveToPreview(newX, newY);
         }
 
         InvalidateAndMeasure();
@@ -1828,6 +2089,13 @@ public sealed class ModelSystemCanvas : Control
         // ── Left-button release: end resize drag ─────────────────────────
         if (_resizing is not null)
         {
+            // Commit the final size to the session (single undo entry).
+            if (_resizing is NodeViewModel committingNode)
+                committingNode.CommitResize();
+            else if (_resizing is CommentBlockViewModel committingComment)
+                committingComment.CommitResize();
+            else if (_resizing is GhostNodeViewModel committingGhost)
+                committingGhost.CommitResize();
             _resizing = null;
             e.Pointer.Capture(null);
             Cursor = Cursor.Default;
@@ -1908,6 +2176,26 @@ public sealed class ModelSystemCanvas : Control
 
         // ── Left-button release: end element drag ─────────────────────────
         if (_dragging is null) return;
+
+        // Commit the preview position as a single session command (one undo entry).
+        if (_multiSelection.Count > 1 && _multiSelection.Contains(_dragging))
+        {
+            foreach (var el in _multiSelection)
+            {
+                if      (el is NodeViewModel       gnvm) gnvm.CommitMove();
+                else if (el is StartViewModel       gsvm) gsvm.CommitMove();
+                else if (el is CommentBlockViewModel gcvm) gcvm.CommitMove();
+                else if (el is GhostNodeViewModel   ggvm) ggvm.CommitMove();
+            }
+        }
+        else
+        {
+            if      (_dragging is NodeViewModel        nvm) nvm.CommitMove();
+            else if (_dragging is StartViewModel        svm) svm.CommitMove();
+            else if (_dragging is CommentBlockViewModel cvm) cvm.CommitMove();
+            else if (_dragging is GhostNodeViewModel   gvm) gvm.CommitMove();
+        }
+
         _dragging = null;
         e.Pointer.Capture(null);
         InvalidateAndMeasure();
@@ -2137,11 +2425,34 @@ public sealed class ModelSystemCanvas : Control
     /// <param name="rowW">Override width of the editor overlay (use -1 to auto-derive).</param>
     private void BeginParamEdit(NodeViewModel node, double rowX = -1, double rowY = -1, double rowW = -1)
     {
+        HideVarDropdown();
         _editingParamNode = node;
         _editingParamEditorX = rowX >= 0 ? rowX : node.X;
         _editingParamEditorY = rowY >= 0 ? rowY : node.Y + NodeHeaderHeight;
         _editingParamEditorW = rowW >= 0 ? rowW : NodeRenderWidth(node);
         _inlineEditor.Text  = node.ParameterValueRepresentation;
+
+        // For scripted parameters the text is rendered by Render() with syntax colours;
+        // make the TextBox itself transparent so the coloured tokens show through.
+        if (node.IsScriptedParameter)
+        {
+            _inlineEditor.Foreground = Brushes.Transparent;
+            bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+            _inlineEditor.CaretBrush = isLight ? Brushes.Black : Brushes.White;
+            _scriptTokens = TokenizeScript(node.ParameterValueRepresentation);
+            _scriptOverlay.Tokens    = _scriptTokens;
+            _scriptOverlay.IsVisible = true;
+        }
+        else
+        {
+            _inlineEditor.Foreground = ParamValueTextBrush;
+            _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
+            _inlineEditor.CaretBrush = null; // default (uses Foreground)
+            _scriptTokens            = Array.Empty<(string, IBrush)>();
+            _scriptOverlay.Tokens    = _scriptTokens;
+            _scriptOverlay.IsVisible = false;
+        }
+
         _inlineEditor.IsVisible = true;
         // Re-layout so ArrangeOverride positions the TextBox at the right row.
         InvalidateMeasure();
@@ -2154,31 +2465,109 @@ public sealed class ModelSystemCanvas : Control
     }
 
     /// <summary>Commits the current editor text as the new parameter value.</summary>
+    /// <remarks>
+    /// For ScriptedParameter nodes the value is validated before the editor is closed.
+    /// If the save fails the editor remains open so the user can correct the expression,
+    /// and an error toast is shown instead.
+    /// </remarks>
     private void CommitParamEdit()
     {
-        if (_editingParamNode is null) return;
-        var node  = _editingParamNode;
-        var value = _inlineEditor.Text ?? string.Empty;
-        // Clear first so LostFocus re-entry is guarded.
-        _editingParamNode       = null;
-        _inlineEditor.IsVisible = false;
-        if (!node.SetParameterValue(value, out var error))
-            _vm?.ShowToast(error?.Message ?? "Failed to set parameter value.",
-                           isError: true, durationMs: 5000);
-        InvalidateAndMeasure();
+        if (_commitParamEditInProgress) return;
+        _commitParamEditInProgress = true;
+        try
+        {
+            HideVarDropdown();
+            if (_editingParamNode is null) return;
+            var node  = _editingParamNode;
+            var value = _inlineEditor.Text ?? string.Empty;
+
+            // Attempt to save. For ScriptedParameter this validates the expression first.
+            if (!node.SetParameterValue(value, out var error))
+            {
+                // Save failed – keep the editor open, restore focus, show the error.
+                _vm?.ShowToast(error?.Message ?? "Failed to set parameter value.",
+                               isError: true, durationMs: 5000);
+                Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => _inlineEditor.Focus(),
+                    Avalonia.Threading.DispatcherPriority.Input);
+                return;
+            }
+
+            // Save succeeded – close the editor.
+            _editingParamNode        = null;
+            _inlineEditor.IsVisible  = false;
+            _inlineEditor.Foreground = ParamValueTextBrush;
+            _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
+            _inlineEditor.CaretBrush = null;
+            _scriptTokens            = Array.Empty<(string, IBrush)>();
+            _scriptOverlay.Tokens    = _scriptTokens;
+            _scriptOverlay.IsVisible = false;
+            InvalidateAndMeasure();
+        }
+        finally
+        {
+            _commitParamEditInProgress = false;
+        }
     }
 
     /// <summary>Discards the current edit without saving.</summary>
     private void CancelParamEdit()
     {
-        _editingParamNode       = null;
-        _inlineEditor.IsVisible = false;
+        HideVarDropdown();
+        _editingParamNode        = null;
+        _inlineEditor.IsVisible  = false;
+        _inlineEditor.Foreground = ParamValueTextBrush;
+        _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
+        _inlineEditor.CaretBrush = null;
+        _scriptTokens            = Array.Empty<(string, IBrush)>();
+        _scriptOverlay.Tokens    = _scriptTokens;
+        _scriptOverlay.IsVisible = false;
         InvalidateAndMeasure();
         Focus();
     }
 
     private void OnInlineEditorKeyDown(object? sender, KeyEventArgs e)
     {
+        // ── Variable autocomplete dropdown navigation ─────────────────────
+        if (_varDropdownVisible)
+        {
+            int count = _varDropdownStack.Children.Count;
+            if (e.Key == Key.Down)
+            {
+                _varSelectedIndex = Math.Min(_varSelectedIndex + 1, count - 1);
+                UpdateDropdownHighlight();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.Up)
+            {
+                _varSelectedIndex = Math.Max(_varSelectedIndex - 1, 0);
+                UpdateDropdownHighlight();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.Tab)
+            {
+                SelectCurrentDropdownItem();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key is Key.Return or Key.Enter)
+            {
+                // Complete with the highlighted item; do NOT commit the whole edit.
+                SelectCurrentDropdownItem();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.Escape)
+            {
+                HideVarDropdown();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // ── Standard inline-editor keys ───────────────────────────────────
         if (e.Key is Key.Return or Key.Enter)
         {
             CommitParamEdit();
@@ -2192,11 +2581,476 @@ public sealed class ModelSystemCanvas : Control
         }
     }
 
+    // ── Variable autocomplete helpers ─────────────────────────────────────
+
+    // ── Script syntax tokenizer ───────────────────────────────────────────
+
+    /// <summary>
+    /// Breaks <paramref name="text"/> into coloured segments for display in the
+    /// scripted-parameter inline editor.
+    /// <list type="bullet">
+    ///   <item>Known model-system variables → <see cref="ScriptVarKnownBrush"/> (green)</item>
+    ///   <item>Unrecognised identifiers   → <see cref="ScriptVarUnknownBrush"/> (red)</item>
+    ///   <item>Numeric literals            → <see cref="ScriptNumberBrush"/> (light-blue)</item>
+    ///   <item>String literals             → <see cref="ScriptStringBrush"/> (orange)</item>
+    ///   <item><c>true</c> / <c>false</c>  → <see cref="ScriptKeywordBrush"/> (gold)</item>
+    ///   <item>Operators &amp; punctuation → <see cref="ScriptOperatorBrush"/> (steel-blue)</item>
+    ///   <item>Whitespace                  → <see cref="ParamValueTextBrush"/> (neutral)</item>
+    /// </list>
+    /// </summary>
+    private (string text, IBrush brush)[] TokenizeScript(string text)
+    {
+        if (_vm is null || string.IsNullOrEmpty(text))
+            return Array.Empty<(string, IBrush)>();
+
+        var knownNames = new HashSet<string>(
+            _vm.ModelSystemVariables.Select(v => v.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        var tokens = new List<(string, IBrush)>();
+        int i = 0;
+        while (i < text.Length)
+        {
+            char c = text[i];
+
+            // ── String literal ─────────────────────────────────────────────
+            if (c == '"')
+            {
+                int start = i++;
+                while (i < text.Length && text[i] != '"') i++;
+                if (i < text.Length) i++; // consume closing quote
+                tokens.Add((text[start..i], ScriptStringBrush));
+                continue;
+            }
+
+            // ── Whitespace ────────────────────────────────────────────────
+            if (char.IsWhiteSpace(c))
+            {
+                int start = i;
+                while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
+                tokens.Add((text[start..i], ParamValueTextBrush));
+                continue;
+            }
+
+            // ── Identifier / keyword ───────────────────────────────────────
+            if (char.IsLetter(c) || c == '_')
+            {
+                int start = i;
+                while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_')) i++;
+                var word = text[start..i];
+                IBrush brush = word switch
+                {
+                    "true" or "false" => ScriptKeywordBrush,
+                    _                 => knownNames.Contains(word)
+                                         ? ScriptVarKnownBrush
+                                         : ScriptVarUnknownBrush,
+                };
+                tokens.Add((word, brush));
+                continue;
+            }
+
+            // ── Numeric literal ──────────────────────────────────────────
+            if (char.IsDigit(c))
+            {
+                int start = i;
+                while (i < text.Length && (char.IsDigit(text[i]) || text[i] == '.')) i++;
+                tokens.Add((text[start..i], ScriptNumberBrush));
+                continue;
+            }
+
+            // ── Operator / punctuation (single or double char) ────────────────
+            {
+                int start = i++;
+                // Absorb two-char operators: &&, ||, ==, !=, >=, <=
+                if (i < text.Length && (
+                    (c == '&' && text[i] == '&') ||
+                    (c == '|' && text[i] == '|') ||
+                    (c == '=' && text[i] == '=') ||
+                    (c == '!' && text[i] == '=') ||
+                    (c == '>' && text[i] == '=') ||
+                    (c == '<' && text[i] == '=')))
+                {
+                    i++;
+                }
+                tokens.Add((text[start..i], ScriptOperatorBrush));
+            }
+        }
+        return tokens.ToArray();
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> for characters that terminate a variable token
+    /// in a scripted-parameter expression.
+    /// </summary>
+    private static bool IsExpressionSpecialChar(char c) =>
+        c is '+' or '-' or '*' or '/' or '^' or '?' or ':'
+           or '&' or '|' or '<' or '>' or '=' or '!' or '(' or ')' or '"';
+
+    /// <summary>
+    /// Called whenever the inline-editor text changes.  When editing a
+    /// <see cref="NodeViewModel.IsScriptedParameter"/> node, extracts the
+    /// token at the caret and populates (or hides) the autocomplete dropdown.
+    /// </summary>
+    private void OnInlineEditorTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        // ── Syntax-highlight tokens for scripted params ─────────────────────────
+        if (_editingParamNode is { IsScriptedParameter: true })
+        {
+            _scriptTokens = TokenizeScript(_inlineEditor.Text ?? string.Empty);
+            _scriptOverlay.Tokens = _scriptTokens;
+            _scriptOverlay.InvalidateVisual();
+        }
+        else
+        {
+            _scriptTokens = Array.Empty<(string, IBrush)>();
+            _scriptOverlay.Tokens = _scriptTokens;
+        }
+
+        // ── Variable autocomplete dropdown ──────────────────────────────────
+        if (_editingParamNode is null || !_editingParamNode.IsScriptedParameter || _vm is null)
+        {
+            HideVarDropdown();
+            return;
+        }
+
+        var text  = _inlineEditor.Text ?? string.Empty;
+        var caret = Math.Clamp(_inlineEditor.CaretIndex, 0, text.Length);
+
+        // Walk backwards from the caret to find the start of the current token.
+        int tokenStart = caret;
+        while (tokenStart > 0)
+        {
+            char ch = text[tokenStart - 1];
+            if (char.IsWhiteSpace(ch) || IsExpressionSpecialChar(ch))
+                break;
+            tokenStart--;
+        }
+
+        var token = text[tokenStart..caret];
+        _varTokenStart = tokenStart;
+
+        if (token.Length == 0)
+        {
+            HideVarDropdown();
+            return;
+        }
+
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+
+        var matches = _vm.ModelSystemVariables
+            .Where(v => v.Name.Contains(token, StringComparison.OrdinalIgnoreCase))
+            .Select(v => v.Name)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxVarDropdownItems)
+            .ToList();
+
+        if (matches.Count == 0)
+        {
+            HideVarDropdown();
+            return;
+        }
+
+        var normalBg  = isLight
+            ? new SolidColorBrush(Color.FromRgb(0xF8, 0xF9, 0xFF))
+            : new SolidColorBrush(Color.FromRgb(0x1E, 0x2E, 0x3E));
+        IBrush normalFg = isLight ? Brushes.Black  : Brushes.White;
+
+        _varDropdownBorder.Background = normalBg;
+        _varDropdownBorder.BorderBrush = isLight
+            ? new SolidColorBrush(Color.FromRgb(0x88, 0xAA, 0xCC))
+            : new SolidColorBrush(Color.FromRgb(0x44, 0x88, 0xCC));
+
+        _varDropdownStack.Children.Clear();
+        foreach (var name in matches)
+        {
+            var captured = name;
+            var tb = new TextBlock
+            {
+                Text       = captured,
+                Padding    = new Thickness(8, 3, 8, 3),
+                Foreground = normalFg,
+                Background = normalBg,
+                FontSize   = HookFontSize,
+                FontFamily = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            };
+            tb.PointerEntered += (_, _) =>
+            {
+                tb.Background = new SolidColorBrush(Color.FromRgb(0x20, 0x60, 0xA0));
+                tb.Foreground = Brushes.White;
+            };
+            tb.PointerExited += (_, _) =>
+            {
+                // UpdateDropdownHighlight will repaint based on _varSelectedIndex.
+                UpdateDropdownHighlight();
+            };
+            tb.PointerPressed += (_, pe) =>
+            {
+                CompleteVariable(captured);
+                pe.Handled = true;
+            };
+            _varDropdownStack.Children.Add(tb);
+        }
+
+        _varSelectedIndex = 0;
+        UpdateDropdownHighlight();
+        _varDropdownBorder.IsVisible = true;
+        _varDropdownVisible = true;
+        InvalidateMeasure();
+    }
+
+    /// <summary>Repaints the selection highlight so only the row at <see cref="_varSelectedIndex"/> is highlighted.</summary>
+    private void UpdateDropdownHighlight()
+    {
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        var normalBg  = isLight
+            ? new SolidColorBrush(Color.FromRgb(0xF8, 0xF9, 0xFF))
+            : new SolidColorBrush(Color.FromRgb(0x1E, 0x2E, 0x3E));
+        var selBg = new SolidColorBrush(Color.FromRgb(0x20, 0x60, 0xA0));
+        IBrush normalFg = isLight ? Brushes.Black  : Brushes.White;
+
+        for (int i = 0; i < _varDropdownStack.Children.Count; i++)
+        {
+            if (_varDropdownStack.Children[i] is not TextBlock tb) continue;
+            bool sel = i == _varSelectedIndex;
+            tb.Background = sel ? selBg  : normalBg;
+            tb.Foreground = sel ? Brushes.White : normalFg;
+        }
+    }
+
+    /// <summary>Completes the current token with the currently highlighted dropdown item.</summary>
+    private void SelectCurrentDropdownItem()
+    {
+        int count = _varDropdownStack.Children.Count;
+        if (_varSelectedIndex < 0 || _varSelectedIndex >= count) return;
+        if (_varDropdownStack.Children[_varSelectedIndex] is TextBlock tb && tb.Text is { } name)
+            CompleteVariable(name);
+    }
+
+    /// <summary>
+    /// Replaces the token starting at <see cref="_varTokenStart"/> up to the current
+    /// caret position with <paramref name="name"/>, then closes the dropdown.
+    /// The editor remains open so the user can continue typing.
+    /// </summary>
+    private void CompleteVariable(string name)
+    {
+        var text  = _inlineEditor.Text ?? string.Empty;
+        var caret = Math.Clamp(_inlineEditor.CaretIndex, 0, text.Length);
+        _inlineEditor.Text       = text[.._varTokenStart] + name + text[caret..];
+        _inlineEditor.CaretIndex = _varTokenStart + name.Length;
+        HideVarDropdown();
+        // Clicking a TextBlock item shifted focus to the canvas; return it to the
+        // inline editor so the user can keep typing without clicking again.
+        Avalonia.Threading.Dispatcher.UIThread.Post(
+            () => _inlineEditor.Focus(),
+            Avalonia.Threading.DispatcherPriority.Input);
+    }
+
+    /// <summary>Hides and clears the variable autocomplete dropdown.</summary>
+    private void HideVarDropdown()
+    {
+        if (!_varDropdownVisible) return;
+        _varDropdownVisible          = false;
+        _varDropdownBorder.IsVisible = false;
+        _varDropdownStack.Children.Clear();
+        InvalidateMeasure();
+    }
+
     private void OnInlineEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        // When the variable autocomplete dropdown is visible the user may have clicked
+        // a suggestion item. TextBlock items are non-focusable, so focus falls to the
+        // canvas. We must NOT commit here; CompleteVariable() keeps the session open
+        // and will immediately return focus to the inline editor.
+        if (_varDropdownVisible) return;
+
         // Commit on focus loss (e.g. user clicks away to another element).
         if (_editingParamNode is not null)
             CommitParamEdit();
+    }
+
+    /// <summary>
+    /// Opens the inline comment editor for the currently selected comment block.
+    /// Called externally (e.g. from the F2 key handler in the editor view).
+    /// Does nothing if the selected element is not a <see cref="CommentBlockViewModel"/>.
+    /// </summary>
+    // ── Inline name editor helpers ───────────────────────────────────────────
+
+    /// <summary>Opens the single-line name editor over <paramref name="element"/> (node or start).</summary>
+    private void BeginNameEdit(ICanvasElement element)
+    {
+        CommitParamEdit();
+        CommitCommentEdit();
+
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        _nameEditor.Foreground = isLight ? Brushes.Black : Brushes.White;
+        _nameEditor.Background = isLight
+            ? new SolidColorBrush(Color.FromRgb(0xE8, 0xF0, 0xFE))
+            : new SolidColorBrush(Color.FromRgb(0x1A, 0x2C, 0x40));
+
+        if (element is NodeViewModel nvm)
+        {
+            _nameEditorX = nvm.X;
+            _nameEditorY = nvm.Y;
+            _nameEditorW = NodeRenderWidth(nvm);
+            _nameEditorH = NodeHeaderHeight;
+        }
+        else if (element is StartViewModel svm)
+        {
+            _nameEditorX = svm.X - StartViewModel.Radius;
+            _nameEditorY = svm.Y + StartViewModel.Radius + 2;
+            _nameEditorW = svm.Diameter + 20;
+            _nameEditorH = NodeHeaderHeight;
+        }
+        else
+        {
+            return;
+        }
+
+        _editingNameElement   = element;
+        _nameEditor.Text      = element.Name;
+        _nameEditor.IsVisible = true;
+        InvalidateMeasure();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _nameEditor.Focus();
+            _nameEditor.SelectAll();
+        }, Avalonia.Threading.DispatcherPriority.Render);
+    }
+
+    /// <summary>Saves the name editor text and closes the editor.</summary>
+    private void CommitNameEdit()
+    {
+        if (_editingNameElement is null) return;
+        var element = _editingNameElement;
+        var name    = (_nameEditor.Text ?? string.Empty).Trim();
+        _editingNameElement   = null;
+        _nameEditor.IsVisible = false;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            _ = element switch
+            {
+                NodeViewModel  nvm => nvm.SetName(name, out _),
+                StartViewModel svm => svm.SetName(name, out _),
+                _                  => true,
+            };
+        }
+        InvalidateAndMeasure();
+    }
+
+    /// <summary>Discards the name edit without saving.</summary>
+    private void CancelNameEdit()
+    {
+        _editingNameElement   = null;
+        _nameEditor.IsVisible = false;
+        InvalidateAndMeasure();
+        Focus();
+    }
+
+    private void OnNameEditorKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Return or Key.Enter)
+        {
+            CommitNameEdit();
+            Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CancelNameEdit();
+            e.Handled = true;
+        }
+    }
+
+    private void OnNameEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_editingNameElement is not null)
+            CommitNameEdit();
+    }
+
+    /// <summary>
+    /// Opens the inline name editor for the currently selected node or start.
+    /// Called from the editor view when F2 is pressed and a node/start is selected.
+    /// </summary>
+    public void BeginNameEditForSelected()
+    {
+        if (_vm?.SelectedElement is NodeViewModel or StartViewModel)
+            BeginNameEdit(_vm.SelectedElement);
+    }
+
+    // ── Inline comment editor helpers ────────────────────────────────────────
+
+    public void BeginCommentEditForSelected()
+    {
+        if (_vm?.SelectedElement is CommentBlockViewModel comment)
+            BeginCommentEdit(comment);
+    }
+
+    /// <summary>Shows the multi-line comment editor over <paramref name="comment"/>.</summary>
+    private void BeginCommentEdit(CommentBlockViewModel comment)
+    {
+        _editingCommentBlock   = comment;
+        _editingCommentEditorX = comment.X;
+        _editingCommentEditorY = comment.Y;
+        _editingCommentEditorW = comment.Width;
+        _editingCommentEditorH = comment.Height;
+        _commentEditor.Text    = comment.Name;   // Name returns the underlying Comment text.
+        // Pick colours based on the active theme.
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        _commentEditor.Foreground = isLight
+            ? CommentTextBrush   // dark text on sticky-note yellow
+            : Brushes.White;     // white text on dark background
+        _commentEditor.Background = isLight
+            ? new SolidColorBrush(Color.FromArgb(0xF2, 0xFF, 0xF0, 0x96))   // sticky-note yellow
+            : new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x18));          // dark green-tinted panel
+        _commentEditor.IsVisible = true;
+        InvalidateMeasure();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _commentEditor.Focus();
+        }, Avalonia.Threading.DispatcherPriority.Render);
+    }
+
+    /// <summary>Saves the comment editor text and closes the editor.</summary>
+    private void CommitCommentEdit()
+    {
+        if (_editingCommentBlock is null) return;
+        var comment = _editingCommentBlock;
+        var text    = _commentEditor.Text ?? string.Empty;
+        _editingCommentBlock     = null;
+        _commentEditor.IsVisible = false;
+        comment.SetText(text);
+        InvalidateAndMeasure();
+    }
+
+    /// <summary>Discards the comment edit without saving.</summary>
+    private void CancelCommentEdit()
+    {
+        _editingCommentBlock     = null;
+        _commentEditor.IsVisible = false;
+        InvalidateAndMeasure();
+        Focus();
+    }
+
+    private void OnCommentEditorKeyDown(object? sender, KeyEventArgs e)
+    {
+        if ((e.Key is Key.Return or Key.Enter) && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            // Ctrl+Enter commits; plain Enter inserts a newline (default).
+            CommitCommentEdit();
+            Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CancelCommentEdit();
+            e.Handled = true;
+        }
+    }
+
+    private void OnCommentEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_editingCommentBlock is not null)
+            CommitCommentEdit();
     }
 
     /// <summary>
@@ -2425,4 +3279,5 @@ public sealed class ModelSystemCanvas : Control
         var pen  = new Pen(Brushes.CornflowerBlue, 1.5 / _scale, SelectionRectDash);
         ctx.DrawRectangle(SelectionRectFill, pen, rect, 2 / _scale, 2 / _scale);
     }
+
 }

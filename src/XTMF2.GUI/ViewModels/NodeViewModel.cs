@@ -39,18 +39,23 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     private readonly ModelSystemSession _session;
     private readonly User _user;
 
-    // ── Coordinates read directly from the underlying model ──────────────
-    /// <inheritdoc/>
-    public double X => (double)UnderlyingNode.Location.X;
+    // ── Coordinates read directly from the underlying model (or preview during drag) ─
+    private double? _previewX;
+    private double? _previewY;
+    private double? _previewW;
+    private double? _previewH;
 
     /// <inheritdoc/>
-    public double Y => (double)UnderlyingNode.Location.Y;
+    public double X => _previewX ?? (double)UnderlyingNode.Location.X;
+
+    /// <inheritdoc/>
+    public double Y => _previewY ?? (double)UnderlyingNode.Location.Y;
 
     /// <summary>Rendered width; falls back to 120 when the model value is 0.</summary>
-    public double Width  => UnderlyingNode.Location.Width  is 0 ? 120.0 : (double)UnderlyingNode.Location.Width;
+    public double Width  => _previewW ?? (UnderlyingNode.Location.Width  is 0 ? 120.0 : (double)UnderlyingNode.Location.Width);
 
     /// <summary>Rendered height; falls back to 50 when the model value is 0.</summary>
-    public double Height => UnderlyingNode.Location.Height is 0 ? 50.0  : (double)UnderlyingNode.Location.Height;
+    public double Height => _previewH ?? (UnderlyingNode.Location.Height is 0 ? 50.0  : (double)UnderlyingNode.Location.Height);
 
     /// <summary>Centre X, used to compute link endpoints after a move.</summary>
     public double CenterX => X + Width / 2.0;
@@ -136,6 +141,34 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     }
 
     /// <summary>
+    /// Updates the visual position without touching the session (for drag preview).
+    /// Call <see cref="CommitMove"/> on mouse-up to persist the change.
+    /// </summary>
+    public void MoveToPreview(double x, double y)
+    {
+        _previewX = x;
+        _previewY = y;
+        OnPropertyChanged(nameof(X));
+        OnPropertyChanged(nameof(Y));
+        OnPropertyChanged(nameof(CenterX));
+        OnPropertyChanged(nameof(CenterY));
+    }
+
+    /// <summary>
+    /// Commits the current preview position to the session (call once on mouse-up).
+    /// Does nothing if no preview is active.
+    /// </summary>
+    public void CommitMove()
+    {
+        if (_previewX is null) return;
+        var x = _previewX.Value;
+        var y = _previewY!.Value;
+        _previewX = null;
+        _previewY = null;
+        MoveTo(x, y);
+    }
+
+    /// <summary>
     /// Move the node to a new canvas position, persisting the change to the
     /// underlying model via the session (supports undo/redo).
     /// </summary>
@@ -147,6 +180,39 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
         _session.SetNodeLocation(_user, UnderlyingNode, new Rectangle((float)x, (float)y, w, h), out _);
         // OnModelPropertyChanged("Location") is fired by the model; it raises
         // PropertyChanged for X, Y, CenterX, CenterY automatically.
+    }
+
+    /// <summary>Rename the node, persisting the change via the session (supports undo/redo).</summary>
+    public bool SetName(string name, out CommandError? error)
+        => _session.SetNodeName(_user, UnderlyingNode, name, out error);
+
+    /// <summary>
+    /// Updates the visual size without touching the session (for resize-drag preview).
+    /// Call <see cref="CommitResize"/> on mouse-up to persist the change.
+    /// Width is clamped to a minimum of 120; height to a minimum of 28.
+    /// </summary>
+    public void ResizeToPreview(double w, double h)
+    {
+        _previewW = Math.Max(120.0, w);
+        _previewH = Math.Max(28.0,  h);
+        OnPropertyChanged(nameof(Width));
+        OnPropertyChanged(nameof(Height));
+        OnPropertyChanged(nameof(CenterX));
+        OnPropertyChanged(nameof(CenterY));
+    }
+
+    /// <summary>
+    /// Commits the current preview size to the session (call once on mouse-up).
+    /// Does nothing if no resize preview is active.
+    /// </summary>
+    public void CommitResize()
+    {
+        if (_previewW is null) return;
+        var w = _previewW.Value;
+        var h = _previewH!.Value;
+        _previewW = null;
+        _previewH = null;
+        ResizeTo(w, h);
     }
 
     /// <summary>

@@ -129,6 +129,31 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>Observable view-models for the model system's variable list.</summary>
     public ObservableCollection<ModelSystemVariableViewModel> ModelSystemVariables { get; } = new();
 
+    /// <summary>Text typed into the variables filter box; filters <see cref="FilteredModelSystemVariables"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FilteredModelSystemVariables))]
+    private string _variableFilter = string.Empty;
+
+    /// <summary>
+    /// Sorted (by name) and filtered (by <see cref="VariableFilter"/>) view of
+    /// <see cref="ModelSystemVariables"/>. Matches on name or boundary path.
+    /// </summary>
+    public IEnumerable<ModelSystemVariableViewModel> FilteredModelSystemVariables
+    {
+        get
+        {
+            var q = ModelSystemVariables.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(VariableFilter))
+            {
+                var f = VariableFilter.Trim();
+                q = q.Where(v =>
+                    v.Name.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                    v.BoundaryPath.Contains(f, StringComparison.OrdinalIgnoreCase));
+            }
+            return q.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>The currently selected link, if any. Mutually exclusive with <see cref="SelectedElement"/>.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NothingSelected))]
@@ -193,6 +218,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     public bool SelectedElementIsNode => SelectedElement is NodeViewModel;
 
+    /// <summary>True when the selected element is a <see cref="CommentBlockViewModel"/>.</summary>
+    public bool SelectedElementIsComment => SelectedElement is CommentBlockViewModel;
+
+    /// <summary>True when the selected element is NOT a <see cref="CommentBlockViewModel"/>, used to hide the rename box for comments.</summary>
+    public bool SelectedElementIsNotComment => SelectedElement is not CommentBlockViewModel;
+
     /// <summary>
     /// True when the selected node is a BasicParameter or ScriptedParameter,
     /// used to gate the parameter value editor in the property panel.
@@ -256,6 +287,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         OnPropertyChanged(nameof(SelectedElementFieldLabel));
         OnPropertyChanged(nameof(SelectedElementTypeName));
         OnPropertyChanged(nameof(SelectedElementIsNode));
+        OnPropertyChanged(nameof(SelectedElementIsComment));
+        OnPropertyChanged(nameof(SelectedElementIsNotComment));
         OnPropertyChanged(nameof(SelectedElementIsParameter));
         SelectedElementParameterValue =
             value is NodeViewModel pnvm && pnvm.IsParameterNode
@@ -1216,6 +1249,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Full rebuild keeps the code simple; the list is expected to be small.
         SyncModelSystemVariables();
         OnPropertyChanged(nameof(HasNoModelSystemVariables));
+        OnPropertyChanged(nameof(FilteredModelSystemVariables));
     }
 
     /// <summary>Commit the name/comment currently in <see cref="SelectedElementEditName"/> back to the model.</summary>
@@ -1306,15 +1340,16 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
         else
         {
-            // Multiple starts: ask the user to type the start name (listing the options).
-            var startList = string.Join(", ", availableStarts.Select(s => s.Name));
-            var startDialog = new InputDialog(
+            // Multiple starts: show a ComboBox so the user can pick one.
+            var startNames = availableStarts.Select(s => s.Name).ToList();
+            var startDialog = new StartPickerDialog(
                 title: "Select Start",
-                prompt: $"Available starts: {startList}\nEnter the start to execute:",
-                defaultText: availableStarts[0].Name);
+                prompt: "Select the start to execute:",
+                startNames: startNames,
+                defaultStart: startNames[0]);
             await startDialog.ShowDialog(ParentWindow);
             if (startDialog.WasCancelled) return;
-            startToExecute = startDialog.InputText?.Trim() ?? availableStarts[0].Name;
+            startToExecute = startDialog.SelectedStartName ?? startNames[0];
             if (string.IsNullOrEmpty(startToExecute)) return;
         }
 

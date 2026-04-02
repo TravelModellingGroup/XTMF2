@@ -42,11 +42,11 @@ public partial class ModelSystemEditorView : UserControl
         DataContextChanged += OnDataContextChanged;
         AttachedToVisualTree += OnAttachedToVisualTree;
 
-        // Pressing Enter in the name box commits the rename without requiring the Rename button.
-        NameEditBox.KeyDown += OnNameEditBoxKeyDown;
-
         // Pressing Enter in the parameter value box commits the value.
         ParameterValueEditBox.KeyDown += OnParameterValueEditBoxKeyDown;
+
+        // Escape in the variable filter box clears the filter.
+        VariableFilterBox.KeyDown += OnVariableFilterBoxKeyDown;
 
         // F2 anywhere in this view focuses the rename box (when an element is selected).
         KeyDown += OnViewKeyDown;
@@ -71,8 +71,15 @@ public partial class ModelSystemEditorView : UserControl
     {
         if (e.Key == Key.F2 && _vm?.SelectedElement is not null)
         {
-            NameEditBox.Focus();
-            NameEditBox.SelectAll();
+            if (_vm.SelectedElement is CommentBlockViewModel)
+            {
+                TheCanvas.BeginCommentEditForSelected();
+            }
+            else
+            {
+                // Route F2 for nodes/starts to the inline canvas name editor.
+                TheCanvas.BeginNameEditForSelected();
+            }
             e.Handled = true;
         }
         else if (e.Key == Key.S && e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -93,10 +100,13 @@ public partial class ModelSystemEditorView : UserControl
         }
     }
 
-    private void OnNameEditBoxKeyDown(object? sender, KeyEventArgs e)
+    private void OnVariableFilterBoxKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter)
-            _vm?.CommitRenameCommand.Execute(null);
+        if (e.Key == Key.Escape && _vm is not null)
+        {
+            _vm.VariableFilter = string.Empty;
+            e.Handled = true;
+        }
     }
 
     private void OnParameterValueEditBoxKeyDown(object? sender, KeyEventArgs e)

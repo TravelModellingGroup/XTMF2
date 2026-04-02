@@ -42,18 +42,23 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
     private readonly ModelSystemSession _session;
     private readonly User _user;
 
-    // ── Coordinates read directly from the underlying model ──────────────
-    /// <inheritdoc/>
-    public double X => (double)UnderlyingBlock.Location.X;
+    // ── Coordinates read directly from the underlying model (or preview during drag) ─
+    private double? _previewX;
+    private double? _previewY;
+    private double? _previewW;
+    private double? _previewH;
 
     /// <inheritdoc/>
-    public double Y => (double)UnderlyingBlock.Location.Y;
+    public double X => _previewX ?? (double)UnderlyingBlock.Location.X;
+
+    /// <inheritdoc/>
+    public double Y => _previewY ?? (double)UnderlyingBlock.Location.Y;
 
     /// <summary>Rendered width; falls back to <see cref="DefaultWidth"/> when the model value is 0.</summary>
-    public double Width  => UnderlyingBlock.Location.Width  is 0 ? DefaultWidth  : (double)UnderlyingBlock.Location.Width;
+    public double Width  => _previewW ?? (UnderlyingBlock.Location.Width  is 0 ? DefaultWidth  : (double)UnderlyingBlock.Location.Width);
 
     /// <summary>Rendered height; falls back to <see cref="DefaultHeight"/> when the model value is 0.</summary>
-    public double Height => UnderlyingBlock.Location.Height is 0 ? DefaultHeight : (double)UnderlyingBlock.Location.Height;
+    public double Height => _previewH ?? (UnderlyingBlock.Location.Height is 0 ? DefaultHeight : (double)UnderlyingBlock.Location.Height);
 
     // ICanvasElement: Name maps to Comment so the property panel can reuse SelectedElementEditName.
     /// <inheritdoc/>
@@ -95,6 +100,34 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
     }
 
     /// <summary>
+    /// Updates the visual position without touching the session (for drag preview).
+    /// Call <see cref="CommitMove"/> on mouse-up to persist the change.
+    /// </summary>
+    public void MoveToPreview(double x, double y)
+    {
+        _previewX = x;
+        _previewY = y;
+        OnPropertyChanged(nameof(X));
+        OnPropertyChanged(nameof(Y));
+        OnPropertyChanged(nameof(CenterX));
+        OnPropertyChanged(nameof(CenterY));
+    }
+
+    /// <summary>
+    /// Commits the current preview position to the session (call once on mouse-up).
+    /// Does nothing if no preview is active.
+    /// </summary>
+    public void CommitMove()
+    {
+        if (_previewX is null) return;
+        var x = _previewX.Value;
+        var y = _previewY!.Value;
+        _previewX = null;
+        _previewY = null;
+        MoveTo(x, y);
+    }
+
+    /// <summary>
     /// Move the comment block to a new canvas position, persisting the change via the session
     /// (supports undo/redo).
     /// </summary>
@@ -106,6 +139,45 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
         _session.SetCommentBlockLocation(_user, UnderlyingBlock,
             new Rectangle((float)x, (float)y, w, h), out _);
         // OnModelPropertyChanged("Location") fires automatically and propagates X/Y changes.
+    }
+
+    /// <summary>
+    /// Update the comment text, persisting the change via the session (supports undo/redo).
+    /// Whitespace-only text is ignored.
+    /// </summary>
+    public void SetText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        _session.SetCommentBlockText(_user, UnderlyingBlock, text, out _);
+    }
+
+    /// <summary>
+    /// Updates the visual size without touching the session (for resize-drag preview).
+    /// Call <see cref="CommitResize"/> on mouse-up to persist the change.
+    /// Width is clamped to a minimum of 60; height to a minimum of 30.
+    /// </summary>
+    public void ResizeToPreview(double w, double h)
+    {
+        _previewW = Math.Max(60.0, w);
+        _previewH = Math.Max(30.0, h);
+        OnPropertyChanged(nameof(Width));
+        OnPropertyChanged(nameof(Height));
+        OnPropertyChanged(nameof(CenterX));
+        OnPropertyChanged(nameof(CenterY));
+    }
+
+    /// <summary>
+    /// Commits the current preview size to the session (call once on mouse-up).
+    /// Does nothing if no resize preview is active.
+    /// </summary>
+    public void CommitResize()
+    {
+        if (_previewW is null) return;
+        var w = _previewW.Value;
+        var h = _previewH!.Value;
+        _previewW = null;
+        _previewH = null;
+        ResizeTo(w, h);
     }
 
     /// <summary>

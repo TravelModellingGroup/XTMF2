@@ -341,6 +341,14 @@ public static class ParameterCompiler
         return Compile(nodes, text.Slice(first + 1, second - first - 1), offset + first + 1, out expression);
     }
 
+    /// <summary>
+    /// Returns true if the character is a special character that is used as an operator or delimiter
+    /// in the expression grammar and therefore cannot be part of a variable name.
+    /// </summary>
+    private static bool IsSpecialCharacter(char c) =>
+        c is '?' or ':' or '&' or '|' or '+' or '-' or '*' or '/' or '^'
+          or '<' or '>' or '=' or '!' or '(' or ')' or '"';
+
     private static bool GetVariable(IList<Node> nodes, ReadOnlyMemory<char> text, int offset, [NotNullWhen(true)] out Expression? expression)
     {
         expression = null;
@@ -353,7 +361,7 @@ public static class ParameterCompiler
         var end = start;
         for (; end < span.Length; end++)
         {
-            if (char.IsWhiteSpace(span[end]))
+            if (IsSpecialCharacter(span[end]))
             {
                 break;
             }
@@ -364,8 +372,8 @@ public static class ParameterCompiler
         {
             return false;
         }
-        var innerText = text[start..end];
-        var node = nodes.FirstOrDefault(n => innerText.Span.Equals(n.Name.AsSpan(), StringComparison.InvariantCulture));
+        var innerText = text[start..end].Trim();
+        var node = nodes.FirstOrDefault(n => innerText.Span.Equals(n.Name.AsSpan().Trim(), StringComparison.InvariantCulture));
         if (node is not null)
         {
             expression = Variable.CreateVariableForNode(node, innerText, offset + start);
