@@ -42,9 +42,6 @@ public partial class ModelSystemEditorView : UserControl
         DataContextChanged += OnDataContextChanged;
         AttachedToVisualTree += OnAttachedToVisualTree;
 
-        // Pressing Enter in the name box commits the rename without requiring the Rename button.
-        NameEditBox.KeyDown += OnNameEditBoxKeyDown;
-
         // Pressing Enter in the parameter value box commits the value.
         ParameterValueEditBox.KeyDown += OnParameterValueEditBoxKeyDown;
 
@@ -73,13 +70,12 @@ public partial class ModelSystemEditorView : UserControl
         {
             if (_vm.SelectedElement is CommentBlockViewModel)
             {
-                // Route F2 for comments to the inline canvas editor.
                 TheCanvas.BeginCommentEditForSelected();
             }
             else
             {
-                NameEditBox.Focus();
-                NameEditBox.SelectAll();
+                // Route F2 for nodes/starts to the inline canvas name editor.
+                TheCanvas.BeginNameEditForSelected();
             }
             e.Handled = true;
         }
@@ -99,12 +95,6 @@ public partial class ModelSystemEditorView : UserControl
             _vm?.RunModelSystemCommand.Execute(null);
             e.Handled = true;
         }
-    }
-
-    private void OnNameEditBoxKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-            _vm?.CommitRenameCommand.Execute(null);
     }
 
     private void OnParameterValueEditBoxKeyDown(object? sender, KeyEventArgs e)

@@ -183,11 +183,11 @@
                                 <TextBox x:Name="NameEditBox"
                                          Text="{Binding SelectedElementEditName, Mode=TwoWay}"
                                          FontSize="12"
-                                         IsVisible="{Binding SelectedElementIsNotComment}"
+                                         IsVisible="False"
                                          Watermark="Element name…"/>
                                 <Button Content="{Binding SelectedElementFieldLabel, StringFormat='Apply {0}'}"
                                         Command="{Binding CommitRenameCommand}"
-                                        IsVisible="{Binding SelectedElementIsNotComment}"
+                                        IsVisible="False"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Center"
                                         FontSize="12"/>

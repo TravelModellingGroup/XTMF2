@@ -149,6 +149,10 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
         // PropertyChanged for X, Y, CenterX, CenterY automatically.
     }
 
+    /// <summary>Rename the node, persisting the change via the session (supports undo/redo).</summary>
+    public bool SetName(string name, out CommandError? error)
+        => _session.SetNodeName(_user, UnderlyingNode, name, out error);
+
     /// <summary>
     /// Resize the node, persisting the change via the session (supports undo/redo).
     /// Width is clamped to a minimum of 120; height to a minimum of 28.

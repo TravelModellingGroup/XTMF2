@@ -96,4 +96,8 @@ public sealed partial class StartViewModel : ObservableObject, ICanvasElement
         // OnModelPropertyChanged("Location") is fired by the model; it raises
         // PropertyChanged for X, Y, CenterX, CenterY automatically.
     }
+
+    /// <summary>Rename the start, persisting the change via the session (supports undo/redo).</summary>
+    public bool SetName(string name, out CommandError? error)
+        => _session.SetNodeName(_user, UnderlyingStart, name, out error);
 }

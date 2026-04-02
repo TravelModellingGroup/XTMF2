@@ -173,6 +173,14 @@ public sealed class ModelSystemCanvas : Control
     /// <summary>Model-space position and size of the comment editor overlay.</summary>
     private double _editingCommentEditorX, _editingCommentEditorY, _editingCommentEditorW, _editingCommentEditorH;
 
+    // ── Inline name editor ───────────────────────────────────────────────────
+    /// <summary>Overlay single-line TextBox used for renaming nodes and starts.</summary>
+    private readonly TextBox _nameEditor;
+    /// <summary>The element currently being renamed, or <c>null</c> when idle.</summary>
+    private ICanvasElement? _editingNameElement;
+    /// <summary>Model-space position and size of the name editor overlay.</summary>
+    private double _nameEditorX, _nameEditorY, _nameEditorW, _nameEditorH;
+
     // ── Inlined BasicParameter caches (rebuilt by BuildHookAnchorCache) ───
     /// <summary>
     /// Maps (origin node, hook) → the BasicParameter node that is currently inlined
@@ -236,6 +244,25 @@ public sealed class ModelSystemCanvas : Control
                                   Avalonia.Interactivity.RoutingStrategies.Tunnel);
         LogicalChildren.Add(_commentEditor);
         VisualChildren.Add(_commentEditor);
+
+        // Build the single-line name editor; Enter commits, Escape cancels.
+        _nameEditor = new TextBox
+        {
+            FontFamily               = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize                 = NodeFontSize,
+            Foreground               = NodeTextBrush,
+            Background               = new SolidColorBrush(Color.FromRgb(0x1A, 0x2C, 0x40)),
+            BorderThickness          = new Thickness(1),
+            BorderBrush              = NodeSelBrush,
+            Padding                  = new Thickness(4, 0, 4, 0),
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            IsVisible                = false,
+        };
+        _nameEditor.AddHandler(InputElement.KeyDownEvent, OnNameEditorKeyDown,
+                               Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        _nameEditor.LostFocus += OnNameEditorLostFocus;
+        LogicalChildren.Add(_nameEditor);
+        VisualChildren.Add(_nameEditor);
 
         // ── Zoom control (pinned to viewport bottom-right) ────────────────
         _zoomTextBox = new TextBox
@@ -474,6 +501,11 @@ public sealed class ModelSystemCanvas : Control
         {
             _commentEditor.Measure(new Size(_editingCommentEditorW * _scale, _editingCommentEditorH * _scale));
         }
+        // Measure the name editor.
+        if (_editingNameElement is not null)
+        {
+            _nameEditor.Measure(new Size(_nameEditorW * _scale, _nameEditorH * _scale));
+        }
         // Measure the zoom bar so ArrangeOverride can use its desired size.
         _zoomBar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         return new Size(maxX * _scale, maxY * _scale);
@@ -500,6 +532,16 @@ public sealed class ModelSystemCanvas : Control
                 _editingCommentEditorY * _scale,
                 _editingCommentEditorW * _scale,
                 _editingCommentEditorH * _scale));
+        }
+        // Position the name editor over the element header being renamed.
+        if (_editingNameElement is not null)
+        {
+            _nameEditor.FontSize = NodeFontSize * _scale;
+            _nameEditor.Arrange(new Rect(
+                _nameEditorX * _scale,
+                _nameEditorY * _scale,
+                _nameEditorW * _scale,
+                _nameEditorH * _scale));
         }
         // Pin the zoom control to the bottom-right of the visible viewport.
         var sv = GetScrollViewer();
@@ -1437,6 +1479,20 @@ public sealed class ModelSystemCanvas : Control
             ClearMultiSelection();
             e.Handled = true;
         }
+        else if (e.Key == Key.F2 && _vm?.SelectedElement is not null)
+        {
+            var sel = _vm.SelectedElement;
+            if (sel is NodeViewModel or StartViewModel)
+            {
+                BeginNameEdit(sel);
+                e.Handled = true;
+            }
+            else if (sel is CommentBlockViewModel cmt)
+            {
+                BeginCommentEdit(cmt);
+                e.Handled = true;
+            }
+        }
     }
 
     // ── Scaling helpers ───────────────────────────────────────────────────
@@ -1545,8 +1601,9 @@ public sealed class ModelSystemCanvas : Control
             var resizeHit = HitTestResizeHandle(mpos);
             if (resizeHit is not null)
             {
-                if (_editingParamNode   is not null) CommitParamEdit();
+                if (_editingParamNode    is not null) CommitParamEdit();
                 if (_editingCommentBlock is not null) CommitCommentEdit();
+                if (_editingNameElement  is not null) CommitNameEdit();
                 ClearMultiSelection();
                 _resizing       = resizeHit;
                 _resizeStartPos = mpos;
@@ -1566,8 +1623,9 @@ public sealed class ModelSystemCanvas : Control
             var minimizeHit = HitTestMinimizeButton(mpos);
             if (minimizeHit is not null)
             {
-                if (_editingParamNode   is not null) CommitParamEdit();
+                if (_editingParamNode    is not null) CommitParamEdit();
                 if (_editingCommentBlock is not null) CommitCommentEdit();
+                if (_editingNameElement  is not null) CommitNameEdit();
                 minimizeHit.InlineBasicParameter();
                 InvalidateAndMeasure();
                 e.Handled = true;
@@ -1600,6 +1658,7 @@ public sealed class ModelSystemCanvas : Control
             // Clicking elsewhere commits any open edit.
             if (_editingParamNode    is not null) CommitParamEdit();
             if (_editingCommentBlock is not null) CommitCommentEdit();
+            if (_editingNameElement  is not null) CommitNameEdit();
         }
 
         // ── Hook toggle icon click (left button, any click count) ─────────
@@ -1631,6 +1690,23 @@ public sealed class ModelSystemCanvas : Control
             if (nodeHit is { IsParameterNode: true })
             {
                 _ = _vm.EditParameterNodeAsync(nodeHit);
+                e.Handled = true;
+                return;
+            }
+            // ── Double-click on a regular node: begin inline rename ────────
+            if (nodeHit is not null)
+            {
+                _vm.SelectElementCommand.Execute(nodeHit);
+                BeginNameEdit(nodeHit);
+                e.Handled = true;
+                return;
+            }
+            // ── Double-click on a start: begin inline rename ──────────────
+            var startHit = HitTest(mpos, testComments: false) as StartViewModel;
+            if (startHit is not null)
+            {
+                _vm.SelectElementCommand.Execute(startHit);
+                BeginNameEdit(startHit);
                 e.Handled = true;
                 return;
             }
@@ -1680,8 +1756,9 @@ public sealed class ModelSystemCanvas : Control
         if (isCtrlLeft)
         {
             // Always commit any open inline edit first.
-            if (_editingParamNode   is not null) CommitParamEdit();
+            if (_editingParamNode    is not null) CommitParamEdit();
             if (_editingCommentBlock is not null) CommitCommentEdit();
+            if (_editingNameElement  is not null) CommitNameEdit();
 
             if (hit is NodeViewModel or CommentBlockViewModel or GhostNodeViewModel)
             {
@@ -2295,6 +2372,112 @@ public sealed class ModelSystemCanvas : Control
     /// Called externally (e.g. from the F2 key handler in the editor view).
     /// Does nothing if the selected element is not a <see cref="CommentBlockViewModel"/>.
     /// </summary>
+    // ── Inline name editor helpers ───────────────────────────────────────────
+
+    /// <summary>Opens the single-line name editor over <paramref name="element"/> (node or start).</summary>
+    private void BeginNameEdit(ICanvasElement element)
+    {
+        CommitParamEdit();
+        CommitCommentEdit();
+
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        _nameEditor.Foreground = isLight ? Brushes.Black : Brushes.White;
+        _nameEditor.Background = isLight
+            ? new SolidColorBrush(Color.FromRgb(0xE8, 0xF0, 0xFE))
+            : new SolidColorBrush(Color.FromRgb(0x1A, 0x2C, 0x40));
+
+        if (element is NodeViewModel nvm)
+        {
+            _nameEditorX = nvm.X;
+            _nameEditorY = nvm.Y;
+            _nameEditorW = NodeRenderWidth(nvm);
+            _nameEditorH = NodeHeaderHeight;
+        }
+        else if (element is StartViewModel svm)
+        {
+            _nameEditorX = svm.X - StartViewModel.Radius;
+            _nameEditorY = svm.Y + StartViewModel.Radius + 2;
+            _nameEditorW = svm.Diameter + 20;
+            _nameEditorH = NodeHeaderHeight;
+        }
+        else
+        {
+            return;
+        }
+
+        _editingNameElement   = element;
+        _nameEditor.Text      = element.Name;
+        _nameEditor.IsVisible = true;
+        InvalidateMeasure();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _nameEditor.Focus();
+            _nameEditor.SelectAll();
+        }, Avalonia.Threading.DispatcherPriority.Render);
+    }
+
+    /// <summary>Saves the name editor text and closes the editor.</summary>
+    private void CommitNameEdit()
+    {
+        if (_editingNameElement is null) return;
+        var element = _editingNameElement;
+        var name    = (_nameEditor.Text ?? string.Empty).Trim();
+        _editingNameElement   = null;
+        _nameEditor.IsVisible = false;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            _ = element switch
+            {
+                NodeViewModel  nvm => nvm.SetName(name, out _),
+                StartViewModel svm => svm.SetName(name, out _),
+                _                  => true,
+            };
+        }
+        InvalidateAndMeasure();
+    }
+
+    /// <summary>Discards the name edit without saving.</summary>
+    private void CancelNameEdit()
+    {
+        _editingNameElement   = null;
+        _nameEditor.IsVisible = false;
+        InvalidateAndMeasure();
+        Focus();
+    }
+
+    private void OnNameEditorKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Return or Key.Enter)
+        {
+            CommitNameEdit();
+            Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CancelNameEdit();
+            e.Handled = true;
+        }
+    }
+
+    private void OnNameEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_editingNameElement is not null)
+            CommitNameEdit();
+    }
+
+    /// <summary>
+    /// Opens the inline name editor for the currently selected node or start.
+    /// Called from the editor view when F2 is pressed and a node/start is selected.
+    /// </summary>
+    public void BeginNameEditForSelected()
+    {
+        if (_vm?.SelectedElement is NodeViewModel or StartViewModel)
+            BeginNameEdit(_vm.SelectedElement);
+    }
+
+    // ── Inline comment editor helpers ────────────────────────────────────────
+
     public void BeginCommentEditForSelected()
     {
         if (_vm?.SelectedElement is CommentBlockViewModel comment)
