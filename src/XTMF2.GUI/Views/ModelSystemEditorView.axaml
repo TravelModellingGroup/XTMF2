@@ -176,21 +176,6 @@
 
                             <StackPanel Spacing="4"
                                         IsVisible="{Binding SelectedElement, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                <TextBlock Text="{Binding SelectedElementFieldLabel, StringFormat='{}{0}:'}"
-                                           FontSize="12"
-                                           Opacity="0.7"
-                                           IsVisible="{Binding SelectedElementIsNotComment}"/>
-                                <TextBox x:Name="NameEditBox"
-                                         Text="{Binding SelectedElementEditName, Mode=TwoWay}"
-                                         FontSize="12"
-                                         IsVisible="False"
-                                         Watermark="Element name…"/>
-                                <Button Content="{Binding SelectedElementFieldLabel, StringFormat='Apply {0}'}"
-                                        Command="{Binding CommitRenameCommand}"
-                                        IsVisible="False"
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Center"
-                                        FontSize="12"/>
                                 <Separator Margin="0,4"/>
                                 <TextBlock Text="Type:"
                                            FontSize="12"
