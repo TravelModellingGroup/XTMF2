@@ -1474,8 +1474,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         _toastCts = new CancellationTokenSource();
         var token = _toastCts.Token;
 
-        ToastIsError  = isError;
-        ToastMessage  = message;
+        ToastIsError = isError;
+        ToastMessage = message;
+
+        if (isError)
+            SystemAlert.PlayError();
 
         _ = Task.Delay(durationMs, token).ContinueWith(_ =>
         {

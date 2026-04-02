@@ -63,6 +63,9 @@ public partial class SettingsWindow : Window
         {
             LanguageComboBox.SelectedItem = languageItem;
         }
+
+        // Load system sounds preference
+        PlaySystemSoundsCheckBox.IsChecked = Properties.Settings.Default.PlaySystemSounds;
     }
 
     private void ThemeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -128,8 +131,13 @@ public partial class SettingsWindow : Window
         if (_currentLanguage != null)
         {
             Properties.Settings.Default.Language = _currentLanguage;
-            Properties.Settings.Default.Save();
         }
+
+        // Save system sounds preference
+        Properties.Settings.Default.PlaySystemSounds =
+            PlaySystemSoundsCheckBox.IsChecked == true;
+
+        Properties.Settings.Default.Save();
 
         // Theme is already saved via ChangeTheme method
         // which calls SaveThemePreference internally

@@ -280,6 +280,9 @@ Esta acción no se puede deshacer.</value>
   <data name="Settings_AutoSave" xml:space="preserve">
     <value>Guardar proyectos automáticamente</value>
   </data>
+  <data name="Settings_PlaySystemSounds" xml:space="preserve">
+    <value>Reproducir sonidos del sistema para alertas de error</value>
+  </data>
   <data name="Settings_Cancel" xml:space="preserve">
     <value>Cancelar</value>
   </data>

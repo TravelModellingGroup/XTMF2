@@ -73,7 +73,11 @@ public sealed partial class RunsViewModel : ObservableObject
     {
         var vm = FindRun(runId);
         if (vm is null) return;
-        Dispatcher.UIThread.Post(() => vm.MarkFinished());
+        Dispatcher.UIThread.Post(() =>
+        {
+            vm.MarkFinished();
+            SystemAlert.ShowRunFinished(vm.RunName);
+        });
     }
 
     /// <summary>
@@ -83,7 +87,11 @@ public sealed partial class RunsViewModel : ObservableObject
     {
         var vm = FindRun(runId);
         if (vm is null) return;
-        Dispatcher.UIThread.Post(() => vm.MarkError(errorMessage, stack));
+        Dispatcher.UIThread.Post(() =>
+        {
+            vm.MarkError(errorMessage, stack);
+            SystemAlert.ShowRunFailed(vm.RunName);
+        });
     }
 
     /// <summary>

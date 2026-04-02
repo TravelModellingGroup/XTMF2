@@ -286,6 +286,9 @@ Cette action ne peut pas être annulée.</value>
   <data name="Settings_AutoSave" xml:space="preserve">
     <value>Sauvegarde automatique des projets</value>
   </data>
+  <data name="Settings_PlaySystemSounds" xml:space="preserve">
+    <value>Jouer les sons système pour les alertes d’erreur</value>
+  </data>
   <data name="Settings_Cancel" xml:space="preserve">
     <value>Annuler</value>
   </data>

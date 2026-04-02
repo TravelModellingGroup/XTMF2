@@ -295,6 +295,9 @@ This action cannot be undone.</value>
   <data name="Settings_AutoSave" xml:space="preserve">
     <value>Auto-save projects</value>
   </data>
+  <data name="Settings_PlaySystemSounds" xml:space="preserve">
+    <value>Play system sounds for error alerts</value>
+  </data>
   <data name="Settings_Cancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
