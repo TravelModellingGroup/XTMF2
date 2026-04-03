@@ -237,6 +237,10 @@ public sealed class ModelSystemCanvas : Control
     /// Empty when not editing a ScriptedParameter.
     /// </summary>
     private (string text, IBrush brush)[] _scriptTokens = Array.Empty<(string, IBrush)>();
+    /// <summary>Internal ScrollViewer of <see cref="_inlineEditor"/>, cached to allow unsubscription.</summary>
+    private ScrollViewer? _inlineEditorSv;
+    /// <summary>PropertyChanged handler subscribed to <see cref="_inlineEditorSv"/> while editing a scripted parameter.</summary>
+    private EventHandler<AvaloniaPropertyChangedEventArgs>? _inlineEditorSvHandler;
 
     /// <summary><c>true</c> while <see cref="CommitParamEdit"/> is executing, used to suppress re-entrant LostFocus commits.</summary>
     private bool _commitParamEditInProgress;
@@ -3129,6 +3133,19 @@ public sealed class ModelSystemCanvas : Control
     /// <param name="rowX">Override X position of the editor overlay (use -1 to auto-derive).</param>
     /// <param name="rowY">Override Y position of the editor overlay (use -1 to auto-derive).</param>
     /// <param name="rowW">Override width of the editor overlay (use -1 to auto-derive).</param>
+    /// <summary>
+    /// Unsubscribes from the inline editor's internal ScrollViewer PropertyChanged event
+    /// and clears the cached references. Safe to call when not subscribed.
+    /// </summary>
+    private void UnsubscribeInlineEditorScroll()
+    {
+        if (_inlineEditorSv is not null && _inlineEditorSvHandler is not null)
+            _inlineEditorSv.PropertyChanged -= _inlineEditorSvHandler;
+        _inlineEditorSv      = null;
+        _inlineEditorSvHandler = null;
+        _scriptOverlay.HorizontalScrollOffset = 0;
+    }
+
     private void BeginParamEdit(NodeViewModel node, double rowX = -1, double rowY = -1, double rowW = -1)
     {
         HideVarDropdown();
@@ -3148,6 +3165,32 @@ public sealed class ModelSystemCanvas : Control
             _scriptTokens = TokenizeScript(node.ParameterValueRepresentation);
             _scriptOverlay.Tokens    = _scriptTokens;
             _scriptOverlay.IsVisible = true;
+
+            // Subscribe to the TextBox's internal ScrollViewer so the overlay shifts
+            // horizontally in lockstep with the TextBox after every caret move or
+            // text change (the scroll happens during layout, after TextChanged fires).
+            UnsubscribeInlineEditorScroll();
+            // The internal SV may not exist until after the first layout pass, so
+            // we post the subscription to run once the visual tree is populated.
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                var sv = _inlineEditor.GetVisualDescendants()
+                                      .OfType<ScrollViewer>()
+                                      .FirstOrDefault();
+                if (sv is not null)
+                {
+                    _inlineEditorSvHandler = (_, args) =>
+                    {
+                        if (args.Property == ScrollViewer.OffsetProperty)
+                        {
+                            _scriptOverlay.HorizontalScrollOffset = sv.Offset.X;
+                            _scriptOverlay.InvalidateVisual();
+                        }
+                    };
+                    _inlineEditorSv = sv;
+                    sv.PropertyChanged += _inlineEditorSvHandler;
+                }
+            }, Avalonia.Threading.DispatcherPriority.Loaded);
         }
         else
         {
@@ -3200,6 +3243,7 @@ public sealed class ModelSystemCanvas : Control
             }
 
             // Save succeeded – close the editor.
+            UnsubscribeInlineEditorScroll();
             _editingParamNode        = null;
             _inlineEditor.IsVisible  = false;
             _inlineEditor.Foreground = ParamValueTextBrush;
@@ -3220,6 +3264,7 @@ public sealed class ModelSystemCanvas : Control
     private void CancelParamEdit()
     {
         HideVarDropdown();
+        UnsubscribeInlineEditorScroll();
         _editingParamNode        = null;
         _inlineEditor.IsVisible  = false;
         _inlineEditor.Foreground = ParamValueTextBrush;
@@ -3404,6 +3449,8 @@ public sealed class ModelSystemCanvas : Control
         {
             _scriptTokens = TokenizeScript(_inlineEditor.Text ?? string.Empty);
             _scriptOverlay.Tokens = _scriptTokens;
+            // Offset is kept current by the _inlineEditorScrollSub observable subscription;
+            // just redraw with the already-known offset.
             _scriptOverlay.InvalidateVisual();
         }
         else

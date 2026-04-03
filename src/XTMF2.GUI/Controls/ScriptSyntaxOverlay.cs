@@ -37,6 +37,13 @@ internal sealed class ScriptSyntaxOverlay : Control
     public (string text, IBrush brush)[] Tokens { get; set; } = Array.Empty<(string, IBrush)>();
 
     /// <summary>
+    /// Horizontal pixel offset from the TextBox's internal ScrollViewer, used to
+    /// align the rendered text with what the TextBox actually shows. Set by
+    /// <see cref="ModelSystemCanvas"/> whenever the editor text changes.
+    /// </summary>
+    public double HorizontalScrollOffset { get; set; }
+
+    /// <summary>
     /// Scaled font size to use when drawing; updated by <see cref="ModelSystemCanvas.ArrangeOverride"/>
     /// on every layout pass so the text matches the current zoom level.
     /// </summary>
@@ -83,6 +90,11 @@ internal sealed class ScriptSyntaxOverlay : Control
         }
 
         double ty = (Bounds.Height - ft.Height) / 2.0;
-        ctx.DrawText(ft, new Point(leftPad, ty));
+
+        // Clip to the overlay bounds so text never bleeds past the TextBox edge,
+        // then translate left by the TextBox's horizontal scroll offset so the
+        // visible window of characters matches what the TextBox itself shows.
+        using var _clip = ctx.PushClip(new Rect(0, 0, Bounds.Width, Bounds.Height));
+        ctx.DrawText(ft, new Point(leftPad - HorizontalScrollOffset, ty));
     }
 }
