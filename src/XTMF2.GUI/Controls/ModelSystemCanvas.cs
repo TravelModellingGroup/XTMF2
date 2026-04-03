@@ -354,6 +354,9 @@ public sealed class ModelSystemCanvas : Control
     // ── Zoom control overlay ───────────────────────────────────────────────
     private readonly Border  _zoomBar;
     private readonly TextBox _zoomTextBox;
+    private readonly Button  _zoomMinusBtn;
+    private readonly Button  _zoomPlusBtn;
+    private bool _zoomBarIsLight = false; // tracks last applied theme so we only update on change
 
     public ModelSystemCanvas()
     {
@@ -454,7 +457,7 @@ public sealed class ModelSystemCanvas : Control
         _zoomTextBox.KeyDown   += OnZoomTextBoxKeyDown;
         _zoomTextBox.LostFocus += (_, _) => TryApplyZoomText();
 
-        var minusBtn = new Button
+        _zoomMinusBtn = new Button
         {
             Content         = "\u2212",   // − (minus sign)
             FontSize        = 13,
@@ -463,9 +466,9 @@ public sealed class ModelSystemCanvas : Control
             Foreground      = NodeTextBrush,
             BorderThickness = new Thickness(0),
         };
-        minusBtn.Click += (_, _) => ApplyScale(_scale - ScaleStep);
+        _zoomMinusBtn.Click += (_, _) => ApplyScale(_scale - ScaleStep);
 
-        var plusBtn = new Button
+        _zoomPlusBtn = new Button
         {
             Content         = "+",
             FontSize        = 13,
@@ -474,7 +477,7 @@ public sealed class ModelSystemCanvas : Control
             Foreground      = NodeTextBrush,
             BorderThickness = new Thickness(0),
         };
-        plusBtn.Click += (_, _) => ApplyScale(_scale + ScaleStep);
+        _zoomPlusBtn.Click += (_, _) => ApplyScale(_scale + ScaleStep);
 
         _zoomBar = new Border
         {
@@ -487,7 +490,7 @@ public sealed class ModelSystemCanvas : Control
             {
                 Orientation = Orientation.Horizontal,
                 Spacing     = 0,
-                Children    = { minusBtn, _zoomTextBox, plusBtn },
+                Children    = { _zoomMinusBtn, _zoomTextBox, _zoomPlusBtn },
             },
         };
         LogicalChildren.Add(_zoomBar);
@@ -828,6 +831,11 @@ public sealed class ModelSystemCanvas : Control
         var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height);
         bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
         _isLight = isLight;
+        if (isLight != _zoomBarIsLight)
+        {
+            bool capture = isLight;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateZoomBarColors(capture));
+        }
         ctx.DrawRectangle(isLight ? CanvasBackgroundLight : CanvasBackground, null, bounds);
         DrawGridBackground(ctx, bounds, isLight);
 
@@ -2162,6 +2170,31 @@ public sealed class ModelSystemCanvas : Control
             var lx = start.X + (start.Diameter - ft.Width) / 2;
             var ly = start.Y + start.Diameter + 3;
             ctx.DrawText(ft, new Point(lx, ly));
+        }
+    }
+
+    /// <summary>
+    /// <summary>Updates the zoom bar's colours to match the current light/dark theme.</summary>
+    private void UpdateZoomBarColors(bool isLight)
+    {
+        _zoomBarIsLight = isLight;
+        if (isLight)
+        {
+            _zoomBar.Background  = new SolidColorBrush(Color.FromArgb(0xE8, 0xF0, 0xF4, 0xFF));
+            _zoomBar.BorderBrush = new SolidColorBrush(Color.FromRgb(0xAA, 0xBB, 0xCC));
+            _zoomTextBox.Background = new SolidColorBrush(Color.FromRgb(0xF0, 0xF4, 0xFB));
+            _zoomTextBox.Foreground = Brushes.Black;
+            _zoomMinusBtn.Foreground = Brushes.Black;
+            _zoomPlusBtn.Foreground  = Brushes.Black;
+        }
+        else
+        {
+            _zoomBar.Background  = new SolidColorBrush(Color.FromArgb(0xCC, 0x1A, 0x1A, 0x2E));
+            _zoomBar.BorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x55, 0x66));
+            _zoomTextBox.Background = new SolidColorBrush(Color.FromRgb(0x22, 0x32, 0x44));
+            _zoomTextBox.Foreground = NodeTextBrush;
+            _zoomMinusBtn.Foreground = NodeTextBrush;
+            _zoomPlusBtn.Foreground  = NodeTextBrush;
         }
     }
 
