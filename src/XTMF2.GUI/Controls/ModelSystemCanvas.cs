@@ -413,6 +413,12 @@ public sealed class ModelSystemCanvas : Control
         };
         LogicalChildren.Add(_zoomBar);
         VisualChildren.Add(_zoomBar);
+
+        // Suppress Avalonia's automatic context-menu-on-right-click behaviour.
+        // The canvas manages the context menu manually in OnPointerReleased so
+        // that it only appears after a minimal-movement right-click, not after
+        // a right-drag used to create a link connection.
+        ContextRequested += SuppressContextRequested;
     }
 
     // ── Drag state ────────────────────────────────────────────────────────
@@ -2553,6 +2559,15 @@ public sealed class ModelSystemCanvas : Control
         InvalidateAndMeasure();
         e.Handled = true;
     }
+
+    /// <summary>
+    /// Suppress Avalonia's automatic context-menu opening on right-click release.
+    /// The canvas shows the context menu manually in <see cref="OnPointerReleased"/>
+    /// only when the pointer has moved less than the drag threshold, so we must
+    /// prevent the framework from opening it independently.
+    /// </summary>
+    private void SuppressContextRequested(object? sender, ContextRequestedEventArgs e)
+        => e.Handled = true;
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
