@@ -226,5 +226,57 @@
             <Setter Property="Background" Value="{DynamicResource DlgDangerHover}"/>
         </Style>
 
+        <!-- ── neon-view: shared style for UserControl-based content views ── -->
+        <Style Selector="UserControl.neon-view">
+            <Setter Property="Background" Value="{DynamicResource DlgBg}"/>
+        </Style>
+        <Style Selector="UserControl.neon-view TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource DlgFg}"/>
+        </Style>
+        <Style Selector="UserControl.neon-view ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="UserControl.neon-view ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgHover}"/>
+        </Style>
+        <Style Selector="UserControl.neon-view ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgSelected}"/>
+        </Style>
+        <Style Selector="UserControl.neon-view ListBoxItem:selected:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgAccentMid}"/>
+        </Style>
+        <Style Selector="UserControl.neon-view Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource DlgFg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DlgBtnBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="12,6"/>
+        </Style>
+        <Style Selector="UserControl.neon-view Button:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgHover}"/>
+        </Style>
+        <Style Selector="UserControl.neon-view Button.dlg-primary">
+            <Setter Property="Background" Value="{DynamicResource DlgPrimaryBtnBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DlgPrimaryBtnFg}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="UserControl.neon-view Button.dlg-primary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgPrimaryBtnHover}"/>
+        </Style>
+        <Style Selector="UserControl.neon-view Button.dlg-danger">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource DlgDanger}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DlgDanger}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="MinWidth" Value="0"/>
+        </Style>
+        <Style Selector="UserControl.neon-view Button.dlg-danger:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgDangerHover}"/>
+        </Style>
+
     </Application.Styles>
 </Application>

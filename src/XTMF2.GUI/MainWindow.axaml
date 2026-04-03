@@ -12,6 +12,7 @@
         x:CompileBindings="True"
         Width="1200"
         Height="700"
+        Background="{DynamicResource DlgBg}"
         KeyDown="Window_KeyDown">
     
     <Grid>

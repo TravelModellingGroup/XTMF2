@@ -9,6 +9,7 @@
              x:Class="XTMF2.GUI.Views.ModelSystemEditorView"
              x:DataType="vm:ModelSystemEditorViewModel"
              x:CompileBindings="True"
+             Classes="neon-view"
              Focusable="True">
 
     <!-- ── Per-theme colour tokens for the floating neon dock bar ──────── -->
@@ -113,7 +114,7 @@
         <Panel Grid.Row="1">
 
             <!-- Canvas (fills the entire panel) -->
-            <Border BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+            <Border BorderBrush="{DynamicResource DlgListBorder}"
                     BorderThickness="1"
                     CornerRadius="4"
                     ClipToBounds="True">

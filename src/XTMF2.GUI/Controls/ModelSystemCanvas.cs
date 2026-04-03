@@ -49,7 +49,7 @@ namespace XTMF2.GUI.Controls;
 public sealed class ModelSystemCanvas : Control
 {
     // ── Brushes / pens (shared, immutable) ───────────────────────────────
-    private static readonly IBrush CanvasBackground      = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E));
+    private static readonly IBrush CanvasBackground      = new SolidColorBrush(Color.FromRgb(0x0E, 0x0E, 0x18)); // matches DlgBg dark token
     private static readonly IBrush CanvasBackgroundLight = new SolidColorBrush(Color.FromRgb(0xF0, 0xF4, 0xF8));
     private static readonly IBrush NodeFill           = new SolidColorBrush(Color.FromRgb(0x0E, 0x22, 0x38)); // deep dark blue
     private static readonly IBrush NodeBorderBrush    = new SolidColorBrush(Color.FromRgb(0x00, 0xCC, 0xFF)); // neon cyan
