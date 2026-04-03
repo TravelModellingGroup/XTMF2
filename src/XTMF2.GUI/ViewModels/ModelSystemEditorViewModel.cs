@@ -2091,6 +2091,23 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Removes a single <paramref name="dest"/> entry from the currently selected MultiLink.
+    /// Bound to the per-row delete button in the destination list.
+    /// </summary>
+    [RelayCommand]
+    private void RemoveLinkDestinationEntry(LinkDestinationViewModel? dest)
+    {
+        if (dest is null) return;
+        if (SelectedLink?.UnderlyingLink is not MultiLink multiLink) return;
+        var idx = SelectedLinkDestinationEntries.IndexOf(dest);
+        if (idx < 0) return;
+        if (SelectedLinkDestinationEntry == dest)
+            SelectedLinkDestinationEntry = null;
+        if (!Session.RemoveLinkDestination(User, multiLink, idx, out var error) && error is not null)
+            _ = ShowError("Remove Failed", error);
+    }
+
+    /// <summary>
     /// Sets <see cref="LinkViewModel.IsSelected"/> on every VM whose
     /// <see cref="LinkViewModel.UnderlyingLink"/> equals <paramref name="underlyingLink"/>.
     /// This ensures all destination arrows for a MultiLink are highlighted together.

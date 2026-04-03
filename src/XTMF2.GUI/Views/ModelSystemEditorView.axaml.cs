@@ -19,9 +19,11 @@
 using System;
 using System.ComponentModel;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using XTMF2.GUI.ViewModels;
 
 namespace XTMF2.GUI.Views;
@@ -317,7 +319,11 @@ public partial class ModelSystemEditorView : UserControl
         for (int i = 0; i < DestinationListBox.ItemCount; i++)
         {
             if (DestinationListBox.ContainerFromIndex(i) is not Control container) continue;
-            var mid = container.Bounds.Top + container.Bounds.Height / 2.0;
+            // TranslatePoint converts the container's origin into the ListBox coordinate space,
+            // which matches `dropPos` obtained via e.GetCurrentPoint(DestinationListBox).
+            var topInListBox = container.TranslatePoint(new Avalonia.Point(0, 0), DestinationListBox);
+            if (topInListBox is null) continue;
+            var mid = topInListBox.Value.Y + container.Bounds.Height / 2.0;
             if (dropPos.Y < mid)
                 return i;
         }
@@ -333,12 +339,18 @@ public partial class ModelSystemEditorView : UserControl
         if (insertBefore < DestinationListBox.ItemCount)
         {
             if (DestinationListBox.ContainerFromIndex(insertBefore) is Control c)
-                indicatorY = c.Bounds.Top;
+            {
+                var topLeft = c.TranslatePoint(new Avalonia.Point(0, 0), DestinationListBox);
+                if (topLeft is not null) indicatorY = topLeft.Value.Y;
+            }
         }
         else if (DestinationListBox.ItemCount > 0)
         {
             if (DestinationListBox.ContainerFromIndex(DestinationListBox.ItemCount - 1) is Control last)
-                indicatorY = last.Bounds.Bottom;
+            {
+                var topLeft = last.TranslatePoint(new Avalonia.Point(0, 0), DestinationListBox);
+                if (topLeft is not null) indicatorY = topLeft.Value.Y + last.Bounds.Height;
+            }
         }
 
         if (indicatorY is null) return;

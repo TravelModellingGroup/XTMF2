@@ -346,7 +346,22 @@
                                              MaxHeight="180">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate x:DataType="vm:LinkDestinationViewModel">
-                                                <TextBlock Text="{Binding Name}" Padding="4,2"/>
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding Name}"
+                                                               Padding="4,2"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                    <Button Grid.Column="1"
+                                                            Content="✕"
+                                                            Padding="4,1"
+                                                            Margin="4,0,0,0"
+                                                            FontSize="10"
+                                                            VerticalAlignment="Center"
+                                                            ToolTip.Tip="Remove this destination"
+                                                            Command="{Binding $parent[UserControl].((vm:ModelSystemEditorViewModel)DataContext).RemoveLinkDestinationEntryCommand}"
+                                                            CommandParameter="{Binding}"/>
+                                                </Grid>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>
                                     </ListBox>
