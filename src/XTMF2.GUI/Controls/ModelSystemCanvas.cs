@@ -2278,6 +2278,12 @@ public sealed class ModelSystemCanvas : Control
                 e.Handled = true;
             }
         }
+        else if (e.Key == Key.Left && (e.KeyModifiers & KeyModifiers.Alt) != 0)
+        {
+            // Alt+Left: navigate to parent boundary / exit function template.
+            _vm?.NavigateUpCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     // ── Scaling helpers ───────────────────────────────────────────────────
@@ -2368,6 +2374,14 @@ public sealed class ModelSystemCanvas : Control
     {
         base.OnPointerPressed(e);
         if (_vm is null) return;
+
+        // ── Mouse back button (XButton1): navigate to parent scope ───────────────
+        if (e.GetCurrentPoint(this).Properties.PointerUpdateKind == PointerUpdateKind.XButton1Pressed)
+        {
+            _vm.NavigateUpCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
 
         var point = e.GetCurrentPoint(this);
         var pos   = point.Position;           // screen coords

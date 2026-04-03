@@ -530,6 +530,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             ExitFunctionTemplateCommand.NotifyCanExecuteChanged();
         }
 
+        NavigateUpCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanNavigateUp));
         SubscribeToBoundary(_currentBoundary);
         BuildFromBoundary(_currentBoundary);
         RebuildBoundaryNavItems();
@@ -1688,6 +1690,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         _currentFunctionTemplate = ftvm;
         OnPropertyChanged(nameof(IsInsideFunctionTemplate));
         ExitFunctionTemplateCommand.NotifyCanExecuteChanged();
+        NavigateUpCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanNavigateUp));
         SwitchToBoundary(ftvm.UnderlyingTemplate.InternalModules);
     }
 
@@ -1758,7 +1762,36 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         _currentFunctionTemplate = null;
         OnPropertyChanged(nameof(IsInsideFunctionTemplate));
         ExitFunctionTemplateCommand.NotifyCanExecuteChanged();
+        NavigateUpCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanNavigateUp));
         SwitchToBoundary(parentBoundary);
+    }
+
+    // ── General navigate-up  (function template exit OR parent boundary) ──────
+
+    /// <summary>
+    /// <c>true</c> when the user can navigate up: either inside a function template
+    /// or viewing a non-root boundary.
+    /// </summary>
+    public bool CanNavigateUp => IsInsideFunctionTemplate || !IsAtRootBoundary;
+
+    /// <summary>
+    /// Navigates up one scope.  If the canvas is inside a function template the
+    /// user is returned to that template's parent boundary.  Otherwise the canvas
+    /// ascends to <see cref="Boundary.Parent"/>.  No-op when already at the global
+    /// root and not inside a function template.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanNavigateUp))]
+    private void NavigateUp()
+    {
+        if (IsInsideFunctionTemplate)
+        {
+            ExitFunctionTemplate();
+            return;
+        }
+        var parent = _currentBoundary.Parent;
+        if (parent is not null)
+            SwitchToBoundary(parent);
     }
 
     /// <summary>

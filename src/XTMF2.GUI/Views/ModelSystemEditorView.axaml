@@ -59,6 +59,7 @@
         <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}"/>
         <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoCommand}"/>
         <KeyBinding Gesture="Ctrl+B" Command="{Binding BrowseBoundariesCommand}"/>
+        <KeyBinding Gesture="Alt+Left" Command="{Binding NavigateUpCommand}"/>
     </UserControl.KeyBindings>
 
     <Grid RowDefinitions="Auto,*" Margin="10">
@@ -156,6 +157,15 @@
                             <Setter Property="Opacity" Value="0.35"/>
                         </Style>
                     </StackPanel.Styles>
+
+                    <!-- Step Out: exit function template or ascend to parent boundary -->
+                    <Button Command="{Binding NavigateUpCommand}"
+                            ToolTip.Tip="Step out to parent scope  (Alt+← / Mouse Back)"
+                            ToolTip.Placement="Top">
+                        <TextBlock Text="⬆" FontSize="18" IsHitTestVisible="False"/>
+                    </Button>
+
+                    <Separator/>
 
                     <!-- Undo -->
                     <Button Command="{Binding UndoCommand}"
