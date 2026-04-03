@@ -44,18 +44,14 @@
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
                             <Button Command="{Binding CreateNewModelSystemCommand}"
                                     Classes="dlg-primary"
-                                    Padding="12,6">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="+" FontWeight="Bold" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{res:Localize ModelSystems_NewModelSystem}" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                    Padding="10,6"
+                                    ToolTip.Tip="{res:Localize ModelSystems_NewModelSystem}">
+                                <TextBlock Text="+" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
                             </Button>
                             <Button Command="{Binding ImportModelSystemCommand}"
-                                    Padding="12,6">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="↑" FontWeight="Bold" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{res:Localize ModelSystems_Import}" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                    Padding="10,6"
+                                    ToolTip.Tip="{res:Localize ModelSystems_Import}">
+                                <TextBlock Text="↑" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
                             </Button>
                         </StackPanel>
                         <controls:SearchBox Grid.Column="2"

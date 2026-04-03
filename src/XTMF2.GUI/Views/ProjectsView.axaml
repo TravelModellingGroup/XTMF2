@@ -44,18 +44,14 @@
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
                             <Button Click="NewProject_Click"
                                     Classes="dlg-primary"
-                                    Padding="12,6">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="+" FontWeight="Bold" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{res:Localize Projects_NewProject}" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                    Padding="10,6"
+                                    ToolTip.Tip="{res:Localize Projects_NewProject}">
+                                <TextBlock Text="+" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
                             </Button>
                             <Button Click="ImportProject_Click"
-                                    Padding="12,6">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="↑" FontWeight="Bold" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{res:Localize Projects_Import}" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                    Padding="10,6"
+                                    ToolTip.Tip="{res:Localize Projects_Import}">
+                                <TextBlock Text="↑" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
                             </Button>
                         </StackPanel>
                         <controls:SearchBox Grid.Column="2"
