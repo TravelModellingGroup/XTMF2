@@ -145,6 +145,57 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void TestRemoveFunctionTemplate_WithReferencingInstance_Fails()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestRemoveFunctionTemplate_WithReferencingInstance_Fails),
+            (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var ms     = mSession.ModelSystem;
+                var gb     = ms.GlobalBoundary;
+
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, gb, "MyTemplate",
+                    out var template, out error), error?.Message);
+
+                // Place an instance that references the template.
+                Assert.IsTrue(mSession.AddFunctionInstance(user, gb, template, "MyInstance",
+                    new Rectangle(10f, 10f, 160f, 70f), out _, out error), error?.Message);
+
+                // Removing the template while the instance still exists must be rejected.
+                var ok = mSession.RemoveFunctionTemplate(user, gb, template, out error);
+                Assert.IsFalse(ok,
+                    "RemoveFunctionTemplate should fail when a FunctionInstance still references it.");
+                Assert.IsNotNull(error);
+                Assert.HasCount(1, gb.FunctionTemplates,
+                    "The template must still be present after the failed removal.");
+            });
+        }
+
+        [TestMethod]
+        public void TestRemoveFunctionTemplate_AfterInstanceRemoved_Succeeds()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestRemoveFunctionTemplate_AfterInstanceRemoved_Succeeds),
+            (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var ms     = mSession.ModelSystem;
+                var gb     = ms.GlobalBoundary;
+
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, gb, "MyTemplate",
+                    out var template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionInstance(user, gb, template, "MyInstance",
+                    new Rectangle(10f, 10f, 160f, 70f), out var instance, out error), error?.Message);
+
+                // Remove the instance first…
+                Assert.IsTrue(mSession.RemoveFunctionInstance(user, instance, out error), error?.Message);
+
+                // …now the template removal should succeed.
+                Assert.IsTrue(mSession.RemoveFunctionTemplate(user, gb, template, out error), error?.Message);
+                Assert.IsEmpty(gb.FunctionTemplates);
+            });
+        }
+
+        [TestMethod]
         public void TestFunctionTemplateSave()
         {
             TestHelper.RunInModelSystemContext("TestFunctionTemplateSave", (user, pSession, mSession) =>

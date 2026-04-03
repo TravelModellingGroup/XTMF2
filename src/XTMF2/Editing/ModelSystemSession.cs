@@ -1491,6 +1491,29 @@ namespace XTMF2.Editing
         /// Returns every <see cref="GhostNode"/> anywhere in the model system that
         /// references <paramref name="realNode"/>.
         /// </summary>
+        /// <summary>
+        /// Returns every <see cref="FunctionInstance"/> anywhere in the model system that
+        /// references <paramref name="template"/>.
+        /// </summary>
+        private List<FunctionInstance> GetAllFunctionInstancesOf(FunctionTemplate template)
+        {
+            var result = new List<FunctionInstance>();
+            var stack = new Stack<Boundary>();
+            stack.Push(ModelSystem.GlobalBoundary);
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+                foreach (var child in current.Boundaries)
+                    stack.Push(child);
+                foreach (var ft in current.FunctionTemplates)
+                    stack.Push(ft.InternalModules);
+                foreach (var fi in current.FunctionInstances)
+                    if (fi.Template == template)
+                        result.Add(fi);
+            }
+            return result;
+        }
+
         private List<GhostNode> GetAllGhostNodesOf(Node realNode)
         {
             var result = new List<GhostNode>();
@@ -1978,6 +2001,19 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
+
+                // Refuse the removal if at least one FunctionInstance still references this template.
+                var referencing = GetAllFunctionInstancesOf(functionTemplate);
+                if (referencing.Count > 0)
+                {
+                    var names = string.Join(", ", referencing.Select(fi => $"'{fi.Name}'"));
+                    error = new CommandError(
+                        $"Cannot remove FunctionTemplate '{functionTemplate.Name}' because it is still " +
+                        $"referenced by the following function instance(s): {names}. " +
+                        $"Remove those instances first.");
+                    return false;
+                }
+
                 if (!boundary.RemoveFunctionTemplate(functionTemplate, out error))
                 {
                     error = new CommandError($"Failed to remove function template {functionTemplate.Name} from boundary {boundary.Name}: {error?.Message}");
