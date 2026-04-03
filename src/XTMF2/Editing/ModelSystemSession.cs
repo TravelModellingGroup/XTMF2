@@ -1102,6 +1102,35 @@ namespace XTMF2.Editing
                     })
                     .ToList();
 
+                // Collect hidden (embedded) nodes: destination nodes of outgoing links that
+                // reside in the same boundary and carry a Rectangle.Hidden location.
+                // These are visually embedded within the owning node and must be deleted with it.
+                var hiddenNodes = outgoingLinks
+                    .SelectMany<Link, Node>(l =>
+                        l is SingleLink sl && sl.Destination is not null ? new[] { sl.Destination }
+                        : l is MultiLink ml ? ml.Destinations.ToArray()
+                        : Array.Empty<Node>())
+                    .Where(n => n.Location.Equals(Rectangle.Hidden) && ReferenceEquals(n.ContainedWithin, boundary))
+                    .Distinct()
+                    .ToList();
+
+                // For each hidden node, capture any OTHER incoming links (not the owner→hidden
+                // links already in outgoingLinks) plus its ghost cascade, for clean undo/redo.
+                var hiddenCascadeData = hiddenNodes
+                    .Select(hn =>
+                    {
+                        var hnLinks     = GetLinksGoingTo(hn).Where(l => !outgoingLinks.Contains(l)).ToList();
+                        var hnMulti     = BuildMultiLinkRestoreInfo(hnLinks, hn);
+                        var hnGhosts    = GetAllGhostNodesOf(hn);
+                        var hnGhostData = hnGhosts.Select(g =>
+                        {
+                            var gLinks = GetLinksGoingTo(g);
+                            return (Ghost: g, Links: gLinks, MultiInfo: BuildMultiLinkRestoreInfo(gLinks, g));
+                        }).ToList();
+                        return (Node: hn, OtherIncoming: hnLinks, MultiInfo: hnMulti, GhostData: hnGhostData);
+                    })
+                    .ToList();
+
                 // Remove all incoming links (or just the relevant destination entries).
                 void RemoveIncoming()
                 {
@@ -1132,11 +1161,41 @@ namespace XTMF2.Editing
                     }
                 }
 
-                // Remove incoming links, then ghost cascade, then outgoing links, then the node itself.
+                void RemoveHiddenCascade()
+                {
+                    foreach (var (hn, hnLinks, hnMulti, hnGhostData) in hiddenCascadeData)
+                    {
+                        foreach (var (ghost, gLinks, gMulti) in hnGhostData)
+                        {
+                            RemoveIncomingLinks(gLinks, ghost, gMulti);
+                            ghost.ContainedWithin!.RemoveGhostNode(ghost, out _);
+                        }
+                        RemoveIncomingLinks(hnLinks, hn, hnMulti);
+                        boundary.RemoveNode(hn, out _);
+                    }
+                }
+
+                void RestoreHiddenCascade()
+                {
+                    foreach (var (hn, hnLinks, hnMulti, hnGhostData) in hiddenCascadeData)
+                    {
+                        boundary.AddNode(hn, out _);
+                        RestoreIncomingLinks(hnLinks, hn, hnMulti);
+                        foreach (var (ghost, gLinks, gMulti) in hnGhostData)
+                        {
+                            ghost.ContainedWithin!.AddGhostNode(ghost, out _);
+                            RestoreIncomingLinks(gLinks, ghost, gMulti);
+                        }
+                    }
+                }
+
+                // Remove incoming links, then ghost cascade, then outgoing links,
+                // then the hidden embedded nodes, then the node itself.
                 RemoveIncoming();
                 RemoveGhostCascade();
                 foreach (var link in outgoingLinks)
                     boundary.RemoveLink(link, out _);
+                RemoveHiddenCascade();
 
                 // Also remove from model system variables if present, capturing position for undo.
                 var variableIndex = ModelSystem.Variables.IndexOf(node);
@@ -1155,9 +1214,10 @@ namespace XTMF2.Editing
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
-                        // Undo: restore node first, then its outgoing links, then all incoming links, then ghosts.
+                        // Undo: restore node first, then hidden nodes, then outgoing links, then incoming links + ghosts.
                         if (boundary.AddNode(node, out var e))
                         {
+                            RestoreHiddenCascade();
                             foreach (var link in outgoingLinks)
                                 boundary.AddLink(link, out e);
                             RestoreIncoming();
@@ -1179,6 +1239,7 @@ namespace XTMF2.Editing
                         RemoveGhostCascade();
                         foreach (var link in outgoingLinks)
                             boundary.RemoveLink(link, out _);
+                        RemoveHiddenCascade();
                         ModelSystem.Variables.Remove(node);
                         if (wasExposedInTemplate)
                             owningTemplate!.RemoveExposedNode(node);
@@ -1188,7 +1249,8 @@ namespace XTMF2.Editing
                 }
                 else
                 {
-                    // Node removal failed; roll back the link removals and ghost cascade.
+                    // Node removal failed; roll back the link removals, hidden cascade, and ghost cascade.
+                    RestoreHiddenCascade();
                     foreach (var link in outgoingLinks)
                         boundary.AddLink(link, out _);
                     RestoreGhostCascade();

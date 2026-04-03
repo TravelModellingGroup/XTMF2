@@ -638,5 +638,69 @@ namespace XTMF2.UnitTests.Editing
                 Assert.AreEqual(newLocation, modules[0].Location);
             });
         }
+
+        /// <summary>
+        /// Verify that a plain RemoveNode call also deletes hidden (embedded) destination nodes
+        /// that were linked to by the removed node.
+        /// </summary>
+        [TestMethod]
+        public void RemoveNode_CascadesHiddenEmbeddedNodes()
+        {
+            TestHelper.RunInModelSystemContext("RemoveNode_CascadesHiddenEmbeddedNodes", (user, pSession, msSession) =>
+            {
+                CommandError error = null;
+                var ms = msSession.ModelSystem;
+                var gBound = ms.GlobalBoundary;
+
+                // AddNodeGenerateParameters creates the main node AND a hidden BasicParameter<string> child.
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(user, gBound, "Test",
+                    typeof(SimpleParameterModule), Rectangle.Hidden,
+                    out var mainNode, out var children, out error), error?.Message);
+                Assert.IsNotNull(children);
+                Assert.HasCount(1, children);
+                Assert.HasCount(2, gBound.Modules, "Expected main node + 1 hidden child.");
+                Assert.HasCount(1, gBound.Links,   "Expected the owner→child link.");
+
+                // Plain RemoveNode should cascade and remove the hidden child too.
+                Assert.IsTrue(msSession.RemoveNode(user, mainNode, out error), error?.Message);
+                Assert.IsEmpty(gBound.Modules, "Hidden child node should have been removed with its owner.");
+                Assert.IsEmpty(gBound.Links,   "The owner→child link should have been removed.");
+            });
+        }
+
+        /// <summary>
+        /// Verify that undo/redo correctly restores and re-removes the hidden
+        /// embedded nodes deleted by RemoveNode.
+        /// </summary>
+        [TestMethod]
+        public void RemoveNode_CascadesHiddenEmbeddedNodes_UndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("RemoveNode_CascadesHiddenEmbeddedNodes_UndoRedo", (user, pSession, msSession) =>
+            {
+                CommandError error = null;
+                var ms = msSession.ModelSystem;
+                var gBound = ms.GlobalBoundary;
+
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(user, gBound, "Test",
+                    typeof(SimpleParameterModule), Rectangle.Hidden,
+                    out var mainNode, out _, out error), error?.Message);
+                Assert.HasCount(2, gBound.Modules);
+                Assert.HasCount(1, gBound.Links);
+
+                Assert.IsTrue(msSession.RemoveNode(user, mainNode, out error), error?.Message);
+                Assert.IsEmpty(gBound.Modules, "After RemoveNode both nodes should be gone.");
+                Assert.IsEmpty(gBound.Links);
+
+                // Undo should bring back both the main node and the hidden child.
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
+                Assert.HasCount(2, gBound.Modules, "Undo should restore the main node and its hidden child.");
+                Assert.HasCount(1, gBound.Links,   "Undo should restore the owner→child link.");
+
+                // Redo should delete them both again.
+                Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
+                Assert.IsEmpty(gBound.Modules, "Redo should remove both nodes again.");
+                Assert.IsEmpty(gBound.Links,   "Redo should remove the link again.");
+            });
+        }
     }
 }
