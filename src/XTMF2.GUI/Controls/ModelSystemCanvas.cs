@@ -120,6 +120,65 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush SelectionRectFill = new SolidColorBrush(Color.FromArgb(0x2E, 0x44, 0x88, 0xFF));
     private static readonly DashStyle SelectionRectDash = new DashStyle([5, 4], 0);
 
+    // ── Light-mode palette ────────────────────────────────────────────────
+    // Each entry below is the light-mode counterpart of a dark-mode brush above.
+    // Render methods select between the two sets via _isLight.
+    private static readonly IBrush NodeFillL             = new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0xFF)); // white card
+    private static readonly IBrush NodeBorderBrushL      = new SolidColorBrush(Color.FromRgb(0x00, 0x66, 0xBB)); // strong blue
+    private static readonly IBrush NodeTextBrushL        = new SolidColorBrush(Color.FromRgb(0x0D, 0x1B, 0x2A)); // near-black
+    private static readonly IBrush GhostNodeFillL        = new SolidColorBrush(Color.FromArgb(0x50, 0xB4, 0xC8, 0xDC));
+    private static readonly IBrush GhostNodeBorderBrushL = new SolidColorBrush(Color.FromRgb(0x33, 0x77, 0xBB));
+    private static readonly IBrush LinkBrushL            = new SolidColorBrush(Color.FromRgb(0x00, 0x55, 0xAA));
+    private static readonly IBrush PendingLinkBrushL     = new SolidColorBrush(Color.FromRgb(0x1A, 0x7A, 0x40));
+    // Script syntax highlight (light)
+    private static readonly IBrush ScriptVarKnownBrushL   = new SolidColorBrush(Color.FromRgb(0x1A, 0x7A, 0x40));
+    private static readonly IBrush ScriptVarUnknownBrushL = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00));
+    private static readonly IBrush ScriptOperatorBrushL   = new SolidColorBrush(Color.FromRgb(0x44, 0x55, 0x66));
+    private static readonly IBrush ScriptNumberBrushL     = new SolidColorBrush(Color.FromRgb(0x00, 0x44, 0xAA));
+    private static readonly IBrush ScriptStringBrushL     = new SolidColorBrush(Color.FromRgb(0x8B, 0x45, 0x00));
+    private static readonly IBrush ScriptKeywordBrushL    = new SolidColorBrush(Color.FromRgb(0x7B, 0x50, 0x00));
+    // Parameter value row (light)
+    private static readonly IBrush ParamValueTextBrushL   = new SolidColorBrush(Color.FromRgb(0x6B, 0x4A, 0x00));
+    private static readonly IBrush ParamValueBgL          = new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x00, 0x00));
+    // Hook row (light)
+    private static readonly IBrush HookConnectedBrushL    = new SolidColorBrush(Color.FromRgb(0x1A, 0x7A, 0x40));
+    private static readonly IBrush HookUnconnectedBrushL  = new SolidColorBrush(Color.FromRgb(0x88, 0x99, 0xAA));
+    private static readonly IBrush HookUnsatisfiedBrushL  = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00));
+    private static readonly IBrush HookDividerBrushL      = new SolidColorBrush(Color.FromRgb(0xBC, 0xCD, 0xE0));
+    private static readonly IBrush HookTextConnBrushL     = new SolidColorBrush(Color.FromRgb(0x0D, 0x5A, 0x28));
+    private static readonly IBrush HookTextDimBrushL      = new SolidColorBrush(Color.FromRgb(0x5A, 0x70, 0x80));
+    private static readonly IBrush HookTextUnsatisfiedBrushL = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00));
+    // Hook toggle icon (light)
+    private static readonly IBrush HookToggleBgL          = new SolidColorBrush(Color.FromArgb(0x60, 0x88, 0xAA, 0xCC));
+    private static readonly IBrush HookToggleActiveBgL    = new SolidColorBrush(Color.FromArgb(0xA0, 0x11, 0x66, 0xFF));
+    private static readonly IBrush HookToggleTextL        = new SolidColorBrush(Color.FromRgb(0x22, 0x44, 0x66));
+    // Resize handle (light)
+    private static readonly IBrush ResizeHandleBrushL     = new SolidColorBrush(Color.FromArgb(0x80, 0x77, 0x88, 0xAA));
+    // Minimize-to-inline button (light)
+    private static readonly IBrush MinimizeBtnBgL         = new SolidColorBrush(Color.FromArgb(0x60, 0x44, 0x88, 0x22));
+    private static readonly IBrush MinimizeBtnTextL       = new SolidColorBrush(Color.FromRgb(0x22, 0x55, 0x00));
+    // Function-template (light)
+    private static readonly IBrush FtFillL          = new SolidColorBrush(Color.FromRgb(0xF6, 0xEE, 0xFF));
+    private static readonly IBrush FtHeaderFillL    = new SolidColorBrush(Color.FromRgb(0xC8, 0xA0, 0xE0));
+    private static readonly IBrush FtBorderBrushL   = new SolidColorBrush(Color.FromRgb(0x77, 0x22, 0xCC));
+    private static readonly IBrush FtTextBrushL     = new SolidColorBrush(Color.FromRgb(0x2A, 0x00, 0x50));
+    private static readonly IBrush FtHookTextBrushL = new SolidColorBrush(Color.FromRgb(0x55, 0x11, 0xAA));
+    private static readonly IBrush FtCountTextBrushL = new SolidColorBrush(Color.FromArgb(0xA0, 0x66, 0x44, 0xAA));
+    // Function-instance (light)
+    private static readonly IBrush FiFillL           = new SolidColorBrush(Color.FromRgb(0xE8, 0xFF, 0xF8));
+    private static readonly IBrush FiHeaderFillL     = new SolidColorBrush(Color.FromRgb(0x7B, 0xCF, 0xC0));
+    private static readonly IBrush FiBorderBrushL    = new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0x6B));
+    private static readonly IBrush FiSelBorderBrushL = new SolidColorBrush(Color.FromRgb(0x00, 0x55, 0x48));
+    private static readonly IBrush FiTextBrushL      = new SolidColorBrush(Color.FromRgb(0x00, 0x33, 0x28));
+    private static readonly IBrush FiSubTextBrushL   = new SolidColorBrush(Color.FromArgb(0xC0, 0x3A, 0x55, 0x50));
+    private static readonly IBrush FiHookTextBrushL  = new SolidColorBrush(Color.FromRgb(0x00, 0x57, 0x4E));
+    // Glow colours (light mode — more subdued than dark-mode neons)
+    private static readonly Color NodeGlowColorL  = Color.FromRgb(0x00, 0x66, 0xBB);
+    private static readonly Color FtGlowColorL   = Color.FromRgb(0x88, 0x22, 0xCC);
+    private static readonly Color FiGlowColorL   = Color.FromRgb(0x00, 0x7A, 0x6B);
+    private static readonly Color GhostGlowColorL = Color.FromRgb(0x33, 0x77, 0xBB);
+    private static readonly Color LinkGlowColorL  = Color.FromRgb(0x00, 0x66, 0xBB);
+
     // Function-template container box
     private static readonly IBrush FtFill            = new SolidColorBrush(Color.FromRgb(0x20, 0x12, 0x38));
     private static readonly IBrush FtHeaderFill      = new SolidColorBrush(Color.FromRgb(0x4A, 0x28, 0x6E));
@@ -206,6 +265,8 @@ public sealed class ModelSystemCanvas : Control
 
     // ── ViewModel ─────────────────────────────────────────────────────────
     private ModelSystemEditorViewModel?      _vm;
+    /// <summary>Set at the start of each <see cref="Render"/> call; <c>true</c> when the app is in light mode.</summary>
+    private bool _isLight;
     /// <summary>Tracks the FunctionTemplate we are currently subscribed to for PropertyChanged,
     /// so we can unsubscribe when navigating away.</summary>
     private FunctionTemplateViewModel? _subscribedCurrentFunctionTemplate;
@@ -766,6 +827,7 @@ public sealed class ModelSystemCanvas : Control
         BuildHookAnchorCache();
         var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height);
         bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        _isLight = isLight;
         ctx.DrawRectangle(isLight ? CanvasBackgroundLight : CanvasBackground, null, bounds);
         DrawGridBackground(ctx, bounds, isLight);
 
@@ -931,9 +993,9 @@ public sealed class ModelSystemCanvas : Control
                 for (int d = 0; d < 3; d++)
                 {
                     double offset = 4.0 + d * 4.0;
-                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(bx - offset + dotR, by - dotR), dotR, dotR);
-                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(bx - dotR, by - offset + dotR), dotR, dotR);
                 }
             }
@@ -955,16 +1017,16 @@ public sealed class ModelSystemCanvas : Control
             var rect   = new Rect(ft.X, ft.Y, rw, rh);
 
             // Neon glow + outer border (dashed to distinguish from a regular node or boundary)
-            var borderBrush = ft.IsSelected ? FtSelBorderBrush : FtBorderBrush;
+            var borderBrush = ft.IsSelected ? FtSelBorderBrush : (_isLight ? FtBorderBrushL : FtBorderBrush);
             var border      = new Pen(borderBrush, NodeBorderThickness + 0.5, dashStyle: FtBorderDash);
-            DrawRectGlow(ctx, rect, FtCornerRadius, ft.IsSelected ? SelectionGlowColor : FtGlowColor);
-            ctx.DrawRectangle(FtFill, border, rect, FtCornerRadius, FtCornerRadius);
+            DrawRectGlow(ctx, rect, FtCornerRadius, ft.IsSelected ? SelectionGlowColor : (_isLight ? FtGlowColorL : FtGlowColor));
+            ctx.DrawRectangle(_isLight ? FtFillL : FtFill, border, rect, FtCornerRadius, FtCornerRadius);
 
             // ── Header band ────────────────────────────────────────────────
             // Draw header as a filled rectangle, then overdraw the bottom strip
             // with the body fill so we effectively clip the rounded bottom corners.
-            ctx.DrawRectangle(FtHeaderFill, null, rect, FtCornerRadius, FtCornerRadius);
-            ctx.DrawRectangle(FtFill, null,
+            ctx.DrawRectangle(_isLight ? FtHeaderFillL : FtHeaderFill, null, rect, FtCornerRadius, FtCornerRadius);
+            ctx.DrawRectangle(_isLight ? FtFillL : FtFill, null,
                 new Rect(ft.X, ft.Y + FtHeaderHeight, rw, rh - FtHeaderHeight));
 
             // Re-draw the border on top so the header fill doesn't erase it.
@@ -972,7 +1034,7 @@ public sealed class ModelSystemCanvas : Control
 
             // "⊞ TemplateName" label in the header
             var labelText = "\u229e " + ft.Name;
-            var labelFt   = MakeText(labelText, FtNameFontSize, FtTextBrush);
+            var labelFt   = MakeText(labelText, FtNameFontSize, _isLight ? FtTextBrushL : FtTextBrush);
             var lx        = ft.X + 8.0;
             var ly        = ft.Y + (FtHeaderHeight - labelFt.Height) / 2.0;
             using (ctx.PushClip(new Rect(ft.X + 4, ft.Y, rw - 8, FtHeaderHeight)))
@@ -984,19 +1046,19 @@ public sealed class ModelSystemCanvas : Control
             {
                 ctx.DrawRectangle(InlineParamRowBg, null,
                     new Rect(ft.X, rowY, rw, FtHookRowHeight));
-                ctx.DrawLine(new Pen(HookDividerBrush, 0.5),
+                ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
                     new Point(ft.X, rowY),
                     new Point(ft.X + rw, rowY));
 
                 // Dot on the left edge (acts like a hook anchor)
                 double dotCx = ft.X + HookDotRadius + 4.0;
                 double dotCy = rowY + FtHookRowHeight / 2.0;
-                ctx.DrawEllipse(HookConnectedBrush, null,
+                ctx.DrawEllipse(_isLight ? HookConnectedBrushL : HookConnectedBrush, null,
                     new Point(dotCx, dotCy), HookDotRadius, HookDotRadius);
 
                 // Node name
                 var nodeNameFt = MakeText(
-                    exposedNode.Name ?? string.Empty, HookFontSize, FtHookTextBrush);
+                    exposedNode.Name ?? string.Empty, HookFontSize, _isLight ? FtHookTextBrushL : FtHookTextBrush);
                 double textLeft = ft.X + HookDotRadius * 2 + 9.0;
                 using (ctx.PushClip(new Rect(textLeft, rowY, rw - textLeft + ft.X, FtHookRowHeight)))
                     ctx.DrawText(nodeNameFt,
@@ -1011,7 +1073,7 @@ public sealed class ModelSystemCanvas : Control
             var hint = moduleCount == 0
                 ? "Empty — double-click to edit"
                 : $"{moduleCount} module(s) — double-click to edit";
-            var hintFt = MakeText(hint, HookFontSize, FtCountTextBrush);
+            var hintFt = MakeText(hint, HookFontSize, _isLight ? FtCountTextBrushL : FtCountTextBrush);
             if (bodyH > FtHookRowHeight)
             {
                 var hintX = ft.X + (rw - hintFt.Width) / 2.0;
@@ -1028,9 +1090,9 @@ public sealed class ModelSystemCanvas : Control
                 for (int d = 0; d < 3; d++)
                 {
                     double off = 4.0 + d * 4.0;
-                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(gx - off + dotR, gy - dotR), dotR, dotR);
-                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(gx - dotR,        gy - off + dotR), dotR, dotR);
                 }
             }
@@ -1049,27 +1111,27 @@ public sealed class ModelSystemCanvas : Control
             double rh  = fi.Height;
             var rect   = new Rect(fi.X, fi.Y, rw, rh);
 
-            var borderBrush = fi.IsSelected ? FiSelBorderBrush : FiBorderBrush;
+            var borderBrush = fi.IsSelected ? (_isLight ? FiSelBorderBrushL : FiSelBorderBrush) : (_isLight ? FiBorderBrushL : FiBorderBrush);
             var border      = new Pen(borderBrush, NodeBorderThickness);
-            DrawRectGlow(ctx, rect, FiCornerRadius, fi.IsSelected ? SelectionGlowColor : FiGlowColor);
-            ctx.DrawRectangle(FiFill, border, rect, FiCornerRadius, FiCornerRadius);
+            DrawRectGlow(ctx, rect, FiCornerRadius, fi.IsSelected ? SelectionGlowColor : (_isLight ? FiGlowColorL : FiGlowColor));
+            ctx.DrawRectangle(_isLight ? FiFillL : FiFill, border, rect, FiCornerRadius, FiCornerRadius);
 
             // ── Header band ────────────────────────────────────────────────
-            ctx.DrawRectangle(FiHeaderFill, null, rect, FiCornerRadius, FiCornerRadius);
-            ctx.DrawRectangle(FiFill, null,
+            ctx.DrawRectangle(_isLight ? FiHeaderFillL : FiHeaderFill, null, rect, FiCornerRadius, FiCornerRadius);
+            ctx.DrawRectangle(_isLight ? FiFillL : FiFill, null,
                 new Rect(fi.X, fi.Y + FtHeaderHeight, rw, rh - FtHeaderHeight));
             ctx.DrawRectangle(null, border, rect, FiCornerRadius, FiCornerRadius);
 
             // "⊡ InstanceName" in header
             var labelText = "\u22A1 " + fi.Name;
-            var labelFtText = MakeText(labelText, FtNameFontSize, FiTextBrush);
+            var labelFtText = MakeText(labelText, FtNameFontSize, _isLight ? FiTextBrushL : FiTextBrush);
             var lx  = fi.X + 8.0;
             var ly  = fi.Y + (FtHeaderHeight - labelFtText.Height) / 2.0;
             using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
                 ctx.DrawText(labelFtText, new Point(lx, ly));
 
             // Template subtitle (small, muted) at the bottom of the header
-            var subText = MakeText("[" + fi.TemplateName + "]" + (fi.EntryNodeTypeName.Length > 0 ? " : " + fi.EntryNodeTypeName : ""), HookFontSize, FiSubTextBrush);
+            var subText = MakeText("[" + fi.TemplateName + "]" + (fi.EntryNodeTypeName.Length > 0 ? " : " + fi.EntryNodeTypeName : ""), HookFontSize, _isLight ? FiSubTextBrushL : FiSubTextBrush);
             var subX = fi.X + rw - subText.Width - 8.0;
             var subY = fi.Y + (FtHeaderHeight - subText.Height) / 2.0;
             using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
@@ -1081,15 +1143,15 @@ public sealed class ModelSystemCanvas : Control
             {
                 ctx.DrawRectangle(InlineParamRowBg, null,
                     new Rect(fi.X, rowY, rw, FtHookRowHeight));
-                ctx.DrawLine(new Pen(HookDividerBrush, 0.5),
+                ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
                     new Point(fi.X, rowY), new Point(fi.X + rw, rowY));
 
                 double dotCx = fi.X + HookDotRadius + 4.0;
                 double dotCy = rowY + FtHookRowHeight / 2.0;
-                ctx.DrawEllipse(HookConnectedBrush, null,
+                ctx.DrawEllipse(_isLight ? HookConnectedBrushL : HookConnectedBrush, null,
                     new Point(dotCx, dotCy), HookDotRadius, HookDotRadius);
 
-                var hookNameFt = MakeText(hookNode.Name ?? string.Empty, HookFontSize, FiHookTextBrush);
+                var hookNameFt = MakeText(hookNode.Name ?? string.Empty, HookFontSize, _isLight ? FiHookTextBrushL : FiHookTextBrush);
                 double textLeft = fi.X + HookDotRadius * 2 + 9.0;
                 using (ctx.PushClip(new Rect(textLeft, rowY, rw - textLeft + fi.X, FtHookRowHeight)))
                     ctx.DrawText(hookNameFt,
@@ -1106,9 +1168,9 @@ public sealed class ModelSystemCanvas : Control
                 for (int d = 0; d < 3; d++)
                 {
                     double off = 4.0 + d * 4.0;
-                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(gx - off + dotR, gy - dotR), dotR, dotR);
-                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(gx - dotR,        gy - off + dotR), dotR, dotR);
                 }
             }
@@ -1124,11 +1186,11 @@ public sealed class ModelSystemCanvas : Control
             if (link.Destination is null) continue;
             if (link.Destination is NodeViewModel destNvm && destNvm.IsInlined) continue;
 
-            var brush = link.IsSelected ? LinkSelBrush : LinkBrush;
+            var brush = link.IsSelected ? LinkSelBrush : (_isLight ? LinkBrushL : LinkBrush);
             var pen   = new Pen(brush, LinkThickness);
 
             // Neon glow: two wider transparent halos drawn beneath the main link line.
-            var glowColor  = link.IsSelected ? LinkSelGlowColor : LinkGlowColor;
+            var glowColor  = link.IsSelected ? LinkSelGlowColor : (_isLight ? LinkGlowColorL : LinkGlowColor);
             var glowOuter  = new Pen(new SolidColorBrush(Color.FromArgb(0x10, glowColor.R, glowColor.G, glowColor.B)), LinkThickness + 8);
             var glowInner  = new Pen(new SolidColorBrush(Color.FromArgb(0x26, glowColor.R, glowColor.G, glowColor.B)), LinkThickness + 3);
 
@@ -1840,11 +1902,11 @@ public sealed class ModelSystemCanvas : Control
             bool isEntryNode = _vm.IsInsideFunctionTemplate
                 && _vm.CurrentFunctionTemplate?.UnderlyingTemplate.EntryNode == node.UnderlyingNode;
 
-            var border = new Pen(node.IsSelected ? NodeSelBrush : NodeBorderBrush, NodeBorderThickness);
+            var border = new Pen(node.IsSelected ? NodeSelBrush : (_isLight ? NodeBorderBrushL : NodeBorderBrush), NodeBorderThickness);
 
             // Node background + border
-            DrawRectGlow(ctx, rect, NodeCornerRadius, node.IsSelected ? SelectionGlowColor : NodeGlowColor);
-            ctx.DrawRectangle(NodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
+            DrawRectGlow(ctx, rect, NodeCornerRadius, node.IsSelected ? SelectionGlowColor : (_isLight ? NodeGlowColorL : NodeGlowColor));
+            ctx.DrawRectangle(_isLight ? NodeFillL : NodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // ── Entry-node gold ring (drawn over the normal border) ───────────
             if (isEntryNode)
@@ -1861,7 +1923,7 @@ public sealed class ModelSystemCanvas : Control
 
             // ── Header: node name centred in the header band ──────────────
             double headerBottom = node.Y + NodeHeaderHeight;
-            var ft = MakeText(node.Name, NodeFontSize, NodeTextBrush);
+            var ft = MakeText(node.Name, NodeFontSize, _isLight ? NodeTextBrushL : NodeTextBrush);
             double tx = node.X + (rw - ft.Width) / 2;
             // Shift name to the upper portion of the header when a badge will be drawn below it.
             double ty = isEntryNode
@@ -1888,9 +1950,9 @@ public sealed class ModelSystemCanvas : Control
                 for (int d = 0; d < 3; d++)
                 {
                     double offset = 4.0 + d * 4.0;
-                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(bx - offset + dotR, by - dotR), dotR, dotR);
-                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(bx - dotR,           by - offset + dotR), dotR, dotR);
                 }
             }
@@ -1901,10 +1963,10 @@ public sealed class ModelSystemCanvas : Control
             if (!_vm.ShowAllHooks && node.UnderlyingNode.Hooks.Count > 0)
             {
                 var iconRect  = HookToggleIconRect(node, rw);
-                var iconBg    = node.ShowHooks ? HookToggleActiveBg : HookToggleBg;
+                var iconBg    = node.ShowHooks ? (_isLight ? HookToggleActiveBgL : HookToggleActiveBg) : (_isLight ? HookToggleBgL : HookToggleBg);
                 ctx.DrawRectangle(iconBg, null, iconRect, 3.0, 3.0);
                 var glyph     = node.ShowHooks ? "\u25BE" : "\u25B8";  // ▾ or ▸
-                var iconFt    = MakeText(glyph, HookFontSize + 1.0, HookToggleText);
+                var iconFt    = MakeText(glyph, HookFontSize + 1.0, _isLight ? HookToggleTextL : HookToggleText);
                 var glyphX    = iconRect.X + (iconRect.Width  - iconFt.Width)  / 2.0;
                 var glyphY    = iconRect.Y + (iconRect.Height - iconFt.Height) / 2.0;
                 ctx.DrawText(iconFt, new Point(glyphX, glyphY));
@@ -1916,8 +1978,8 @@ public sealed class ModelSystemCanvas : Control
             if (_canInlineNodes.Contains(node))
             {
                 var minRect  = InlineMinimizeButtonRect(node);
-                ctx.DrawRectangle(MinimizeBtnBg, null, minRect, 3.0, 3.0);
-                var minFt    = MakeText("\u229f", HookFontSize, MinimizeBtnText);  // ⊟ minus-in-box
+                ctx.DrawRectangle(_isLight ? MinimizeBtnBgL : MinimizeBtnBg, null, minRect, 3.0, 3.0);
+                var minFt    = MakeText("\u229f", HookFontSize, _isLight ? MinimizeBtnTextL : MinimizeBtnText);  // ⊟ minus-in-box
                 var minGlX   = minRect.X + (minRect.Width  - minFt.Width)  / 2.0;
                 var minGlY   = minRect.Y + (minRect.Height - minFt.Height) / 2.0;
                 ctx.DrawText(minFt, new Point(minGlX, minGlY));
@@ -1931,7 +1993,7 @@ public sealed class ModelSystemCanvas : Control
                 continue;
 
             // Divider line separating header from content rows
-            var dividerPen = new Pen(HookDividerBrush, 1.0);
+            var dividerPen = new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 1.0);
             ctx.DrawLine(dividerPen,
                 new Point(node.X + 1,      headerBottom),
                 new Point(node.X + rw - 1, headerBottom));
@@ -1945,7 +2007,7 @@ public sealed class ModelSystemCanvas : Control
                 double rowMidY = node.Y + NodeHeaderHeight + HookRowHeight / 2.0;
 
                 // Subtle tinted background for readability
-                ctx.DrawRectangle(ParamValueBg, null,
+                ctx.DrawRectangle(_isLight ? ParamValueBgL : ParamValueBg, null,
                     new Rect(node.X + 1, node.Y + NodeHeaderHeight, rw - 2, HookRowHeight));
 
                 const double textPad = 6.0;
@@ -1954,7 +2016,7 @@ public sealed class ModelSystemCanvas : Control
                 if (node != _editingParamNode)
                 {
                     var display  = string.IsNullOrEmpty(paramValue) ? "(no value)" : paramValue;
-                    var paramFt  = MakeText(display, HookFontSize, ParamValueTextBrush);
+                    var paramFt  = MakeText(display, HookFontSize, _isLight ? ParamValueTextBrushL : ParamValueTextBrush);
                     double maxW  = rw - textPad * 2;
                     double paramTy = rowMidY - paramFt.Height / 2.0;
                     using (ctx.PushClip(new Rect(node.X + textPad, paramTy, Math.Max(0, maxW), paramFt.Height + 1)))
@@ -1967,7 +2029,7 @@ public sealed class ModelSystemCanvas : Control
                 if (hasHooks)
                 {
                     double sepY = node.Y + NodeHeaderHeight + HookRowHeight;
-                    ctx.DrawLine(new Pen(HookDividerBrush, 0.5),
+                    ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
                         new Point(node.X + 1,      sepY),
                         new Point(node.X + rw - 1, sepY));
                 }
@@ -2003,9 +2065,9 @@ public sealed class ModelSystemCanvas : Control
 
                 // Dot on the right edge (the link anchor).
                 // Red for unsatisfied required hooks, green for connected/inlined, grey otherwise.
-                var dotBrush = unsatisfied        ? HookUnsatisfiedBrush
-                             : (conn || hasInlined) ? HookConnectedBrush
-                             :                        HookUnconnectedBrush;
+                var dotBrush = unsatisfied          ? (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush)
+                             : (conn || hasInlined)  ? (_isLight ? HookConnectedBrushL   : HookConnectedBrush)
+                             :                         (_isLight ? HookUnconnectedBrushL  : HookUnconnectedBrush);
                 ctx.DrawEllipse(dotBrush, null,
                     new Point(node.X + rw, rowMidY),
                     HookDotRadius, HookDotRadius);
@@ -2015,10 +2077,10 @@ public sealed class ModelSystemCanvas : Control
                 string hookLabel = hasInlined && inlinedParam is not null
                     ? $"{hook.Name}: {(string.IsNullOrEmpty(inlinedParam.ParameterValueRepresentation) ? "(no value)" : inlinedParam.ParameterValueRepresentation)}"
                     : hook.Name;
-                IBrush hookTextBrush = unsatisfied ? HookTextUnsatisfiedBrush
-                                     : hasInlined  ? ParamValueTextBrush
-                                     : conn        ? HookTextConnBrush
-                                     :               HookTextDimBrush;
+                IBrush hookTextBrush = unsatisfied ? (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush)
+                                     : hasInlined  ? (_isLight ? ParamValueTextBrushL       : ParamValueTextBrush)
+                                     : conn        ? (_isLight ? HookTextConnBrushL          : HookTextConnBrush)
+                                     :               (_isLight ? HookTextDimBrushL           : HookTextDimBrush);
                 var hookFt   = MakeText(hookLabel, HookFontSize, hookTextBrush);
                 double maxW  = rw - textPad * 2 - HookDotRadius * 2;
                 double hookTy = rowMidY - hookFt.Height / 2.0;
@@ -2029,7 +2091,7 @@ public sealed class ModelSystemCanvas : Control
                 if (i < hooks.Count - 1)
                 {
                     double sepY = node.Y + NodeHeaderHeight + (rowOffset + i + 1) * HookRowHeight;
-                    ctx.DrawLine(new Pen(HookDividerBrush, 0.5),
+                    ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
                         new Point(node.X + 1,      sepY),
                         new Point(node.X + rw - 1, sepY));
                 }
@@ -2050,15 +2112,15 @@ public sealed class ModelSystemCanvas : Control
             var rect  = new Rect(ghost.X, ghost.Y, rw, rh);
 
             // Fill is semi-transparent; border is dashed.
-            var borderBrush = ghost.IsSelected ? GhostNodeSelBrush : GhostNodeBorderBrush;
+            var borderBrush = ghost.IsSelected ? GhostNodeSelBrush : (_isLight ? GhostNodeBorderBrushL : GhostNodeBorderBrush);
             var border      = new Pen(borderBrush, NodeBorderThickness, dashStyle: GhostNodeDash);
 
-            DrawRectGlow(ctx, rect, NodeCornerRadius, ghost.IsSelected ? SelectionGlowColor : GhostGlowColor);
-            ctx.DrawRectangle(GhostNodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
+            DrawRectGlow(ctx, rect, NodeCornerRadius, ghost.IsSelected ? SelectionGlowColor : (_isLight ? GhostGlowColorL : GhostGlowColor));
+            ctx.DrawRectangle(_isLight ? GhostNodeFillL : GhostNodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // Ghost icon prefix ("⊙ ") to distinguish from real nodes at a glance.
             var labelText = "\u2299 " + ghost.Name;
-            var ft = MakeText(labelText, NodeFontSize, NodeTextBrush);
+            var ft = MakeText(labelText, NodeFontSize, _isLight ? NodeTextBrushL : NodeTextBrush);
             var tx = ghost.X + (rw      - ft.Width)  / 2;
             var ty = ghost.Y + (NodeHeaderHeight - ft.Height) / 2;
 
@@ -2073,9 +2135,9 @@ public sealed class ModelSystemCanvas : Control
                 for (int d = 0; d < 3; d++)
                 {
                     double offset = 4.0 + d * 4.0;
-                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(bx - offset + dotR, by - dotR), dotR, dotR);
-                    ctx.DrawEllipse(ResizeHandleBrush, null,
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(bx - dotR,           by - offset + dotR), dotR, dotR);
                 }
             }
@@ -2089,13 +2151,13 @@ public sealed class ModelSystemCanvas : Control
             var fill   = start.IsSelected ? StartSelFill : StartFill;
             var center = new Point(start.CenterX, start.CenterY);
             var r      = StartViewModel.Radius;
-            var border = new Pen(start.IsSelected ? NodeSelBrush : NodeBorderBrush, NodeBorderThickness);
+            var border = new Pen(start.IsSelected ? NodeSelBrush : (_isLight ? NodeBorderBrushL : NodeBorderBrush), NodeBorderThickness);
 
             DrawEllipseGlow(ctx, center, r, r, start.IsSelected ? SelectionGlowColor : StartGlowColor);
             ctx.DrawEllipse(fill, border, center, r, r);
 
             // Label below the circle
-            bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+            var isLight = _isLight;
             var ft = MakeText(start.Name, StartFontSize, isLight ? StartTextBrushLight : StartTextBrush);
             var lx = start.X + (start.Diameter - ft.Width) / 2;
             var ly = start.Y + start.Diameter + 3;
@@ -3412,7 +3474,7 @@ public sealed class ModelSystemCanvas : Control
                 int start = i++;
                 while (i < text.Length && text[i] != '"') i++;
                 if (i < text.Length) i++; // consume closing quote
-                tokens.Add((text[start..i], ScriptStringBrush));
+                tokens.Add((text[start..i], _isLight ? ScriptStringBrushL : ScriptStringBrush));
                 continue;
             }
 
@@ -3421,7 +3483,7 @@ public sealed class ModelSystemCanvas : Control
             {
                 int start = i;
                 while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
-                tokens.Add((text[start..i], ParamValueTextBrush));
+                tokens.Add((text[start..i], _isLight ? ParamValueTextBrushL : ParamValueTextBrush));
                 continue;
             }
 
@@ -3433,10 +3495,10 @@ public sealed class ModelSystemCanvas : Control
                 var word = text[start..i];
                 IBrush brush = word switch
                 {
-                    "true" or "false" => ScriptKeywordBrush,
+                    "true" or "false" => _isLight ? ScriptKeywordBrushL : ScriptKeywordBrush,
                     _                 => knownNames.Contains(word)
-                                         ? ScriptVarKnownBrush
-                                         : ScriptVarUnknownBrush,
+                                         ? (_isLight ? ScriptVarKnownBrushL   : ScriptVarKnownBrush)
+                                         : (_isLight ? ScriptVarUnknownBrushL : ScriptVarUnknownBrush),
                 };
                 tokens.Add((word, brush));
                 continue;
@@ -3447,7 +3509,7 @@ public sealed class ModelSystemCanvas : Control
             {
                 int start = i;
                 while (i < text.Length && (char.IsDigit(text[i]) || text[i] == '.')) i++;
-                tokens.Add((text[start..i], ScriptNumberBrush));
+                tokens.Add((text[start..i], _isLight ? ScriptNumberBrushL : ScriptNumberBrush));
                 continue;
             }
 
@@ -3465,7 +3527,7 @@ public sealed class ModelSystemCanvas : Control
                 {
                     i++;
                 }
-                tokens.Add((text[start..i], ScriptOperatorBrush));
+                tokens.Add((text[start..i], _isLight ? ScriptOperatorBrushL : ScriptOperatorBrush));
             }
         }
         return tokens.ToArray();
