@@ -2691,8 +2691,7 @@ public sealed class ModelSystemCanvas : Control
             var rdx  = rPos.X - _rightClickPressPos.X;
             var rdy  = rPos.Y - _rightClickPressPos.Y;
 
-            if (Math.Sqrt(rdx * rdx + rdy * rdy) < 3.0
-                && (_rightClickElement is not null || _rightClickLink is not null))
+            if (Math.Sqrt(rdx * rdx + rdy * rdy) < 3.0)
             {
                 _linkOrigin = null;
                 e.Pointer.Capture(null);
@@ -2859,7 +2858,39 @@ public sealed class ModelSystemCanvas : Control
     /// </summary>
     private void ShowContextMenu(ICanvasElement? element, LinkViewModel? link)
     {
-        if (_vm is null || (element is null && link is null)) return;
+        if (_vm is null) return;
+
+        // ── Background right-click: offer Add items when nothing was hit ──
+        if (element is null && link is null)
+        {
+            var bgMenu = new ContextMenu();
+            var vm2 = _vm;
+            var spawnPt = ToCanvasPos(_rightClickPressPos);
+
+            var addStartItem = new MenuItem { Header = "Add Start…" };
+            addStartItem.Click += (_, _) => _ = vm2.AddStartAtAsync(spawnPt.X, spawnPt.Y);
+            bgMenu.Items.Add(addStartItem);
+
+            var addModuleItem = new MenuItem { Header = "Add Module…" };
+            addModuleItem.Click += (_, _) => _ = vm2.AddModuleAtAsync(spawnPt.X, spawnPt.Y);
+            bgMenu.Items.Add(addModuleItem);
+
+            var addCommentItem = new MenuItem { Header = "Add Comment" };
+            addCommentItem.Click += (_, _) => vm2.AddCommentBlockAt(spawnPt.X, spawnPt.Y);
+            bgMenu.Items.Add(addCommentItem);
+
+            var addFtItem = new MenuItem { Header = "Add Function Template…" };
+            addFtItem.Click += (_, _) => _ = vm2.AddFunctionTemplateAtAsync(spawnPt.X, spawnPt.Y);
+            bgMenu.Items.Add(addFtItem);
+
+            var addFiItem = new MenuItem { Header = "Add Function Instance…" };
+            addFiItem.Click += (_, _) => _ = vm2.AddFunctionInstanceAtAsync(spawnPt.X, spawnPt.Y);
+            bgMenu.Items.Add(addFiItem);
+
+            ContextMenu = bgMenu;
+            ContextMenu.Open(this);
+            return;
+        }
 
         var vm = _vm; // capture for closure
 

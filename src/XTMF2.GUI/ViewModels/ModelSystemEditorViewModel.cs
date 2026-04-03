@@ -2249,6 +2249,142 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         return new Rectangle(50 + offset % 800, 50 + (offset / 800) * PlacementStep);
     }
 
+    // ── Position-aware add helpers (called from the canvas background context menu) ─
+
+    /// <summary>Prompt for a name and add a new Start at the specified canvas position.</summary>
+    public async Task AddStartAtAsync(double x, double y)
+    {
+        if (ParentWindow is null) return;
+
+        var dialog = new InputDialog
+        {
+            Prompt = "Enter start name:",
+            InputText = $"Start {++_startCounter}"
+        };
+        await dialog.ShowDialog(ParentWindow);
+
+        var name = dialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+
+        var location = new Rectangle((float)x, (float)y);
+        Session.AddModelSystemStart(User, _currentBoundary, name, location, out _, out _);
+    }
+
+    /// <summary>Show a type-picker then a name dialog and add a new module node at the specified canvas position.</summary>
+    public async Task AddModuleAtAsync(double x, double y)
+    {
+        if (ParentWindow is null) return;
+
+        var typePicker = new TypePickerDialog(
+            Session.LoadedModuleTypes,
+            prompt: "Select the module type to add:");
+        await typePicker.ShowDialog(ParentWindow);
+
+        if (typePicker.WasCancelled || typePicker.SelectedType is null) return;
+        var selectedType = typePicker.SelectedType;
+
+        var nameDialog = new InputDialog(
+            title: "Add Module",
+            prompt: "Enter module name:",
+            defaultText: selectedType.Name);
+        await nameDialog.ShowDialog(ParentWindow);
+
+        var name = nameDialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
+
+        var location = new Rectangle((float)x, (float)y);
+        Session.AddNodeGenerateParameters(User, _currentBoundary, name, selectedType, location, out _, out _, out _);
+    }
+
+    /// <summary>Add a new comment block at the specified canvas position.</summary>
+    public void AddCommentBlockAt(double x, double y)
+    {
+        var location = new Rectangle((float)x, (float)y,
+            (float)CommentBlockViewModel.DefaultWidth,
+            (float)CommentBlockViewModel.DefaultHeight);
+        Session.AddCommentBlock(User, _currentBoundary, $"Comment {++_commentCounter}", location, out _, out _);
+    }
+
+    /// <summary>Prompt for a name and create a new function template at the specified canvas position.</summary>
+    public async Task AddFunctionTemplateAtAsync(double x, double y)
+    {
+        if (ParentWindow is null) return;
+
+        var dialog = new InputDialog(
+            title: "Add Function Template",
+            prompt: "Enter the function template name:",
+            defaultText: $"FunctionTemplate{FunctionTemplates.Count + 1}");
+        await dialog.ShowDialog(ParentWindow);
+
+        var name = dialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(name) || dialog.WasCancelled) return;
+
+        var ftLocation = new Rectangle((float)x, (float)y, 220f, 140f);
+
+        if (!Session.AddFunctionTemplate(User, _currentBoundary, name,
+                out var ft, out var error))
+        {
+            await ShowError("Add Function Template Failed", error);
+            return;
+        }
+
+        Session.SetFunctionTemplateLocation(User, ft!, ftLocation, out _);
+    }
+
+    /// <summary>Prompt the user to pick a template and a name then place a new function instance at the specified canvas position.</summary>
+    public async Task AddFunctionInstanceAtAsync(double x, double y)
+    {
+        if (ParentWindow is null) return;
+
+        var availableTemplates = new System.Collections.Generic.List<FunctionTemplate>();
+        _currentBoundary.CollectAccessibleFunctionTemplates(availableTemplates);
+        if (availableTemplates.Count == 0)
+        {
+            ShowToast("No function templates are defined in this boundary or its children.", isError: true, durationMs: 4000);
+            return;
+        }
+
+        var templateDisplayNames = availableTemplates
+            .Select(ft => Boundary.GetQualifiedTemplateName(_currentBoundary, ft) ?? ft.Name)
+            .ToList();
+
+        FunctionTemplate selectedTemplate;
+        if (availableTemplates.Count == 1)
+        {
+            selectedTemplate = availableTemplates[0];
+        }
+        else
+        {
+            var picker = new StartPickerDialog(
+                title: "Add Function Instance",
+                prompt: "Select the function template to instantiate:",
+                startNames: templateDisplayNames,
+                defaultStart: templateDisplayNames[0]);
+            await picker.ShowDialog(ParentWindow);
+            if (picker.WasCancelled) return;
+            var picked = picker.SelectedStartName ?? templateDisplayNames[0];
+            var pickedIdx = templateDisplayNames.IndexOf(picked);
+            selectedTemplate = availableTemplates[pickedIdx >= 0 ? pickedIdx : 0];
+        }
+
+        var nameDialog = new InputDialog(
+            title: "Add Function Instance",
+            prompt: $"Enter the instance name ({selectedTemplate.Name}):",
+            defaultText: $"{selectedTemplate.Name}{FunctionInstances.Count + 1}");
+        await nameDialog.ShowDialog(ParentWindow);
+
+        var name = nameDialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
+
+        var location = new Rectangle((float)x, (float)y, 160f, 70f);
+
+        if (!Session.AddFunctionInstance(User, _currentBoundary, selectedTemplate, name, location,
+                out _, out var addError))
+        {
+            await ShowError("Add Function Instance Failed", addError);
+        }
+    }
+
     // ── IDisposable ───────────────────────────────────────────────────────
     /// <inheritdoc />
     public void Dispose()

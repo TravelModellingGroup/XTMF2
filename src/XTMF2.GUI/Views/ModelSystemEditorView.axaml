@@ -140,38 +140,16 @@
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Spacing="6" Margin="0,0,10,0">
 
-                            <!-- Section: Add elements -->
-                            <TextBlock Text="Toolbox"
+                            <!-- Section: Canvas controls -->
+                            <TextBlock Text="Canvas"
                                        FontWeight="SemiBold"
                                        FontSize="14"
+                                       Margin="0,0,0,2"/>
+                            <TextBlock Text="Right-click on the canvas background to add nodes, starts, comments, and more."
+                                       FontSize="11"
+                                       Opacity="0.6"
+                                       TextWrapping="Wrap"
                                        Margin="0,0,0,4"/>
-
-                            <Button Content="Add Start"
-                                    Command="{Binding AddStartCommand}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"/>
-
-                            <Button Content="Add Module"
-                                    Command="{Binding AddModuleCommand}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"/>
-
-                            <Button Content="Add Comment"
-                                    Command="{Binding AddCommentBlockCommand}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"/>
-
-                            <Button Content="Add Function Template"
-                                    Command="{Binding AddFunctionTemplateCommand}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"
-                                    ToolTip.Tip="Create a reusable sub-graph template in this boundary"/>
-
-                            <Button Content="Add Function Instance"
-                                    Command="{Binding AddFunctionInstanceCommand}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"
-                                    ToolTip.Tip="Place an instance of a function template on the canvas"/>
 
                             <!-- Back button: shown only when drilling inside a function template -->
                             <Button Content="← Exit Function Template"
