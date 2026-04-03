@@ -11,6 +11,49 @@
              x:CompileBindings="True"
              Focusable="True">
 
+    <!-- ── Per-theme colour tokens for the floating neon dock bar ──────── -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+
+                <ResourceDictionary x:Key="Dark">
+                    <!-- pill shell -->
+                    <SolidColorBrush x:Key="NeonPillBg">#E6050510</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonPillBorder">#FF00D4FF</SolidColorBrush>
+                    <!-- button text / icons -->
+                    <SolidColorBrush x:Key="NeonPillFg">#FFEEFFFF</SolidColorBrush>
+                    <!-- separator line -->
+                    <SolidColorBrush x:Key="NeonPillSep">#4400D4FF</SolidColorBrush>
+                    <!-- hover / press highlights -->
+                    <SolidColorBrush x:Key="NeonPillHover">#2200D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonPillPress">#4400D4FF</SolidColorBrush>
+                </ResourceDictionary>
+
+                <ResourceDictionary x:Key="Light">
+                    <!-- pill shell: white-tinted, slightly translucent -->
+                    <SolidColorBrush x:Key="NeonPillBg">#F4F8FFEE</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonPillBorder">#FF0066CC</SolidColorBrush>
+                    <!-- button text / icons: dark navy -->
+                    <SolidColorBrush x:Key="NeonPillFg">#FF003088</SolidColorBrush>
+                    <!-- separator line -->
+                    <SolidColorBrush x:Key="NeonPillSep">#550066CC</SolidColorBrush>
+                    <!-- hover / press highlights -->
+                    <SolidColorBrush x:Key="NeonPillHover">#1A0066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonPillPress">#330066CC</SolidColorBrush>
+                </ResourceDictionary>
+
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- BoxShadow cannot be set via DynamicResource (struct, no runtime type-conversion).
+         Set via code-behind in UpdateThemeClass() using the x:Name on the Border. -->
+    <UserControl.Styles>
+        <Style Selector="Border.neon-pill">
+            <Setter Property="BoxShadow" Value="0 0 14 3 #8000D4FF, 0 0 40 10 #4000A0FF, 0 6 24 0 #80000000"/>
+        </Style>
+    </UserControl.Styles>
+
     <UserControl.KeyBindings>
         <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveModelSystemCommand}"/>
         <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}"/>
@@ -59,379 +102,11 @@
                              VerticalAlignment="Center"/>
         </Grid>
 
-        <!-- ── Main content: toolbox + canvas ──────────────────────── -->
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="275"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+        <!-- ── Main content: full-width canvas with floating overlays ─────── -->
+        <Panel Grid.Row="1">
 
-            <!-- Left: Toolbox -->
-            <Border Grid.Column="0"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                    BorderThickness="1"
-                    CornerRadius="4"
-                    Padding="8">
-                <DockPanel>
-
-                    <!-- ── File action buttons (bottom) ───────────────── -->
-                    <Border DockPanel.Dock="Bottom"
-                            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                            BorderThickness="0,1,0,0"
-                            Padding="0,8,0,0"
-                            Margin="0,8,0,0">
-                        <StackPanel Orientation="Horizontal"
-                                    HorizontalAlignment="Center"
-                                    Spacing="6"
-                                    >
-
-                            <!-- Undo -->
-                            <Button Command="{Binding UndoCommand}"
-                                    IsEnabled="{Binding CanUndo}"
-                                    ToolTip.Tip="Undo (Ctrl+Z)">
-                                <TextBlock Text="&#x21B6;" FontSize="18" HorizontalAlignment="Center"/>
-                            </Button>
-
-                            <!-- Redo -->
-                            <Button Command="{Binding RedoCommand}"
-                                    IsEnabled="{Binding CanRedo}"
-                                    ToolTip.Tip="Redo (Ctrl+Y)">
-                                <TextBlock Text="&#x21B7;" FontSize="18" HorizontalAlignment="Center"/>
-                            </Button>
-
-                            <!-- Save -->
-                            <Button Command="{Binding SaveModelSystemCommand}"
-                                    ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                    <TextBlock Text="💾" FontSize="18" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-
-                            <!-- Export -->
-                            <Button Command="{Binding ExportModelSystemCommand}"
-                                    ToolTip.Tip="{res:Localize ModelSystemEditor_ExportTooltip}">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                    <TextBlock Text="📤" FontSize="18" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-
-                            <!-- Revert -->
-                            <Button Command="{Binding RevertModelSystemCommand}"
-                                    ToolTip.Tip="{res:Localize ModelSystemEditor_RevertTooltip}">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                    <TextBlock Text="↩" FontSize="18" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-
-                            <!-- Run -->
-                            <Button Command="{Binding RunModelSystemCommand}"
-                                    IsEnabled="{Binding CanRun}"
-                                    ToolTip.Tip="Run this model system (save first to apply changes)">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                    <TextBlock Text="▶" FontSize="18" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-
-                        </StackPanel>
-                    </Border>
-
-                    <!-- ── Scrollable toolbox content (fills remaining space) ── -->
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="6" Margin="0,0,10,0">
-
-                            <!-- Section: Canvas controls -->
-                            <TextBlock Text="Canvas"
-                                       FontWeight="SemiBold"
-                                       FontSize="14"
-                                       Margin="0,0,0,2"/>
-                            <TextBlock Text="Right-click on the canvas background to add nodes, starts, comments, and more."
-                                       FontSize="11"
-                                       Opacity="0.6"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,4"/>
-
-                            <!-- Back button: shown only when drilling inside a function template -->
-                            <Button Content="← Exit Function Template"
-                                    Command="{Binding ExitFunctionTemplateCommand}"
-                                    IsVisible="{Binding IsInsideFunctionTemplate}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"
-                                    ToolTip.Tip="Return to the parent boundary"/>
-
-                            <CheckBox Content="Show all hooks"
-                                      IsChecked="{Binding ShowAllHooks}"
-                                      FontSize="12"
-                                      Margin="0,6,0,0"/>
-
-                            <Separator Margin="0,8"/>
-
-                            <!-- Section: Selected element properties -->
-                            <TextBlock Text="Selected Element"
-                                       FontWeight="SemiBold"
-                                       FontSize="13"
-                                       Margin="0,0,0,2"/>
-
-                            <StackPanel Spacing="4"
-                                        IsVisible="{Binding SelectedElement, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                <Separator Margin="0,4"/>
-                                <TextBlock Text="Type:"
-                                           FontSize="12"
-                                           Opacity="0.7"/>
-                                <TextBlock Text="{Binding SelectedElementTypeName}"
-                                           FontSize="12"
-                                           TextWrapping="Wrap"/>
-                                <Button Content="Change Type…"
-                                        Command="{Binding ChangeModuleTypeCommand}"
-                                        IsVisible="{Binding SelectedElementIsNode}"
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Center"
-                                        FontSize="12"
-                                        Margin="0,4,0,0"/>
-
-                                <!-- ── Function Instance actions ─────────────── -->
-                                <StackPanel Spacing="4"
-                                            IsVisible="{Binding SelectedElementIsFunctionInstance}"
-                                            Margin="0,4,0,0">
-                                    <Separator Margin="0,4"/>
-                                    <TextBlock Text="Function Instance"
-                                               FontWeight="SemiBold"
-                                               FontSize="12"/>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Text="Template:"
-                                                   FontSize="11"
-                                                   Opacity="0.7"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock Text="{Binding SelectedFunctionInstanceTemplateName}"
-                                                   FontSize="11"
-                                                   FontStyle="Italic"
-                                                   VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                    <Button Content="Rename…"
-                                            Click="OnRenameFunctionInstanceClick"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Center"
-                                            FontSize="12"
-                                            ToolTip.Tip="Rename inline on the canvas (also F2)"/>
-                                    <Button Content="Delete Instance"
-                                            Command="{Binding DeleteFunctionInstanceBindingCommand}"
-                                            CommandParameter="{Binding SelectedElement}"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Center"
-                                            FontSize="12"/>
-                                    <TextBlock Text="Exposed hooks:"
-                                               FontSize="11"
-                                               Opacity="0.7"
-                                               Margin="0,4,0,0"/>
-                                    <ListBox ItemsSource="{Binding SelectedFunctionInstanceExposedHooks}"
-                                             MaxHeight="120"
-                                             FontSize="11">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Name}" Padding="2,1"/>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
-                                    <TextBlock Text="(none — add exposed hooks by editing the template)"
-                                               FontSize="10"
-                                               Opacity="0.55"
-                                               TextWrapping="Wrap"
-                                               IsVisible="{Binding SelectedFunctionInstanceHasNoExposedHooks}"/>
-                                </StackPanel>
-
-                                <!-- ── Function Template actions ─────────────── -->
-                                <StackPanel Spacing="4"
-                                            IsVisible="{Binding SelectedElementIsFunctionTemplate}"
-                                            Margin="0,4,0,0">
-                                    <Separator Margin="0,4"/>
-                                    <TextBlock Text="Function Template"
-                                               FontWeight="SemiBold"
-                                               FontSize="12"/>
-                                    <Button Content="Edit Contents"
-                                            Command="{Binding NavigateIntoFunctionTemplateBindingCommand}"
-                                            CommandParameter="{Binding SelectedElement}"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Center"
-                                            FontSize="12"
-                                            ToolTip.Tip="Drill into the template's internal boundary (also double-click the template on canvas)"/>
-                                    <Button Content="Rename…"
-                                            Click="OnRenameFunctionTemplateClick"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Center"
-                                            FontSize="12"
-                                            ToolTip.Tip="Rename inline on the canvas (also F2)"/>
-                                    <Button Content="Delete Template"
-                                            Command="{Binding DeleteFunctionTemplateBindingCommand}"
-                                            CommandParameter="{Binding SelectedElement}"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Center"
-                                            FontSize="12"/>
-                                    <TextBlock Text="Exposed hooks:"
-                                               FontSize="11"
-                                               Opacity="0.7"
-                                               Margin="0,4,0,0"/>
-                                    <ListBox ItemsSource="{Binding SelectedFunctionTemplateExposedNodes}"
-                                             MaxHeight="120"
-                                             FontSize="11">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Name}" Padding="2,1"/>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
-                                    <TextBlock Text="(none — right-click a module inside the template to expose it)"
-                                               FontSize="10"
-                                               Opacity="0.55"
-                                               TextWrapping="Wrap"
-                                               IsVisible="{Binding SelectedFunctionTemplateHasNoExposedNodes}"/>
-                                </StackPanel>
-
-                                <!-- ── Parameter value editor ──────────────── -->
-                                <StackPanel Spacing="4"
-                                            IsVisible="{Binding SelectedElementIsParameter}"
-                                            Margin="0,4,0,0">
-                                    <Separator Margin="0,4"/>
-                                    <TextBlock Text="Value:"
-                                               FontSize="12"
-                                               Opacity="0.7"/>
-                                    <TextBox x:Name="ParameterValueEditBox"
-                                             Text="{Binding SelectedElementParameterValue, Mode=TwoWay}"
-                                             FontSize="12"
-                                             Watermark="Enter value…"/>
-                                    <Button Content="Apply Value"
-                                            Command="{Binding CommitParameterValueCommand}"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Center"
-                                            FontSize="12"/>
-                                </StackPanel>
-                            </StackPanel>
-
-                            <!-- Section: MultiLink destinations -->
-                            <StackPanel IsVisible="{Binding SelectedLinkIsMulti}" Spacing="4" Margin="0,4,0,0">
-                                <TextBlock Text="Link Destinations"
-                                           FontWeight="SemiBold"
-                                           FontSize="13"/>
-                                <TextBlock Text="Drag to reorder  ·  select + Delete to remove"
-                                           FontSize="10"
-                                           Opacity="0.6"
-                                           TextWrapping="Wrap"/>
-                                <!-- Wrap in Grid so the drop-indicator Canvas can overlay the ListBox. -->
-                                <Grid>
-                                    <ListBox x:Name="DestinationListBox"
-                                             ItemsSource="{Binding SelectedLinkDestinationEntries}"
-                                             SelectedItem="{Binding SelectedLinkDestinationEntry, Mode=TwoWay}"
-                                             MaxHeight="180">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:LinkDestinationViewModel">
-                                                <Grid ColumnDefinitions="*,Auto">
-                                                    <TextBlock Grid.Column="0"
-                                                               Text="{Binding Name}"
-                                                               Padding="4,2"
-                                                               VerticalAlignment="Center"
-                                                               TextTrimming="CharacterEllipsis"/>
-                                                    <Button Grid.Column="1"
-                                                            Content="✕"
-                                                            Padding="4,1"
-                                                            Margin="4,0,0,0"
-                                                            FontSize="10"
-                                                            VerticalAlignment="Center"
-                                                            ToolTip.Tip="Remove this destination"
-                                                            Command="{Binding $parent[UserControl].((vm:ModelSystemEditorViewModel)DataContext).RemoveLinkDestinationEntryCommand}"
-                                                            CommandParameter="{Binding}"/>
-                                                </Grid>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
-                                    <!-- Drop indicator: shown while dragging to mark the insert position. -->
-                                    <Canvas IsHitTestVisible="False">
-                                        <Border x:Name="DestDropIndicator"
-                                                IsVisible="False"
-                                                Height="2"
-                                                CornerRadius="1"
-                                                Background="{DynamicResource SystemAccentColor}"/>
-                                    </Canvas>
-                                </Grid>
-                            </StackPanel>
-
-                            <!-- ── Model System Variables ─────────────────── -->
-                            <Separator Margin="0,8"/>
-                            <TextBlock Text="Model System Variables"
-                                       FontWeight="SemiBold"
-                                       FontSize="13"
-                                       Margin="0,0,0,2"/>
-                            <TextBlock Text="Right-click a parameter node to add it. Type to filter."
-                                       FontSize="10"
-                                       Opacity="0.6"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,4"/>
-                            <TextBox x:Name="VariableFilterBox"
-                                     Text="{Binding VariableFilter, Mode=TwoWay}"
-                                     Watermark="Filter variables…"
-                                     FontSize="12"
-                                     Margin="0,0,0,4"
-                                     IsVisible="{Binding !HasNoModelSystemVariables}"/>
-                            <ListBox ItemsSource="{Binding FilteredModelSystemVariables}"
-                                     MaxHeight="200"
-                                     SelectionMode="Single">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:ModelSystemVariableViewModel">
-                                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
-                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Name}"
-                                                           FontSize="12"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding BoundaryPath}"
-                                                           FontSize="10"
-                                                           Opacity="0.55"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                            </StackPanel>
-                                            <Button Grid.Column="1"
-                                                    Content="→"
-                                                    ToolTip.Tip="Go to node"
-                                                    Padding="6,2"
-                                                    Margin="4,0,2,0"
-                                                    FontSize="12"
-                                                    Command="{Binding $parent[UserControl].((vm:ModelSystemEditorViewModel)DataContext).GoToVariableNodeCommand}"
-                                                    CommandParameter="{Binding}"/>
-                                            <Button Grid.Column="2"
-                                                    Content="✕"
-                                                    ToolTip.Tip="Remove from variables"
-                                                    Padding="6,2"
-                                                    FontSize="12"
-                                                    Command="{Binding $parent[UserControl].((vm:ModelSystemEditorViewModel)DataContext).RemoveVariableNodeCommand}"
-                                                    CommandParameter="{Binding}"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                            <TextBlock Text="(no variables defined)"
-                                       FontSize="11"
-                                       Opacity="0.45"
-                                       IsVisible="{Binding HasNoModelSystemVariables}"
-                                       Margin="0,2,0,0"/>
-
-                            <TextBlock Text="Nothing selected."
-                                       FontSize="12"
-                                       Opacity="0.5"
-                                       IsVisible="{Binding NothingSelected}"/>
-
-                        </StackPanel>
-                    </ScrollViewer>
-
-                </DockPanel>
-            </Border>
-
-            <!-- Splitter -->
-            <GridSplitter Grid.Column="1"
-                          ResizeDirection="Columns"
-                          Width="5"
-                          Background="Transparent"
-                          Margin="2,0"/>
-
-            <!-- Right: Canvas area -->
-            <Border Grid.Column="2"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+            <!-- Canvas (fills the entire panel) -->
+            <Border BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                     BorderThickness="1"
                     CornerRadius="4"
                     ClipToBounds="True">
@@ -443,7 +118,107 @@
                 </ScrollViewer>
             </Border>
 
-        </Grid>
+            <!-- ── Floating action bar (bottom-centre, neon pill) ───────── -->
+            <Border x:Name="NeonDockBar"
+                    Classes="neon-pill"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,0,20"
+                    Padding="14,9"
+                    CornerRadius="40"
+                    Background="{DynamicResource NeonPillBg}"
+                    BorderBrush="{DynamicResource NeonPillBorder}"
+                    BorderThickness="1.5"
+                    ZIndex="20">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+
+                    <StackPanel.Styles>
+                        <Style Selector="Separator">
+                            <Setter Property="Width" Value="1"/>
+                            <Setter Property="Height" Value="24"/>
+                            <Setter Property="Background" Value="{DynamicResource NeonPillSep}"/>
+                            <Setter Property="Margin" Value="4,0"/>
+                        </Style>
+                        <Style Selector="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="{DynamicResource NeonPillFg}"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="CornerRadius" Value="20"/>
+                            <Setter Property="Padding" Value="10,6"/>
+                        </Style>
+                        <Style Selector="Button:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource NeonPillHover}"/>
+                        </Style>
+                        <Style Selector="Button:pressed /template/ ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource NeonPillPress}"/>
+                        </Style>
+                        <Style Selector="Button:disabled">
+                            <Setter Property="Opacity" Value="0.35"/>
+                        </Style>
+                    </StackPanel.Styles>
+
+                    <!-- Undo -->
+                    <Button Command="{Binding UndoCommand}"
+                            IsEnabled="{Binding CanUndo}"
+                            ToolTip.Tip="Undo (Ctrl+Z)"
+                            ToolTip.Placement="Top">
+                        <TextBlock Text="&#x21B6;" FontSize="18" IsHitTestVisible="False"/>
+                    </Button>
+
+                    <!-- Redo -->
+                    <Button Command="{Binding RedoCommand}"
+                            IsEnabled="{Binding CanRedo}"
+                            ToolTip.Tip="Redo (Ctrl+Y)"
+                            ToolTip.Placement="Top">
+                        <TextBlock Text="&#x21B7;" FontSize="18" IsHitTestVisible="False"/>
+                    </Button>
+
+                    <Separator/>
+
+                    <!-- Save -->
+                    <Button Command="{Binding SaveModelSystemCommand}"
+                            ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}"
+                            ToolTip.Placement="Top">
+                        <TextBlock Text="💾" FontSize="18" IsHitTestVisible="False"/>
+                    </Button>
+
+                    <!-- Export -->
+                    <Button Command="{Binding ExportModelSystemCommand}"
+                            ToolTip.Tip="{res:Localize ModelSystemEditor_ExportTooltip}"
+                            ToolTip.Placement="Top">
+                        <TextBlock Text="📤" FontSize="18" IsHitTestVisible="False"/>
+                    </Button>
+
+                    <!-- Revert -->
+                    <Button Command="{Binding RevertModelSystemCommand}"
+                            ToolTip.Tip="{res:Localize ModelSystemEditor_RevertTooltip}"
+                            ToolTip.Placement="Top">
+                        <TextBlock Text="↩" FontSize="18" IsHitTestVisible="False"/>
+                    </Button>
+
+                    <Separator/>
+
+                    <!-- Run -->
+                    <Button Command="{Binding RunModelSystemCommand}"
+                            IsEnabled="{Binding CanRun}"
+                            ToolTip.Tip="Run this model system (save first to apply changes)"
+                            ToolTip.Placement="Top">
+                        <TextBlock Text="▶" FontSize="18" IsHitTestVisible="False"/>
+                    </Button>
+
+                    <Separator/>
+
+                    <!-- Variables -->
+                    <Button Click="OnShowVariablesClick"
+                            ToolTip.Tip="View / manage Model System Variables"
+                            ToolTip.Placement="Top">
+                        <TextBlock Text="⚙" FontSize="18" IsHitTestVisible="False"/>
+                    </Button>
+
+                </StackPanel>
+            </Border>
+
+        </Panel>
 
         <!-- ── Toast notification overlay ──────────────────────────────── -->
         <Border Grid.Row="1"

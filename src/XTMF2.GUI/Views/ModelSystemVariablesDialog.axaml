@@ -1,0 +1,188 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
+        x:Class="XTMF2.GUI.Views.ModelSystemVariablesDialog"
+        x:DataType="vm:ModelSystemEditorViewModel"
+        x:CompileBindings="True"
+        Title="Model System Variables"
+        Width="480"
+        Height="520"
+        MinWidth="320"
+        MinHeight="280"
+        WindowStartupLocation="CenterOwner"
+        Background="#0E0E18"
+        BorderBrush="#FF00D4FF"
+        BorderThickness="1.5">
+
+    <Window.Styles>
+        <!-- Neon button base -->
+        <Style Selector="Button.neon">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#FFEEFFFF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="10,4"/>
+        </Style>
+        <Style Selector="Button.neon:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#2200D4FF"/>
+        </Style>
+        <Style Selector="Button.neon:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#4400D4FF"/>
+        </Style>
+        <Style Selector="Button.neon-danger">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#FFFF4466"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="8,4"/>
+        </Style>
+        <Style Selector="Button.neon-danger:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#22FF4466"/>
+        </Style>
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="#FFEEFFFF"/>
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="#12FFFFFF"/>
+            <Setter Property="Foreground" Value="#FFEEFFFF"/>
+            <Setter Property="BorderBrush" Value="#4400D4FF"/>
+            <Setter Property="CaretBrush" Value="#FF00D4FF"/>
+        </Style>
+        <Style Selector="ListBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#FFEEFFFF"/>
+            <Setter Property="Padding" Value="4,3"/>
+        </Style>
+        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#1500D4FF"/>
+        </Style>
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="#2500D4FF"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+
+        <!-- ── Header ──────────────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="Model System Variables"
+                       FontSize="18"
+                       FontWeight="Bold"
+                       Foreground="#FF00D4FF"/>
+            <TextBlock Text="Variables are named parameter nodes referenced across the model system."
+                       FontSize="11"
+                       Opacity="0.6"
+                       TextWrapping="Wrap"
+                       Margin="0,4,0,8"/>
+
+            <!-- Filter box -->
+            <TextBox x:Name="FilterBox"
+                     Text="{Binding VariableFilter, Mode=TwoWay}"
+                     Watermark="Filter by name or boundary…"
+                     FontSize="12"
+                     IsVisible="{Binding !HasNoModelSystemVariables}"/>
+        </StackPanel>
+
+        <!-- ── Variable list ────────────────────────────────────────────────── -->
+        <Border Grid.Row="1"
+                BorderBrush="#2200D4FF"
+                BorderThickness="1"
+                CornerRadius="6"
+                ClipToBounds="True">
+            <Panel>
+                <!-- Empty state -->
+                <StackPanel VerticalAlignment="Center"
+                            HorizontalAlignment="Center"
+                            Spacing="6"
+                            IsVisible="{Binding HasNoModelSystemVariables}">
+                    <TextBlock Text="∅"
+                               FontSize="36"
+                               Foreground="#3300D4FF"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="No variables defined."
+                               FontSize="13"
+                               Opacity="0.5"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="Right-click a parameter node on the canvas and choose"
+                               FontSize="11"
+                               Opacity="0.4"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="&quot;Add to Model System Variables&quot;."
+                               FontSize="11"
+                               Opacity="0.4"
+                               HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Variable list -->
+                <ListBox ItemsSource="{Binding FilteredModelSystemVariables}"
+                         Background="Transparent"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         IsVisible="{Binding !HasNoModelSystemVariables}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ModelSystemVariableViewModel">
+                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                  Margin="2,3">
+                                <!-- Name + path -->
+                                <StackPanel Grid.Column="0"
+                                            VerticalAlignment="Center"
+                                            Spacing="1">
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="13"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding BoundaryPath}"
+                                               FontSize="10"
+                                               Foreground="#7700D4FF"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+
+                                <!-- Go to node -->
+                                <Button Grid.Column="1"
+                                        Classes="neon"
+                                        ToolTip.Tip="Navigate canvas to this node"
+                                        Margin="6,0,2,0"
+                                        Command="{Binding $parent[Window].((vm:ModelSystemEditorViewModel)DataContext).GoToVariableNodeCommand}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Text="→" FontSize="14"/>
+                                </Button>
+
+                                <!-- Remove -->
+                                <Button Grid.Column="2"
+                                        Classes="neon-danger"
+                                        ToolTip.Tip="Remove from variables"
+                                        Command="{Binding $parent[Window].((vm:ModelSystemEditorViewModel)DataContext).RemoveVariableNodeCommand}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Text="✕" FontSize="12"/>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Panel>
+        </Border>
+
+        <!-- ── Footer ───────────────────────────────────────────────────────── -->
+        <Border Grid.Row="2"
+                BorderBrush="#2200D4FF"
+                BorderThickness="0,1,0,0"
+                Margin="0,12,0,0"
+                Padding="0,10,0,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           VerticalAlignment="Center"
+                           FontSize="11"
+                           Opacity="0.45"
+                           Text="Tip: right-click a parameter on the canvas to add variables."/>
+                <Button Grid.Column="1"
+                        Classes="neon"
+                        Click="OnCloseClick"
+                        BorderBrush="#4400D4FF"
+                        BorderThickness="1">
+                    <TextBlock Text="Close" FontSize="13"/>
+                </Button>
+            </Grid>
+        </Border>
+
+    </Grid>
+
+</Window>
