@@ -1016,38 +1016,34 @@ public sealed class ModelSystemCanvas : Control
             var glowOuter  = new Pen(new SolidColorBrush(Color.FromArgb(0x10, glowColor.R, glowColor.G, glowColor.B)), LinkThickness + 8);
             var glowInner  = new Pen(new SolidColorBrush(Color.FromArgb(0x26, glowColor.R, glowColor.G, glowColor.B)), LinkThickness + 3);
 
-            // Use centre-to-centre distance to decide: when the two elements are
-            // closer than ElbowMinOffset an elbow looks cramped, so draw a straight
-            // line from the natural exit point of the origin to the nearest border
-            // of the destination (bypassing the forced midX offset in ComputeElbow).
-            double cdx = link.X2 - link.X1, cdy = link.Y2 - link.Y1;
-            Point approachFrom, arrowTip, shaftEnd;
-            if (Math.Sqrt(cdx * cdx + cdy * cdy) < MaxStraightLineDistance)
+            // Draw an S-shaped cubic Bézier curve. Tension adapts to the span so short
+            // links curve gently and long ones sweep broadly, with no elbow kinks.
+            var (bp1, bc1, bc2, bp2) = ComputeSCurve(link);
+            // Derive arrowhead direction from the destination border normal so the
+            // head always arrives perfectly perpendicular to the face it hits.
+            var arrowFrom = BorderArrivalFrom(link.Destination, bp2);
+            Point approachFrom = arrowFrom, arrowTip = bp2;
+            var shaftEnd = DrawArrow(ctx, brush, arrowFrom, bp2);
+
+            // Build the geometry once; reuse for glow and main stroke.
+            static StreamGeometry MakeCurveGeo(Point p1, Point c1, Point c2, Point end)
             {
-                var (sp1, sp2) = ComputeDirectLine(link);
-                ctx.DrawLine(glowOuter, sp1, sp2);
-                ctx.DrawLine(glowInner, sp1, sp2);
-                shaftEnd     = DrawArrow(ctx, brush, sp1, sp2);
-                ctx.DrawLine(pen, sp1, shaftEnd);
-                approachFrom = sp1;
-                arrowTip     = sp2;
+                var g = new StreamGeometry();
+                using var gc = g.Open();
+                gc.BeginFigure(p1, isFilled: false);
+                gc.CubicBezierTo(c1, c2, end);
+                gc.EndFigure(isClosed: false);
+                return g;
             }
-            else
-            {
-                var (p1, mid1, mid2, p2) = ComputeElbow(link);
-                ctx.DrawLine(glowOuter, p1,   mid1);
-                ctx.DrawLine(glowOuter, mid1, mid2);
-                ctx.DrawLine(glowOuter, mid2, p2);
-                ctx.DrawLine(glowInner, p1,   mid1);
-                ctx.DrawLine(glowInner, mid1, mid2);
-                ctx.DrawLine(glowInner, mid2, p2);
-                shaftEnd     = DrawArrow(ctx, brush, mid2, p2);
-                ctx.DrawLine(pen, p1,   mid1);
-                ctx.DrawLine(pen, mid1, mid2);
-                ctx.DrawLine(pen, mid2, shaftEnd);
-                approachFrom = mid2;
-                arrowTip     = p2;
-            }
+
+            // Glow halos extend to bp2 so the halo wraps the arrowhead too.
+            var glowGeo  = MakeCurveGeo(bp1, bc1, bc2, bp2);
+            ctx.DrawGeometry(null, glowOuter, glowGeo);
+            ctx.DrawGeometry(null, glowInner, glowGeo);
+
+            // Main shaft stops at shaftEnd so it doesn't overlap the filled arrowhead.
+            var shaftGeo = MakeCurveGeo(bp1, bc1, bc2, shaftEnd);
+            ctx.DrawGeometry(null, pen, shaftGeo);
 
             // For multi-link destinations draw a small 1-based index number
             // beside the arrowhead so the user can see the hook slot ordering.
@@ -1218,10 +1214,115 @@ public sealed class ModelSystemCanvas : Control
     }
 
     /// <summary>
+    /// Computes cubic Bézier control points for a direction-aware link curve.
+    /// <para>
+    /// c1 is placed along the <em>exit</em> tangent at p1 (rightward for hook anchors,
+    /// radially outward for Start nodes). c2 is placed along the <em>entry</em> tangent
+    /// at p2, derived from the inward normal of the destination border face, so the
+    /// curve arrives smoothly perpendicular to that face. Tension is proportional to
+    /// the Euclidean distance between p1 and p2 so the curve scales naturally at any
+    /// zoom and in any direction.
+    /// </para>
+    /// </summary>
+    private (Point p1, Point c1, Point c2, Point p2) ComputeSCurve(LinkViewModel link)
+    {
+        var destCenter = new Point(link.X2, link.Y2);
+
+        // p1 and exit direction.
+        Point  p1;
+        Vector exitDir;
+        if (link.Origin is NodeViewModel originNvm
+            && _hookAnchors.TryGetValue((originNvm, link.UnderlyingLink.OriginHook), out var hookPt))
+        {
+            p1      = hookPt;
+            exitDir = new Vector(1, 0); // hooks always face right
+        }
+        else if (link.Origin is StartViewModel startOrigin)
+        {
+            var oc  = new Point(startOrigin.CenterX, startOrigin.CenterY);
+            p1      = BorderPoint(link.Origin, destCenter) ?? oc;
+            var odx = p1.X - oc.X;  var ody = p1.Y - oc.Y;
+            var ol  = Math.Sqrt(odx * odx + ody * ody);
+            exitDir = ol < 0.1 ? new Vector(1, 0) : new Vector(odx / ol, ody / ol);
+        }
+        else
+        {
+            p1      = BorderPoint(link.Origin, destCenter) ?? new Point(link.X1, link.Y1);
+            exitDir = new Vector(1, 0);
+        }
+
+        // p2: destination border point approached from p1's direction.
+        var p2 = BorderPoint(link.Destination, p1) ?? destCenter;
+
+        // c1 follows the exit tangent; c2 steps back from p2 along the entry tangent.
+        var    entryDir = BorderInwardNormal(link.Destination, p2);
+        double dx       = p2.X - p1.X, dy = p2.Y - p1.Y;
+        double tension  = Math.Max(Math.Sqrt(dx * dx + dy * dy) * 0.45, 50.0);
+
+        var c1 = new Point(p1.X + exitDir.X  * tension, p1.Y + exitDir.Y  * tension);
+        var c2 = new Point(p2.X - entryDir.X * tension, p2.Y - entryDir.Y * tension);
+
+        return (p1, c1, c2, p2);
+    }
+
+    /// <summary>Evaluates a cubic Bézier curve at parameter <paramref name="t"/> ∈ [0, 1].</summary>
+    private static Point SampleCubicBezier(Point p1, Point c1, Point c2, Point p2, double t)
+    {
+        double u = 1 - t;
+        return new Point(
+            u*u*u * p1.X + 3*u*u*t * c1.X + 3*u*t*t * c2.X + t*t*t * p2.X,
+            u*u*u * p1.Y + 3*u*u*t * c1.Y + 3*u*t*t * c2.Y + t*t*t * p2.Y);
+    }
+
+    /// <summary>
+    /// Returns the unit vector pointing <em>into</em> <paramref name="dest"/> through
+    /// the border face that <paramref name="borderPt"/> sits on.
+    /// For axis-aligned rect borders this is always one of ±X or ±Y.
+    /// For circles (Start nodes) it is the inward radius direction.
+    /// </summary>
+    private Vector BorderInwardNormal(ICanvasElement? dest, Point borderPt)
+    {
+        const double eps = 1.5;
+
+        Rect? r = dest switch {
+            NodeViewModel nvm             => new Rect(nvm.X,  nvm.Y,  NodeRenderWidth(nvm), NodeRenderHeight(nvm)),
+            GhostNodeViewModel gnvm       => new Rect(gnvm.X, gnvm.Y, gnvm.Width,  gnvm.Height),
+            FunctionInstanceViewModel fiv => new Rect(fiv.X,  fiv.Y,  fiv.Width,   fiv.Height),
+            _                             => (Rect?)null
+        };
+
+        if (r is { } rect)
+        {
+            if (Math.Abs(borderPt.X - rect.X)      < eps) return new Vector( 1,  0); // left face  → rightward
+            if (Math.Abs(borderPt.X - rect.Right)  < eps) return new Vector(-1,  0); // right face → leftward
+            if (Math.Abs(borderPt.Y - rect.Y)      < eps) return new Vector( 0,  1); // top face   → downward
+            if (Math.Abs(borderPt.Y - rect.Bottom) < eps) return new Vector( 0, -1); // bottom face → upward
+        }
+
+        // Circle or unknown: inward radial direction.
+        var cx  = dest?.CenterX ?? borderPt.X;
+        var cy  = dest?.CenterY ?? borderPt.Y;
+        var ddx = cx - borderPt.X;  var ddy = cy - borderPt.Y;
+        var len = Math.Sqrt(ddx * ddx + ddy * ddy);
+        return len < 0.1 ? new Vector(-1, 0) : new Vector(ddx / len, ddy / len);
+    }
+
+    /// <summary>
+    /// Returns a point one arrowhead-length back from <paramref name="borderPt"/> along the
+    /// inward-facing normal of the destination border face, so the arrowhead always
+    /// arrives perpendicular to that face.
+    /// </summary>
+    private Point BorderArrivalFrom(ICanvasElement? dest, Point borderPt)
+    {
+        double back   = ArrowSize * 1.5;
+        var    normal = BorderInwardNormal(dest, borderPt);
+        return new Point(borderPt.X - normal.X * back, borderPt.Y - normal.Y * back);
+    }
+
+    /// <summary>
     /// Computes a straight-line (p1, p2) pair for a link:
     /// p1 is the hook anchor (or origin border point), and p2 is the destination
     /// border point along the direct p1→destination-centre direction.
-    /// Used when the two elements are too close for an elbow to look reasonable.
     /// </summary>
     private (Point p1, Point p2) ComputeDirectLine(LinkViewModel link)
     {
@@ -1360,14 +1461,52 @@ public sealed class ModelSystemCanvas : Control
     private void RenderPendingLink(DrawingContext ctx)
     {
         if (_linkOrigin is null) return;
-        var pen    = new Pen(PendingLinkBrush, LinkThickness, dashStyle: PendingLinkDash);
-        var origin = new Point(_linkOrigin.CenterX, _linkOrigin.CenterY);
-        // Neon glow behind the pending link
+        var pen = new Pen(PendingLinkBrush, LinkThickness, dashStyle: PendingLinkDash);
+
+        // p1 and exit direction follow the same rules as ComputeSCurve.
+        Point p1;
+        Vector exitDir;
+        var cursor = _linkCurrentPos;
+        if (_linkOrigin is StartViewModel pendingStart)
+        {
+            var oc  = new Point(pendingStart.CenterX, pendingStart.CenterY);
+            p1      = BorderPoint(_linkOrigin, cursor) ?? oc;
+            var odx = p1.X - oc.X;  var ody = p1.Y - oc.Y;
+            var ol  = Math.Sqrt(odx * odx + ody * ody);
+            exitDir = ol < 0.1 ? new Vector(1, 0) : new Vector(odx / ol, ody / ol);
+        }
+        else
+        {
+            p1      = new Point(_linkOrigin.CenterX, _linkOrigin.CenterY);
+            exitDir = new Vector(1, 0);
+        }
+
+        var p2 = cursor;
+        // Approach direction for the free cursor end: from origin toward cursor.
+        var aprDx = p1.X - p2.X;  var aprDy = p1.Y - p2.Y;
+        var aprLen = Math.Sqrt(aprDx * aprDx + aprDy * aprDy);
+        Vector approachDir = aprLen < 0.1 ? new Vector(-1, 0) : new Vector(aprDx / aprLen, aprDy / aprLen);
+
+        double dx = p2.X - p1.X, dy = p2.Y - p1.Y;
+        double tension = Math.Max(Math.Sqrt(dx * dx + dy * dy) * 0.45, 50.0);
+        var c1 = new Point(p1.X + exitDir.X    * tension, p1.Y + exitDir.Y    * tension);
+        var c2 = new Point(p2.X + approachDir.X * tension, p2.Y + approachDir.Y * tension);
+
+        // Sample near tip so the pending arrowhead angle is also accurate.
+        var pendingArrowFrom = SampleCubicBezier(p1, c1, c2, p2, 0.97);
+        var shaftEnd = DrawArrow(ctx, PendingLinkBrush, pendingArrowFrom, p2);
+
+        var geo = new StreamGeometry();
+        using (var gc = geo.Open())
+        {
+            gc.BeginFigure(p1, isFilled: false);
+            gc.CubicBezierTo(c1, c2, shaftEnd);
+            gc.EndFigure(isClosed: false);
+        }
         var pgColor = Color.FromRgb(0x2E, 0xCC, 0x71);
-        ctx.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb(0x10, pgColor.R, pgColor.G, pgColor.B)), LinkThickness + 8), origin, _linkCurrentPos);
-        ctx.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb(0x26, pgColor.R, pgColor.G, pgColor.B)), LinkThickness + 3), origin, _linkCurrentPos);
-        var shaftEnd = DrawArrow(ctx, PendingLinkBrush, origin, _linkCurrentPos);
-        ctx.DrawLine(pen, origin, shaftEnd);
+        ctx.DrawGeometry(null, new Pen(new SolidColorBrush(Color.FromArgb(0x10, pgColor.R, pgColor.G, pgColor.B)), LinkThickness + 8), geo);
+        ctx.DrawGeometry(null, new Pen(new SolidColorBrush(Color.FromArgb(0x26, pgColor.R, pgColor.G, pgColor.B)), LinkThickness + 3), geo);
+        ctx.DrawGeometry(null, pen, geo);
     }
 
     // ── Link hit-testing ──────────────────────────────────────────────────
@@ -1386,21 +1525,20 @@ public sealed class ModelSystemCanvas : Control
             // Skip links to inlined nodes — no line is drawn for them.
             if (link.Destination is NodeViewModel dlNvm && dlNvm.IsInlined) continue;
 
-            double hcdx = link.X2 - link.X1, hcdy = link.Y2 - link.Y1;
-            if (Math.Sqrt(hcdx * hcdx + hcdy * hcdy) < ElbowMinOffset)
+            // Sample the S-curve at 12 chords; any chord within tolerance is a hit.
+            var (hp1, hc1, hc2, hp2) = ComputeSCurve(link);
+            const int HitSamples = 12;
+            var prev = hp1;
+            bool curveHit = false;
+            for (int s = 1; s <= HitSamples && !curveHit; s++)
             {
-                var (sp1, sp2) = ComputeDirectLine(link);
-                if (DistToSeg(pos, sp1, sp2) <= LinkHitTolerance)
-                    return link;
+                double t    = s / (double)HitSamples;
+                var    next = SampleCubicBezier(hp1, hc1, hc2, hp2, t);
+                if (DistToSeg(pos, prev, next) <= LinkHitTolerance)
+                    curveHit = true;
+                prev = next;
             }
-            else
-            {
-                var (p1, mid1, mid2, p2) = ComputeElbow(link);
-                if (DistToSeg(pos, p1,   mid1) <= LinkHitTolerance ||
-                    DistToSeg(pos, mid1, mid2) <= LinkHitTolerance ||
-                    DistToSeg(pos, mid2, p2)   <= LinkHitTolerance)
-                    return link;
-            }
+            if (curveHit) return link;
         }
         return null;
     }
