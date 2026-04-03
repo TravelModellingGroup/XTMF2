@@ -5,6 +5,7 @@
         xmlns:res="clr-namespace:XTMF2.GUI.Resources"
         mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="340"
         x:Class="XTMF2.GUI.Views.AboutDialog"
+        Classes="neon-dialog"
         Title="{res:Localize About_Title}"
         Width="420"
         SizeToContent="Height"
@@ -78,6 +79,7 @@
         <!-- Close button -->
         <Button Grid.Row="6"
                 x:Name="CloseButton"
+                Classes="dlg-primary"
                 Content="{res:Localize About_Close}"
                 HorizontalAlignment="Center"
                 Width="100"

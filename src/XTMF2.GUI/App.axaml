@@ -25,7 +25,64 @@
 
     <Application.Resources>
         <ResourceDictionary>
-            
+
+            <ResourceDictionary.ThemeDictionaries>
+
+                <!-- ── Neon dialog shared tokens ────────────────────────────────── -->
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="DlgBg">#0E0E18</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgBorder">#FF00D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgFg">#FFEEFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgSubFg">#99AABBCC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgAccent">#FF00D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgAccentDim">#2200D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgAccentMid">#4400D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgAccentFaint">#3300D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgAccentText">#8800D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgDanger">#FFFF4466</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgDangerHover">#22FF4466</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgErrorFg">#FFFF4466</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgInputBg">#12FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgInputBorder">#4400D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgHover">#1500D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgSelected">#2500D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgListBorder">#2200D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgSep">#2200D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgCaret">#FF00D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgBtnBorder">#4400D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgPrimaryBtnBg">#FF00D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgPrimaryBtnFg">#FF000A0E</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgPrimaryBtnHover">#CC00D4FF</SolidColorBrush>
+                </ResourceDictionary>
+
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="DlgBg">#F2F6FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgBorder">#FF0066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgFg">#FF001830</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgSubFg">#FF567890</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgAccent">#FF0066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgAccentDim">#1A0066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgAccentMid">#330066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgAccentFaint">#550066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgAccentText">#AA0066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgDanger">#FFCC0022</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgDangerHover">#22CC0022</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgErrorFg">#FFCC0022</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgInputBg">#0A000000</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgInputBorder">#550066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgHover">#150066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgSelected">#250066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgListBorder">#330066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgSep">#330066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgCaret">#FF0066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgBtnBorder">#550066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgPrimaryBtnBg">#FF0066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgPrimaryBtnFg">#FFFFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="DlgPrimaryBtnHover">#CC0066CC</SolidColorBrush>
+                </ResourceDictionary>
+
+            </ResourceDictionary.ThemeDictionaries>
+
             <!-- Forest Green Theme Colors -->
             <ResourceDictionary x:Key="ForestGreen">
                 <Color x:Key="AccentColor">#2D5016</Color>
@@ -88,6 +145,86 @@
         <Style Selector=":is(Button).sapphire-blue:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#5179F1"/>
         </Style>
-        
+
+        <!-- ── Neon dialog theme: apply with Classes="neon-dialog" on any Window ── -->
+        <Style Selector="Window.neon-dialog">
+            <Setter Property="Background" Value="{DynamicResource DlgBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DlgBorder}"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+        </Style>
+        <Style Selector="Window.neon-dialog TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource DlgFg}"/>
+        </Style>
+        <Style Selector="Window.neon-dialog TextBox">
+            <Setter Property="Background" Value="{DynamicResource DlgInputBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DlgFg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DlgInputBorder}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource DlgCaret}"/>
+        </Style>
+        <Style Selector="Window.neon-dialog ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Window.neon-dialog ListBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource DlgFg}"/>
+        </Style>
+        <Style Selector="Window.neon-dialog ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgHover}"/>
+        </Style>
+        <Style Selector="Window.neon-dialog ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgSelected}"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Border.dlg-list">
+            <Setter Property="BorderBrush" Value="{DynamicResource DlgListBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Separator">
+            <Setter Property="Background" Value="{DynamicResource DlgSep}"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource DlgFg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DlgBtnBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="20,8"/>
+            <Setter Property="MinWidth" Value="80"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Button:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgAccentDim}"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Button:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgAccentMid}"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Button.dlg-primary">
+            <Setter Property="Background" Value="{DynamicResource DlgPrimaryBtnBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DlgPrimaryBtnFg}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Button.dlg-primary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgPrimaryBtnHover}"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Button.dlg-primary:disabled">
+            <Setter Property="Opacity" Value="0.4"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Button.dlg-icon">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="MinWidth" Value="0"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Button.dlg-danger">
+            <Setter Property="Foreground" Value="{DynamicResource DlgDanger}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="MinWidth" Value="0"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Button.dlg-danger:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DlgDangerHover}"/>
+        </Style>
+
     </Application.Styles>
 </Application>

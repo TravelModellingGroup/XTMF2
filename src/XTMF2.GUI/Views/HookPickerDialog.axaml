@@ -6,6 +6,7 @@
         x:Class="XTMF2.GUI.Views.HookPickerDialog"
         x:CompileBindings="True"
         x:DataType="local:HookPickerDialog"
+        Classes="neon-dialog"
         xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
         Title="Select Hook"
         Width="460"
@@ -24,9 +25,7 @@
 
         <!-- Hook list -->
         <Border Grid.Row="1"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                BorderThickness="1"
-                CornerRadius="3">
+                Classes="dlg-list">
             <ListBox x:Name="HookListBox"
                      ItemsSource="{Binding Hooks}"
                      SelectionMode="Single">
@@ -57,6 +56,7 @@
                     Spacing="10"
                     Margin="0,12,0,0">
             <Button Content="{res:Localize Dialog_OK}"
+                    Classes="dlg-primary"
                     Click="OK_Click"
                     IsDefault="True"
                     Padding="24,8"

@@ -4,6 +4,7 @@
         x:Class="XTMF2.GUI.Views.StartPickerDialog"
         x:CompileBindings="True"
         x:DataType="local:StartPickerDialog"
+        Classes="neon-dialog"
         Width="380"
         Height="145"
         WindowStartupLocation="CenterOwner"
@@ -32,6 +33,7 @@
                     Spacing="10"
                     Margin="0,15,0,0">
             <Button Content="OK"
+                    Classes="dlg-primary"
                     Click="OK_Click"
                     IsDefault="True"
                     Padding="20,8"

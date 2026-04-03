@@ -9,107 +9,8 @@
         Height="520"
         MinWidth="320"
         MinHeight="280"
-        WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource VarDlgBg}"
-        BorderBrush="{DynamicResource VarDlgBorder}"
-        BorderThickness="1.5">
-
-    <Window.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.ThemeDictionaries>
-
-                <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="VarDlgBg">#0E0E18</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgBorder">#FF00D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgFg">#FFEEFFFF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgAccent">#FF00D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgAccentDim">#2200D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgAccentMid">#4400D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgAccentFaint">#3300D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgAccentText">#8800D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgDanger">#FFFF4466</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgDangerHover">#22FF4466</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgInputBg">#12FFFFFF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgInputBorder">#4400D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgHover">#1500D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgSelected">#2500D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgListBorder">#2200D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgSep">#2200D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgCloseBorder">#4400D4FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgCaret">#FF00D4FF</SolidColorBrush>
-                </ResourceDictionary>
-
-                <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="VarDlgBg">#F2F6FF</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgBorder">#FF0066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgFg">#FF001830</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgAccent">#FF0066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgAccentDim">#1A0066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgAccentMid">#330066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgAccentFaint">#550066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgAccentText">#AA0066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgDanger">#FFCC0022</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgDangerHover">#22CC0022</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgInputBg">#0A000000</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgInputBorder">#550066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgHover">#150066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgSelected">#250066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgListBorder">#330066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgSep">#330066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgCloseBorder">#550066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="VarDlgCaret">#FF0066CC</SolidColorBrush>
-                </ResourceDictionary>
-
-            </ResourceDictionary.ThemeDictionaries>
-        </ResourceDictionary>
-    </Window.Resources>
-
-    <Window.Styles>
-        <!-- Neon button base -->
-        <Style Selector="Button.neon">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource VarDlgFg}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="10,4"/>
-        </Style>
-        <Style Selector="Button.neon:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource VarDlgAccentDim}"/>
-        </Style>
-        <Style Selector="Button.neon:pressed /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource VarDlgAccentMid}"/>
-        </Style>
-        <Style Selector="Button.neon-danger">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource VarDlgDanger}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="8,4"/>
-        </Style>
-        <Style Selector="Button.neon-danger:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource VarDlgDangerHover}"/>
-        </Style>
-        <Style Selector="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource VarDlgFg}"/>
-        </Style>
-        <Style Selector="TextBox">
-            <Setter Property="Background" Value="{DynamicResource VarDlgInputBg}"/>
-            <Setter Property="Foreground" Value="{DynamicResource VarDlgFg}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource VarDlgInputBorder}"/>
-            <Setter Property="CaretBrush" Value="{DynamicResource VarDlgCaret}"/>
-        </Style>
-        <Style Selector="ListBoxItem">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource VarDlgFg}"/>
-            <Setter Property="Padding" Value="4,3"/>
-        </Style>
-        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource VarDlgHover}"/>
-        </Style>
-        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource VarDlgSelected}"/>
-        </Style>
-    </Window.Styles>
+        Classes="neon-dialog"
+        WindowStartupLocation="CenterOwner">
 
     <Grid RowDefinitions="Auto,*,Auto" Margin="16">
 
@@ -118,7 +19,7 @@
             <TextBlock Text="Model System Variables"
                        FontSize="18"
                        FontWeight="Bold"
-                       Foreground="{DynamicResource VarDlgAccent}"/>
+                       Foreground="{DynamicResource DlgAccent}"/>
             <TextBlock Text="Variables are named parameter nodes referenced across the model system."
                        FontSize="11"
                        Opacity="0.6"
@@ -135,9 +36,7 @@
 
         <!-- ── Variable list ────────────────────────────────────────────────── -->
         <Border Grid.Row="1"
-                BorderBrush="{DynamicResource VarDlgListBorder}"
-                BorderThickness="1"
-                CornerRadius="6"
+                Classes="dlg-list"
                 ClipToBounds="True">
             <Panel>
                 <!-- Empty state -->
@@ -147,7 +46,7 @@
                             IsVisible="{Binding HasNoModelSystemVariables}">
                     <TextBlock Text="∅"
                                FontSize="36"
-                               Foreground="{DynamicResource VarDlgAccentFaint}"
+                               Foreground="{DynamicResource DlgAccentFaint}"
                                HorizontalAlignment="Center"/>
                     <TextBlock Text="No variables defined."
                                FontSize="13"
@@ -182,13 +81,13 @@
                                                TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Text="{Binding BoundaryPath}"
                                                FontSize="10"
-                                               Foreground="{DynamicResource VarDlgAccentText}"
+                                               Foreground="{DynamicResource DlgAccentText}"
                                                TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
 
                                 <!-- Go to node -->
                                 <Button Grid.Column="1"
-                                        Classes="neon"
+                                        Classes="dlg-icon"
                                         ToolTip.Tip="Navigate canvas to this node"
                                         Margin="6,0,2,0"
                                         Command="{Binding $parent[Window].((vm:ModelSystemEditorViewModel)DataContext).GoToVariableNodeCommand}"
@@ -198,7 +97,7 @@
 
                                 <!-- Remove -->
                                 <Button Grid.Column="2"
-                                        Classes="neon-danger"
+                                        Classes="dlg-danger"
                                         ToolTip.Tip="Remove from variables"
                                         Command="{Binding $parent[Window].((vm:ModelSystemEditorViewModel)DataContext).RemoveVariableNodeCommand}"
                                         CommandParameter="{Binding}">
@@ -213,7 +112,7 @@
 
         <!-- ── Footer ───────────────────────────────────────────────────────── -->
         <Border Grid.Row="2"
-                BorderBrush="{DynamicResource VarDlgSep}"
+                BorderBrush="{DynamicResource DlgSep}"
                 BorderThickness="0,1,0,0"
                 Margin="0,12,0,0"
                 Padding="0,10,0,0">
@@ -224,10 +123,7 @@
                            Opacity="0.45"
                            Text="Tip: right-click a parameter on the canvas to add variables."/>
                 <Button Grid.Column="1"
-                        Classes="neon"
-                        Click="OnCloseClick"
-                        BorderBrush="{DynamicResource VarDlgCloseBorder}"
-                        BorderThickness="1">
+                        Click="OnCloseClick">
                     <TextBlock Text="Close" FontSize="13"/>
                 </Button>
             </Grid>
