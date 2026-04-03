@@ -2868,7 +2868,7 @@ public sealed class ModelSystemCanvas : Control
             var spawnPt = ToCanvasPos(_rightClickPressPos);
 
             var addStartItem = new MenuItem { Header = "Add Start…" };
-            addStartItem.Click += (_, _) => _ = vm2.AddStartAtAsync(spawnPt.X, spawnPt.Y);
+            addStartItem.Click += (_, _) => vm2.AddStartAt(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addStartItem);
 
             var addModuleItem = new MenuItem { Header = "Add Module…" };

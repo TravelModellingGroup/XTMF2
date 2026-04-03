@@ -569,7 +569,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (e.NewItems is not null)
             foreach (Node n in e.NewItems)
-                Nodes.Add(new NodeViewModel(n, Session, User));
+            {
+                var nvm = new NodeViewModel(n, Session, User);
+                nvm.ShowHooks = true;   // expand hooks by default so the user can immediately see all connections
+                Nodes.Add(nvm);
+                SelectElement(nvm);
+            }
 
         if (e.OldItems is not null)
             foreach (Node n in e.OldItems)
@@ -583,7 +588,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (e.NewItems is not null)
             foreach (Start s in e.NewItems)
-                Starts.Add(new StartViewModel(s, Session, User));
+            {
+                var svm = new StartViewModel(s, Session, User);
+                Starts.Add(svm);
+                SelectElement(svm);
+            }
 
         if (e.OldItems is not null)
             foreach (Start s in e.OldItems)
@@ -616,7 +625,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (e.NewItems is not null)
             foreach (CommentBlock cb in e.NewItems)
-                CommentBlocks.Add(new CommentBlockViewModel(cb, Session, User));
+            {
+                var cvm = new CommentBlockViewModel(cb, Session, User);
+                CommentBlocks.Add(cvm);
+                SelectElement(cvm);
+            }
 
         if (e.OldItems is not null)
             foreach (CommentBlock cb in e.OldItems)
@@ -644,7 +657,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (e.NewItems is not null)
             foreach (FunctionTemplate ft in e.NewItems)
-                FunctionTemplates.Add(new FunctionTemplateViewModel(ft, Session, User));
+            {
+                var ftvm = new FunctionTemplateViewModel(ft, Session, User);
+                FunctionTemplates.Add(ftvm);
+                SelectElement(ftvm);
+            }
 
         if (e.OldItems is not null)
             foreach (FunctionTemplate ft in e.OldItems)
@@ -662,7 +679,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (e.NewItems is not null)
             foreach (FunctionInstance fi in e.NewItems)
-                FunctionInstances.Add(new FunctionInstanceViewModel(fi, Session, User));
+            {
+                var fivm = new FunctionInstanceViewModel(fi, Session, User);
+                FunctionInstances.Add(fivm);
+                SelectElement(fivm);
+            }
 
         if (e.OldItems is not null)
             foreach (FunctionInstance fi in e.OldItems)
@@ -2251,26 +2272,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     // ── Position-aware add helpers (called from the canvas background context menu) ─
 
-    /// <summary>Prompt for a name and add a new Start at the specified canvas position.</summary>
-    public async Task AddStartAtAsync(double x, double y)
+    /// <summary>Add a new Start at the specified canvas position using an auto-generated name.</summary>
+    public void AddStartAt(double x, double y)
     {
-        if (ParentWindow is null) return;
-
-        var dialog = new InputDialog
-        {
-            Prompt = "Enter start name:",
-            InputText = $"Start {++_startCounter}"
-        };
-        await dialog.ShowDialog(ParentWindow);
-
-        var name = dialog.InputText?.Trim();
-        if (string.IsNullOrEmpty(name)) return;
-
         var location = new Rectangle((float)x, (float)y);
-        Session.AddModelSystemStart(User, _currentBoundary, name, location, out _, out _);
+        Session.AddModelSystemStart(User, _currentBoundary, $"Start {++_startCounter}", location, out _, out _);
     }
 
-    /// <summary>Show a type-picker then a name dialog and add a new module node at the specified canvas position.</summary>
+    /// <summary>Show a type-picker then add a new module node at the specified canvas position, named after the chosen type.</summary>
     public async Task AddModuleAtAsync(double x, double y)
     {
         if (ParentWindow is null) return;
@@ -2283,17 +2292,16 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (typePicker.WasCancelled || typePicker.SelectedType is null) return;
         var selectedType = typePicker.SelectedType;
 
-        var nameDialog = new InputDialog(
-            title: "Add Module",
-            prompt: "Enter module name:",
-            defaultText: selectedType.Name);
-        await nameDialog.ShowDialog(ParentWindow);
-
-        var name = nameDialog.InputText?.Trim();
-        if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
-
         var location = new Rectangle((float)x, (float)y);
-        Session.AddNodeGenerateParameters(User, _currentBoundary, name, selectedType, location, out _, out _, out _);
+        Session.AddNodeGenerateParameters(User, _currentBoundary, selectedType.Name, selectedType, location, out var addedNode, out _, out _);
+
+        // AddNodeGenerateParameters also adds parameter child nodes, each of which triggers
+        // OnModulesChanged → SelectElement. Re-select the root module node so it ends up selected.
+        if (addedNode is not null)
+        {
+            var nvm = Nodes.FirstOrDefault(v => v.UnderlyingNode == addedNode);
+            if (nvm is not null) SelectElement(nvm);
+        }
     }
 
     /// <summary>Add a new comment block at the specified canvas position.</summary>
@@ -2305,19 +2313,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Session.AddCommentBlock(User, _currentBoundary, $"Comment {++_commentCounter}", location, out _, out _);
     }
 
-    /// <summary>Prompt for a name and create a new function template at the specified canvas position.</summary>
+    /// <summary>Create a new function template at the specified canvas position with a unique auto-generated name.</summary>
     public async Task AddFunctionTemplateAtAsync(double x, double y)
     {
-        if (ParentWindow is null) return;
-
-        var dialog = new InputDialog(
-            title: "Add Function Template",
-            prompt: "Enter the function template name:",
-            defaultText: $"FunctionTemplate{FunctionTemplates.Count + 1}");
-        await dialog.ShowDialog(ParentWindow);
-
-        var name = dialog.InputText?.Trim();
-        if (string.IsNullOrEmpty(name) || dialog.WasCancelled) return;
+        // Generate a name that doesn't clash with any existing template in the boundary.
+        int idx = FunctionTemplates.Count + 1;
+        string name;
+        do { name = $"FunctionTemplate{idx++}"; }
+        while (FunctionTemplates.Any(ft => string.Equals(ft.Name, name, StringComparison.OrdinalIgnoreCase)));
 
         var ftLocation = new Rectangle((float)x, (float)y, 220f, 140f);
 
@@ -2331,11 +2334,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Session.SetFunctionTemplateLocation(User, ft!, ftLocation, out _);
     }
 
-    /// <summary>Prompt the user to pick a template and a name then place a new function instance at the specified canvas position.</summary>
+    /// <summary>Pick a template (when more than one exists) then place a new function instance at the specified canvas position with an auto-generated name.</summary>
     public async Task AddFunctionInstanceAtAsync(double x, double y)
     {
-        if (ParentWindow is null) return;
-
         var availableTemplates = new System.Collections.Generic.List<FunctionTemplate>();
         _currentBoundary.CollectAccessibleFunctionTemplates(availableTemplates);
         if (availableTemplates.Count == 0)
@@ -2344,10 +2345,6 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return;
         }
 
-        var templateDisplayNames = availableTemplates
-            .Select(ft => Boundary.GetQualifiedTemplateName(_currentBoundary, ft) ?? ft.Name)
-            .ToList();
-
         FunctionTemplate selectedTemplate;
         if (availableTemplates.Count == 1)
         {
@@ -2355,6 +2352,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
         else
         {
+            if (ParentWindow is null) return;
+            var templateDisplayNames = availableTemplates
+                .Select(ft => Boundary.GetQualifiedTemplateName(_currentBoundary, ft) ?? ft.Name)
+                .ToList();
             var picker = new StartPickerDialog(
                 title: "Add Function Instance",
                 prompt: "Select the function template to instantiate:",
@@ -2367,14 +2368,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             selectedTemplate = availableTemplates[pickedIdx >= 0 ? pickedIdx : 0];
         }
 
-        var nameDialog = new InputDialog(
-            title: "Add Function Instance",
-            prompt: $"Enter the instance name ({selectedTemplate.Name}):",
-            defaultText: $"{selectedTemplate.Name}{FunctionInstances.Count + 1}");
-        await nameDialog.ShowDialog(ParentWindow);
-
-        var name = nameDialog.InputText?.Trim();
-        if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
+        // Generate a unique instance name.
+        int idx = FunctionInstances.Count + 1;
+        string name;
+        do { name = $"{selectedTemplate.Name}{idx++}"; }
+        while (FunctionInstances.Any(fi => string.Equals(fi.Name, name, StringComparison.OrdinalIgnoreCase)));
 
         var location = new Rectangle((float)x, (float)y, 160f, 70f);
 
