@@ -125,6 +125,11 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
                 }
             }
         };
+
+        TypeListBox.DoubleTapped += (_, _) =>
+        {
+            if (TypeListBox.SelectedItem is Type) OK_Click(null, null!);
+        };
     }
 
     // ── Filtering ─────────────────────────────────────────────────────────
