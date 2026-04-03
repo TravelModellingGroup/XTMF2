@@ -51,21 +51,21 @@ public sealed class ModelSystemCanvas : Control
     // ── Brushes / pens (shared, immutable) ───────────────────────────────
     private static readonly IBrush CanvasBackground      = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E));
     private static readonly IBrush CanvasBackgroundLight = new SolidColorBrush(Color.FromRgb(0xF0, 0xF4, 0xF8));
-    private static readonly IBrush NodeFill           = new SolidColorBrush(Color.FromRgb(0x2C, 0x3E, 0x50));
-    private static readonly IBrush NodeBorderBrush    = new SolidColorBrush(Color.FromRgb(0x77, 0x88, 0x99));
+    private static readonly IBrush NodeFill           = new SolidColorBrush(Color.FromRgb(0x0E, 0x22, 0x38)); // deep dark blue
+    private static readonly IBrush NodeBorderBrush    = new SolidColorBrush(Color.FromRgb(0x00, 0xCC, 0xFF)); // neon cyan
     private static readonly IBrush NodeSelBrush       = Brushes.DodgerBlue;
     private static readonly IBrush NodeTextBrush      = Brushes.White;
-    private static readonly IBrush StartFill          = new SolidColorBrush(Color.FromRgb(0xE6, 0x7E, 0x22));
+    private static readonly IBrush StartFill          = new SolidColorBrush(Color.FromRgb(0xFF, 0x77, 0x00)); // vivid orange
     private static readonly IBrush StartSelFill       = Brushes.DodgerBlue;
     private static readonly IBrush StartTextBrush      = Brushes.White;
     private static readonly IBrush StartTextBrushLight  = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E));
-    private static readonly IBrush LinkBrush          = new SolidColorBrush(Color.FromRgb(0x7F, 0x8C, 0x8D));
+    private static readonly IBrush LinkBrush          = new SolidColorBrush(Color.FromRgb(0x22, 0xBB, 0xDD)); // teal-cyan
     private static readonly IBrush LinkSelBrush       = Brushes.OrangeRed;
     private static readonly IBrush PendingLinkBrush   = new SolidColorBrush(Color.FromRgb(0x2E, 0xCC, 0x71));
     private static readonly DashStyle PendingLinkDash = new DashStyle([6, 4], 0);
     // Ghost node styling
-    private static readonly IBrush GhostNodeFill      = new SolidColorBrush(Color.FromArgb(0x50, 0x2C, 0x3E, 0x50));
-    private static readonly IBrush GhostNodeBorderBrush = new SolidColorBrush(Color.FromRgb(0x77, 0x88, 0x99));
+    private static readonly IBrush GhostNodeFill      = new SolidColorBrush(Color.FromArgb(0x50, 0x0E, 0x22, 0x38));
+    private static readonly IBrush GhostNodeBorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x99, 0xDD)); // steel-blue neon
     private static readonly IBrush GhostNodeSelBrush  = Brushes.DodgerBlue;
     private static readonly DashStyle GhostNodeDash   = new DashStyle([6, 4], 0);
 
@@ -84,7 +84,7 @@ public sealed class ModelSystemCanvas : Control
     // Comment block colours (sticky-note style)
     private static readonly IBrush CommentFill        = new SolidColorBrush(Color.FromArgb(0xE6, 0xFF, 0xF0, 0x96));
     private static readonly IBrush CommentSelFill     = new SolidColorBrush(Color.FromArgb(0xE6, 0xFF, 0xE0, 0x50));
-    private static readonly IBrush CommentBorderBrush = new SolidColorBrush(Color.FromRgb(0xB8, 0xA0, 0x00));
+    private static readonly IBrush CommentBorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)); // bright gold
     private static readonly IBrush CommentSelBorder   = Brushes.DodgerBlue;
     private static readonly IBrush CommentTextBrush   = new SolidColorBrush(Color.FromRgb(0x22, 0x1E, 0x00));
     // Hook colours
@@ -115,7 +115,7 @@ public sealed class ModelSystemCanvas : Control
     // Function-template container box
     private static readonly IBrush FtFill            = new SolidColorBrush(Color.FromRgb(0x20, 0x12, 0x38));
     private static readonly IBrush FtHeaderFill      = new SolidColorBrush(Color.FromRgb(0x4A, 0x28, 0x6E));
-    private static readonly IBrush FtBorderBrush     = new SolidColorBrush(Color.FromRgb(0x7B, 0x45, 0xBD));
+    private static readonly IBrush FtBorderBrush     = new SolidColorBrush(Color.FromRgb(0xAA, 0x55, 0xFF)); // vivid purple
     private static readonly IBrush FtSelBorderBrush  = Brushes.DodgerBlue;
     private static readonly IBrush FtTextBrush       = new SolidColorBrush(Color.FromRgb(0xDD, 0xCC, 0xFF));
     private static readonly IBrush FtHookTextBrush   = new SolidColorBrush(Color.FromRgb(0xCC, 0xAA, 0xFF));
@@ -128,8 +128,8 @@ public sealed class ModelSystemCanvas : Control
     // Function-instance box (teal/green palette, solid border to distinguish from template)
     private static readonly IBrush FiFill           = new SolidColorBrush(Color.FromRgb(0x07, 0x24, 0x24));
     private static readonly IBrush FiHeaderFill     = new SolidColorBrush(Color.FromRgb(0x0E, 0x4A, 0x44));
-    private static readonly IBrush FiBorderBrush    = new SolidColorBrush(Color.FromRgb(0x00, 0xBF, 0xA5));
-    private static readonly IBrush FiSelBorderBrush = new SolidColorBrush(Color.FromRgb(0x64, 0xFF, 0xDA));
+    private static readonly IBrush FiBorderBrush    = new SolidColorBrush(Color.FromRgb(0x00, 0xFF, 0xCC)); // vivid mint-teal
+    private static readonly IBrush FiSelBorderBrush = new SolidColorBrush(Color.FromRgb(0x24, 0xCF, 0xCA));
     private static readonly IBrush FiTextBrush      = new SolidColorBrush(Color.FromRgb(0xB2, 0xFF, 0xF0));
     private static readonly IBrush FiSubTextBrush   = new SolidColorBrush(Color.FromArgb(0xB0, 0x80, 0xE8, 0xD0));
     private static readonly IBrush FiHookTextBrush  = new SolidColorBrush(Color.FromRgb(0x80, 0xCB, 0xC4));
@@ -145,10 +145,16 @@ public sealed class ModelSystemCanvas : Control
     private static readonly Pen GridPenLight = new Pen(new SolidColorBrush(Color.FromArgb(0x60, 0x88, 0xAA, 0xCC)), 0.5);
     /// <summary>1 cm expressed in Avalonia logical pixels (96 DPI basis).</summary>
     private const double GridSpacingDip = 96.0 / 2.54;
-    // Drop-shadow layers (three passes, loosest → tightest, to simulate a soft blur)
-    private static readonly IBrush ShadowBrush1 = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
-    private static readonly IBrush ShadowBrush2 = new SolidColorBrush(Color.FromArgb(0x22, 0, 0, 0));
-    private static readonly IBrush ShadowBrush3 = new SolidColorBrush(Color.FromArgb(0x30, 0, 0, 0));
+    // Neon glow colours — applied as outward-expanding alpha halos in DrawRectGlow / DrawEllipseGlow.
+    private static readonly Color NodeGlowColor      = Color.FromRgb(0x00, 0xCC, 0xFF); // electric cyan
+    private static readonly Color StartGlowColor     = Color.FromRgb(0xFF, 0x88, 0x00); // vivid orange
+    private static readonly Color FtGlowColor        = Color.FromRgb(0xAA, 0x44, 0xFF); // neon purple
+    private static readonly Color FiGlowColor        = Color.FromRgb(0x00, 0xFF, 0xCC); // mint-teal
+    private static readonly Color CommentGlowColor   = Color.FromRgb(0xFF, 0xD7, 0x00); // gold
+    private static readonly Color GhostGlowColor     = Color.FromRgb(0x44, 0x99, 0xDD); // steel-blue
+    private static readonly Color LinkGlowColor      = Color.FromRgb(0x00, 0xCC, 0xFF); // cyan
+    private static readonly Color LinkSelGlowColor   = Color.FromRgb(0xFF, 0x55, 0x00); // orange-red
+    private static readonly Color SelectionGlowColor = Color.FromRgb(0x22, 0xAA, 0xFF); // bright blue (selected objects)
 
     // ── Drawing constants ─────────────────────────────────────────────────
     private const double NodeCornerRadius    = 4.0;
@@ -781,7 +787,7 @@ public sealed class ModelSystemCanvas : Control
             var fill   = comment.IsSelected ? CommentSelFill   : CommentFill;
             var border = new Pen(comment.IsSelected ? CommentSelBorder : CommentBorderBrush, NodeBorderThickness, dashStyle: DashStyle.Dash);
 
-            DrawRectShadow(ctx, rect, NodeCornerRadius);
+            DrawRectGlow(ctx, rect, NodeCornerRadius, comment.IsSelected ? SelectionGlowColor : CommentGlowColor);
             ctx.DrawRectangle(fill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // Render wrapped comment text inside the block with clipping
@@ -832,10 +838,10 @@ public sealed class ModelSystemCanvas : Control
             double rh  = ft.Height;
             var rect   = new Rect(ft.X, ft.Y, rw, rh);
 
-            // Shadow + outer border (dashed to distinguish from a regular node or boundary)
+            // Neon glow + outer border (dashed to distinguish from a regular node or boundary)
             var borderBrush = ft.IsSelected ? FtSelBorderBrush : FtBorderBrush;
             var border      = new Pen(borderBrush, NodeBorderThickness + 0.5, dashStyle: FtBorderDash);
-            DrawRectShadow(ctx, rect, FtCornerRadius);
+            DrawRectGlow(ctx, rect, FtCornerRadius, ft.IsSelected ? SelectionGlowColor : FtGlowColor);
             ctx.DrawRectangle(FtFill, border, rect, FtCornerRadius, FtCornerRadius);
 
             // ── Header band ────────────────────────────────────────────────
@@ -929,7 +935,7 @@ public sealed class ModelSystemCanvas : Control
 
             var borderBrush = fi.IsSelected ? FiSelBorderBrush : FiBorderBrush;
             var border      = new Pen(borderBrush, NodeBorderThickness);
-            DrawRectShadow(ctx, rect, FiCornerRadius);
+            DrawRectGlow(ctx, rect, FiCornerRadius, fi.IsSelected ? SelectionGlowColor : FiGlowColor);
             ctx.DrawRectangle(FiFill, border, rect, FiCornerRadius, FiCornerRadius);
 
             // ── Header band ────────────────────────────────────────────────
@@ -1005,6 +1011,11 @@ public sealed class ModelSystemCanvas : Control
             var brush = link.IsSelected ? LinkSelBrush : LinkBrush;
             var pen   = new Pen(brush, LinkThickness);
 
+            // Neon glow: two wider transparent halos drawn beneath the main link line.
+            var glowColor  = link.IsSelected ? LinkSelGlowColor : LinkGlowColor;
+            var glowOuter  = new Pen(new SolidColorBrush(Color.FromArgb(0x10, glowColor.R, glowColor.G, glowColor.B)), LinkThickness + 8);
+            var glowInner  = new Pen(new SolidColorBrush(Color.FromArgb(0x26, glowColor.R, glowColor.G, glowColor.B)), LinkThickness + 3);
+
             // Use centre-to-centre distance to decide: when the two elements are
             // closer than ElbowMinOffset an elbow looks cramped, so draw a straight
             // line from the natural exit point of the origin to the nearest border
@@ -1014,6 +1025,8 @@ public sealed class ModelSystemCanvas : Control
             if (Math.Sqrt(cdx * cdx + cdy * cdy) < MaxStraightLineDistance)
             {
                 var (sp1, sp2) = ComputeDirectLine(link);
+                ctx.DrawLine(glowOuter, sp1, sp2);
+                ctx.DrawLine(glowInner, sp1, sp2);
                 shaftEnd     = DrawArrow(ctx, brush, sp1, sp2);
                 ctx.DrawLine(pen, sp1, shaftEnd);
                 approachFrom = sp1;
@@ -1022,6 +1035,12 @@ public sealed class ModelSystemCanvas : Control
             else
             {
                 var (p1, mid1, mid2, p2) = ComputeElbow(link);
+                ctx.DrawLine(glowOuter, p1,   mid1);
+                ctx.DrawLine(glowOuter, mid1, mid2);
+                ctx.DrawLine(glowOuter, mid2, p2);
+                ctx.DrawLine(glowInner, p1,   mid1);
+                ctx.DrawLine(glowInner, mid1, mid2);
+                ctx.DrawLine(glowInner, mid2, p2);
                 shaftEnd     = DrawArrow(ctx, brush, mid2, p2);
                 ctx.DrawLine(pen, p1,   mid1);
                 ctx.DrawLine(pen, mid1, mid2);
@@ -1343,6 +1362,10 @@ public sealed class ModelSystemCanvas : Control
         if (_linkOrigin is null) return;
         var pen    = new Pen(PendingLinkBrush, LinkThickness, dashStyle: PendingLinkDash);
         var origin = new Point(_linkOrigin.CenterX, _linkOrigin.CenterY);
+        // Neon glow behind the pending link
+        var pgColor = Color.FromRgb(0x2E, 0xCC, 0x71);
+        ctx.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb(0x10, pgColor.R, pgColor.G, pgColor.B)), LinkThickness + 8), origin, _linkCurrentPos);
+        ctx.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb(0x26, pgColor.R, pgColor.G, pgColor.B)), LinkThickness + 3), origin, _linkCurrentPos);
         var shaftEnd = DrawArrow(ctx, PendingLinkBrush, origin, _linkCurrentPos);
         ctx.DrawLine(pen, origin, shaftEnd);
     }
@@ -1566,7 +1589,7 @@ public sealed class ModelSystemCanvas : Control
             var border = new Pen(node.IsSelected ? NodeSelBrush : NodeBorderBrush, NodeBorderThickness);
 
             // Node background + border
-            DrawRectShadow(ctx, rect, NodeCornerRadius);
+            DrawRectGlow(ctx, rect, NodeCornerRadius, node.IsSelected ? SelectionGlowColor : NodeGlowColor);
             ctx.DrawRectangle(NodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // ── Entry-node gold ring (drawn over the normal border) ───────────
@@ -1776,7 +1799,7 @@ public sealed class ModelSystemCanvas : Control
             var borderBrush = ghost.IsSelected ? GhostNodeSelBrush : GhostNodeBorderBrush;
             var border      = new Pen(borderBrush, NodeBorderThickness, dashStyle: GhostNodeDash);
 
-            DrawRectShadow(ctx, rect, NodeCornerRadius);
+            DrawRectGlow(ctx, rect, NodeCornerRadius, ghost.IsSelected ? SelectionGlowColor : GhostGlowColor);
             ctx.DrawRectangle(GhostNodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // Ghost icon prefix ("⊙ ") to distinguish from real nodes at a glance.
@@ -1814,7 +1837,7 @@ public sealed class ModelSystemCanvas : Control
             var r      = StartViewModel.Radius;
             var border = new Pen(start.IsSelected ? NodeSelBrush : NodeBorderBrush, NodeBorderThickness);
 
-            DrawEllipseShadow(ctx, center, r, r);
+            DrawEllipseGlow(ctx, center, r, r, start.IsSelected ? SelectionGlowColor : StartGlowColor);
             ctx.DrawEllipse(fill, border, center, r, r);
 
             // Label below the circle
@@ -1826,20 +1849,31 @@ public sealed class ModelSystemCanvas : Control
         }
     }
 
-    /// <summary>Draws a three-layer simulated drop shadow for a rounded rectangle.</summary>
-    private static void DrawRectShadow(DrawingContext ctx, Rect rect, double cornerRadius)
+    /// <summary>
+    /// Draws a neon glow halo around a rounded rectangle using 5 outward-expanding semi-transparent
+    /// layers of <paramref name="glowColor"/>, fading from fully transparent at the outer edge to
+    /// relatively vivid just inside the object border.
+    /// </summary>
+    private static void DrawRectGlow(DrawingContext ctx, Rect rect, double cornerRadius, Color glowColor)
     {
-        ctx.DrawRectangle(ShadowBrush1, null, rect.Translate(new Vector(6, 6)), cornerRadius, cornerRadius);
-        ctx.DrawRectangle(ShadowBrush2, null, rect.Translate(new Vector(4, 4)), cornerRadius, cornerRadius);
-        ctx.DrawRectangle(ShadowBrush3, null, rect.Translate(new Vector(2, 2)), cornerRadius, cornerRadius);
+        ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x08, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(14), cornerRadius + 14, cornerRadius + 14);
+        ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x10, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(9),  cornerRadius + 9,  cornerRadius + 9);
+        ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x1E, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(5),  cornerRadius + 5,  cornerRadius + 5);
+        ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x34, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(2.5), cornerRadius + 2.5, cornerRadius + 2.5);
+        ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x50, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(1),  cornerRadius + 1,  cornerRadius + 1);
     }
 
-    /// <summary>Draws a three-layer simulated drop shadow for an ellipse.</summary>
-    private static void DrawEllipseShadow(DrawingContext ctx, Point center, double rx, double ry)
+    /// <summary>
+    /// Draws a neon glow halo around an ellipse using 5 outward-expanding semi-transparent layers of
+    /// <paramref name="glowColor"/>, fading from fully transparent at the outer edge inward.
+    /// </summary>
+    private static void DrawEllipseGlow(DrawingContext ctx, Point center, double rx, double ry, Color glowColor)
     {
-        ctx.DrawEllipse(ShadowBrush1, null, center + new Vector(6, 6), rx, ry);
-        ctx.DrawEllipse(ShadowBrush2, null, center + new Vector(4, 4), rx, ry);
-        ctx.DrawEllipse(ShadowBrush3, null, center + new Vector(2, 2), rx, ry);
+        ctx.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x08, glowColor.R, glowColor.G, glowColor.B)), null, center, rx + 14, ry + 14);
+        ctx.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x10, glowColor.R, glowColor.G, glowColor.B)), null, center, rx + 9,  ry + 9);
+        ctx.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x1E, glowColor.R, glowColor.G, glowColor.B)), null, center, rx + 5,  ry + 5);
+        ctx.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x34, glowColor.R, glowColor.G, glowColor.B)), null, center, rx + 2.5, ry + 2.5);
+        ctx.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x50, glowColor.R, glowColor.G, glowColor.B)), null, center, rx + 1,  ry + 1);
     }
 
     private static FormattedText MakeText(string text, double size, IBrush foreground) =>
