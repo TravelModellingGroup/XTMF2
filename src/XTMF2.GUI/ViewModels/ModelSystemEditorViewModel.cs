@@ -121,7 +121,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     // ── Dock integration ──────────────────────────────────────────────────
     /// <summary>Tab title shown in the dock.</summary>
-    public string Title => ModelSystemHeader.Name ?? "Model System";
+    public string Title => $"✎  {ModelSystemHeader.Name ?? "Model System"}";
 
     /// <summary>Allow the user to close this tab.</summary>
     public bool CanClose => true;

@@ -34,7 +34,7 @@ public sealed partial class RunsViewModel : ObservableObject
 {
     // ── Dock integration ──────────────────────────────────────────────────
     /// <summary>Tab title shown in the dock.</summary>
-    public string Title => "Runs";
+    public string Title => "▶  Runs";
 
     /// <summary>The Runs tab is permanent; do not allow users to close it.</summary>
     public bool CanClose => false;
