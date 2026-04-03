@@ -185,7 +185,10 @@ public sealed class ModelSystemCanvas : Control
     private static readonly Typeface DefaultTypeface = new Typeface("Segoe UI, Arial, sans-serif");
 
     // ── ViewModel ─────────────────────────────────────────────────────────
-    private ModelSystemEditorViewModel? _vm;
+    private ModelSystemEditorViewModel?      _vm;
+    /// <summary>Tracks the FunctionTemplate we are currently subscribed to for PropertyChanged,
+    /// so we can unsubscribe when navigating away.</summary>
+    private FunctionTemplateViewModel? _subscribedCurrentFunctionTemplate;
 
     // ── Per-frame hook anchor cache (rebuilt in BuildHookAnchorCache) ─────
     private readonly Dictionary<(NodeViewModel, NodeHook), Point>
@@ -505,11 +508,13 @@ public sealed class ModelSystemCanvas : Control
         foreach (var g in _vm.GhostNodes)        ((INotifyPropertyChanged)g).PropertyChanged += OnElementPropertyChanged;
         foreach (var f in _vm.FunctionTemplates) ((INotifyPropertyChanged)f).PropertyChanged += OnElementPropertyChanged;
         foreach (var fi in _vm.FunctionInstances) ((INotifyPropertyChanged)fi).PropertyChanged += OnElementPropertyChanged;
+        _vm.RenderRequested += OnRenderRequested;
     }
 
     private void Detach()
     {
         if (_vm is null) return;
+        _vm.RenderRequested -= OnRenderRequested;
         _vm.Nodes.CollectionChanged             -= OnCollectionChanged;
         _vm.Starts.CollectionChanged            -= OnCollectionChanged;
         _vm.Links.CollectionChanged             -= OnCollectionChanged;
@@ -526,6 +531,12 @@ public sealed class ModelSystemCanvas : Control
         foreach (var g in _vm.GhostNodes)        ((INotifyPropertyChanged)g).PropertyChanged -= OnElementPropertyChanged;
         foreach (var f in _vm.FunctionTemplates) ((INotifyPropertyChanged)f).PropertyChanged -= OnElementPropertyChanged;
         foreach (var fi in _vm.FunctionInstances) ((INotifyPropertyChanged)fi).PropertyChanged -= OnElementPropertyChanged;
+
+        if (_subscribedCurrentFunctionTemplate is not null)
+        {
+            ((INotifyPropertyChanged)_subscribedCurrentFunctionTemplate).PropertyChanged -= OnElementPropertyChanged;
+            _subscribedCurrentFunctionTemplate = null;
+        }
     }
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -545,12 +556,34 @@ public sealed class ModelSystemCanvas : Control
         Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateVisual);
     }
 
+    private void OnRenderRequested(object? sender, EventArgs e)
+        => Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateVisual);
+
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ModelSystemEditorViewModel.SelectedElement)
                            or nameof(ModelSystemEditorViewModel.SelectedLink)
                            or nameof(ModelSystemEditorViewModel.ShowAllHooks))
             Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateAndMeasure);
+
+
+        // When we navigate into or out of a FunctionTemplate, maintain a direct subscription
+        // to the template VM so that property changes (e.g. EntryNode after undo) still
+        // trigger InvalidateVisual even though the VM is no longer in FunctionTemplates.
+        if (e.PropertyName is nameof(ModelSystemEditorViewModel.IsInsideFunctionTemplate) && _vm is not null)
+        {
+            if (_subscribedCurrentFunctionTemplate is not null)
+            {
+                ((INotifyPropertyChanged)_subscribedCurrentFunctionTemplate).PropertyChanged -= OnElementPropertyChanged;
+                _subscribedCurrentFunctionTemplate = null;
+            }
+            if (_vm.CurrentFunctionTemplate is { } current)
+            {
+                _subscribedCurrentFunctionTemplate = current;
+                ((INotifyPropertyChanged)current).PropertyChanged += OnElementPropertyChanged;
+            }
+            Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateVisual);
+        }
     }
 
     private void InvalidateAndMeasure()

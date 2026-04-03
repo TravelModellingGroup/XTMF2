@@ -2148,6 +2148,37 @@ namespace XTMF2.Editing
                         $"The node '{entryNode.Name}' does not belong to the InternalModules of template '{template.Name}'.");
                     return false;
                 }
+
+                // Reject the change when it would break at least one existing link whose
+                // destination is a FunctionInstance of this template.
+                // FunctionInstance.Type returns entryNode.Type (or typeof(object) when null).
+                var newType = entryNode?.Type;
+                var instances = GetAllFunctionInstancesOf(template);
+                foreach (var fi in instances)
+                {
+                    var incomingLinks = GetLinksGoingTo(fi);
+                    foreach (var link in incomingLinks)
+                    {
+                        var hookType = link.OriginHook!.Type;
+                        // For array hooks, check the element type.
+                        var effectiveHookType = hookType.IsArray
+                            ? hookType.GetElementType()!
+                            : hookType;
+                        // A null newType maps to typeof(object), which satisfies no typed hook.
+                        bool compatible = newType is not null
+                            && effectiveHookType.IsAssignableFrom(newType);
+                        if (!compatible)
+                        {
+                            error = new CommandError(
+                                $"Cannot change the entry node of template '{template.Name}': " +
+                                $"FunctionInstance '{fi.Name}' is wired to hook '{link.OriginHook.Name}' " +
+                                $"(type '{effectiveHookType.Name}') on node '{link.Origin?.Name}', " +
+                                $"which is incompatible with the new entry-node type '{newType?.Name ?? "none"}'.");
+                            return false;
+                        }
+                    }
+                }
+
                 var oldEntryNode = template.EntryNode;
                 template.SetEntryNode(entryNode);
                 Buffer.AddUndo(new Command(() =>

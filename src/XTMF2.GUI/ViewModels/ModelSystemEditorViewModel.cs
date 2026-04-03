@@ -2104,12 +2104,20 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     // ── Undo / Redo commands ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Raised after every undo or redo attempt (successful or not) so that the canvas
+    /// can invalidate itself; this is necessary because the model change may not produce
+    /// any observable-property notification that the canvas already listens to.
+    /// </summary>
+    internal event EventHandler? RenderRequested;
+
     /// <summary>Undo the last command in the session buffer.</summary>
     [RelayCommand]
     private async Task Undo()
     {
         if (!Session.Undo(User, out var error))
             await ShowError("Undo Failed", error!);
+        RenderRequested?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Redo the previously undone command.</summary>
@@ -2118,6 +2126,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (!Session.Redo(User, out var error))
             await ShowError("Redo Failed", error!);
+        RenderRequested?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

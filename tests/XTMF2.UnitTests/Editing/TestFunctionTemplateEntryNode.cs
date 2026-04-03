@@ -245,6 +245,112 @@ public class TestFunctionTemplateEntryNode
             });
     }
 
+    // ── Compatibility check with linked FunctionInstances ──────────────────
+
+    [TestMethod]
+    public void TestSetEntryNode_WithLinkedInstance_IncompatibleNewType_Rejected()
+    {
+        TestHelper.RunInModelSystemContext(nameof(TestSetEntryNode_WithLinkedInstance_IncompatibleNewType_Rejected),
+            (user, pSession, ms) =>
+            {
+                var gb = ms.ModelSystem.GlobalBoundary;
+                var ft = AddTemplate(user, ms, gb);
+
+                // Entry node is SimpleTestModule : IFunction<string>
+                var entryNode = AddNodeTo(user, ms, ft.InternalModules, "Entry");
+                Assert.IsTrue(ms.SetFunctionTemplateEntryNode(user, ft, entryNode, out _));
+
+                // FunctionInstance on the global boundary.
+                Assert.IsTrue(ms.AddFunctionInstance(user, gb, ft, "FI",
+                    new Rectangle(200f, 10f, 160f, 70f), out var fi, out var fiErr), fiErr?.Message);
+
+                // Wire a SimpleParameterModule (hook[0]: IFunction<string>) → FunctionInstance.
+                Assert.IsTrue(ms.AddNode(user, gb, "Origin", typeof(SimpleParameterModule),
+                    new Rectangle(10f, 10f, 120f, 50f), out var origin, out var nodeErr), nodeErr?.Message);
+                Assert.IsTrue(ms.AddLink(user, origin!, origin!.Hooks[0], fi!, out _, out var linkErr),
+                    linkErr?.Message);
+
+                // Add a BasicParameter<int> (IFunction<int>) inside InternalModules as the
+                // "new" entry node — its type is not assignable to IFunction<string>.
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "IntParam",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<int>),
+                    new Rectangle(10f, 80f, 120f, 50f), out var incompatible, out var n2Err), n2Err?.Message);
+
+                var ok = ms.SetFunctionTemplateEntryNode(user, ft, incompatible, out var err);
+                Assert.IsFalse(ok,
+                    "Changing the entry node to an incompatible type should be rejected.");
+                Assert.IsNotNull(err, "An error message must be provided.");
+                // Entry node must be unchanged.
+                Assert.AreSame(entryNode, ft.EntryNode,
+                    "EntryNode must remain the original node after rejection.");
+            });
+    }
+
+    [TestMethod]
+    public void TestSetEntryNode_WithLinkedInstance_CompatibleNewType_Succeeds()
+    {
+        TestHelper.RunInModelSystemContext(nameof(TestSetEntryNode_WithLinkedInstance_CompatibleNewType_Succeeds),
+            (user, pSession, ms) =>
+            {
+                var gb = ms.ModelSystem.GlobalBoundary;
+                var ft = AddTemplate(user, ms, gb);
+
+                // Entry node: SimpleTestModule : IFunction<string>
+                var entryNode = AddNodeTo(user, ms, ft.InternalModules, "Entry");
+                Assert.IsTrue(ms.SetFunctionTemplateEntryNode(user, ft, entryNode, out _));
+
+                Assert.IsTrue(ms.AddFunctionInstance(user, gb, ft, "FI",
+                    new Rectangle(200f, 10f, 160f, 70f), out var fi, out var fiErr), fiErr?.Message);
+
+                Assert.IsTrue(ms.AddNode(user, gb, "Origin", typeof(SimpleParameterModule),
+                    new Rectangle(10f, 10f, 120f, 50f), out var origin, out var nodeErr), nodeErr?.Message);
+                Assert.IsTrue(ms.AddLink(user, origin!, origin!.Hooks[0], fi!, out _, out var linkErr),
+                    linkErr?.Message);
+
+                // BasicParameter<string> also implements IFunction<string> — compatible.
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "StrParam",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>),
+                    new Rectangle(10f, 80f, 120f, 50f), out var compatible, out var n2Err), n2Err?.Message);
+
+                var ok = ms.SetFunctionTemplateEntryNode(user, ft, compatible, out var err);
+                Assert.IsTrue(ok, err?.Message);
+                Assert.AreSame(compatible, ft.EntryNode,
+                    "EntryNode should be updated to the compatible node.");
+            });
+    }
+
+    [TestMethod]
+    public void TestSetEntryNode_ClearWithLinkedInstance_Rejected()
+    {
+        TestHelper.RunInModelSystemContext(nameof(TestSetEntryNode_ClearWithLinkedInstance_Rejected),
+            (user, pSession, ms) =>
+            {
+                var gb = ms.ModelSystem.GlobalBoundary;
+                var ft = AddTemplate(user, ms, gb);
+
+                var entryNode = AddNodeTo(user, ms, ft.InternalModules, "Entry");
+                Assert.IsTrue(ms.SetFunctionTemplateEntryNode(user, ft, entryNode, out _));
+
+                Assert.IsTrue(ms.AddFunctionInstance(user, gb, ft, "FI",
+                    new Rectangle(200f, 10f, 160f, 70f), out var fi, out var fiErr), fiErr?.Message);
+
+                Assert.IsTrue(ms.AddNode(user, gb, "Origin", typeof(SimpleParameterModule),
+                    new Rectangle(10f, 10f, 120f, 50f), out var origin, out var nodeErr), nodeErr?.Message);
+                Assert.IsTrue(ms.AddLink(user, origin!, origin!.Hooks[0], fi!, out _, out var linkErr),
+                    linkErr?.Message);
+
+                // Clearing the entry node sets effective type to typeof(object),
+                // which is not assignable to IFunction<string>.
+                var ok = ms.SetFunctionTemplateEntryNode(user, ft, null, out var err);
+                Assert.IsFalse(ok,
+                    "Clearing the entry node should be rejected when a linked FunctionInstance " +
+                    "is wired to a typed hook that typeof(object) does not satisfy.");
+                Assert.IsNotNull(err);
+                Assert.AreSame(entryNode, ft.EntryNode,
+                    "EntryNode must remain set after the rejected clear.");
+            });
+    }
+
     // ── Initial state ──────────────────────────────────────────────────────
 
     [TestMethod]
