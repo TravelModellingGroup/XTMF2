@@ -82,11 +82,19 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush ParamValueBg        = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
 
     // Comment block colours (sticky-note style)
-    private static readonly IBrush CommentFill        = new SolidColorBrush(Color.FromArgb(0xE6, 0xFF, 0xF0, 0x96));
-    private static readonly IBrush CommentSelFill     = new SolidColorBrush(Color.FromArgb(0xE6, 0xFF, 0xE0, 0x50));
-    private static readonly IBrush CommentBorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)); // bright gold
+    private static readonly IBrush CommentFill        = new SolidColorBrush(Color.FromArgb(0xF0, 0xFF, 0xF2, 0x90));
+    private static readonly IBrush CommentSelFill     = new SolidColorBrush(Color.FromArgb(0xF0, 0xFF, 0xE0, 0x50));
+    private static readonly IBrush CommentBorderBrush = new SolidColorBrush(Color.FromRgb(0xDD, 0xBB, 0x00));   // warm gold
     private static readonly IBrush CommentSelBorder   = Brushes.DodgerBlue;
     private static readonly IBrush CommentTextBrush   = new SolidColorBrush(Color.FromRgb(0x22, 0x1E, 0x00));
+    /// <summary>Slightly deeper/more saturated yellow for the adhesive-tab band at the top of the sticky note.</summary>
+    private static readonly IBrush CommentHeaderBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xD5, 0x1A));
+    /// <summary>Cream colour for the fold-flap back face (the bit of paper you see when the corner is turned).</summary>
+    private static readonly IBrush CommentFoldBackBrush = new SolidColorBrush(Color.FromArgb(0xD0, 0xFF, 0xFA, 0xD0));
+    /// <summary>Semi-transparent black drop shadow for the sticky note.</summary>
+    private static readonly IBrush CommentShadowBrush = new SolidColorBrush(Color.FromArgb(0x55, 0x00, 0x00, 0x00));
+    /// <summary>Faint pen for horizontal ruled lines on the note body.</summary>
+    private static readonly Pen    CommentRulePen     = new Pen(new SolidColorBrush(Color.FromArgb(0x50, 0xA0, 0x8A, 0x00)), 0.6);
     // Hook colours
     private static readonly IBrush HookConnectedBrush   = new SolidColorBrush(Color.FromRgb(0x2E, 0xCC, 0x71));
     private static readonly IBrush HookUnconnectedBrush = new SolidColorBrush(Color.FromRgb(0x55, 0x66, 0x77));
@@ -165,6 +173,12 @@ public sealed class ModelSystemCanvas : Control
     private const double StartFontSize       = 11.0;
     private const double CommentFontSize     = 11.5;
     private const double CommentPadding      = 6.0;
+    /// <summary>Size of the dog-ear fold cut at the top-right corner of a sticky note.</summary>
+    private const double CommentFoldSize     = 22.0;
+    /// <summary>Height of the adhesive-tab band drawn at the top of the sticky note.</summary>
+    private const double CommentHeaderHeight = 20.0;
+    /// <summary>Vertical spacing between faint ruled lines on the note body.</summary>
+    private const double CommentRuleSpacing  = 17.0;
     // Hook layout
     private const double NodeHeaderHeight   = 28.0;
     private const double HookRowHeight      = 16.0;
@@ -789,18 +803,99 @@ public sealed class ModelSystemCanvas : Control
     {
         foreach (var comment in _vm!.CommentBlocks)
         {
-            var rect   = new Rect(comment.X, comment.Y, comment.Width, comment.Height);
-            var fill   = comment.IsSelected ? CommentSelFill   : CommentFill;
-            var border = new Pen(comment.IsSelected ? CommentSelBorder : CommentBorderBrush, NodeBorderThickness, dashStyle: DashStyle.Dash);
+            double x    = comment.X;
+            double y    = comment.Y;
+            double w    = comment.Width;
+            double h    = comment.Height;
+            bool   sel  = comment.IsSelected;
+            double fold = CommentFoldSize;
 
-            DrawRectGlow(ctx, rect, NodeCornerRadius, comment.IsSelected ? SelectionGlowColor : CommentGlowColor);
-            ctx.DrawRectangle(fill, border, rect, NodeCornerRadius, NodeCornerRadius);
+            var fill      = sel ? CommentSelFill   : CommentFill;
+            var borderBrush = sel ? (IBrush)CommentSelBorder : CommentBorderBrush;
+            var borderPen   = new Pen(borderBrush, NodeBorderThickness);
+            var foldPen     = new Pen(borderBrush, 1.0);
 
-            // Render wrapped comment text inside the block with clipping
-            var textArea = rect.Deflate(CommentPadding);
+            // ── 1. Drop shadow ────────────────────────────────────────────
+            // Build a shadow polygon offset by (4, 5) to the bottom-right.
+            {
+                const double sx = 4, sy = 5;
+                var shadowGeo = new StreamGeometry();
+                using (var gc = shadowGeo.Open())
+                {
+                    gc.BeginFigure(new Point(x + sx,              y + sy             ), isFilled: true);
+                    gc.LineTo     (new Point(x + w - fold + sx,   y + sy             ));
+                    gc.LineTo     (new Point(x + w + sx,          y + fold + sy      ));
+                    gc.LineTo     (new Point(x + w + sx,          y + h + sy         ));
+                    gc.LineTo     (new Point(x + sx,              y + h + sy         ));
+                    gc.EndFigure(true);
+                }
+                ctx.DrawGeometry(CommentShadowBrush, null, shadowGeo);
+            }
+
+            // ── 2. Glow (selection / ambient) ─────────────────────────────
+            DrawRectGlow(ctx, new Rect(x, y, w, h), NodeCornerRadius,
+                         sel ? SelectionGlowColor : CommentGlowColor);
+
+            // ── 3. Main note body (dog-ear polygon) ───────────────────────
+            var bodyGeo = new StreamGeometry();
+            using (var gc = bodyGeo.Open())
+            {
+                gc.BeginFigure(new Point(x,              y     ), isFilled: true);
+                gc.LineTo     (new Point(x + w - fold,   y     ));   // top edge  → fold start
+                gc.LineTo     (new Point(x + w,          y + fold)); // fold crease end
+                gc.LineTo     (new Point(x + w,          y + h ));   // right edge
+                gc.LineTo     (new Point(x,              y + h ));   // bottom edge
+                gc.EndFigure(true);
+            }
+            ctx.DrawGeometry(fill, borderPen, bodyGeo);
+
+            // ── 4. Adhesive-tab header band ───────────────────────────────
+            // Clipped to the body polygon so it doesn't bleed into the fold corner.
+            {
+                using var _ = ctx.PushGeometryClip(bodyGeo);
+                // Header Rectangle: full width but tab stops short of the fold on top row.
+                ctx.DrawRectangle(CommentHeaderBrush, null,
+                    new Rect(x, y, w, CommentHeaderHeight));
+            }
+
+            // ── 5. Faint ruled lines ──────────────────────────────────────
+            {
+                double ruleLeft  = x + CommentPadding;
+                double ruleRight = x + w - CommentPadding;
+                double ruleStart = y + CommentHeaderHeight + CommentRuleSpacing;
+                using var _ = ctx.PushGeometryClip(bodyGeo);
+                for (double ry = ruleStart; ry < y + h - CommentPadding; ry += CommentRuleSpacing)
+                    ctx.DrawLine(CommentRulePen,
+                                 new Point(ruleLeft, ry),
+                                 new Point(ruleRight, ry));
+            }
+
+            // ── 6. Fold-flap triangle (back of the turned corner) ─────────
+            // Triangle: the three points of the folded-over corner area.
+            var foldGeo = new StreamGeometry();
+            using (var gc = foldGeo.Open())
+            {
+                gc.BeginFigure(new Point(x + w - fold, y      ), isFilled: true);
+                gc.LineTo     (new Point(x + w,        y + fold));
+                gc.LineTo     (new Point(x + w - fold, y + fold));
+                gc.EndFigure(true);
+            }
+            ctx.DrawGeometry(CommentFoldBackBrush, foldPen, foldGeo);
+
+            // ── 7. Fold crease line ────────────────────────────────────────
+            ctx.DrawLine(borderPen,
+                         new Point(x + w - fold, y),
+                         new Point(x + w,        y + fold));
+
+            // ── 8. Comment text ───────────────────────────────────────────
+            var textArea = new Rect(
+                x + CommentPadding,
+                y + CommentHeaderHeight + 2,
+                w - CommentPadding * 2,
+                h - CommentHeaderHeight - CommentPadding - 2);
             if (textArea.Width > 4 && textArea.Height > 4)
             {
-                using var _ = ctx.PushClip(textArea);
+                using var clipPush = ctx.PushClip(textArea);
                 var layout = new TextLayout(
                     comment.Name,
                     DefaultTypeface,
@@ -813,11 +908,11 @@ public sealed class ModelSystemCanvas : Control
                 layout.Draw(ctx, new Point(textArea.X, textArea.Y));
             }
 
-            // Resize grip dots (bottom-right corner)
+            // ── 9. Resize grip dots (bottom-right) ────────────────────────
             {
                 double dotR = 2.0;
-                double bx   = comment.X + comment.Width;
-                double by   = comment.Y + comment.Height;
+                double bx   = x + w;
+                double by   = y + h;
                 for (int d = 0; d < 3; d++)
                 {
                     double offset = 4.0 + d * 4.0;
