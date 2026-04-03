@@ -665,7 +665,7 @@ public sealed class ModelSystemCanvas : Control
         if (_varDropdownVisible && _editingParamNode is not null)
         {
             double ddW = Math.Max(180.0, _editingParamEditorW) * _scale;
-            _varDropdownBorder.Measure(new Size(ddW, 200));
+            _varDropdownBorder.Measure(new Size(ddW, 200 * _scale));
         }
         // Measure the comment editor.
         if (_editingCommentBlock is not null)
@@ -710,6 +710,17 @@ public sealed class ModelSystemCanvas : Control
             double ddW = Math.Max(180.0, _editingParamEditorW) * _scale;
             double ddX = _editingParamEditorX * _scale;
             double ddY = (_editingParamEditorY + HookRowHeight) * _scale;
+            // Scale font size and padding of every suggestion row to match the current zoom.
+            double itemPadH = 8.0 * _scale;
+            double itemPadV = 3.0 * _scale;
+            foreach (var child in _varDropdownStack.Children)
+            {
+                if (child is TextBlock tb)
+                {
+                    tb.FontSize = HookFontSize * _scale;
+                    tb.Padding  = new Thickness(itemPadH, itemPadV, itemPadH, itemPadV);
+                }
+            }
             _varDropdownBorder.Arrange(new Rect(ddX, ddY, ddW, _varDropdownBorder.DesiredSize.Height));
         }
         // Position the comment editor over the comment block being edited.
