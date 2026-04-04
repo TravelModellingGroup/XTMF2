@@ -160,6 +160,23 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
         MoveTo(x, y);
     }
 
+    /// <summary>
+    /// Returns the target <see cref="Rectangle"/> for the pending drag preview and clears the
+    /// preview state, without making a session call. Returns <c>null</c> when no preview is active.
+    /// </summary>
+    internal Rectangle? TakePendingMoveRect()
+    {
+        if (_previewX is null) return null;
+        var x = _previewX.Value;
+        var y = _previewY!.Value;
+        _previewX = null;
+        _previewY = null;
+        var loc = UnderlyingInstance.Location;
+        var w = loc.Width  is 0 ? 120f : loc.Width;
+        var h = loc.Height is 0 ? 50f  : loc.Height;
+        return new Rectangle((float)x, (float)y, w, h);
+    }
+
     public void MoveTo(double x, double y)
     {
         var loc = UnderlyingInstance.Location;

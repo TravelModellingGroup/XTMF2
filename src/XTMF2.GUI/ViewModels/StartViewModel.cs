@@ -117,6 +117,20 @@ public sealed partial class StartViewModel : ObservableObject, ICanvasElement
     }
 
     /// <summary>
+    /// Returns the target <see cref="Rectangle"/> for the pending drag preview and clears the
+    /// preview state, without making a session call. Returns <c>null</c> when no preview is active.
+    /// </summary>
+    internal Rectangle? TakePendingMoveRect()
+    {
+        if (_previewX is null) return null;
+        var x = _previewX.Value;
+        var y = _previewY!.Value;
+        _previewX = null;
+        _previewY = null;
+        return new Rectangle((float)x, (float)y, (float)Diameter, (float)Diameter);
+    }
+
+    /// <summary>
     /// Move the start to a new canvas position, persisting the change to the
     /// underlying model via the session (supports undo/redo).
     /// </summary>

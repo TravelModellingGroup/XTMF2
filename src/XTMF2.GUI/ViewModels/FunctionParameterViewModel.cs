@@ -153,6 +153,21 @@ public sealed partial class FunctionParameterViewModel : ObservableObject, ICanv
     }
 
     /// <summary>
+    /// Returns the target <see cref="Rectangle"/> for the pending drag preview and clears the
+    /// preview state, without making a session call. Returns <c>null</c> when no preview is active.
+    /// </summary>
+    internal Rectangle? TakePendingMoveRect()
+    {
+        if (_previewX is null) return null;
+        var x = _previewX.Value;
+        var y = _previewY!.Value;
+        _previewX = null;
+        _previewY = null;
+        var loc = UnderlyingParameter.Location;
+        return new Rectangle((float)x, (float)y, loc.Width, loc.Height);
+    }
+
+    /// <summary>
     /// Updates the visual size without persisting (for resize preview).
     /// Call <see cref="CommitResize"/> on mouse-up to persist.
     /// </summary>

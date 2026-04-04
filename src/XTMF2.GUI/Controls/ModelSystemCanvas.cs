@@ -3129,20 +3129,64 @@ public sealed class ModelSystemCanvas : Control
 
         // ── Left-button release: end element drag ─────────────────────────
         if (_dragging is null) return;
+        if (_vm is null) return;
 
         // Commit the preview position as a single session command (one undo entry).
         if (_multiSelection.Count > 1 && _multiSelection.Contains(_dragging))
         {
+            // Collect the pending move rectangles from all selected elements and push them
+            // as one CommandBatch so the entire group drag is undone with a single Ctrl+Z.
+            var nodeMoves     = new List<(Node, Rectangle)>();
+            var commentMoves  = new List<(CommentBlock, Rectangle)>();
+            var templateMoves = new List<(FunctionTemplate, Rectangle)>();
+            var instanceMoves = new List<(FunctionInstance, Rectangle)>();
+
             foreach (var el in _multiSelection)
             {
-                if      (el is NodeViewModel       gnvm) gnvm.CommitMove();
-                else if (el is StartViewModel       gsvm) gsvm.CommitMove();
-                else if (el is CommentBlockViewModel gcvm) gcvm.CommitMove();
-                else if (el is GhostNodeViewModel   ggvm) ggvm.CommitMove();
-                else if (el is FunctionTemplateViewModel gftvm) gftvm.CommitMove();
-                else if (el is FunctionInstanceViewModel gfivm) gfivm.CommitMove();
-                else if (el is FunctionParameterViewModel gfpvm) gfpvm.CommitMove();
+                if (el is NodeViewModel gnvm)
+                {
+                    var r = gnvm.TakePendingMoveRect();
+                    if (r.HasValue) nodeMoves.Add((gnvm.UnderlyingNode, r.Value));
+                }
+                else if (el is StartViewModel gsvm)
+                {
+                    var r = gsvm.TakePendingMoveRect();
+                    if (r.HasValue) nodeMoves.Add((gsvm.UnderlyingStart, r.Value));
+                }
+                else if (el is CommentBlockViewModel gcvm)
+                {
+                    var r = gcvm.TakePendingMoveRect();
+                    if (r.HasValue) commentMoves.Add((gcvm.UnderlyingBlock, r.Value));
+                }
+                else if (el is GhostNodeViewModel ggvm)
+                {
+                    var r = ggvm.TakePendingMoveRect();
+                    if (r.HasValue) nodeMoves.Add((ggvm.UnderlyingGhostNode, r.Value));
+                }
+                else if (el is FunctionTemplateViewModel gftvm)
+                {
+                    var r = gftvm.TakePendingMoveRect();
+                    if (r.HasValue) templateMoves.Add((gftvm.UnderlyingTemplate, r.Value));
+                }
+                else if (el is FunctionInstanceViewModel gfivm)
+                {
+                    var r = gfivm.TakePendingMoveRect();
+                    if (r.HasValue) instanceMoves.Add((gfivm.UnderlyingInstance, r.Value));
+                }
+                else if (el is FunctionParameterViewModel gfpvm)
+                {
+                    var r = gfpvm.TakePendingMoveRect();
+                    if (r.HasValue) nodeMoves.Add((gfpvm.UnderlyingParameter, r.Value));
+                }
             }
+
+            _vm.Session.MoveElements(
+                _vm.User,
+                nodeMoves.Count     > 0 ? nodeMoves     : null,
+                commentMoves.Count  > 0 ? commentMoves  : null,
+                templateMoves.Count > 0 ? templateMoves : null,
+                instanceMoves.Count > 0 ? instanceMoves : null,
+                out _);
         }
         else
         {

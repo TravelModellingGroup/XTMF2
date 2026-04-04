@@ -2592,6 +2592,95 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Moves a heterogeneous collection of canvas elements as a single undoable operation.
+        /// All supplied moves are applied and recorded in one <see cref="CommandBatch"/> so that
+        /// a single undo reverses the entire group drag.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="nodeMoves">Node / Start / GhostNode / FunctionParameter moves (all are <see cref="Node"/> subclasses).</param>
+        /// <param name="commentMoves">Comment-block moves.</param>
+        /// <param name="templateMoves">Function-template moves.</param>
+        /// <param name="instanceMoves">Function-instance moves.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns><c>true</c> on success; <c>false</c> with an error on failure.</returns>
+        public bool MoveElements(
+            User user,
+            IReadOnlyList<(Node node, Rectangle newLocation)>? nodeMoves,
+            IReadOnlyList<(CommentBlock block, Rectangle newLocation)>? commentMoves,
+            IReadOnlyList<(FunctionTemplate template, Rectangle newLocation)>? templateMoves,
+            IReadOnlyList<(FunctionInstance instance, Rectangle newLocation)>? instanceMoves,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            error = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var batch = new CommandBatch();
+
+                if (nodeMoves is not null)
+                {
+                    foreach (var (node, newLoc) in nodeMoves)
+                    {
+                        var oldLoc = node.Location;
+                        node.SetLocation(newLoc);
+                        var n = node; var o = oldLoc; var nl = newLoc;
+                        batch.Add(new Command(
+                            () => { n.SetLocation(o);  return (true, null); },
+                            () => { n.SetLocation(nl); return (true, null); }));
+                    }
+                }
+
+                if (commentMoves is not null)
+                {
+                    foreach (var (block, newLoc) in commentMoves)
+                    {
+                        var oldLoc = block.Location;
+                        block.Location = newLoc;
+                        var b = block; var o = oldLoc; var nl = newLoc;
+                        batch.Add(new Command(
+                            () => { b.Location = o;  return (true, null); },
+                            () => { b.Location = nl; return (true, null); }));
+                    }
+                }
+
+                if (templateMoves is not null)
+                {
+                    foreach (var (template, newLoc) in templateMoves)
+                    {
+                        var oldLoc = template.Location;
+                        template.SetLocation(newLoc);
+                        var t = template; var o = oldLoc; var nl = newLoc;
+                        batch.Add(new Command(
+                            () => { t.SetLocation(o);  return (true, null); },
+                            () => { t.SetLocation(nl); return (true, null); }));
+                    }
+                }
+
+                if (instanceMoves is not null)
+                {
+                    foreach (var (instance, newLoc) in instanceMoves)
+                    {
+                        var oldLoc = instance.Location;
+                        instance.SetLocation(newLoc);
+                        var inst = instance; var o = oldLoc; var nl = newLoc;
+                        batch.Add(new Command(
+                            () => { inst.SetLocation(o);  return (true, null); },
+                            () => { inst.SetLocation(nl); return (true, null); }));
+                    }
+                }
+
+                Buffer.AddUndo(batch);
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Create a model system session to use for a run
         /// </summary>
         /// <param name="runtime">The XTMF runtime the run will occur in</param>
