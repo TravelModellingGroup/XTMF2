@@ -1674,7 +1674,13 @@ namespace XTMF2.Editing
                 }
                 var previousType = basicParameter.Type;
                 var previousValue = basicParameter.ParameterValue;
-                if(basicParameter.SetParameterExpression(ModelSystem.Variables, expression, out error))
+                // Nodes inside a FunctionTemplate's InternalModules have template-local
+                // variables that shadow the global model-system variables.
+                var localVars = basicParameter.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+                IList<Node> allVars = localVars is { Count: > 0 }
+                    ? localVars.Concat(ModelSystem.Variables).ToList()
+                    : (IList<Node>)ModelSystem.Variables;
+                if(basicParameter.SetParameterExpression(allVars, expression, out error))
                 {
                     var newType = basicParameter.Type;
                     var newExpression = basicParameter.ParameterValue;
@@ -1738,8 +1744,7 @@ namespace XTMF2.Editing
         /// <param name="node">The node to remove.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        public bool RemoveVariable(User user, Node node, [NotNullWhen(false)] out CommandError? error)
-        {
+        public bool RemoveVariable(User user, Node node, [NotNullWhen(false)] out CommandError? error)        {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(node);
 
@@ -1765,6 +1770,60 @@ namespace XTMF2.Editing
                     },
                     () => { ModelSystem.Variables.Remove(node); return (true, null); }));
                 error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Designates a node inside a <see cref="FunctionTemplate"/>'s
+        /// <see cref="FunctionTemplate.InternalModules"/> as a template-local variable.
+        /// Local variables are resolved before global model-system variables when compiling
+        /// scripted parameter expressions for nodes inside the same template.
+        /// Scripts outside the template cannot reference these variables.
+        /// </summary>
+        public bool AddFunctionTemplateVariable(User user, FunctionTemplate template, Node node,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(node);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (!template.AddLocalVariable(node, out error)) return false;
+                Buffer.AddUndo(new Command(
+                    () => { template.RemoveLocalVariable(node, out _); return (true, null); },
+                    () => { template.AddLocalVariable(node, out _);    return (true, null); }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Removes a node from a <see cref="FunctionTemplate"/>'s local variable list.
+        /// </summary>
+        public bool RemoveFunctionTemplateVariable(User user, FunctionTemplate template, Node node,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(node);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (!template.RemoveLocalVariable(node, out error)) return false;
+                Buffer.AddUndo(new Command(
+                    () => { template.AddLocalVariable(node, out _);    return (true, null); },
+                    () => { template.RemoveLocalVariable(node, out _); return (true, null); }));
                 return true;
             }
         }

@@ -158,9 +158,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>Observable view-models for the model system's variable list.</summary>
     public ObservableCollection<ModelSystemVariableViewModel> ModelSystemVariables { get; } = new();
 
-    /// <summary>Text typed into the variables filter box; filters <see cref="FilteredModelSystemVariables"/>.</summary>
+    /// <summary>Observable view-models for the current FunctionTemplate's local variable list.
+    /// Empty when not inside a FunctionTemplate.</summary>
+    public ObservableCollection<ModelSystemVariableViewModel> LocalVariables { get; } = new();
+
+    /// <summary>Text typed into the variables filter box; filters <see cref="FilteredModelSystemVariables"/> and <see cref="FilteredLocalVariables"/>.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FilteredModelSystemVariables))]
+    [NotifyPropertyChangedFor(nameof(FilteredLocalVariables))]
     private string _variableFilter = string.Empty;
 
     /// <summary>
@@ -182,6 +187,30 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return q.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase);
         }
     }
+
+    /// <summary>
+    /// Sorted (by name) and filtered (by <see cref="VariableFilter"/>) view of
+    /// <see cref="LocalVariables"/> for the current FunctionTemplate.
+    /// </summary>
+    public IEnumerable<ModelSystemVariableViewModel> FilteredLocalVariables
+    {
+        get
+        {
+            var q = LocalVariables.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(VariableFilter))
+            {
+                var f = VariableFilter.Trim();
+                q = q.Where(v => v.Name.Contains(f, StringComparison.OrdinalIgnoreCase));
+            }
+            return q.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>True when local FunctionTemplate variables are available (drives section visibility).</summary>
+    public bool HasLocalVariables => LocalVariables.Count > 0;
+
+    /// <summary>True when neither global nor local variables are defined (drives the empty-state label).</summary>
+    public bool HasNoVariablesAtAll => ModelSystemVariables.Count == 0 && LocalVariables.Count == 0;
 
     /// <summary>The currently selected link, if any. Mutually exclusive with <see cref="SelectedElement"/>.</summary>
     [ObservableProperty]
@@ -540,7 +569,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         {
             ((INotifyCollectionChanged)_currentFunctionTemplate.UnderlyingTemplate.FunctionParameters).CollectionChanged
                 -= OnFunctionParametersChanged;
+            ((INotifyCollectionChanged)_currentFunctionTemplate.UnderlyingTemplate.LocalVariables).CollectionChanged
+                -= OnLocalVariablesChanged;
             _currentFunctionTemplate = null;
+            SyncLocalVariables(null);
             OnPropertyChanged(nameof(IsInsideFunctionTemplate));
             ExitFunctionTemplateCommand.NotifyCanExecuteChanged();
         }
@@ -1516,6 +1548,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public bool IsNodeInVariables(NodeViewModel nvm) =>
         Session.ModelSystem.Variables.Contains(nvm.UnderlyingNode);
 
+    /// <summary>Returns true when <paramref name="nvm"/> is in the current FunctionTemplate's local variable list.</summary>
+    public bool IsNodeInLocalVariables(NodeViewModel nvm) =>
+        _currentFunctionTemplate?.UnderlyingTemplate.LocalVariables.Contains(nvm.UnderlyingNode) ?? false;
+
     /// <summary>True when the model system variable list is empty (drives the empty-state label).</summary>
     public bool HasNoModelSystemVariables => ModelSystemVariables.Count == 0;
 
@@ -1540,6 +1576,30 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Adds the given node to the current FunctionTemplate's local variable list.
+    /// Called from the canvas context menu when inside a FunctionTemplate.
+    /// </summary>
+    public async Task AddNodeToLocalVariablesAsync(NodeViewModel nvm)
+    {
+        if (_currentFunctionTemplate is null) return;
+        if (!Session.AddFunctionTemplateVariable(User, _currentFunctionTemplate.UnderlyingTemplate,
+                nvm.UnderlyingNode, out var error))
+            await ShowError("Add Local Variable Failed", error);
+    }
+
+    /// <summary>
+    /// Removes the given node from the current FunctionTemplate's local variable list.
+    /// Called from the canvas context menu when inside a FunctionTemplate.
+    /// </summary>
+    public async Task RemoveNodeFromLocalVariablesAsync(NodeViewModel nvm)
+    {
+        if (_currentFunctionTemplate is null) return;
+        if (!Session.RemoveFunctionTemplateVariable(User, _currentFunctionTemplate.UnderlyingTemplate,
+                nvm.UnderlyingNode, out var error))
+            await ShowError("Remove Local Variable Failed", error);
+    }
+
+    /// <summary>
     /// Removes the given variable entry from the model system's variable list.
     /// Bound to the "Remove" button in the variables panel.
     /// </summary>
@@ -1548,6 +1608,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (!Session.RemoveVariable(User, varVm.UnderlyingNode, out var error))
             await ShowError("Remove Variable Failed", error);
+    }
+
+    /// <summary>
+    /// Removes the given node from the current FunctionTemplate's local variable list.
+    /// Bound to the "Remove" button in the local variables section.
+    /// </summary>
+    [RelayCommand]
+    private async Task RemoveLocalVariableNode(ModelSystemVariableViewModel varVm)
+    {
+        if (_currentFunctionTemplate is null) return;
+        if (!Session.RemoveFunctionTemplateVariable(User, _currentFunctionTemplate.UnderlyingTemplate,
+                varVm.UnderlyingNode, out var error))
+            await ShowError("Remove Local Variable Failed", error);
     }
 
     /// <summary>
@@ -1585,7 +1658,28 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Full rebuild keeps the code simple; the list is expected to be small.
         SyncModelSystemVariables();
         OnPropertyChanged(nameof(HasNoModelSystemVariables));
+        OnPropertyChanged(nameof(HasNoVariablesAtAll));
         OnPropertyChanged(nameof(FilteredModelSystemVariables));
+    }
+
+    /// <summary>Rebuilds <see cref="LocalVariables"/> from the given FunctionTemplate's local variable list.
+    /// Pass <c>null</c> to clear (when leaving a FunctionTemplate).</summary>
+    private void SyncLocalVariables(FunctionTemplate? ft)
+    {
+        foreach (var old in LocalVariables) old.Detach();
+        LocalVariables.Clear();
+        if (ft is not null)
+            foreach (var node in ft.LocalVariables)
+                LocalVariables.Add(new ModelSystemVariableViewModel(node));
+        OnPropertyChanged(nameof(HasLocalVariables));
+        OnPropertyChanged(nameof(HasNoVariablesAtAll));
+        OnPropertyChanged(nameof(FilteredLocalVariables));
+    }
+
+    private void OnLocalVariablesChanged(object? sender,
+        System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        SyncLocalVariables(_currentFunctionTemplate?.UnderlyingTemplate);
     }
 
     /// <summary>Commit the name/comment currently in <see cref="SelectedElementEditName"/> back to the model.</summary>
@@ -1811,7 +1905,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Subscribe to the incoming template's FunctionParameters so the canvas stays in sync.
         ((INotifyCollectionChanged)ftvm.UnderlyingTemplate.FunctionParameters).CollectionChanged
             += OnFunctionParametersChanged;
+        // Subscribe to local variables so the dialog list stays in sync.
+        ((INotifyCollectionChanged)ftvm.UnderlyingTemplate.LocalVariables).CollectionChanged
+            += OnLocalVariablesChanged;
         _currentFunctionTemplate = ftvm;
+        SyncLocalVariables(ftvm.UnderlyingTemplate);
         OnPropertyChanged(nameof(IsInsideFunctionTemplate));
         ExitFunctionTemplateCommand.NotifyCanExecuteChanged();
         NavigateUpCommand.NotifyCanExecuteChanged();
@@ -2011,6 +2109,27 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (!Session.RemoveFunctionParameter(
                 User, _currentFunctionTemplate.UnderlyingTemplate, parameter, out var error))
             await ShowError("Remove Function Parameter Failed", error);
+    }
+
+    /// <summary>
+    /// Toggles whether <paramref name="node"/> is a local variable of the current
+    /// <see cref="FunctionTemplate"/>. If it is already in <see cref="FunctionTemplate.LocalVariables"/>
+    /// it is removed; otherwise it is added. Validation is performed by the session.
+    /// </summary>
+    public async Task ToggleFunctionTemplateVariableAsync(Node node)
+    {
+        if (_currentFunctionTemplate is null) return;
+        var template = _currentFunctionTemplate.UnderlyingTemplate;
+        if (template.LocalVariables.Contains(node))
+        {
+            if (!Session.RemoveFunctionTemplateVariable(User, template, node, out var error))
+                await ShowError("Remove Local Variable Failed", error);
+        }
+        else
+        {
+            if (!Session.AddFunctionTemplateVariable(User, template, node, out var error))
+                await ShowError("Add Local Variable Failed", error);
+        }
     }
 
     /// <summary>

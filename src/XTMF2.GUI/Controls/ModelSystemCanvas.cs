@@ -3306,20 +3306,44 @@ public sealed class ModelSystemCanvas : Control
 
             menu.Items.Add(new Separator());
 
-            bool alreadyVar = vm.IsNodeInVariables(paramNode);
-            var varHeader = alreadyVar
-                ? "Remove from Model System Variables"
-                : "Add to Model System Variables";
-            var varItem = new MenuItem { Header = varHeader };
-            varItem.Click += (_, _) =>
+            if (vm.IsInsideFunctionTemplate)
             {
-                if (vm.IsNodeInVariables(paramNode))
-                    _ = vm.RemoveNodeFromVariablesAsync(paramNode);
-                else
-                    _ = vm.AddNodeToVariablesAsync(paramNode);
-            };
-            menu.Items.Add(varItem);
-            menu.Items.Add(new Separator());
+                // Inside a FunctionTemplate: only offer local variables for eligible node types.
+                if (FunctionTemplate.IsValidLocalVariableNode(paramNode.UnderlyingNode, out _))
+                {
+                    bool alreadyLocalVar = vm.IsNodeInLocalVariables(paramNode);
+                    var localVarHeader = alreadyLocalVar
+                        ? "Remove from Local Variables"
+                        : "Add as Local Variable";
+                    var localVarItem = new MenuItem { Header = localVarHeader };
+                    localVarItem.Click += (_, _) =>
+                    {
+                        if (vm.IsNodeInLocalVariables(paramNode))
+                            _ = vm.RemoveNodeFromLocalVariablesAsync(paramNode);
+                        else
+                            _ = vm.AddNodeToLocalVariablesAsync(paramNode);
+                    };
+                    menu.Items.Add(localVarItem);
+                    menu.Items.Add(new Separator());
+                }
+            }
+            else
+            {
+                bool alreadyVar = vm.IsNodeInVariables(paramNode);
+                var varHeader = alreadyVar
+                    ? "Remove from Model System Variables"
+                    : "Add to Model System Variables";
+                var varItem = new MenuItem { Header = varHeader };
+                varItem.Click += (_, _) =>
+                {
+                    if (vm.IsNodeInVariables(paramNode))
+                        _ = vm.RemoveNodeFromVariablesAsync(paramNode);
+                    else
+                        _ = vm.AddNodeToVariablesAsync(paramNode);
+                };
+                menu.Items.Add(varItem);
+                menu.Items.Add(new Separator());
+            }
         }
 
         // ── IFunction<T> → Create linked ExecuteWithContext ───────────────
@@ -3439,6 +3463,25 @@ public sealed class ModelSystemCanvas : Control
         {
             // Right-clicking an existing FunctionParameter: offer rename or remove.
             var fpvm = (FunctionParameterViewModel)element;
+            var template = _vm.CurrentFunctionTemplate?.UnderlyingTemplate;
+
+            // ── Local-variable toggle (only for IFunction<basicType> parameters) ──
+            if (template is not null
+                && FunctionTemplate.IsValidLocalVariableNode(fpvm.UnderlyingParameter, out _))
+            {
+                bool isAlreadyVar = template.LocalVariables.Contains(fpvm.UnderlyingParameter);
+                var localVarHeader = isAlreadyVar
+                    ? "Remove from Local Variables"
+                    : "Add as Local Variable";
+                var localVarItem = new MenuItem { Header = localVarHeader };
+                localVarItem.Click += async (_, _) =>
+                {
+                    await vm.ToggleFunctionTemplateVariableAsync(fpvm.UnderlyingParameter);
+                    InvalidateAndMeasure();
+                };
+                menu.Items.Add(new Separator());
+                menu.Items.Add(localVarItem);
+            }
 
             var fpRenameItem = new MenuItem { Header = "Rename…" };
             fpRenameItem.Click += async (_, _) =>
@@ -3865,8 +3908,10 @@ public sealed class ModelSystemCanvas : Control
         bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
 
         var matches = _vm.ModelSystemVariables
+            .Concat(_vm.LocalVariables)
             .Where(v => v.Name.Contains(token, StringComparison.OrdinalIgnoreCase))
             .Select(v => v.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .Take(MaxVarDropdownItems)
             .ToList();

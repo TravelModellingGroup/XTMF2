@@ -151,6 +151,13 @@ namespace XTMF2.ModelSystemConstruct
         public ReadOnlyObservableCollection<FunctionInstance> FunctionInstances
             => _functionInstancesView ??= new ReadOnlyObservableCollection<FunctionInstance>(_functionInstances);
 
+        /// <summary>
+        /// When this boundary serves as the <c>InternalModules</c> of a
+        /// <see cref="FunctionTemplate"/>, this property returns that template.
+        /// <c>null</c> for all other boundaries.
+        /// </summary>
+        public FunctionTemplate? OwningFunctionTemplate { get; internal set; }
+
         internal bool Validate(ref string? moduleName, ref string? error)
         {
             foreach (var module in _modules)

@@ -47,6 +47,7 @@ namespace XTMF2.ModelSystemConstruct
         private const string LocationProperty           = "Location";
         private const string FunctionParametersProperty = "FunctionParameters";
         private const string EntryNodeProperty          = "EntryNode";
+        private const string LocalVariablesProperty     = "LocalVariables";
         private const string LocationXProperty          = "X";
         private const string LocationYProperty          = "Y";
         private const string LocationWProperty          = "Width";
@@ -117,6 +118,18 @@ namespace XTMF2.ModelSystemConstruct
             _location = location;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Location)));
         }
+
+        // ── Local variables (nodes in InternalModules that can be referenced by
+        //    name in scripted parameter expressions inside the template) ────
+        private readonly ObservableCollection<Node> _localVariables = new();
+
+        /// <summary>
+        /// Nodes inside <see cref="InternalModules"/> that are designated as template-local
+        /// variables. These are resolved BEFORE <see cref="ModelSystem.Variables"/> when
+        /// compiling scripted expressions for nodes inside this template. Scripts on
+        /// boundaries outside the template cannot see these variables.
+        /// </summary>
+        public ReadOnlyObservableCollection<Node> LocalVariables { get; private set; } = null!;
 
         // ── Function parameters ───────────────────────────────────────────
         private readonly ObservableCollection<FunctionParameter> _functionParameters = new();
@@ -231,7 +244,85 @@ namespace XTMF2.ModelSystemConstruct
             _name = name;
             Parent = parent;
             InternalModules = internalModules ?? new Boundary("InternalModules", parent);
+            // Register this template as the owner of InternalModules so that expression
+            // compilation can discover the local variable scope from any node inside it.
+            InternalModules.OwningFunctionTemplate = this;
             FunctionParameters = new ReadOnlyObservableCollection<FunctionParameter>(_functionParameters);
+            LocalVariables     = new ReadOnlyObservableCollection<Node>(_localVariables);
+        }
+
+        // ── Local variable management (called by ModelSystemSession) ──────
+
+        /// <summary>
+        /// Returns <c>true</c> if <paramref name="node"/> is eligible to be a local variable.
+        /// A node is eligible when it is inside <see cref="InternalModules"/> and its effective
+        /// parameter type is one of the four basic types (bool, int, float, string), either
+        /// directly (e.g. the node is a <c>BasicParameter&lt;int&gt;</c>) or via
+        /// <see cref="IFunction{T}"/> (e.g. a <see cref="FunctionParameter"/> whose type is
+        /// <c>IFunction&lt;int&gt;</c>).
+        /// </summary>
+        public static bool IsValidLocalVariableNode(Node node, [NotNullWhen(false)] out CommandError? error)
+        {
+            var t = node is FunctionParameter fp ? ExtractIFunctionInnerType(fp.Type) : node.ParameterValue?.Type;
+            if (t is null)
+            {
+                error = new CommandError(
+                    $"Node '{node.Name}' does not have a basic-type parameter value and cannot be used as a local variable.");
+                return false;
+            }
+            if (t != typeof(bool) && t != typeof(int) && t != typeof(float) && t != typeof(string))
+            {
+                error = new CommandError(
+                    $"Node '{node.Name}' has type '{t.FullName}' which is not a supported variable type (bool, int, float, string).");
+                return false;
+            }
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// If <paramref name="type"/> is <c>IFunction&lt;T&gt;</c> for a basic supported T,
+        /// returns T; otherwise returns null.
+        /// </summary>
+        public static Type? ExtractIFunctionInnerType(Type? type)
+        {
+            if (type is null || !type.IsGenericType) return null;
+            if (type.GetGenericTypeDefinition() != typeof(IFunction<>)) return null;
+            var inner = type.GetGenericArguments()[0];
+            return (inner == typeof(bool) || inner == typeof(int)
+                 || inner == typeof(float) || inner == typeof(string))
+                ? inner : null;
+        }
+
+        /// <summary>
+        /// Adds <paramref name="node"/> to <see cref="LocalVariables"/>.
+        /// The node must be inside <see cref="InternalModules"/> and not already present.
+        /// </summary>
+        internal bool AddLocalVariable(Node node, [NotNullWhen(false)] out CommandError? error)
+        {
+            if (!IsValidLocalVariableNode(node, out error)) return false;
+            if (_localVariables.Contains(node))
+            {
+                error = new CommandError($"Node '{node.Name}' is already a local variable of template '{Name}'.");
+                return false;
+            }
+            _localVariables.Add(node);
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Removes <paramref name="node"/> from <see cref="LocalVariables"/>.
+        /// </summary>
+        internal bool RemoveLocalVariable(Node node, [NotNullWhen(false)] out CommandError? error)
+        {
+            if (!_localVariables.Remove(node))
+            {
+                error = new CommandError($"Node '{node.Name}' is not a local variable of template '{Name}'.");
+                return false;
+            }
+            error = null;
+            return true;
         }
 
         /// <summary>
@@ -276,6 +367,19 @@ namespace XTMF2.ModelSystemConstruct
             if (_entryNode != null && nodeDictionary.TryGetValue(_entryNode, out int entryIdx))
                 writer.WriteNumber(EntryNodeProperty, entryIdx);
 
+            // Local variables – stored as an array of node indices
+            if (_localVariables.Count > 0)
+            {
+                writer.WritePropertyName(LocalVariablesProperty);
+                writer.WriteStartArray();
+                foreach (var lv in _localVariables)
+                {
+                    if (nodeDictionary.TryGetValue(lv, out int lvIdx))
+                        writer.WriteNumberValue(lvIdx);
+                }
+                writer.WriteEndArray();
+            }
+
             writer.WriteEndObject();
         }
 
@@ -316,6 +420,8 @@ namespace XTMF2.ModelSystemConstruct
             // Partial template reference: created as soon as we read the name so that
             // FunctionParameter.Load() can reference it.
             FunctionTemplate? partialTemplate = null;
+            // Deferred list of local variable indices; resolved after nodes are loaded.
+            List<int>? deferredLocalVarIds = null;
 
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
@@ -373,6 +479,16 @@ namespace XTMF2.ModelSystemConstruct
                     if (reader.TokenType == JsonTokenType.Number)
                         deferredEntryNodeIndex = reader.GetInt32();
                 }
+                else if (reader.ValueTextEquals(LocalVariablesProperty))
+                {
+                    reader.Read(); // StartArray
+                    deferredLocalVarIds = new List<int>();
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        if (reader.TokenType == JsonTokenType.Number)
+                            deferredLocalVarIds.Add(reader.GetInt32());
+                    }
+                }
                 else
                 {
                     reader.Skip();
@@ -390,6 +506,16 @@ namespace XTMF2.ModelSystemConstruct
                 && node.TryGetValue(deferredEntryNodeIndex.Value, out var entryNodeCandidate))
             {
                 template._entryNode = entryNodeCandidate;
+            }
+
+            // Resolve local variable indices.
+            if (deferredLocalVarIds is not null)
+            {
+                foreach (var idx in deferredLocalVarIds)
+                {
+                    if (node.TryGetValue(idx, out var lvNode))
+                        template._localVariables.Add(lvNode);
+                }
             }
 
             return true;

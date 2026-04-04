@@ -29,19 +29,40 @@ internal abstract class Variable : Expression
 
     internal static Variable CreateVariableForNode(Node node, ReadOnlyMemory<char> text, int offset)
     {
-        var parameterValue = node.ParameterValue;
-        if(parameterValue is null)
-        {
-            throw new CompilerException($"Unable to create a variable for node {node.Name} because it has no parameter value!", offset);
+            // FunctionParameter nodes expose IFunction<T> for a basic type; handle them specially
+            // because they don't have a ParameterValue — their value arrives via the FunctionInstance
+            // hook binding at runtime.
+            if (node is ModelSystemConstruct.FunctionParameter fp)
+            {
+                var inner = ModelSystemConstruct.FunctionTemplate.ExtractIFunctionInnerType(fp.Type);
+                if (inner is null)
+                    throw new CompilerException(
+                        $"FunctionParameter '{node.Name}' type '{fp.Type?.FullName}' is not IFunction<T> of a supported basic type.",
+                        offset);
+                return inner.FullName switch
+                {
+                    "System.Boolean" => new FunctionParameterVariable<bool>(text, offset, fp),
+                    "System.Int32"   => new FunctionParameterVariable<int>(text, offset, fp),
+                    "System.Single"  => new FunctionParameterVariable<float>(text, offset, fp),
+                    "System.String"  => new FunctionParameterVariable<string>(text, offset, fp),
+                    _ => throw new CompilerException(
+                        $"Unsupported IFunction inner type '{inner.FullName}' for FunctionParameter '{node.Name}'.", offset)
+                };
+            }
+
+            var parameterValue = node.ParameterValue;
+            if(parameterValue is null)
+            {
+                throw new CompilerException($"Unable to create a variable for node {node.Name} because it has no parameter value!", offset);
+            }
+            return parameterValue.Type.FullName switch
+            {
+                "System.Boolean" => new BooleanVariable(text, offset, node),
+                "System.Int32" => new IntegerVariable(text, offset, node),
+                "System.Single" => new FloatVariable(text, offset, node),
+                "System.String" => new StringVariable(text, offset, node),
+                _ => throw new CompilerException($"Invalid type for a variable {parameterValue.Type.FullName} found when trying to" +
+                $" use {node.Name}!", offset)
+            };
         }
-        return parameterValue.Type.FullName switch
-        {
-            "System.Boolean" => new BooleanVariable(text, offset, node),
-            "System.Int32" => new IntegerVariable(text, offset, node),
-            "System.Single" => new FloatVariable(text, offset, node),
-            "System.String" => new StringVariable(text, offset, node),
-            _ => throw new CompilerException($"Invalid type for a variable {parameterValue.Type.FullName} found when trying to" +
-            $" use {node.Name}!", offset)
-        };   
-    }
 }
