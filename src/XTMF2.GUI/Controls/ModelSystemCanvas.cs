@@ -164,6 +164,16 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush FtTextBrushL     = new SolidColorBrush(Color.FromRgb(0x2A, 0x00, 0x50));
     private static readonly IBrush FtHookTextBrushL = new SolidColorBrush(Color.FromRgb(0x55, 0x11, 0xAA));
     private static readonly IBrush FtCountTextBrushL = new SolidColorBrush(Color.FromArgb(0xA0, 0x66, 0x44, 0xAA));
+    // Start (light) — pale amber fill, dark amber border, no neon glow
+    private static readonly IBrush StartFillL        = new SolidColorBrush(Color.FromRgb(0xFF, 0xF0, 0xD9)); // pale cream-amber
+    private static readonly IBrush StartBorderBrushL = new SolidColorBrush(Color.FromRgb(0xCC, 0x66, 0x00)); // rich amber border
+    private static readonly Color  StartGlowColorL   = Color.FromRgb(0xBB, 0x55, 0x00);                      // subdued amber glow
+    // FunctionParameter / Function Variable (light) — same amber hue family as Start
+    private static readonly IBrush FpFillL        = new SolidColorBrush(Color.FromRgb(0xFF, 0xF0, 0xD9)); // pale cream-amber body
+    private static readonly IBrush FpHeaderFillL  = new SolidColorBrush(Color.FromRgb(0xE8, 0x9A, 0x1A)); // warm amber header
+    private static readonly IBrush FpBorderBrushL = new SolidColorBrush(Color.FromRgb(0xB8, 0x62, 0x00)); // dark amber border
+    private static readonly IBrush FpTextBrushL   = new SolidColorBrush(Color.FromRgb(0x33, 0x1A, 0x00)); // near-black brown text
+    private static readonly Color  FpGlowColorL   = Color.FromRgb(0xBB, 0x55, 0x00);                      // subdued amber glow
     // Function-instance (light)
     private static readonly IBrush FiFillL           = new SolidColorBrush(Color.FromRgb(0xE8, 0xFF, 0xF8));
     private static readonly IBrush FiHeaderFillL     = new SolidColorBrush(Color.FromRgb(0x7B, 0xCF, 0xC0));
@@ -1230,22 +1240,39 @@ public sealed class ModelSystemCanvas : Control
             double rh  = fp.Height;
             var rect   = new Rect(fp.X, fp.Y, rw, rh);
 
-            // Orange-red fill to visually distinguish FunctionParameter nodes.
-            var borderColor = fp.IsSelected ? Colors.OrangeRed : Colors.DarkOrange;
-            var border      = new Pen(new SolidColorBrush(borderColor), NodeBorderThickness);
-            DrawRectGlow(ctx, rect, FiCornerRadius, fp.IsSelected ? SelectionGlowColor : Colors.OrangeRed);
-            ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x8C, 0x00)), border,
-                rect, FiCornerRadius, FiCornerRadius);
+            // Amber/orange fill — switches between dark and light palettes.
+            IBrush bodyFill, headerFill, textBrush;
+            Pen    border;
+            Color  glowColor;
+            if (_isLight)
+            {
+                bodyFill  = fp.IsSelected ? new SolidColorBrush(Colors.PeachPuff) : FpFillL;
+                headerFill = FpHeaderFillL;
+                border    = new Pen(fp.IsSelected ? NodeSelBrush : FpBorderBrushL, NodeBorderThickness);
+                textBrush = FpTextBrushL;
+                glowColor = fp.IsSelected ? SelectionGlowColor : FpGlowColorL;
+            }
+            else
+            {
+                bodyFill  = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x8C, 0x00));
+                headerFill = new SolidColorBrush(Color.FromArgb(0xFF, 0xC0, 0x50, 0x00));
+                border    = new Pen(new SolidColorBrush(fp.IsSelected ? Colors.OrangeRed : Colors.DarkOrange), NodeBorderThickness);
+                textBrush = Brushes.White;
+                glowColor = fp.IsSelected ? SelectionGlowColor : Colors.OrangeRed;
+            }
 
-            // Header band in a darker orange.
-            ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xFF, 0xC0, 0x50, 0x00)), null,
+            DrawRectGlow(ctx, rect, FiCornerRadius, glowColor);
+            ctx.DrawRectangle(bodyFill, border, rect, FiCornerRadius, FiCornerRadius);
+
+            // Header band.
+            ctx.DrawRectangle(headerFill, null,
                 new Rect(fp.X, fp.Y, rw, FtHeaderHeight), FiCornerRadius, FiCornerRadius);
-            ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x8C, 0x00)), null,
+            ctx.DrawRectangle(bodyFill, null,
                 new Rect(fp.X, fp.Y + FtHeaderHeight / 2.0, rw, rh - FtHeaderHeight / 2.0));
             ctx.DrawRectangle(null, border, rect, FiCornerRadius, FiCornerRadius);
 
-            // Name label in header (no prefix so the full name fits).
-            var labelFtText = MakeText(fp.Name, FtNameFontSize, Brushes.White);
+            // Name label in header.
+            var labelFtText = MakeText(fp.Name, FtNameFontSize, textBrush);
             var lx = fp.X + 8.0;
             var ly = fp.Y + (FtHeaderHeight - labelFtText.Height) / 2.0;
             using (ctx.PushClip(new Rect(fp.X + 4, fp.Y, rw - 8, FtHeaderHeight)))
@@ -1254,7 +1281,7 @@ public sealed class ModelSystemCanvas : Control
             // Type name in smaller text below header.
             if (!string.IsNullOrEmpty(fp.TypeName))
             {
-                var typeText = MakeText(fp.TypeName, HookFontSize, Brushes.White);
+                var typeText = MakeText(fp.TypeName, HookFontSize, textBrush);
                 using (ctx.PushClip(new Rect(fp.X + 4, fp.Y + FtHeaderHeight, rw - 8, rh - FtHeaderHeight)))
                     ctx.DrawText(typeText, new Point(lx, fp.Y + FtHeaderHeight + 4.0));
             }
@@ -2319,12 +2346,12 @@ public sealed class ModelSystemCanvas : Control
     {
         foreach (var start in _vm!.Starts)
         {
-            var fill   = start.IsSelected ? StartSelFill : StartFill;
+            var fill   = start.IsSelected ? StartSelFill : (_isLight ? StartFillL : StartFill);
             var center = new Point(start.CenterX, start.CenterY);
             var r      = StartViewModel.Radius;
-            var border = new Pen(start.IsSelected ? NodeSelBrush : (_isLight ? NodeBorderBrushL : NodeBorderBrush), NodeBorderThickness);
+            var border = new Pen(start.IsSelected ? NodeSelBrush : (_isLight ? StartBorderBrushL : NodeBorderBrush), NodeBorderThickness);
 
-            DrawEllipseGlow(ctx, center, r, r, start.IsSelected ? SelectionGlowColor : StartGlowColor);
+            DrawEllipseGlow(ctx, center, r, r, start.IsSelected ? SelectionGlowColor : (_isLight ? StartGlowColorL : StartGlowColor));
             ctx.DrawEllipse(fill, border, center, r, r);
 
             // Label below the circle
