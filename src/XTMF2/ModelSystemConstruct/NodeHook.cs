@@ -29,7 +29,7 @@ namespace XTMF2
     /// </summary>
     public abstract class NodeHook
     {
-        public string Name { get; private set; }
+        public virtual string Name { get; protected set; }
 
         public HookCardinality Cardinality { get; private set; }
 
@@ -276,5 +276,47 @@ namespace XTMF2
         {
             return Field.GetValue(module) is not null;
         }
+    }
+
+    /// <summary>
+    /// A hook on a <see cref="ModelSystemConstruct.FunctionInstance"/> that corresponds
+    /// to one of the owning template's <see cref="ModelSystemConstruct.FunctionParameter"/>
+    /// slots.  Outgoing links from the function instance to external nodes use this hook type;
+    /// the actual module wiring is performed transitively by
+    /// <see cref="ModelSystemConstruct.FunctionInstance.ConstructRuntimeLinks"/>.
+    /// </summary>
+    public sealed class FunctionParameterHook : NodeHook
+    {
+        /// <summary>The function-parameter slot this hook represents.</summary>
+        public ModelSystemConstruct.FunctionParameter Parameter { get; }
+
+        /// <inheritdoc/>
+        public override Type Type => Parameter.Type;
+
+        /// <param name="parameter">The function-parameter slot this hook exposes.</param>
+        /// <param name="index">Ordinal position among the template's FunctionParameters.</param>
+        public FunctionParameterHook(ModelSystemConstruct.FunctionParameter parameter, int index)
+            : base(parameter.Name, HookCardinality.SingleOptional, index, isParameter: false, defaultValue: null)
+        {
+            Parameter = parameter;
+        }
+
+        /// <summary>
+        /// Always returns the current name of the underlying <see cref="Parameter"/>, so that
+        /// renaming a <see cref="FunctionParameter"/> is immediately visible on all
+        /// <see cref="FunctionInstance"/> hook rows without rebuilding the hooks list.
+        /// </summary>
+        public override string Name => Parameter.Name;
+
+        // ── Install is intentionally a no-op ─────────────────────────────
+        // The module wiring for FunctionParameter hooks is not performed through
+        // the standard Install path; instead SingleLink.Construct detects a
+        // FunctionInstance origin with a FunctionParameterHook and calls
+        // FunctionInstance.BindParameter directly.
+
+        internal override void Install(Node origin, Node destination, int index) { /* no-op */ }
+        internal override void Install(IModule origin, IModule destination, int index) { /* no-op */ }
+        internal override void CreateArray(IModule origin, int length) { /* no-op */ }
+        internal override bool AnyInstalled(IModule module) => false;
     }
 }

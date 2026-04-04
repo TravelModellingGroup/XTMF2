@@ -201,6 +201,13 @@ namespace XTMF2.ModelSystemConstruct
                 }
                 foreach (var ft in current._functionTemplates)
                 {
+                    // Include types used by FunctionParameters (they may not appear in any regular node).
+                    foreach (var fp in ft.FunctionParameters)
+                    {
+                        var fpt = fp.Type;
+                        if (fpt != null && !included.Contains(fpt))
+                            included.Add(fpt);
+                    }
                     GetUsedTypes(ft.InternalModules, included);
                 }
                 return included;

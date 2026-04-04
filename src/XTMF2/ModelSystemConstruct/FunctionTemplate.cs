@@ -22,30 +22,35 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using System.Text;
 using System.Text.Json;
 using XTMF2.Editing;
 using XTMF2.Repository;
-using XTMF2.RuntimeModules;
 
 namespace XTMF2.ModelSystemConstruct
 {
     /// <summary>
     /// This class provides the logic for creating a function template.
     /// Function templates are then used in a model system by instantiating all of the
-    /// needed references.
+    /// needed references via <see cref="FunctionInstance"/>.
+    /// <para>
+    /// A function template may declare zero or more <see cref="FunctionParameters"/>.
+    /// Each <see cref="FunctionParameter"/> acts as a typed placeholder inside the
+    /// template's <see cref="InternalModules"/> boundary: internal nodes link <em>to</em>
+    /// parameters, and the concrete module is provided at run-time by the
+    /// <see cref="FunctionInstance"/> that instantiates this template.
+    /// </para>
     /// </summary>
     public sealed class FunctionTemplate : INotifyPropertyChanged
     {
         // ── JSON property names ───────────────────────────────────────────
-        private const string NameProperty           = "Name";
-        private const string LocationProperty       = "Location";
-        private const string ExposedNodesProperty   = "ExposedNodes";
-        private const string EntryNodeProperty      = "EntryNode";
-        private const string LocationXProperty      = "X";
-        private const string LocationYProperty      = "Y";
-        private const string LocationWProperty      = "Width";
-        private const string LocationHProperty      = "Height";
+        private const string NameProperty               = "Name";
+        private const string LocationProperty           = "Location";
+        private const string FunctionParametersProperty = "FunctionParameters";
+        private const string EntryNodeProperty          = "EntryNode";
+        private const string LocationXProperty          = "X";
+        private const string LocationYProperty          = "Y";
+        private const string LocationWProperty          = "Width";
+        private const string LocationHProperty          = "Height";
 
         private string _name = String.Empty;
 
@@ -113,58 +118,95 @@ namespace XTMF2.ModelSystemConstruct
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Location)));
         }
 
-        // ── Exposed nodes ─────────────────────────────────────────────────
-        /// <summary>
-        /// Nodes within <see cref="InternalModules"/> that are exposed as external hooks
-        /// when the template is viewed from the parent boundary.
-        /// </summary>
-        private readonly ObservableCollection<Node> _exposedNodes = new();
+        // ── Function parameters ───────────────────────────────────────────
+        private readonly ObservableCollection<FunctionParameter> _functionParameters = new();
 
         /// <summary>
-        /// Read-only view of the nodes exposed as hooks on this function template's canvas box.
+        /// The typed parameter slots declared on this function template.
+        /// <para>
+        /// Each <see cref="FunctionParameter"/> is a virtual placeholder inside
+        /// <see cref="InternalModules"/>: internal nodes link <em>to</em> a parameter,
+        /// and the actual module is supplied at run-time by the
+        /// <see cref="FunctionInstance"/> that instantiates this template.
+        /// On the parent boundary's canvas a <see cref="FunctionInstance"/> exposes one
+        /// outgoing hook per <see cref="FunctionParameter"/>, allowing external nodes to
+        /// be wired in.
+        /// </para>
         /// </summary>
-        public ReadOnlyObservableCollection<Node> ExposedNodes { get; }
+        public ReadOnlyObservableCollection<FunctionParameter> FunctionParameters { get; }
 
         /// <summary>
-        /// Toggles the exposure of <paramref name="node"/>.
-        /// Adding it when not present; removing it when already exposed.
-        /// Node must belong to <see cref="InternalModules"/>.
+        /// Adds a new <see cref="FunctionParameter"/> to this template.
+        /// The name must be unique within this template.
         /// </summary>
-        internal bool ToggleExposedNode(Node node, [NotNullWhen(false)] out CommandError? error)
+        internal bool AddFunctionParameter(string name, Type type, Rectangle location,
+            [NotNullWhen(true)] out FunctionParameter? parameter,
+            [NotNullWhen(false)] out CommandError? error)
         {
-            if (!InternalModules.Modules.Contains(node))
+            if (string.IsNullOrWhiteSpace(name))
             {
-                error = new CommandError($"Node '{node.Name}' does not belong to the InternalModules of template '{Name}'.");
+                parameter = null;
+                error = new CommandError("A FunctionParameter name must not be empty.");
                 return false;
             }
-            var nodeType = node.Type;
-            bool isBasicParameter = nodeType is { IsGenericType: true }
-                && nodeType.GetGenericTypeDefinition() == typeof(BasicParameter<>);
-            if (!isBasicParameter)
+            if (_functionParameters.Any(fp => fp.Name.Equals(name, StringComparison.Ordinal)))
             {
-                error = new CommandError($"Only BasicParameter nodes can be exposed as hooks. '{node.Name}' is not a BasicParameter.");
+                parameter = null;
+                error = new CommandError($"A FunctionParameter named '{name}' already exists in template '{Name}'.");
                 return false;
             }
+            parameter = new FunctionParameter(name, type, this, location);
+            _functionParameters.Add(parameter);
             error = null;
-            if (_exposedNodes.Contains(node))
-                _exposedNodes.Remove(node);
-            else
-                _exposedNodes.Add(node);
             return true;
         }
 
         /// <summary>
-        /// Forcibly removes <paramref name="node"/> from the exposed nodes list (used for undo).
+        /// Forcibly adds an already-constructed <see cref="FunctionParameter"/> back to the
+        /// collection (used for undo of a removal).
         /// </summary>
-        internal void RemoveExposedNode(Node node) => _exposedNodes.Remove(node);
+        internal void RestoreFunctionParameter(FunctionParameter parameter, int index)
+        {
+            if (!_functionParameters.Contains(parameter))
+                _functionParameters.Insert(Math.Min(index, _functionParameters.Count), parameter);
+        }
 
         /// <summary>
-        /// Forcibly adds <paramref name="node"/> to the exposed nodes list (used for undo).
+        /// Removes a <see cref="FunctionParameter"/> from this template.
         /// </summary>
-        internal void AddExposedNode(Node node)
+        internal bool RemoveFunctionParameter(FunctionParameter parameter,
+            [NotNullWhen(false)] out CommandError? error)
         {
-            if (!_exposedNodes.Contains(node))
-                _exposedNodes.Add(node);
+            if (!_functionParameters.Remove(parameter))
+            {
+                error = new CommandError($"FunctionParameter '{parameter.Name}' was not found in template '{Name}'.");
+                return false;
+            }
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Renames <paramref name="parameter"/> to <paramref name="newName"/>.
+        /// The new name must be unique within this template.
+        /// </summary>
+        internal bool RenameFunctionParameter(FunctionParameter parameter, string newName,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                error = new CommandError("A FunctionParameter name must not be empty.");
+                return false;
+            }
+            if (_functionParameters.Any(fp => !ReferenceEquals(fp, parameter)
+                && fp.Name.Equals(newName, StringComparison.Ordinal)))
+            {
+                error = new CommandError($"A FunctionParameter named '{newName}' already exists in template '{Name}'.");
+                return false;
+            }
+            parameter.SetName(newName, out _);
+            error = null;
+            return true;
         }
 
         /// <summary>
@@ -189,7 +231,7 @@ namespace XTMF2.ModelSystemConstruct
             _name = name;
             Parent = parent;
             InternalModules = internalModules ?? new Boundary("InternalModules", parent);
-            ExposedNodes = new ReadOnlyObservableCollection<Node>(_exposedNodes);
+            FunctionParameters = new ReadOnlyObservableCollection<FunctionParameter>(_functionParameters);
         }
 
         /// <summary>
@@ -213,19 +255,22 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteNumber(LocationHProperty, Location.Height);
             writer.WriteEndObject();
 
-            // Internal modules (must come before ExposedNodes so that indices are defined)
-            writer.WritePropertyName(nameof(InternalModules));
-            InternalModules.Save(ref index, nodeDictionary, typeDictionary, writer);
-
-            // Exposed nodes – stored as integer indices
-            writer.WritePropertyName(ExposedNodesProperty);
+            // FunctionParameters BEFORE InternalModules so their indices are defined
+            // before any internal links that reference them as destinations are written.
+            writer.WritePropertyName(FunctionParametersProperty);
             writer.WriteStartArray();
-            foreach (var en in _exposedNodes)
+            foreach (var fp in _functionParameters)
             {
-                if (nodeDictionary.TryGetValue(en, out int idx))
-                    writer.WriteNumberValue(idx);
+                // Ensure the type is recorded.
+                if (!typeDictionary.ContainsKey(fp.Type!))
+                    typeDictionary[fp.Type!] = typeDictionary.Count;
+                fp.Save(ref index, nodeDictionary, typeDictionary, writer);
             }
             writer.WriteEndArray();
+
+            // Internal modules (must come after FunctionParameters so FP indices are established).
+            writer.WritePropertyName(nameof(InternalModules));
+            InternalModules.Save(ref index, nodeDictionary, typeDictionary, writer);
 
             // Entry node – stored as an integer index (null means not set)
             if (_entryNode != null && nodeDictionary.TryGetValue(_entryNode, out int entryIdx))
@@ -252,70 +297,80 @@ namespace XTMF2.ModelSystemConstruct
             return Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, parent, out template, ref error);
         }
 
-        internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
+        internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
+            List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes,
-            ref Utf8JsonReader reader, Boundary parent, [NotNullWhen(true)] out FunctionTemplate? template, [NotNullWhen(false)] ref string? error)
+            ref Utf8JsonReader reader, Boundary parent,
+            [NotNullWhen(true)] out FunctionTemplate? template,
+            [NotNullWhen(false)] ref string? error)
         {
             template = null;
             string? name = null;
             Rectangle location = new Rectangle(40, 40, 200, 120);
             var innerModules = new Boundary(parent);
-            // Exposed node indices – resolved after InternalModules is loaded.
-            var deferredExposedIndices = new List<int>();
-            // Entry node index – resolved after InternalModules is loaded.
             int? deferredEntryNodeIndex = null;
 
-            if(reader.TokenType != JsonTokenType.StartObject)
-            {
+            if (reader.TokenType != JsonTokenType.StartObject)
                 return Helper.FailWith(out error, "Unexpected token when reading FunctionTemplate!");
-            }
-            while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+
+            // Partial template reference: created as soon as we read the name so that
+            // FunctionParameter.Load() can reference it.
+            FunctionTemplate? partialTemplate = null;
+
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                if(reader.TokenType != JsonTokenType.PropertyName)
-                {
-                    continue;
-                }
-                if(reader.ValueTextEquals(NameProperty))
+                if (reader.TokenType != JsonTokenType.PropertyName) continue;
+
+                if (reader.ValueTextEquals(NameProperty))
                 {
                     reader.Read();
                     name = reader.GetString();
+                    if (partialTemplate is null && name is not null)
+                        partialTemplate = new FunctionTemplate(name, parent, innerModules);
                 }
-                else if(reader.ValueTextEquals(LocationProperty))
+                else if (reader.ValueTextEquals(LocationProperty))
                 {
                     reader.Read(); // StartObject
                     float lx = 40, ly = 40, lw = 200, lh = 120;
-                    while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                     {
-                        if(reader.TokenType != JsonTokenType.PropertyName) continue;
-                        if(reader.ValueTextEquals(LocationXProperty))      { reader.Read(); lx = reader.GetSingle(); }
-                        else if(reader.ValueTextEquals(LocationYProperty)) { reader.Read(); ly = reader.GetSingle(); }
-                        else if(reader.ValueTextEquals(LocationWProperty)) { reader.Read(); lw = reader.GetSingle(); }
-                        else if(reader.ValueTextEquals(LocationHProperty)) { reader.Read(); lh = reader.GetSingle(); }
+                        if (reader.TokenType != JsonTokenType.PropertyName) continue;
+                        if (reader.ValueTextEquals(LocationXProperty))      { reader.Read(); lx = reader.GetSingle(); }
+                        else if (reader.ValueTextEquals(LocationYProperty)) { reader.Read(); ly = reader.GetSingle(); }
+                        else if (reader.ValueTextEquals(LocationWProperty)) { reader.Read(); lw = reader.GetSingle(); }
+                        else if (reader.ValueTextEquals(LocationHProperty)) { reader.Read(); lh = reader.GetSingle(); }
                         else reader.Skip();
                     }
                     location = new Rectangle(lx, ly, lw, lh);
                 }
-                else if(reader.ValueTextEquals(nameof(InternalModules)))
+                else if (reader.ValueTextEquals(FunctionParametersProperty))
                 {
-                    reader.Read();
-                    if(!innerModules.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error))
+                    // FunctionParameters must be loaded before InternalModules so that
+                    // their node-dict indices are in the dictionary when internal links are loaded.
+                    if (partialTemplate is null)
                     {
+                        error = "FunctionParameters section appeared before the template Name was read.";
                         return false;
                     }
-                }
-                else if(reader.ValueTextEquals(ExposedNodesProperty))
-                {
                     reader.Read(); // StartArray
-                    while(reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                     {
-                        if(reader.TokenType == JsonTokenType.Number)
-                            deferredExposedIndices.Add(reader.GetInt32());
+                        if (!FunctionParameter.Load(typeLookup, node, ref reader, partialTemplate,
+                                out var fp, ref error))
+                            return false;
+                        partialTemplate._functionParameters.Add(fp!);
                     }
                 }
-                else if(reader.ValueTextEquals(EntryNodeProperty))
+                else if (reader.ValueTextEquals(nameof(InternalModules)))
                 {
                     reader.Read();
-                    if(reader.TokenType == JsonTokenType.Number)
+                    if (!innerModules.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error))
+                        return false;
+                }
+                else if (reader.ValueTextEquals(EntryNodeProperty))
+                {
+                    reader.Read();
+                    if (reader.TokenType == JsonTokenType.Number)
                         deferredEntryNodeIndex = reader.GetInt32();
                 }
                 else
@@ -323,21 +378,12 @@ namespace XTMF2.ModelSystemConstruct
                     reader.Skip();
                 }
             }
-            if(name is null)
-            {
-                return Helper.FailWith(out error, "Function template did not include a name!");
-            }
-            template = new FunctionTemplate(name, parent, innerModules);
-            // Replace the empty InternalModules created by the constructor with the one
-            // loaded from disk (which already contains the correct nodes, starts, links, etc.).
-            template.SetLocation(location);
 
-            // Resolve exposed node indices now that InternalModules nodes are in the dictionary.
-            foreach (int idx in deferredExposedIndices)
-            {
-                if (node.TryGetValue(idx, out var exposedNode))
-                    template._exposedNodes.Add(exposedNode);
-            }
+            if (name is null)
+                return Helper.FailWith(out error, "Function template did not include a name!");
+
+            template = partialTemplate ?? new FunctionTemplate(name, parent, innerModules);
+            template.SetLocation(location);
 
             // Resolve the entry node index.
             if (deferredEntryNodeIndex.HasValue

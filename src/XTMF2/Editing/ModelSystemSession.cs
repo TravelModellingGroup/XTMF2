@@ -1202,14 +1202,6 @@ namespace XTMF2.Editing
                 if (variableIndex >= 0)
                     ModelSystem.Variables.RemoveAt(variableIndex);
 
-                // If the node lives inside a FunctionTemplate's InternalModules and was exposed
-                // as a hook, remove it from the exposed list so the template stays consistent.
-                var owningTemplate = boundary.Parent?.FunctionTemplates
-                    .FirstOrDefault(ft => ft.InternalModules == boundary);
-                bool wasExposedInTemplate = owningTemplate is not null && owningTemplate.ExposedNodes.Contains(node);
-                if (wasExposedInTemplate)
-                    owningTemplate!.RemoveExposedNode(node);
-
                 if (boundary.RemoveNode(node, out error))
                 {
                     Buffer.AddUndo(new Command(() =>
@@ -1227,8 +1219,6 @@ namespace XTMF2.Editing
                                 var restoreIdx = Math.Min(variableIndex, ModelSystem.Variables.Count);
                                 ModelSystem.Variables.Insert(restoreIdx, node);
                             }
-                            if (wasExposedInTemplate)
-                                owningTemplate!.AddExposedNode(node);
                             return (true, null);
                         }
                         return (false, e);
@@ -1241,8 +1231,6 @@ namespace XTMF2.Editing
                             boundary.RemoveLink(link, out _);
                         RemoveHiddenCascade();
                         ModelSystem.Variables.Remove(node);
-                        if (wasExposedInTemplate)
-                            owningTemplate!.RemoveExposedNode(node);
                         return (boundary.RemoveNode(node, out var e), e);
                     }));
                     return true;
@@ -1260,8 +1248,6 @@ namespace XTMF2.Editing
                         var restoreIdx = Math.Min(variableIndex, ModelSystem.Variables.Count);
                         ModelSystem.Variables.Insert(restoreIdx, node);
                     }
-                    if (wasExposedInTemplate)
-                        owningTemplate!.AddExposedNode(node);
                     return false;
                 }
             }
@@ -1457,6 +1443,37 @@ namespace XTMF2.Editing
                     return result;
             }
             return null;
+        }
+
+        /// <summary>
+        /// Returns <c>true</c> if any <see cref="FunctionInstance"/> of <paramref name="template"/>
+        /// anywhere in the model system has an active link originating at the
+        /// <see cref="FunctionParameterHook"/> that corresponds to <paramref name="parameter"/>.
+        /// Traverses every reachable boundary (including <see cref="FunctionTemplate.InternalModules"/>).
+        /// </summary>
+        private static bool HasActiveFunctionParameterLink(
+            Boundary root, FunctionTemplate template, FunctionParameter parameter)
+        {
+            var stack = new Stack<Boundary>();
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+                foreach (var child in current.Boundaries)
+                    stack.Push(child);
+                foreach (var ft in current.FunctionTemplates)
+                    stack.Push(ft.InternalModules);
+
+                foreach (var link in current.Links)
+                {
+                    if (link.Origin is FunctionInstance fi
+                        && ReferenceEquals(fi.Template, template)
+                        && link.OriginHook is FunctionParameterHook fph
+                        && ReferenceEquals(fph.Parameter, parameter))
+                        return true;
+                }
+            }
+            return false;
         }
 
         private List<Link> GetLinksGoingTo(Node destNode)
@@ -2257,22 +2274,19 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
-        /// Toggles whether a node within a function template's InternalModules is exposed
-        /// as an external hook on the template's canvas container.
-        /// Adds the node when it is not yet exposed; removes it when it already is.
+        /// Adds a new <see cref="FunctionParameter"/> to <paramref name="template"/>.
+        /// The parameter becomes a valid link destination inside the template and a hook
+        /// on every <see cref="FunctionInstance"/> that references the template.
         /// </summary>
-        /// <param name="user">The user issuing the command.</param>
-        /// <param name="template">The function template that owns the node.</param>
-        /// <param name="node">A node in <paramref name="template"/>'s InternalModules.</param>
-        /// <param name="error">An error message if the operation fails.</param>
-        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
-        public bool ToggleFunctionTemplateExposedNode(User user, FunctionTemplate template, Node node,
+        public bool AddFunctionParameter(User user, FunctionTemplate template, string name, Type type,
+            Rectangle location, out FunctionParameter? parameter,
             [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(template);
-            ArgumentNullException.ThrowIfNull(node);
-            error = null;
+            ArgumentNullException.ThrowIfNull(name);
+            ArgumentNullException.ThrowIfNull(type);
+            parameter = null;
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -2280,18 +2294,112 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
-                bool wasExposed = template.ExposedNodes.Contains(node);
-                if (!template.ToggleExposedNode(node, out error))
+                if (!template.AddFunctionParameter(name, type, location, out parameter, out error))
                     return false;
+                var captured = parameter!;
+                var capturedIdx = template.FunctionParameters.Count - 1;
                 Buffer.AddUndo(new Command(() =>
                 {
-                    if (wasExposed) template.AddExposedNode(node);
-                    else            template.RemoveExposedNode(node);
+                    template.RemoveFunctionParameter(captured, out var e);
+                    return (true, e);
+                }, () =>
+                {
+                    template.RestoreFunctionParameter(captured, capturedIdx);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Removes a <see cref="FunctionParameter"/> from <paramref name="template"/>.
+        /// Any links inside the template that point to the parameter are also removed.
+        /// </summary>
+        public bool RemoveFunctionParameter(User user, FunctionTemplate template, FunctionParameter parameter,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(parameter);
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                // Refuse deletion if any FunctionInstance in the model has an active link
+                // from the hook that corresponds to this FunctionParameter.
+                if (HasActiveFunctionParameterLink(ModelSystem.GlobalBoundary, template, parameter))
+                {
+                    error = new CommandError(
+                        $"Cannot remove FunctionParameter '{parameter.Name}': one or more FunctionInstances have a link connected to this parameter's hook.");
+                    return false;
+                }
+                // Capture state before any mutations.
+                var internalBoundary = template.InternalModules;
+                var linksToRemove = internalBoundary.Links
+                    .Where(l => l.HasDestination(parameter))
+                    .ToList();
+                int restoreIndex = template.FunctionParameters.IndexOf(parameter);
+
+                // Remove links that reference this parameter as a destination.
+                foreach (var link in linksToRemove)
+                    internalBoundary.RemoveLink(link, out _);
+
+                if (!template.RemoveFunctionParameter(parameter, out error))
+                {
+                    // Roll back link removals on failure.
+                    foreach (var link in linksToRemove)
+                        internalBoundary.AddLink(link, out _);
+                    return false;
+                }
+                Buffer.AddUndo(new Command(() =>
+                {
+                    // Undo: restore parameter and its links.
+                    template.RestoreFunctionParameter(parameter, restoreIndex);
+                    foreach (var link in linksToRemove)
+                        internalBoundary.AddLink(link, out _);
                     return (true, null);
                 }, () =>
                 {
-                    if (wasExposed) template.RemoveExposedNode(node);
-                    else            template.AddExposedNode(node);
+                    // Redo: re-remove links then the parameter.
+                    foreach (var link in linksToRemove)
+                        internalBoundary.RemoveLink(link, out _);
+                    return (template.RemoveFunctionParameter(parameter, out var e), e);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Renames a <see cref="FunctionParameter"/> within <paramref name="template">>.
+        /// Also updates the corresponding <see cref="FunctionParameterHook"/> name on every
+        /// live <see cref="FunctionInstance"/> because the hook derives its name from the parameter.
+        /// </summary>
+        public bool RenameFunctionParameter(User user, FunctionTemplate template, FunctionParameter parameter,
+            string newName, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(parameter);
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var oldName = parameter.Name;
+                if (!template.RenameFunctionParameter(parameter, newName, out error))
+                    return false;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    template.RenameFunctionParameter(parameter, oldName, out _);
+                    return (true, null);
+                }, () =>
+                {
+                    template.RenameFunctionParameter(parameter, newName, out _);
                     return (true, null);
                 }));
                 return true;

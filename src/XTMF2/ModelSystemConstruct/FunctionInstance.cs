@@ -18,8 +18,10 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Text.Json;
 using XTMF2.Editing;
 
@@ -56,6 +58,36 @@ namespace XTMF2.ModelSystemConstruct
             Template = template;
             // Re-fire our Type property when the template's designated entry node changes.
             ((INotifyPropertyChanged)template).PropertyChanged += OnTemplatePropertyChanged;
+            // Rebuild the cached Hooks list whenever FunctionParameters change.
+            ((INotifyCollectionChanged)template.FunctionParameters).CollectionChanged += OnFunctionParametersChanged;
+            // Track individual FunctionParameter renames so hook labels stay current.
+            foreach (var fp in template.FunctionParameters)
+                ((INotifyPropertyChanged)fp).PropertyChanged += OnFunctionParameterPropertyChanged;
+        }
+
+        private void OnFunctionParametersChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            // Manage per-item subscriptions for newly added / removed parameters.
+            if (e.OldItems is not null)
+                foreach (FunctionParameter fp in e.OldItems)
+                    ((INotifyPropertyChanged)fp).PropertyChanged -= OnFunctionParameterPropertyChanged;
+            if (e.NewItems is not null)
+                foreach (FunctionParameter fp in e.NewItems)
+                    ((INotifyPropertyChanged)fp).PropertyChanged += OnFunctionParameterPropertyChanged;
+
+            _cachedHooks = null;
+            InvokePropertyChanged(nameof(Hooks));
+        }
+
+        private void OnFunctionParameterPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(FunctionParameter.Name))
+            {
+                // FunctionParameterHook.Name is a live computed property, so we only need
+                // to notify observers that the Hooks collection's labels have changed.
+                _cachedHooks = null;
+                InvokePropertyChanged(nameof(Hooks));
+            }
         }
 
         private void OnTemplatePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -70,6 +102,33 @@ namespace XTMF2.ModelSystemConstruct
         /// (no compatible hooks) when no entry node has been designated.
         /// </summary>
         public override Type Type => Template.EntryNode?.Type ?? typeof(object);
+
+        // ── Dynamic hooks (one per FunctionParameter) ─────────────────────
+
+        private IReadOnlyList<NodeHook>? _cachedHooks;
+
+        /// <summary>
+        /// The outgoing hooks of this function instance, one per
+        /// <see cref="FunctionTemplate.FunctionParameters"/> in the referenced template.
+        /// Each hook corresponds to a <see cref="FunctionParameter"/> placeholder inside the
+        /// template; linking <c>FI.hookForP → ExternalNode</c> supplies the module that will
+        /// fill parameter P at run-time.
+        /// </summary>
+        public override IReadOnlyList<NodeHook> Hooks
+        {
+            get
+            {
+                if (_cachedHooks is null)
+                {
+                    var list = new List<NodeHook>();
+                    int idx = 0;
+                    foreach (var fp in Template.FunctionParameters)
+                        list.Add(new FunctionParameterHook(fp, idx++));
+                    _cachedHooks = list.AsReadOnly();
+                }
+                return _cachedHooks;
+            }
+        }
 
         // ── Persistence ───────────────────────────────────────────────────
 
@@ -170,6 +229,27 @@ namespace XTMF2.ModelSystemConstruct
         private Dictionary<Node, IModule>? _runtimeModules;
 
         /// <summary>
+        /// Maps each <see cref="FunctionParameter"/> of the template to the external
+        /// <see cref="IModule"/> that was wired to this instance via a
+        /// <see cref="FunctionParameterHook"/> link.
+        /// Populated during <see cref="ConstructLinks"/> on the enclosing boundary;
+        /// null between runs.
+        /// </summary>
+        private Dictionary<FunctionParameter, IModule?>? _parameterBindings;
+
+        /// <summary>
+        /// Records <paramref name="module"/> as the runtime binding for
+        /// <see cref="FunctionParameter"/> <paramref name="parameter"/> on this instance.
+        /// Called by <see cref="SingleLink.Construct"/> when processing an outgoing
+        /// <see cref="FunctionParameterHook"/> link.
+        /// </summary>
+        internal void BindParameter(FunctionParameter parameter, IModule? module)
+        {
+            _parameterBindings ??= new(ReferenceEqualityComparer.Instance);
+            _parameterBindings[parameter] = module;
+        }
+
+        /// <summary>
         /// Returns the per-instance <see cref="IModule"/> cloned from
         /// <paramref name="templateNode"/> for this function instance, or <c>null</c>
         /// if the instance has not yet been constructed for a run.
@@ -185,6 +265,7 @@ namespace XTMF2.ModelSystemConstruct
         internal bool ConstructRuntimeModules(XTMFRuntime runtime, ref string? error)
         {
             _runtimeModules = new Dictionary<Node, IModule>(ReferenceEqualityComparer.Instance);
+            _parameterBindings = new Dictionary<FunctionParameter, IModule?>(ReferenceEqualityComparer.Instance);
             var internals = Template.InternalModules;
             foreach (var start in internals.Starts)
             {
@@ -232,6 +313,24 @@ namespace XTMF2.ModelSystemConstruct
 
             if (link is SingleLink sl)
             {
+                // ── Transitive FunctionParameter wiring ───────────────────────────────
+                if (sl.Destination is FunctionParameter fp)
+                {
+                    if (_parameterBindings is not null
+                        && _parameterBindings.TryGetValue(fp, out var boundModule)
+                        && boundModule is not null)
+                    {
+                        sl.OriginHook.Install(originModule, boundModule, 0);
+                    }
+                    else if (sl.OriginHook.Cardinality == HookCardinality.Single)
+                    {
+                        error = $"FunctionInstance '{Name}': FunctionParameter '{fp.Name}' has no external binding " +
+                                $"but hook '{sl.OriginHook.Name}' requires one (Single cardinality).";
+                        return false;
+                    }
+                    return true;
+                }
+
                 var dest = sl.Destination is GhostNode gn ? gn.ReferencedNode : sl.Destination!;
                 if (sl.OriginHook.Cardinality == HookCardinality.Single && dest.IsDisabled)
                 {
@@ -247,8 +346,17 @@ namespace XTMF2.ModelSystemConstruct
                 int enabled = 0;
                 foreach (var d in ml.Destinations)
                 {
-                    var r = d is GhostNode gn ? gn.ReferencedNode : d;
-                    if (!r.IsDisabled && ResolveRuntimeDestModule(d) is not null) enabled++;
+                    if (d is FunctionParameter fpDest)
+                    {
+                        if (_parameterBindings is not null
+                            && _parameterBindings.TryGetValue(fpDest, out var bm) && bm is not null)
+                            enabled++;
+                    }
+                    else
+                    {
+                        var r = d is GhostNode rGn ? rGn.ReferencedNode : d;
+                        if (!r.IsDisabled && ResolveRuntimeDestModule(d) is not null) enabled++;
+                    }
                 }
                 if (ml.OriginHook.Cardinality == HookCardinality.AtLeastOne && enabled == 0)
                 {
@@ -259,10 +367,19 @@ namespace XTMF2.ModelSystemConstruct
                 int idx = 0;
                 foreach (var d in ml.Destinations)
                 {
-                    var r = d is GhostNode gn ? gn.ReferencedNode : d;
-                    var dm = ResolveRuntimeDestModule(d);
-                    if (!r.IsDisabled && dm is not null)
-                        ml.OriginHook.Install(originModule, dm, idx++);
+                    if (d is FunctionParameter fpDest)
+                    {
+                        if (_parameterBindings is not null
+                            && _parameterBindings.TryGetValue(fpDest, out var bm) && bm is not null)
+                            ml.OriginHook.Install(originModule, bm, idx++);
+                    }
+                    else
+                    {
+                        var r = d is GhostNode rGn ? rGn.ReferencedNode : d;
+                        var dm = ResolveRuntimeDestModule(d);
+                        if (!r.IsDisabled && dm is not null)
+                            ml.OriginHook.Install(originModule, dm, idx++);
+                    }
                 }
             }
             return true;

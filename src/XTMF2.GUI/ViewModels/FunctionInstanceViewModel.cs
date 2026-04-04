@@ -31,7 +31,7 @@ namespace XTMF2.GUI.ViewModels;
 /// Wraps a <see cref="FunctionInstance"/> for display on the model system canvas.
 /// A FunctionInstance is rendered as a rectangular node whose header shows the instance
 /// name and whose hook rows correspond to the referenced
-/// <see cref="FunctionTemplate.ExposedNodes"/>.
+/// <see cref="FunctionTemplate.FunctionParameters"/>.
 /// </summary>
 public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanvasElement
 {
@@ -78,10 +78,10 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
         => UnderlyingInstance.Template.Type?.Name ?? string.Empty;
 
     /// <summary>
-    /// Live-synced list of exposed hook nodes derived from the referenced template.
-    /// Kept in sync with <see cref="FunctionTemplate.ExposedNodes"/>.
+    /// Live-synced list of <see cref="FunctionParameter"/> objects derived from the referenced template.
+    /// Kept in sync with <see cref="FunctionTemplate.FunctionParameters"/>.
     /// </summary>
-    public ObservableCollection<Node> ExposedHooks { get; } = new();
+    public ObservableCollection<FunctionParameter> FunctionParameters { get; } = new();
 
     public FunctionInstanceViewModel(FunctionInstance instance, ModelSystemSession session, User user)
     {
@@ -93,9 +93,9 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
         ((INotifyPropertyChanged)instance).PropertyChanged += OnModelPropertyChanged;
         ((INotifyPropertyChanged)instance.Template).PropertyChanged += OnTemplatePropertyChanged;
 
-        // Track the template's exposed nodes so the canvas hook rows stay current.
-        SyncExposedHooks();
-        ((INotifyCollectionChanged)instance.Template.ExposedNodes).CollectionChanged += OnExposedNodesChanged;
+        // Track the template's FunctionParameters so hook rows stay current.
+        SyncFunctionParameters();
+        ((INotifyCollectionChanged)instance.Template.FunctionParameters).CollectionChanged += OnFunctionParametersChanged;
     }
 
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -104,6 +104,12 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
         {
             case nameof(FunctionInstance.Name):
                 Name = UnderlyingInstance.Name;
+                break;
+            case nameof(FunctionInstance.Hooks):
+                // A FunctionParameter was renamed (or added/removed); re-sync the hook label list
+                // and notify the canvas to redraw FI hook rows.
+                SyncFunctionParameters();
+                OnPropertyChanged(nameof(FunctionParameters));
                 break;
             case nameof(FunctionInstance.Location):
                 OnPropertyChanged(nameof(X));
@@ -122,14 +128,14 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
             OnPropertyChanged(nameof(EntryNodeTypeName));
     }
 
-    private void OnExposedNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => SyncExposedHooks();
+    private void OnFunctionParametersChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => SyncFunctionParameters();
 
-    private void SyncExposedHooks()
+    private void SyncFunctionParameters()
     {
-        ExposedHooks.Clear();
-        foreach (var n in UnderlyingInstance.Template.ExposedNodes)
-            ExposedHooks.Add(n);
+        FunctionParameters.Clear();
+        foreach (var fp in UnderlyingInstance.Template.FunctionParameters)
+            FunctionParameters.Add(fp);
     }
 
     // ── Drag support ──────────────────────────────────────────────────────
@@ -201,6 +207,6 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
     {
         ((INotifyPropertyChanged)UnderlyingInstance).PropertyChanged -= OnModelPropertyChanged;
         ((INotifyPropertyChanged)UnderlyingInstance.Template).PropertyChanged -= OnTemplatePropertyChanged;
-        ((INotifyCollectionChanged)UnderlyingInstance.Template.ExposedNodes).CollectionChanged -= OnExposedNodesChanged;
+        ((INotifyCollectionChanged)UnderlyingInstance.Template.FunctionParameters).CollectionChanged -= OnFunctionParametersChanged;
     }
 }

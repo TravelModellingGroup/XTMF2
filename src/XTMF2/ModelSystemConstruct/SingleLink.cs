@@ -58,6 +58,38 @@ namespace XTMF2.ModelSystemConstruct
 
         internal override bool Construct(ref string? error)
         {
+            // FunctionParameter destinations are resolved transitively at runtime by
+            // FunctionInstance.ConstructRuntimeLink(); no static wiring is needed here.
+            if (Destination is FunctionParameter)
+            {
+                error = null;
+                return true;
+            }
+
+            // If the origin is a FunctionInstance wired through a FunctionParameterHook,
+            // record the parameter binding so FunctionInstance can route internal links
+            // to the actual external module at runtime.
+            if (Origin is FunctionInstance fiBinder && OriginHook is FunctionParameterHook fph)
+            {
+                var resolvedFiDest = Destination is GhostNode gnFi
+                    ? gnFi.ReferencedNode
+                    : Destination!;
+                IModule? bindModule;
+                if (resolvedFiDest is FunctionInstance destFiBinder)
+                {
+                    bindModule = destFiBinder.Template.EntryNode is not null
+                        ? destFiBinder.GetRuntimeModule(destFiBinder.Template.EntryNode)
+                        : null;
+                }
+                else
+                {
+                    bindModule = resolvedFiDest.Module;
+                }
+                fiBinder.BindParameter(fph.Parameter, bindModule);
+                error = null;
+                return true;
+            }
+
             // Resolve ghost-node destinations to their real node.
             var resolved = Destination is GhostNode gn ? gn.ReferencedNode : Destination!;
 

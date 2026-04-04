@@ -159,7 +159,9 @@ namespace XTMF2
             {
                 return FailWith(out link, out error, "No destination specified on link!");
             }
-            var hook = modules[origin!.Type!].Hooks?.FirstOrDefault(h => h.Name.Equals(hookName, StringComparison.OrdinalIgnoreCase));
+            var hook = origin is FunctionInstance fi
+                ? fi.Hooks.FirstOrDefault(h => h.Name.Equals(hookName, StringComparison.OrdinalIgnoreCase))
+                : modules[origin!.Type!].Hooks?.FirstOrDefault(h => h.Name.Equals(hookName, StringComparison.OrdinalIgnoreCase));
             if(hook == null)
             {
                 return FailWith(out link, out error, "Unable to find a hook with the name " + hookName);

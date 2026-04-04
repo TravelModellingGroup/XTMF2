@@ -148,6 +148,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>Observable wrappers around <see cref="Boundary.FunctionInstances"/>.</summary>
     public ObservableCollection<FunctionInstanceViewModel> FunctionInstances { get; } = new();
 
+    /// <summary>
+    /// Observable wrappers around <see cref="FunctionTemplate.FunctionParameters"/> of the
+    /// currently active function template. Only populated while
+    /// <see cref="IsInsideFunctionTemplate"/> is <c>true</c>.
+    /// </summary>
+    public ObservableCollection<FunctionParameterViewModel> FunctionParameterVMs { get; } = new();
+
     /// <summary>Observable view-models for the model system's variable list.</summary>
     public ObservableCollection<ModelSystemVariableViewModel> ModelSystemVariables { get; } = new();
 
@@ -288,34 +295,34 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         => (SelectedElement as FunctionInstanceViewModel)?.TemplateName ?? string.Empty;
 
     /// <summary>
-    /// The exposed hook nodes of the template referenced by the currently selected
-    /// function instance, or an empty collection.
+    /// The <see cref="FunctionParameter"/> list of the template referenced by the currently
+    /// selected function instance, or an empty collection.
     /// </summary>
-    public System.Collections.Generic.IEnumerable<ModelSystemConstruct.Node> SelectedFunctionInstanceExposedHooks
-        => (SelectedElement as FunctionInstanceViewModel)?.ExposedHooks
-           ?? System.Linq.Enumerable.Empty<ModelSystemConstruct.Node>();
+    public System.Collections.Generic.IEnumerable<ModelSystemConstruct.FunctionParameter> SelectedFunctionInstanceFunctionParameters
+        => (SelectedElement as FunctionInstanceViewModel)?.FunctionParameters
+           ?? System.Linq.Enumerable.Empty<ModelSystemConstruct.FunctionParameter>();
 
     /// <summary>
-    /// <c>true</c> when the selected function instance's template has no exposed hook nodes —
+    /// <c>true</c> when the selected function instance's template has no function parameters —
     /// drives the "(none)" hint text in the properties panel.
     /// </summary>
-    public bool SelectedFunctionInstanceHasNoExposedHooks
-        => SelectedElement is not FunctionInstanceViewModel fi || fi.ExposedHooks.Count == 0;
+    public bool SelectedFunctionInstanceHasNoFunctionParameters
+        => SelectedElement is not FunctionInstanceViewModel fi || fi.FunctionParameters.Count == 0;
 
     /// <summary>
-    /// The exposed-node list of the currently selected function template, or an empty list
-    /// when nothing (or a non-template element) is selected. Bound by the toolbox panel.
+    /// The <see cref="FunctionParameter"/> list of the currently selected function template,
+    /// or an empty list when nothing (or a non-template element) is selected.
     /// </summary>
-    public IEnumerable<Node> SelectedFunctionTemplateExposedNodes
-        => (SelectedElement as FunctionTemplateViewModel)?.ExposedNodes
-           ?? System.Linq.Enumerable.Empty<Node>();
+    public IEnumerable<FunctionParameter> SelectedFunctionTemplateFunctionParameters
+        => (SelectedElement as FunctionTemplateViewModel)?.FunctionParameters
+           ?? System.Linq.Enumerable.Empty<FunctionParameter>();
 
     /// <summary>
-    /// <c>true</c> when the selected function template has no exposed hook nodes —
+    /// <c>true</c> when the selected function template has no function parameters —
     /// drives the "(none)" hint text in the properties panel.
     /// </summary>
-    public bool SelectedFunctionTemplateHasNoExposedNodes
-        => SelectedElement is not FunctionTemplateViewModel ft || ft.ExposedNodes.Count == 0;
+    public bool SelectedFunctionTemplateHasNoFunctionParameters
+        => SelectedElement is not FunctionTemplateViewModel ft || ft.FunctionParameters.Count == 0;
 
     /// <summary>All module types currently registered in the runtime.</summary>
     public System.Collections.ObjectModel.ReadOnlyObservableCollection<Type> AvailableModuleTypes
@@ -358,12 +365,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         OnPropertyChanged(nameof(SelectedElementIsNotComment));
         OnPropertyChanged(nameof(SelectedElementIsParameter));
         OnPropertyChanged(nameof(SelectedElementIsFunctionTemplate));
-        OnPropertyChanged(nameof(SelectedFunctionTemplateExposedNodes));
-        OnPropertyChanged(nameof(SelectedFunctionTemplateHasNoExposedNodes));
+        OnPropertyChanged(nameof(SelectedFunctionTemplateFunctionParameters));
+        OnPropertyChanged(nameof(SelectedFunctionTemplateHasNoFunctionParameters));
         OnPropertyChanged(nameof(SelectedElementIsFunctionInstance));
         OnPropertyChanged(nameof(SelectedFunctionInstanceTemplateName));
-        OnPropertyChanged(nameof(SelectedFunctionInstanceExposedHooks));
-        OnPropertyChanged(nameof(SelectedFunctionInstanceHasNoExposedHooks));
+        OnPropertyChanged(nameof(SelectedFunctionInstanceFunctionParameters));
+        OnPropertyChanged(nameof(SelectedFunctionInstanceHasNoFunctionParameters));
         SelectedElementParameterValue =
             value is NodeViewModel pnvm && pnvm.IsParameterNode
                 ? pnvm.ParameterValueRepresentation
@@ -450,6 +457,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         foreach (var ghost in boundary.GhostNodes)    GhostNodes.Add(new GhostNodeViewModel(ghost, Session, User));
         foreach (var ft in boundary.FunctionTemplates) FunctionTemplates.Add(new FunctionTemplateViewModel(ft, Session, User));
         foreach (var fi in boundary.FunctionInstances) FunctionInstances.Add(new FunctionInstanceViewModel(fi, Session, User));
+        // Populate FunctionParameterVMs when inside a function template's InternalModules.
+        if (_currentFunctionTemplate is not null)
+            foreach (var fp in _currentFunctionTemplate.UnderlyingTemplate.FunctionParameters)
+                FunctionParameterVMs.Add(new FunctionParameterViewModel(fp, Session, User));
         foreach (var link in boundary.Links)          TryAddLinkViewModel(link);
         foreach (var cb in boundary.CommentBlocks)    CommentBlocks.Add(new CommentBlockViewModel(cb, Session, User));
     }
@@ -516,6 +527,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         FunctionTemplates.Clear();
         foreach (var fi in FunctionInstances) fi.Detach();
         FunctionInstances.Clear();
+        foreach (var fp in FunctionParameterVMs) fp.Detach();
+        FunctionParameterVMs.Clear();
 
         _currentBoundary = boundary;
         OnPropertyChanged(nameof(CurrentBoundary));
@@ -525,6 +538,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (_currentFunctionTemplate is not null
             && !ReferenceEquals(boundary, _currentFunctionTemplate.UnderlyingTemplate.InternalModules))
         {
+            ((INotifyCollectionChanged)_currentFunctionTemplate.UnderlyingTemplate.FunctionParameters).CollectionChanged
+                -= OnFunctionParametersChanged;
             _currentFunctionTemplate = null;
             OnPropertyChanged(nameof(IsInsideFunctionTemplate));
             ExitFunctionTemplateCommand.NotifyCanExecuteChanged();
@@ -699,6 +714,28 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             }
     }
 
+    private void OnFunctionParametersChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems is not null)
+            foreach (FunctionParameter fp in e.NewItems)
+            {
+                var fpvm = new FunctionParameterViewModel(fp, Session, User);
+                FunctionParameterVMs.Add(fpvm);
+                SelectElement(fpvm);
+            }
+
+        if (e.OldItems is not null)
+            foreach (FunctionParameter fp in e.OldItems)
+            {
+                var vm = FunctionParameterVMs.FirstOrDefault(v => v.UnderlyingParameter == fp);
+                if (vm is not null)
+                {
+                    vm.Detach();
+                    FunctionParameterVMs.Remove(vm);
+                }
+            }
+    }
+
     private void TryAddLinkViewModel(Link link)
     {
         var originElement = ResolveElement(link.Origin);
@@ -757,6 +794,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return Starts.FirstOrDefault(s => s.UnderlyingStart == start);
         if (node is FunctionInstance fi)
             return FunctionInstances.FirstOrDefault(fivm => fivm.UnderlyingInstance == fi);
+        if (node is FunctionParameter fp)
+            return FunctionParameterVMs.FirstOrDefault(fpvm => fpvm.UnderlyingParameter == fp);
         var directVm = Nodes.FirstOrDefault(n => n.UnderlyingNode == node);
         if (directVm is not null) return directVm;
         // The real node lives in another boundary — use a ghost referencing it if one is visible here.
@@ -1069,9 +1108,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Resolve the underlying origin node.
         Node? originNode = originElement switch
         {
-            NodeViewModel  nvm => nvm.UnderlyingNode,
-            StartViewModel svm => svm.UnderlyingStart,
-            _                  => null
+            NodeViewModel             nvm  => nvm.UnderlyingNode,
+            StartViewModel            svm  => svm.UnderlyingStart,
+            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+            _                             => null
         };
         if (originNode is null) return;
 
@@ -1110,16 +1150,79 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             await ShowError("Create Link Failed", error);
     }
 
+    /// <summary>
+    /// Creates a link whose destination is a <see cref="FunctionParameter"/> inside the current
+    /// <see cref="FunctionTemplate"/>.  The hook on <paramref name="originElement"/> must be
+    /// type-compatible with <paramref name="destFpVm"/>'s declared parameter type.
+    /// </summary>
+    public async Task CreateLinkAsync(ICanvasElement originElement, FunctionParameterViewModel destFpVm)
+    {
+        if (ParentWindow is null || _currentFunctionTemplate is null) return;
+
+        Node? originNode = originElement switch
+        {
+            NodeViewModel             nvm  => nvm.UnderlyingNode,
+            StartViewModel            svm  => svm.UnderlyingStart,
+            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+            _                             => null
+        };
+        if (originNode is null) return;
+
+        var fp      = destFpVm.UnderlyingParameter;
+        var destType = fp.Type;
+        if (destType is null)
+        {
+            await ShowError("No Type",
+                new CommandError($"FunctionParameter '{fp.Name}' has no type assigned and cannot be used as a link destination."));
+            return;
+        }
+
+        var compatible = new List<NodeHook>();
+        foreach (var hook in originNode.Hooks)
+        {
+            Type hookElementType = (hook.Cardinality is HookCardinality.AtLeastOne or HookCardinality.AnyNumber)
+                ? (hook.Type.GetElementType() ?? hook.Type)
+                : hook.Type;
+            if (hookElementType.IsAssignableFrom(destType))
+                compatible.Add(hook);
+        }
+
+        if (compatible.Count == 0)
+        {
+            await ShowError("Incompatible Types",
+                new CommandError($"No hooks on '{originNode.Name}' are compatible with FunctionParameter type '{destType.Name}'."));
+            return;
+        }
+
+        NodeHook selectedHook;
+        if (compatible.Count == 1)
+        {
+            selectedHook = compatible[0];
+        }
+        else
+        {
+            var dialog = new HookPickerDialog(compatible,
+                $"Select which hook on '{originNode.Name}' to connect to parameter '{fp.Name}':");
+            await dialog.ShowDialog(ParentWindow);
+            if (dialog.WasCancelled || dialog.SelectedHook is null) return;
+            selectedHook = dialog.SelectedHook;
+        }
+
+        if (!Session.AddLink(User, originNode, selectedHook, fp, out _, out var error))
+            await ShowError("Create Link Failed", error);
+    }
+
     public async Task CreateLinkAsync(ICanvasElement originElement, NodeViewModel destVm)
     {
         if (ParentWindow is null) return;
 
-        // Resolve the underlying origin node (Start is also a Node).
+        // Resolve the underlying origin node (Start is also a Node; FunctionInstance is also a Node).
         Node? originNode = originElement switch
         {
-            NodeViewModel  nvm => nvm.UnderlyingNode,
-            StartViewModel svm => svm.UnderlyingStart,
-            _                  => null
+            NodeViewModel             nvm  => nvm.UnderlyingNode,
+            StartViewModel            svm  => svm.UnderlyingStart,
+            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+            _                             => null
         };
         if (originNode is null) return;
 
@@ -1317,6 +1420,24 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (!Session.AddLink(User, originNode.UnderlyingNode, hook, dialog.ChosenNode, out _, out var error))
             await ShowError("Create Inter-Boundary Link Failed", error);
         // On success the boundary CollectionChanged fires and TryAddLinkViewModel wires up the new link.
+    }
+
+    /// <summary>
+    /// Opens the inter-boundary node picker for a <see cref="FunctionInstance"/> origin
+    /// using one of its <see cref="FunctionParameterHook"/>s, then creates the link.
+    /// </summary>
+    public async Task CreateInterBoundaryLinkAsync(FunctionInstanceViewModel fi, FunctionParameterHook hook)
+    {
+        if (ParentWindow is null) return;
+
+        var allBoundaries = GetAllBoundaries(GlobalBoundary);
+        var dialog = new Views.InterBoundaryLinkDialog(allBoundaries, hook, fi.Name);
+        await dialog.ShowDialog(ParentWindow);
+
+        if (dialog.WasCancelled || dialog.ChosenNode is null) return;
+
+        if (!Session.AddLink(User, fi.UnderlyingInstance, hook, dialog.ChosenNode, out _, out var error))
+            await ShowError("Create Link Failed", error);
     }
 
     /// <summary>
@@ -1687,6 +1808,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     public void NavigateIntoFunctionTemplate(FunctionTemplateViewModel ftvm)
     {
+        // Subscribe to the incoming template's FunctionParameters so the canvas stays in sync.
+        ((INotifyCollectionChanged)ftvm.UnderlyingTemplate.FunctionParameters).CollectionChanged
+            += OnFunctionParametersChanged;
         _currentFunctionTemplate = ftvm;
         OnPropertyChanged(nameof(IsInsideFunctionTemplate));
         ExitFunctionTemplateCommand.NotifyCanExecuteChanged();
@@ -1797,19 +1921,96 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>
     /// Toggles whether <paramref name="nvm"/> (a node in the current
     /// <see cref="FunctionTemplate.InternalModules"/>) is exposed as an external hook
-    /// on the template's canvas container.
+    /// <summary>
+    /// Adds a new <see cref="FunctionParameter"/> to the current function template.
     /// <para>
     /// Only available when the canvas is inside a function template (i.e.
     /// <see cref="IsInsideFunctionTemplate"/> is <c>true</c>).
     /// </para>
     /// </summary>
-    public async Task ToggleFunctionTemplateExposedNodeAsync(NodeViewModel nvm)
+    public async Task AddFunctionParameterAsync(string name, Type type, Rectangle location)
     {
         if (_currentFunctionTemplate is null) return;
 
-        if (!Session.ToggleFunctionTemplateExposedNode(
-                User, _currentFunctionTemplate.UnderlyingTemplate, nvm.UnderlyingNode, out var error))
-            await ShowError("Toggle Exposed Hook Failed", error);
+        if (!Session.AddFunctionParameter(
+                User, _currentFunctionTemplate.UnderlyingTemplate,
+                name, type, location,
+                out _, out var error))
+            await ShowError("Add Function Parameter Failed", error);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="FunctionParameter"/> whose type matches <paramref name="hook"/>'s
+    /// element type, places it at (<paramref name="x"/>, <paramref name="y"/>) on the canvas,
+    /// and immediately creates a link from <paramref name="nodeVm"/> via <paramref name="hook"/>
+    /// to the new parameter — all within the current function template.
+    /// </summary>
+    public async Task AddFunctionParameterFromHookAsync(
+        NodeViewModel nodeVm, NodeHook hook, double x, double y)
+    {
+        if (_currentFunctionTemplate is null) return;
+
+        // For array hooks use the element type; otherwise use the hook type directly.
+        var paramType = (hook.Cardinality is HookCardinality.AtLeastOne or HookCardinality.AnyNumber)
+            ? (hook.Type.GetElementType() ?? hook.Type)
+            : hook.Type;
+
+        // Generate a unique name based on the hook name.
+        var baseName = hook.Name;
+        var name = baseName;
+        int idx = 2;
+        while (_currentFunctionTemplate.UnderlyingTemplate.FunctionParameters
+                   .Any(fp => string.Equals(fp.Name, name, StringComparison.OrdinalIgnoreCase)))
+            name = $"{baseName}{idx++}";
+
+        var location = new Rectangle((float)x, (float)y, 180f, 40f);
+
+        if (!Session.AddFunctionParameter(
+                User, _currentFunctionTemplate.UnderlyingTemplate,
+                name, paramType, location,
+                out var parameter, out var error))
+        {
+            await ShowError("Add Function Parameter Failed", error);
+            return;
+        }
+
+        // Wire the hook → FunctionParameter link.
+        if (!Session.AddLink(User, nodeVm.UnderlyingNode, hook, parameter!, out _, out var linkError))
+            await ShowError("Create Link Failed", linkError);
+    }
+
+    /// <summary>
+    /// Removes a <see cref="FunctionParameter"/> from the current function template.
+    /// </summary>
+    /// <summary>
+    /// Prompts the user for a new name and renames the given <see cref="FunctionParameter"/>.
+    /// </summary>
+    public async Task RenameFunctionParameterAsync(FunctionParameterViewModel fpvm)
+    {
+        if (ParentWindow is null) return;
+
+        var dialog = new InputDialog(
+            title: "Rename Function Parameter",
+            prompt: "Enter the new name:",
+            defaultText: fpvm.Name);
+        await dialog.ShowDialog(ParentWindow);
+
+        var newName = dialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(newName) || dialog.WasCancelled) return;
+        if (newName == fpvm.Name) return;
+
+        if (!Session.RenameFunctionParameter(User, fpvm.UnderlyingParameter.Template,
+                fpvm.UnderlyingParameter, newName, out var error))
+            await ShowError("Rename Function Parameter Failed", error);
+    }
+
+    public async Task RemoveFunctionParameterAsync(FunctionParameter parameter)
+    {
+        if (_currentFunctionTemplate is null) return;
+
+        if (!Session.RemoveFunctionParameter(
+                User, _currentFunctionTemplate.UnderlyingTemplate, parameter, out var error))
+            await ShowError("Remove Function Parameter Failed", error);
     }
 
     /// <summary>

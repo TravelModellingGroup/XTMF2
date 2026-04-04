@@ -99,48 +99,46 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
-        public void TestRemoveExposedNodeFromFunctionTemplate()
+        public void TestRemoveFunctionParameterFromFunctionTemplate()
         {
-            TestHelper.RunInModelSystemContext("TestRemoveExposedNodeFromFunctionTemplate", (user, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("TestRemoveFunctionParameterFromFunctionTemplate", (user, pSession, mSession) =>
             {
                 CommandError error = null;
                 var ms = mSession.ModelSystem;
                 Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, "MyFT", out FunctionTemplate template, out error), error?.Message);
-                Assert.IsTrue(mSession.AddNode(user, template.InternalModules, "MyParam",
-                    typeof(XTMF2.RuntimeModules.BasicParameter<string>), Rectangle.Hidden,
-                    out var node, out error), error?.Message);
-                Assert.IsTrue(mSession.ToggleFunctionTemplateExposedNode(user, template, node, out error), error?.Message);
-                Assert.HasCount(1, template.ExposedNodes, "Node should be exposed before deletion.");
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "MyParam",
+                    typeof(XTMF2.IModule), Rectangle.Hidden,
+                    out var fp, out error), error?.Message);
+                Assert.HasCount(1, template.FunctionParameters, "Parameter should exist before removal.");
 
-                Assert.IsTrue(mSession.RemoveNode(user, node, out error), error?.Message);
-                Assert.IsEmpty(template.ExposedNodes, "Deleting an exposed node must also remove it from ExposedNodes.");
+                Assert.IsTrue(mSession.RemoveFunctionParameter(user, template, fp, out error), error?.Message);
+                Assert.IsEmpty(template.FunctionParameters, "FunctionParameters should be empty after removal.");
             });
         }
 
         [TestMethod]
-        public void TestRemoveExposedNodeFromFunctionTemplateUndoRedo()
+        public void TestRemoveFunctionParameterFromFunctionTemplateUndoRedo()
         {
-            TestHelper.RunInModelSystemContext("TestRemoveExposedNodeFromFunctionTemplateUndoRedo", (user, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("TestRemoveFunctionParameterFromFunctionTemplateUndoRedo", (user, pSession, mSession) =>
             {
                 CommandError error = null;
                 var ms = mSession.ModelSystem;
                 Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, "MyFT", out FunctionTemplate template, out error), error?.Message);
-                Assert.IsTrue(mSession.AddNode(user, template.InternalModules, "MyParam",
-                    typeof(XTMF2.RuntimeModules.BasicParameter<string>), Rectangle.Hidden,
-                    out var node, out error), error?.Message);
-                Assert.IsTrue(mSession.ToggleFunctionTemplateExposedNode(user, template, node, out error), error?.Message);
-                Assert.HasCount(1, template.ExposedNodes, "Node should be exposed before deletion.");
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "MyParam",
+                    typeof(XTMF2.IModule), Rectangle.Hidden,
+                    out var fp, out error), error?.Message);
+                Assert.HasCount(1, template.FunctionParameters, "Parameter should exist before removal.");
 
-                Assert.IsTrue(mSession.RemoveNode(user, node, out error), error?.Message);
-                Assert.IsEmpty(template.ExposedNodes, "Deleting an exposed node must also remove it from ExposedNodes.");
+                Assert.IsTrue(mSession.RemoveFunctionParameter(user, template, fp, out error), error?.Message);
+                Assert.IsEmpty(template.FunctionParameters, "FunctionParameters should be empty after removal.");
 
-                // Undo: node comes back and should be re-exposed.
+                // Undo: parameter comes back.
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
-                Assert.HasCount(1, template.ExposedNodes, "Undo should restore the node to ExposedNodes.");
+                Assert.HasCount(1, template.FunctionParameters, "Undo should restore the FunctionParameter.");
 
-                // Redo: node is deleted again, exposed list should be empty again.
+                // Redo: parameter is removed again.
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
-                Assert.IsEmpty(template.ExposedNodes, "Redo should re-remove the node from ExposedNodes.");
+                Assert.IsEmpty(template.FunctionParameters, "Redo should re-remove the FunctionParameter.");
             });
         }
 

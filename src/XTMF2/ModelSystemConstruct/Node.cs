@@ -87,7 +87,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <summary>
         /// Get a readonly list of possible hooks to use to interface with other nodes.
         /// </summary>
-        public IReadOnlyList<NodeHook> Hooks { get; private set; }
+        public virtual IReadOnlyList<NodeHook> Hooks { get; private set; }
 
         /// <summary>
         /// The name of the node

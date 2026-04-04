@@ -94,8 +94,11 @@ namespace XTMF2.ModelSystemConstruct
                 return (r, r.Module);
             }
 
+            // FunctionParameter destinations are handled transitively by FunctionInstance at runtime;
+            // exclude them from the count and installation entirely.
             var moduleCount = _Destinations.Count(d =>
             {
+                if (d is FunctionParameter) return false;
                 var (node, _) = ResolveDest(d);
                 return !node.IsDisabled;
             });
@@ -118,6 +121,8 @@ namespace XTMF2.ModelSystemConstruct
                 int index = 0;
                 for (int i = 0; i < _Destinations.Count; i++)
                 {
+                    // Skip FunctionParameter destinations — resolved transitively via FunctionInstance.
+                    if (_Destinations[i] is FunctionParameter) continue;
                     var (effectiveDest, destModule) = ResolveDest(_Destinations[i]);
                     if (!effectiveDest.IsDisabled && destModule is not null)
                     {

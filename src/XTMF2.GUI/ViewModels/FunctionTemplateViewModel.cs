@@ -80,12 +80,12 @@ public sealed partial class FunctionTemplateViewModel : ObservableObject, ICanva
     public string EntryNodeTypeName
         => UnderlyingTemplate.Type?.Name ?? string.Empty;
 
-    // ── Exposed-node mirrors (synced from model) ──────────────────────────
+    // ── FunctionParameter mirrors (synced from model) ─────────────────────
     /// <summary>
-    /// Live list of nodes from <see cref="FunctionTemplate.InternalModules"/> that are
-    /// exposed as external hooks on this template's canvas container box.
+    /// Live list of <see cref="FunctionParameter"/> objects belonging to this template.
+    /// Kept in sync with <see cref="FunctionTemplate.FunctionParameters"/>.
     /// </summary>
-    public ObservableCollection<Node> ExposedNodes { get; } = new();
+    public ObservableCollection<FunctionParameter> FunctionParameters { get; } = new();
 
     public FunctionTemplateViewModel(FunctionTemplate template, ModelSystemSession session, User user)
     {
@@ -97,9 +97,9 @@ public sealed partial class FunctionTemplateViewModel : ObservableObject, ICanva
         // Sync from the model on property changes.
         ((INotifyPropertyChanged)template).PropertyChanged += OnModelPropertyChanged;
 
-        // Sync exposed-nodes collection.
-        SyncExposedNodes();
-        ((INotifyCollectionChanged)template.ExposedNodes).CollectionChanged += OnExposedNodesChanged;
+        // Sync FunctionParameters collection.
+        SyncFunctionParameters();
+        ((INotifyCollectionChanged)template.FunctionParameters).CollectionChanged += OnFunctionParametersChanged;
     }
 
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -123,14 +123,14 @@ public sealed partial class FunctionTemplateViewModel : ObservableObject, ICanva
         }
     }
 
-    private void OnExposedNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => SyncExposedNodes();
+    private void OnFunctionParametersChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => SyncFunctionParameters();
 
-    private void SyncExposedNodes()
+    private void SyncFunctionParameters()
     {
-        ExposedNodes.Clear();
-        foreach (var n in UnderlyingTemplate.ExposedNodes)
-            ExposedNodes.Add(n);
+        FunctionParameters.Clear();
+        foreach (var fp in UnderlyingTemplate.FunctionParameters)
+            FunctionParameters.Add(fp);
     }
 
     // ── Drag support ──────────────────────────────────────────────────────
@@ -225,6 +225,6 @@ public sealed partial class FunctionTemplateViewModel : ObservableObject, ICanva
     public void Detach()
     {
         ((INotifyPropertyChanged)UnderlyingTemplate).PropertyChanged -= OnModelPropertyChanged;
-        ((INotifyCollectionChanged)UnderlyingTemplate.ExposedNodes).CollectionChanged -= OnExposedNodesChanged;
+        ((INotifyCollectionChanged)UnderlyingTemplate.FunctionParameters).CollectionChanged -= OnFunctionParametersChanged;
     }
 }

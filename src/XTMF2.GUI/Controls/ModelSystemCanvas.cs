@@ -278,6 +278,12 @@ public sealed class ModelSystemCanvas : Control
         _nodeVisibleHooks = new();
     private readonly Dictionary<NodeViewModel, HashSet<NodeHook>>
         _nodeConnectedHooks = new();
+    /// <summary>Anchor points for FunctionInstance FunctionParameterHook rows (right-edge dot).</summary>
+    private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), Point>
+        _fiHookAnchors = new();
+    /// <summary>Tracks which FunctionParameterHooks on each FunctionInstance have live links.</summary>
+    private readonly Dictionary<FunctionInstanceViewModel, HashSet<FunctionParameterHook>>
+        _fiConnectedHooks = new();
 
     // ── Inline parameter editor ───────────────────────────────────────────
     /// <summary>Overlay TextBox used for in-canvas parameter value editing.</summary>
@@ -557,6 +563,7 @@ public sealed class ModelSystemCanvas : Control
     private LinkViewModel?  _rightClickLink;
     /// <summary>Hook dot under the right-button press, if any (may be set alongside <see cref="_rightClickElement"/>).</summary>
     private (NodeViewModel Node, NodeHook Hook)? _rightClickHookHit;
+    private (FunctionInstanceViewModel Fi, FunctionParameterHook Hook)? _rightClickFiHookHit;
 
     // ── Multi-selection set ───────────────────────────────────────────────
     /// <summary>
@@ -593,6 +600,7 @@ public sealed class ModelSystemCanvas : Control
         _vm.GhostNodes.CollectionChanged        += OnCollectionChanged;
         _vm.FunctionTemplates.CollectionChanged += OnCollectionChanged;
         _vm.FunctionInstances.CollectionChanged += OnCollectionChanged;
+        _vm.FunctionParameterVMs.CollectionChanged += OnCollectionChanged;
         _vm.PropertyChanged                     += OnViewModelPropertyChanged;
 
         foreach (var n in _vm.Nodes)             ((INotifyPropertyChanged)n).PropertyChanged += OnElementPropertyChanged;
@@ -602,6 +610,7 @@ public sealed class ModelSystemCanvas : Control
         foreach (var g in _vm.GhostNodes)        ((INotifyPropertyChanged)g).PropertyChanged += OnElementPropertyChanged;
         foreach (var f in _vm.FunctionTemplates) ((INotifyPropertyChanged)f).PropertyChanged += OnElementPropertyChanged;
         foreach (var fi in _vm.FunctionInstances) ((INotifyPropertyChanged)fi).PropertyChanged += OnElementPropertyChanged;
+        foreach (var fp in _vm.FunctionParameterVMs) ((INotifyPropertyChanged)fp).PropertyChanged += OnElementPropertyChanged;
         _vm.RenderRequested += OnRenderRequested;
     }
 
@@ -616,6 +625,7 @@ public sealed class ModelSystemCanvas : Control
         _vm.GhostNodes.CollectionChanged        -= OnCollectionChanged;
         _vm.FunctionTemplates.CollectionChanged -= OnCollectionChanged;
         _vm.FunctionInstances.CollectionChanged -= OnCollectionChanged;
+        _vm.FunctionParameterVMs.CollectionChanged -= OnCollectionChanged;
         _vm.PropertyChanged                     -= OnViewModelPropertyChanged;
 
         foreach (var n in _vm.Nodes)             ((INotifyPropertyChanged)n).PropertyChanged -= OnElementPropertyChanged;
@@ -625,6 +635,7 @@ public sealed class ModelSystemCanvas : Control
         foreach (var g in _vm.GhostNodes)        ((INotifyPropertyChanged)g).PropertyChanged -= OnElementPropertyChanged;
         foreach (var f in _vm.FunctionTemplates) ((INotifyPropertyChanged)f).PropertyChanged -= OnElementPropertyChanged;
         foreach (var fi in _vm.FunctionInstances) ((INotifyPropertyChanged)fi).PropertyChanged -= OnElementPropertyChanged;
+        foreach (var fp in _vm.FunctionParameterVMs) ((INotifyPropertyChanged)fp).PropertyChanged -= OnElementPropertyChanged;
 
         if (_subscribedCurrentFunctionTemplate is not null)
         {
@@ -812,6 +823,7 @@ public sealed class ModelSystemCanvas : Control
         {
             _nameEditor.FontSize = (_editingNameElement is FunctionTemplateViewModel
                                   or FunctionInstanceViewModel
+                                  or FunctionParameterViewModel
                 ? FtNameFontSize : NodeFontSize) * _scale;
             _nameEditor.Arrange(new Rect(
                 _nameEditorX * _scale,
@@ -856,6 +868,7 @@ public sealed class ModelSystemCanvas : Control
             RenderCommentBlocks(ctx);
             RenderFunctionTemplates(ctx);
             RenderFunctionInstances(ctx);
+            RenderFunctionParameters(ctx);
             RenderLinks(ctx);
             RenderNodes(ctx);
             RenderGhostNodes(ctx);
@@ -1058,9 +1071,9 @@ public sealed class ModelSystemCanvas : Control
             using (ctx.PushClip(new Rect(ft.X + 4, ft.Y, rw - 8, FtHeaderHeight)))
                 ctx.DrawText(labelFt, new Point(lx, ly));
 
-            // ── Exposed-node hook rows ─────────────────────────────────────
+            // ── FunctionParameter hook rows ────────────────────────────────
             double rowY = ft.Y + FtHeaderHeight;
-            foreach (var exposedNode in ft.ExposedNodes)
+            foreach (var fp in ft.FunctionParameters)
             {
                 ctx.DrawRectangle(InlineParamRowBg, null,
                     new Rect(ft.X, rowY, rw, FtHookRowHeight));
@@ -1068,15 +1081,15 @@ public sealed class ModelSystemCanvas : Control
                     new Point(ft.X, rowY),
                     new Point(ft.X + rw, rowY));
 
-                // Dot on the left edge (acts like a hook anchor)
+                // Dot on the left edge (acts like a hook anchor) — orange to signal FunctionParameter
                 double dotCx = ft.X + HookDotRadius + 4.0;
                 double dotCy = rowY + FtHookRowHeight / 2.0;
-                ctx.DrawEllipse(_isLight ? HookConnectedBrushL : HookConnectedBrush, null,
+                ctx.DrawEllipse(Brushes.OrangeRed, null,
                     new Point(dotCx, dotCy), HookDotRadius, HookDotRadius);
 
-                // Node name
+                // "Parameter: <name>"
                 var nodeNameFt = MakeText(
-                    exposedNode.Name ?? string.Empty, HookFontSize, _isLight ? FtHookTextBrushL : FtHookTextBrush);
+                    "Parameter: " + (fp.Name ?? string.Empty), HookFontSize, _isLight ? FtHookTextBrushL : FtHookTextBrush);
                 double textLeft = ft.X + HookDotRadius * 2 + 9.0;
                 using (ctx.PushClip(new Rect(textLeft, rowY, rw - textLeft + ft.X, FtHookRowHeight)))
                     ctx.DrawText(nodeNameFt,
@@ -1155,25 +1168,39 @@ public sealed class ModelSystemCanvas : Control
             using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
                 ctx.DrawText(subText, new Point(Math.Max(lx + labelFtText.Width + 4, subX), subY));
 
-            // ── Exposed hook rows ──────────────────────────────────────────
+            // ── FunctionParameter hook rows ────────────────────────────────
             double rowY = fi.Y + FtHeaderHeight;
-            foreach (var hookNode in fi.ExposedHooks)
+            var fiHooks = fi.UnderlyingInstance.Hooks;
+            _fiConnectedHooks.TryGetValue(fi, out var fiConnected);
+            for (int fi_i = 0; fi_i < fi.FunctionParameters.Count; fi_i++)
             {
-                ctx.DrawRectangle(InlineParamRowBg, null,
-                    new Rect(fi.X, rowY, rw, FtHookRowHeight));
+                var fp     = fi.FunctionParameters[fi_i];
+                var fpHook = fi_i < fiHooks.Count ? fiHooks[fi_i] as FunctionParameterHook : null;
+                bool fpConn = fiConnected is not null && fpHook is not null && fiConnected.Contains(fpHook);
+
+                // Tinted background matching unsatisfied hook style (FP hooks are always required).
+                if (!fpConn)
+                    ctx.DrawRectangle(InlineParamRowBg, null,
+                        new Rect(fi.X, rowY, rw, FtHookRowHeight));
+
                 ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
                     new Point(fi.X, rowY), new Point(fi.X + rw, rowY));
 
-                double dotCx = fi.X + HookDotRadius + 4.0;
+                // Dot on the RIGHT edge — green if connected, red if not (FP hooks are required).
                 double dotCy = rowY + FtHookRowHeight / 2.0;
-                ctx.DrawEllipse(_isLight ? HookConnectedBrushL : HookConnectedBrush, null,
-                    new Point(dotCx, dotCy), HookDotRadius, HookDotRadius);
+                var dotBrush = fpConn ? (_isLight ? HookConnectedBrushL   : HookConnectedBrush)
+                                      : (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush);
+                ctx.DrawEllipse(dotBrush, null,
+                    new Point(fi.X + rw, dotCy), HookDotRadius, HookDotRadius);
 
-                var hookNameFt = MakeText(hookNode.Name ?? string.Empty, HookFontSize, _isLight ? FiHookTextBrushL : FiHookTextBrush);
-                double textLeft = fi.X + HookDotRadius * 2 + 9.0;
-                using (ctx.PushClip(new Rect(textLeft, rowY, rw - textLeft + fi.X, FtHookRowHeight)))
-                    ctx.DrawText(hookNameFt,
-                        new Point(textLeft, rowY + (FtHookRowHeight - hookNameFt.Height) / 2.0));
+                const double textPad = 6.0;
+                var hookNameFt = MakeText(fp.Name ?? string.Empty, HookFontSize,
+                    fpConn ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
+                           : (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush));
+                double maxW    = rw - textPad * 2 - HookDotRadius * 2;
+                double hookTy  = dotCy - hookNameFt.Height / 2.0;
+                using (ctx.PushClip(new Rect(fi.X + textPad, hookTy, Math.Max(0, maxW), hookNameFt.Height + 1)))
+                    ctx.DrawText(hookNameFt, new Point(fi.X + textPad, hookTy));
 
                 rowY += FtHookRowHeight;
             }
@@ -1183,6 +1210,60 @@ public sealed class ModelSystemCanvas : Control
                 double dotR = 2.0;
                 double gx   = fi.X + rw;
                 double gy   = fi.Y + rh;
+                for (int d = 0; d < 3; d++)
+                {
+                    double off = 4.0 + d * 4.0;
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
+                        new Point(gx - off + dotR, gy - dotR), dotR, dotR);
+                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
+                        new Point(gx - dotR,        gy - off + dotR), dotR, dotR);
+                }
+            }
+        }
+    }
+
+    private void RenderFunctionParameters(DrawingContext ctx)
+    {
+        foreach (var fp in _vm!.FunctionParameterVMs)
+        {
+            double rw  = fp.Width;
+            double rh  = fp.Height;
+            var rect   = new Rect(fp.X, fp.Y, rw, rh);
+
+            // Orange-red fill to visually distinguish FunctionParameter nodes.
+            var borderColor = fp.IsSelected ? Colors.OrangeRed : Colors.DarkOrange;
+            var border      = new Pen(new SolidColorBrush(borderColor), NodeBorderThickness);
+            DrawRectGlow(ctx, rect, FiCornerRadius, fp.IsSelected ? SelectionGlowColor : Colors.OrangeRed);
+            ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x8C, 0x00)), border,
+                rect, FiCornerRadius, FiCornerRadius);
+
+            // Header band in a darker orange.
+            ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xFF, 0xC0, 0x50, 0x00)), null,
+                new Rect(fp.X, fp.Y, rw, FtHeaderHeight), FiCornerRadius, FiCornerRadius);
+            ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x8C, 0x00)), null,
+                new Rect(fp.X, fp.Y + FtHeaderHeight / 2.0, rw, rh - FtHeaderHeight / 2.0));
+            ctx.DrawRectangle(null, border, rect, FiCornerRadius, FiCornerRadius);
+
+            // Name label in header (no prefix so the full name fits).
+            var labelFtText = MakeText(fp.Name, FtNameFontSize, Brushes.White);
+            var lx = fp.X + 8.0;
+            var ly = fp.Y + (FtHeaderHeight - labelFtText.Height) / 2.0;
+            using (ctx.PushClip(new Rect(fp.X + 4, fp.Y, rw - 8, FtHeaderHeight)))
+                ctx.DrawText(labelFtText, new Point(lx, ly));
+
+            // Type name in smaller text below header.
+            if (!string.IsNullOrEmpty(fp.TypeName))
+            {
+                var typeText = MakeText(fp.TypeName, HookFontSize, Brushes.White);
+                using (ctx.PushClip(new Rect(fp.X + 4, fp.Y + FtHeaderHeight, rw - 8, rh - FtHeaderHeight)))
+                    ctx.DrawText(typeText, new Point(lx, fp.Y + FtHeaderHeight + 4.0));
+            }
+
+            // Resize grip (same dot pattern as other elements).
+            {
+                double dotR = 2.0;
+                double gx   = fp.X + rw;
+                double gy   = fp.Y + rh;
                 for (int d = 0; d < 3; d++)
                 {
                     double off = 4.0 + d * 4.0;
@@ -1280,13 +1361,20 @@ public sealed class ModelSystemCanvas : Control
         var originCenter = new Point(link.X1, link.Y1);
         var destCenter   = new Point(link.X2, link.Y2);
 
-        // p1: hook anchor when origin is a Node, else border-clip.
+        // p1: hook anchor when origin is a Node or FunctionInstance, else border-clip.
         Point p1;
         bool  hookOrigin = false;
         if (link.Origin is NodeViewModel originNvm
             && _hookAnchors.TryGetValue((originNvm, link.UnderlyingLink.OriginHook), out var hookPt))
         {
             p1         = hookPt;
+            hookOrigin = true;
+        }
+        else if (link.Origin is FunctionInstanceViewModel fiOriginElbow
+            && link.UnderlyingLink.OriginHook is FunctionParameterHook fphElbow
+            && _fiHookAnchors.TryGetValue((fiOriginElbow, fphElbow), out var fiHookPtElbow))
+        {
+            p1         = fiHookPtElbow;
             hookOrigin = true;
         }
         else
@@ -1433,6 +1521,13 @@ public sealed class ModelSystemCanvas : Control
             p1      = hookPt;
             exitDir = new Vector(1, 0); // hooks always face right
         }
+        else if (link.Origin is FunctionInstanceViewModel fiOriginSC
+            && link.UnderlyingLink.OriginHook is FunctionParameterHook fphSC
+            && _fiHookAnchors.TryGetValue((fiOriginSC, fphSC), out var fiHookPtSC))
+        {
+            p1      = fiHookPtSC;
+            exitDir = new Vector(1, 0); // FP hook dots always face right
+        }
         else if (link.Origin is StartViewModel startOrigin)
         {
             var oc  = new Point(startOrigin.CenterX, startOrigin.CenterY);
@@ -1561,6 +1656,12 @@ public sealed class ModelSystemCanvas : Control
         if (element is FunctionInstanceViewModel fivm)
         {
             var rect = new Rect(fivm.X, fivm.Y, fivm.Width, fivm.Height);
+            return ClipLineToRect(other, rect);
+        }
+
+        if (element is FunctionParameterViewModel fpvmBP)
+        {
+            var rect = new Rect(fpvmBP.X, fpvmBP.Y, fpvmBP.Width, fpvmBP.Height);
             return ClipLineToRect(other, rect);
         }
 
@@ -1771,6 +1872,32 @@ public sealed class ModelSystemCanvas : Control
         return null;
     }
 
+    /// <summary>
+    /// Returns the <see cref="FunctionInstanceViewModel"/> and its <see cref="FunctionParameterHook"/>
+    /// whose hook row contains <paramref name="pos"/>, or <c>null</c> if none.
+    /// </summary>
+    private (FunctionInstanceViewModel fi, FunctionParameterHook hook)? HitTestFiHook(Point pos)
+    {
+        if (_vm is null) return null;
+        foreach (var fi in _vm.FunctionInstances)
+        {
+            if (pos.X < fi.X || pos.X > fi.X + fi.Width) continue;
+            var fps = fi.FunctionParameters;
+            for (int i = 0; i < fps.Count; i++)
+            {
+                double rowTop = fi.Y + FtHeaderHeight + i * FtHookRowHeight;
+                if (pos.Y >= rowTop && pos.Y < rowTop + FtHookRowHeight)
+                {
+                    // Retrieve the corresponding FunctionParameterHook from the underlying instance.
+                    var hooks = fi.UnderlyingInstance.Hooks;
+                    if (i < hooks.Count && hooks[i] is FunctionParameterHook fph)
+                        return (fi, fph);
+                }
+            }
+        }
+        return null;
+    }
+
     /// <summary>Minimum distance from point <paramref name="p"/> to segment AB.</summary>
     private static double DistToSeg(Point p, Point a, Point b)
     {
@@ -1805,6 +1932,8 @@ public sealed class ModelSystemCanvas : Control
         _nodeConnectedHooks.Clear();
         _hookInlinedParam.Clear();
         _canInlineNodes.Clear();
+        _fiHookAnchors.Clear();
+        _fiConnectedHooks.Clear();
         if (_vm is null) return;
 
         // Which hooks on each node have a live link?
@@ -1815,6 +1944,14 @@ public sealed class ModelSystemCanvas : Control
                 if (!_nodeConnectedHooks.TryGetValue(originVm, out var set))
                     _nodeConnectedHooks[originVm] = set = new HashSet<NodeHook>();
                 set.Add(link.UnderlyingLink.OriginHook);
+            }
+            // Which FunctionParameterHooks on each FI have a live link?
+            if (link.Origin is FunctionInstanceViewModel fiOriginVm
+                && link.UnderlyingLink.OriginHook is FunctionParameterHook fphConnected)
+            {
+                if (!_fiConnectedHooks.TryGetValue(fiOriginVm, out var fiSet))
+                    _fiConnectedHooks[fiOriginVm] = fiSet = new HashSet<FunctionParameterHook>();
+                fiSet.Add(fphConnected);
             }
         }
 
@@ -1870,6 +2007,20 @@ public sealed class ModelSystemCanvas : Control
                 _hookAnchors[(node, visible[i])] = new Point(node.X + rw, ay);
             }
         }
+
+        // Register FunctionInstance FunctionParameterHook anchors (right edge of each hook row).
+        foreach (var fi in _vm.FunctionInstances)
+        {
+            var fiHooks = fi.UnderlyingInstance.Hooks;
+            for (int i = 0; i < fiHooks.Count; i++)
+            {
+                if (fiHooks[i] is FunctionParameterHook fph)
+                {
+                    double rowMidY = fi.Y + FtHeaderHeight + i * FtHookRowHeight + FtHookRowHeight / 2.0;
+                    _fiHookAnchors[(fi, fph)] = new Point(fi.X + fi.Width, rowMidY);
+                }
+            }
+        }
     }
 
     private static double NodeRenderWidth(NodeViewModel node) =>
@@ -1894,6 +2045,7 @@ public sealed class ModelSystemCanvas : Control
         : el is GhostNodeViewModel gnvm ? gnvm.Width
         : el is FunctionTemplateViewModel ftvm ? ftvm.Width
         : el is FunctionInstanceViewModel fivm ? fivm.Width
+        : el is FunctionParameterViewModel fpvm ? fpvm.Width
         : 0;
 
     /// <summary>Returns the rendered height of any resizable canvas element.</summary>
@@ -1903,6 +2055,7 @@ public sealed class ModelSystemCanvas : Control
         : el is GhostNodeViewModel gnvm ? gnvm.Height
         : el is FunctionTemplateViewModel ftvm ? ftvm.Height
         : el is FunctionInstanceViewModel fivm ? fivm.Height
+        : el is FunctionParameterViewModel fpvm ? fpvm.Height
         : 0;
 
     private void RenderNodes(DrawingContext ctx)
@@ -2279,7 +2432,9 @@ public sealed class ModelSystemCanvas : Control
         else if (e.Key == Key.F2 && _vm?.SelectedElement is not null)
         {
             var sel = _vm.SelectedElement;
-            if (sel is NodeViewModel or StartViewModel)
+            if (sel is NodeViewModel or StartViewModel
+                     or FunctionTemplateViewModel or FunctionInstanceViewModel
+                     or FunctionParameterViewModel)
             {
                 BeginNameEdit(sel);
                 e.Handled = true;
@@ -2555,6 +2710,16 @@ public sealed class ModelSystemCanvas : Control
                 e.Handled = true;
                 return;
             }
+
+            // ── Double-click on a function parameter: begin inline rename ──
+            var fpHit = HitTest(mpos, testComments: false) as FunctionParameterViewModel;
+            if (fpHit is not null)
+            {
+                _vm.SelectElementCommand.Execute(fpHit);
+                BeginNameEdit(fpHit);
+                e.Handled = true;
+                return;
+            }
         }
 
         // For right-click (link creation) we exclude comment blocks; for all other paths we include them.
@@ -2572,11 +2737,14 @@ public sealed class ModelSystemCanvas : Control
                 // Also check whether a hook dot was right-clicked on a node.
                 var hookHit = HitTestHook(mpos);
                 _rightClickHookHit  = hookHit.HasValue ? (hookHit.Value.node, hookHit.Value.hook) : null;
+                var fiHookHit = HitTestFiHook(mpos);
+                _rightClickFiHookHit = fiHookHit;
             }
 
-            // Begin link-creation drag from a node or start.
+            // Begin link-creation drag from a node, start, or function instance (via its FunctionParameterHooks).
             // Comment blocks are not valid link origins.
-            if (hit is NodeViewModel or StartViewModel)
+            if (hit is NodeViewModel or StartViewModel
+                || (hit is FunctionInstanceViewModel hitFi && hitFi.FunctionParameters.Count > 0))
             {
                 _linkOrigin     = hit;
                 _linkCurrentPos = mpos;
@@ -2714,6 +2882,8 @@ public sealed class ModelSystemCanvas : Control
                 resizingFt.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             else if (_resizing is FunctionInstanceViewModel resizingFi)
                 resizingFi.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
+            else if (_resizing is FunctionParameterViewModel resizingFp)
+                resizingFp.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             InvalidateAndMeasure();
             e.Handled = true;
             return;
@@ -2772,6 +2942,7 @@ public sealed class ModelSystemCanvas : Control
                 else if (el is GhostNodeViewModel   ggvm) ggvm.MoveToPreview(nx, ny);
                 else if (el is FunctionTemplateViewModel gftvm) gftvm.MoveToPreview(nx, ny);
                 else if (el is FunctionInstanceViewModel gfivm) gfivm.MoveToPreview(nx, ny);
+                else if (el is FunctionParameterViewModel gfpvm) gfpvm.MoveToPreview(nx, ny);
             }
         }
         else
@@ -2785,6 +2956,7 @@ public sealed class ModelSystemCanvas : Control
             if (_dragging is GhostNodeViewModel    gvm) gvm.MoveToPreview(newX, newY);
             if (_dragging is FunctionTemplateViewModel ftvm) ftvm.MoveToPreview(newX, newY);
             if (_dragging is FunctionInstanceViewModel fivm) fivm.MoveToPreview(newX, newY);
+            if (_dragging is FunctionParameterViewModel fpvm2) fpvm2.MoveToPreview(newX, newY);
         }
 
         InvalidateAndMeasure();
@@ -2842,6 +3014,9 @@ public sealed class ModelSystemCanvas : Control
                     && !ReferenceEquals(fiDest, origin)
                     && fiDest.UnderlyingInstance.Template.EntryNode is not null)
                     _ = _vm.CreateLinkAsync(origin, fiDest);
+                else if (hit is FunctionParameterViewModel fpDest
+                    && !ReferenceEquals(fpDest, origin))
+                    _ = _vm.CreateLinkAsync(origin, fpDest);
             }
 
             e.Handled = true;
@@ -2862,6 +3037,8 @@ public sealed class ModelSystemCanvas : Control
                 committingFt.CommitResize();
             else if (_resizing is FunctionInstanceViewModel committingFi)
                 committingFi.CommitResize();
+            else if (_resizing is FunctionParameterViewModel committingFp)
+                committingFp.CommitResize();
             _resizing = null;
             e.Pointer.Capture(null);
             Cursor = Cursor.Default;
@@ -2954,6 +3131,7 @@ public sealed class ModelSystemCanvas : Control
                 else if (el is GhostNodeViewModel   ggvm) ggvm.CommitMove();
                 else if (el is FunctionTemplateViewModel gftvm) gftvm.CommitMove();
                 else if (el is FunctionInstanceViewModel gfivm) gfivm.CommitMove();
+                else if (el is FunctionParameterViewModel gfpvm) gfpvm.CommitMove();
             }
         }
         else
@@ -2964,6 +3142,7 @@ public sealed class ModelSystemCanvas : Control
             else if (_dragging is GhostNodeViewModel   gvm) gvm.CommitMove();
             else if (_dragging is FunctionTemplateViewModel ftvm) ftvm.CommitMove();
             else if (_dragging is FunctionInstanceViewModel fivm) fivm.CommitMove();
+            else if (_dragging is FunctionParameterViewModel fpvm) fpvm.CommitMove();
         }
 
         _dragging = null;
@@ -3058,6 +3237,31 @@ public sealed class ModelSystemCanvas : Control
             interBoundaryItem.Click += (_, _) =>
                 _ = vm.CreateInterBoundaryLinkAsync(capturedNode, capturedHook);
             menu.Items.Add(interBoundaryItem);
+
+            // Inside a function template, offer creating a FunctionParameter from a regular node hook.
+            if (vm.IsInsideFunctionTemplate && capturedHook is not FunctionParameterHook)
+            {
+                var spawnPt2 = ToCanvasPos(_rightClickPressPos);
+                var addFpItem = new MenuItem { Header = "Add Function Parameter" };
+                addFpItem.Click += (_, _) =>
+                    _ = vm.AddFunctionParameterFromHookAsync(
+                        capturedNode, capturedHook, spawnPt2.X, spawnPt2.Y);
+                menu.Items.Add(addFpItem);
+            }
+
+            menu.Items.Add(new Separator());
+        }
+
+        // ── FunctionInstance hook right-click items ────────────────────────────
+        if (_rightClickFiHookHit is { } fiHookEntry)
+        {
+            var capturedFiOrigin   = fiHookEntry.Fi;
+            var capturedFpHook = fiHookEntry.Hook;
+
+            var allBoundariesItem = new MenuItem { Header = "Link to node in another boundary…" };
+            allBoundariesItem.Click += (_, _) =>
+                _ = vm.CreateInterBoundaryLinkAsync(capturedFiOrigin, capturedFpHook);
+            menu.Items.Add(allBoundariesItem);
             menu.Items.Add(new Separator());
         }
 
@@ -3230,22 +3434,29 @@ public sealed class ModelSystemCanvas : Control
             menu.Items.Add(renameItem);
         }
 
-        // ── "Expose as hook" option — when we're inside a function template ──
-        if (_vm.IsInsideFunctionTemplate && element is NodeViewModel exposeCandidateNode
-            && exposeCandidateNode.IsBasicParameter)
+        // ── "Add Function Parameter" — when we're inside a function template ─────
+        if (_vm.IsInsideFunctionTemplate && element is FunctionParameterViewModel)
         {
-            bool alreadyExposed = _vm.CurrentFunctionTemplate?.ExposedNodes.Contains(exposeCandidateNode.UnderlyingNode) ?? false;
-            var exposeHeader = alreadyExposed ? "Remove from Exposed Hooks" : "Expose as Hook on Template";
-            var exposeItem = new MenuItem { Header = exposeHeader };
-            exposeItem.Click += async (_, _) =>
+            // Right-clicking an existing FunctionParameter: offer rename or remove.
+            var fpvm = (FunctionParameterViewModel)element;
+
+            var fpRenameItem = new MenuItem { Header = "Rename…" };
+            fpRenameItem.Click += async (_, _) =>
             {
-                await vm.ToggleFunctionTemplateExposedNodeAsync(exposeCandidateNode);
+                await vm.RenameFunctionParameterAsync(fpvm);
+                InvalidateAndMeasure();
+            };
+
+            var removeItem = new MenuItem { Header = "Remove Function Parameter" };
+            removeItem.Click += async (_, _) =>
+            {
+                await vm.RemoveFunctionParameterAsync(fpvm.UnderlyingParameter);
                 InvalidateAndMeasure();
             };
             menu.Items.Add(new Separator());
-            menu.Items.Add(exposeItem);
+            menu.Items.Add(fpRenameItem);
+            menu.Items.Add(removeItem);
         }
-
         // ── "Set as Entry Node" — any node while viewing InternalModules ─────────
         if (_vm.IsInsideFunctionTemplate && element is NodeViewModel entryNodeCandidate)
         {
@@ -3831,6 +4042,13 @@ public sealed class ModelSystemCanvas : Control
             _nameEditorW = fivm.Width;
             _nameEditorH = FtHeaderHeight;
         }
+        else if (element is FunctionParameterViewModel fpvmEdit)
+        {
+            _nameEditorX = fpvmEdit.X;
+            _nameEditorY = fpvmEdit.Y;
+            _nameEditorW = fpvmEdit.Width;
+            _nameEditorH = FtHeaderHeight;
+        }
         else
         {
             return;
@@ -3864,6 +4082,7 @@ public sealed class ModelSystemCanvas : Control
                 StartViewModel            svm  => svm.SetName(name, out _),
                 FunctionTemplateViewModel ftvm => ftvm.SetName(name, out renameError),
                 FunctionInstanceViewModel fivm => fivm.SetName(name, out renameError),
+                FunctionParameterViewModel fpvmC => fpvmC.SetName(name, out renameError),
                 _                             => true,
             };
             if (!ok)
@@ -3909,7 +4128,8 @@ public sealed class ModelSystemCanvas : Control
     public void BeginNameEditForSelected()
     {
         if (_vm?.SelectedElement is NodeViewModel or StartViewModel
-                                 or FunctionTemplateViewModel or FunctionInstanceViewModel)
+                                 or FunctionTemplateViewModel or FunctionInstanceViewModel
+                                 or FunctionParameterViewModel)
             BeginNameEdit(_vm.SelectedElement);
     }
 
@@ -4053,6 +4273,16 @@ public sealed class ModelSystemCanvas : Control
             if (handle.Contains(pos))
                 return fi;
         }
+        foreach (var fp in _vm.FunctionParameterVMs)
+        {
+            var handle = new Rect(
+                fp.X + fp.Width  - ResizeHandleSize,
+                fp.Y + fp.Height - ResizeHandleSize,
+                ResizeHandleSize,
+                ResizeHandleSize);
+            if (handle.Contains(pos))
+                return fp;
+        }
         return null;
     }
 
@@ -4171,6 +4401,13 @@ public sealed class ModelSystemCanvas : Control
             if (node.IsInlined) continue;  // hidden — not clickable directly
             if (new Rect(node.X, node.Y, NodeRenderWidth(node), NodeRenderHeight(node)).Contains(pos))
                 return node;
+        }
+
+        // FunctionParameter nodes (shown only inside InternalModules of a template)
+        foreach (var fp in _vm.FunctionParameterVMs)
+        {
+            if (new Rect(fp.X, fp.Y, fp.Width, fp.Height).Contains(pos))
+                return fp;
         }
 
         // Ghost nodes

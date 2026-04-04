@@ -145,7 +145,7 @@ namespace XTMF2.UnitTests.Editing
                 Assert.IsTrue(ms.Undo(user, out err), err?.Message);
                 Assert.HasCount(1, ft.InternalModules.GhostNodes,
                     "Ghost inside InternalModules should be restored on undo.");
-                Assert.IsTrue(gb.Modules.Contains(realNode),
+                Assert.Contains(realNode, gb.Modules,
                     "Real node should be restored on undo.");
 
                 // Redo: both are removed again.
@@ -176,7 +176,7 @@ namespace XTMF2.UnitTests.Editing
 
                 // Link origin → ghost using the first available hook.
                 var hooks = origin!.Hooks;
-                Assert.IsTrue(hooks.Count > 0, "SimpleParameterModule must expose at least one hook.");
+                Assert.IsNotEmpty(hooks, "SimpleParameterModule must expose at least one hook.");
                 Assert.IsTrue(ms.AddLink(user, origin, hooks[0], ghost, out _, out var linkErr),
                     linkErr?.Message);
 
