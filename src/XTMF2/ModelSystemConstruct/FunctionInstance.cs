@@ -22,8 +22,10 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using XTMF2.Editing;
+using XTMF2.ModelSystemConstruct.Parameters;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -237,6 +239,30 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         private Dictionary<FunctionParameter, IModule?>? _parameterBindings;
 
+        // ── Per-instance execution context (thread-local) ─────────────────
+
+        /// <summary>
+        /// Thread-local stack of <see cref="FunctionInstance"/> objects that are currently
+        /// evaluating a scripted-parameter expression on this thread.  Pushed by
+        /// <see cref="FunctionInstanceExpression.GetValue"/> and popped in the finally block.
+        /// </summary>
+        [ThreadStatic]
+        private static Stack<FunctionInstance>? _contextStack;
+
+        /// <summary>
+        /// The <see cref="FunctionInstance"/> whose scripted-parameter expression is currently
+        /// being evaluated on the calling thread, or <c>null</c> if none.
+        /// </summary>
+        internal static FunctionInstance? Current
+            => _contextStack?.Count > 0 ? _contextStack.Peek() : null;
+
+        /// <summary>
+        /// Returns the per-instance <see cref="IModule"/> bound to <paramref name="fp"/> on
+        /// this instance, or <c>null</c> if no external module was wired to that parameter.
+        /// </summary>
+        internal IModule? GetBoundModule(FunctionParameter fp)
+            => _parameterBindings?.TryGetValue(fp, out var m) == true ? m : null;
+
         /// <summary>
         /// Records <paramref name="module"/> as the runtime binding for
         /// <see cref="FunctionParameter"/> <paramref name="parameter"/> on this instance.
@@ -271,14 +297,68 @@ namespace XTMF2.ModelSystemConstruct
             {
                 if (!start.ConstructModuleInstance(runtime, out var m, ref error)) return false;
                 _runtimeModules[start] = m!;
+                WrapScriptedExpression(start, m!);
             }
             foreach (var node in internals.Modules)
             {
                 if (!node.ConstructModuleInstance(runtime, out var m, ref error)) return false;
                 _runtimeModules[node] = m!;
+                WrapScriptedExpression(node, m!);
             }
             error = null;
             return true;
+        }
+
+        /// <summary>
+        /// If <paramref name="node"/>'s ParameterValue is a compiled scripted expression,
+        /// replaces the <c>Expression</c> field on the cloned <paramref name="module"/> with
+        /// a <see cref="FunctionInstanceExpression"/> wrapper so that variable lookups inside
+        /// the AST during evaluation can find this instance's per-instance modules and
+        /// FunctionParameter bindings via <see cref="Current"/>.
+        /// </summary>
+        private void WrapScriptedExpression(Node node, IModule module)
+        {
+            if (node.ParameterValue is not ScriptedParameter) return;
+            var exprField = module.GetType().GetField("Expression",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (exprField?.GetValue(module) is ParameterExpression inner)
+                exprField.SetValue(module, new FunctionInstanceExpression(inner, this));
+        }
+
+        /// <summary>
+        /// A <see cref="ParameterExpression"/> wrapper that pushes this
+        /// <see cref="FunctionInstance"/> onto <see cref="_contextStack"/> for the duration
+        /// of <see cref="GetValue"/>, making it available to variable resolvers via
+        /// <see cref="Current"/>.
+        /// </summary>
+        private sealed class FunctionInstanceExpression : ParameterExpression
+        {
+            private readonly ParameterExpression _inner;
+            private readonly FunctionInstance _fi;
+
+            internal FunctionInstanceExpression(ParameterExpression inner, FunctionInstance fi)
+            {
+                _inner = inner;
+                _fi = fi;
+            }
+
+            public override bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString)
+                => _inner.IsCompatible(type, ref errorString);
+
+            public override object? GetValue(IModule caller, Type type, ref string? errorString)
+            {
+                (_contextStack ??= new Stack<FunctionInstance>()).Push(_fi);
+                try   { return _inner.GetValue(caller, type, ref errorString); }
+                finally { _contextStack.Pop(); }
+            }
+
+            public override string Representation => _inner.Representation;
+            public override Type Type => _inner.Type;
+
+            internal override void Save(Utf8JsonWriter writer) => _inner.Save(writer);
+
+            internal override bool AssignToParameter(IModule module, ref string? error)
+                => _inner.AssignToParameter(module, ref error);
         }
 
         /// <summary>

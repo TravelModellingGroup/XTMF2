@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
@@ -43,8 +44,14 @@ internal sealed class FunctionParameterVariable<T> : Variable
     internal override Result GetResult(IModule caller)
     {
         // The FunctionParameter's Module is set to the externally-bound IFunction<T> module
-        // during FunctionInstance.ConstructRuntimeLinks.  If it is available, invoke it.
-        if (_fp.Module is IFunction<T> func)
+        // during FunctionInstance.ConstructRuntimeLinks.  For per-instance FunctionInstances,
+        // the binding is stored in the active FI context rather than on the node directly.
+        IFunction<T>? func = null;
+        if (_fp.Module is IFunction<T> direct)
+            func = direct;
+        else if (FunctionInstance.Current?.GetBoundModule(_fp) is IFunction<T> fiBound)
+            func = fiBound;
+        if (func is not null)
         {
             var value = func.Invoke();
             return value switch

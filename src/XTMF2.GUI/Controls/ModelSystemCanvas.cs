@@ -3772,7 +3772,8 @@ public sealed class ModelSystemCanvas : Control
             return Array.Empty<(string, IBrush)>();
 
         var knownNames = new HashSet<string>(
-            _vm.ModelSystemVariables.Select(v => v.Name),
+            _vm.ModelSystemVariables.Select(v => v.Name)
+                .Concat(_vm.LocalVariables.Select(v => v.Name)),
             StringComparer.OrdinalIgnoreCase);
 
         var tokens = new List<(string, IBrush)>();

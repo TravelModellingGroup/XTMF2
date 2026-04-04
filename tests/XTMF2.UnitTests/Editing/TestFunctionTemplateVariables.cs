@@ -19,10 +19,14 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 using XTMF2.RuntimeModules;
+using XTMF2.UnitTests.Modules;
 
 namespace XTMF2.UnitTests.Editing;
 
@@ -312,6 +316,299 @@ public class TestFunctionTemplateVariables
             {
                 Assert.IsNull(ms.ModelSystem.GlobalBoundary.OwningFunctionTemplate,
                     "Global boundary should have no owning function template.");
+            });
+    }
+
+    // ── ScriptedParameter references LocalVariable ────────────────────────
+
+    [TestMethod]
+    public void ScriptedParameter_CanReference_LocalVariable()
+    {
+        TestHelper.RunInModelSystemContext(nameof(ScriptedParameter_CanReference_LocalVariable),
+            (user, _, ms) =>
+            {
+                CommandError error = null;
+                Assert.IsTrue(ms.AddFunctionTemplate(user, ms.ModelSystem.GlobalBoundary, "MyFT",
+                    out var ft, out error), error?.Message);
+
+                // Create BasicParameter<int> "myVar" = 42 inside InternalModules, add as local var.
+                var localVar = CreateLocalVar<int>(ms, user, ft.InternalModules, "myVar", "42");
+                Assert.IsTrue(ms.AddFunctionTemplateVariable(user, ft, localVar, out error), error?.Message);
+
+                // Create a ScriptedParameter<int> inside InternalModules.
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "result",
+                    typeof(ScriptedParameter<int>), Rectangle.Hidden, out var scriptedNode, out error),
+                    error?.Message);
+
+                // The scripted parameter should be able to reference the local variable by name.
+                Assert.IsTrue(ms.SetParameterExpression(user, scriptedNode, "myVar", out error),
+                    error?.Message);
+                Assert.IsNotNull(scriptedNode.ParameterValue,
+                    "ScriptedParameter should have a ParameterValue after SetParameterExpression.");
+            });
+    }
+
+    [TestMethod]
+    public void ScriptedParameter_CanReference_FunctionParameterLocalVariable()
+    {
+        TestHelper.RunInModelSystemContext(nameof(ScriptedParameter_CanReference_FunctionParameterLocalVariable),
+            (user, _, ms) =>
+            {
+                CommandError error = null;
+                Assert.IsTrue(ms.AddFunctionTemplate(user, ms.ModelSystem.GlobalBoundary, "MyFT",
+                    out var ft, out error), error?.Message);
+
+                // Add a FunctionParameter of type IFunction<int> and mark it as a local variable.
+                Assert.IsTrue(ms.AddFunctionParameter(user, ft, "myFP", typeof(IFunction<int>),
+                    Rectangle.Hidden, out var fp, out error), error?.Message);
+                Assert.IsTrue(ms.AddFunctionTemplateVariable(user, ft, fp, out error), error?.Message);
+
+                // Create a ScriptedParameter<int> inside InternalModules.
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "result",
+                    typeof(ScriptedParameter<int>), Rectangle.Hidden, out var scriptedNode, out error),
+                    error?.Message);
+
+                // The ScriptedParameter should be able to reference the FunctionParameter local var.
+                Assert.IsTrue(ms.SetParameterExpression(user, scriptedNode, "myFP", out error),
+                    error?.Message);
+                Assert.IsNotNull(scriptedNode.ParameterValue);
+            });
+    }
+
+    [TestMethod]
+    public void ScriptedParameter_CanReference_LocalVariable_WithoutPriorValue()
+    {
+        // Regression test: before the fix, IsValidLocalVariableNode returned false and
+        // Variable.CreateVariableForNode threw CompilerException when the backing node had
+        // ParameterValue == null (a freshly-created BasicParameter<int> with no value ever set).
+        TestHelper.RunInModelSystemContext(nameof(ScriptedParameter_CanReference_LocalVariable_WithoutPriorValue),
+            (user, _, ms) =>
+            {
+                CommandError error = null;
+                Assert.IsTrue(ms.AddFunctionTemplate(user, ms.ModelSystem.GlobalBoundary, "MyFT",
+                    out var ft, out error), error?.Message);
+
+                // Create a BasicParameter<int> but deliberately do NOT set a value → ParameterValue is null.
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "unsetVar", typeof(BasicParameter<int>),
+                    Rectangle.Hidden, out var unsetNode, out error), error?.Message);
+                Assert.IsNull(unsetNode!.ParameterValue, "Pre-condition: no value set yet.");
+
+                // Should still be eligible as a local variable (type is determinable from node.Type).
+                Assert.IsTrue(ms.AddFunctionTemplateVariable(user, ft, unsetNode, out error),
+                    error?.Message);
+
+                // A ScriptedParameter inside InternalModules should be able to reference it by name.
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "result", typeof(ScriptedParameter<int>),
+                    Rectangle.Hidden, out var scriptedNode, out error), error?.Message);
+                Assert.IsTrue(ms.SetParameterExpression(user, scriptedNode, "unsetVar", out error),
+                    error?.Message);
+                Assert.IsNotNull(scriptedNode.ParameterValue);
+            });
+    }
+
+    [TestMethod]
+    public void LocalVariable_FunctionParameter_CanBeReferenced_AtRuntime()
+    {
+        // Regression / feature test: a FunctionParameter that is also a local variable must be
+        // correctly resolved at runtime through FunctionInstance.Current.GetBoundModule().
+        TestHelper.RunInModelSystemContext(nameof(LocalVariable_FunctionParameter_CanBeReferenced_AtRuntime),
+            (user, pSession, ms) =>
+            {
+                CommandError error = null;
+                var msys = ms.ModelSystem;
+
+                // ── Build the FunctionTemplate ─────────────────────────────────────
+                Assert.IsTrue(ms.AddFunctionTemplate(user, msys.GlobalBoundary, "FPLocalVarFT",
+                    out var ft, out error), error?.Message);
+
+                // FunctionParameter "myFP" of type IFunction<string> → local variable
+                Assert.IsTrue(ms.AddFunctionParameter(user, ft, "myFP", typeof(IFunction<string>),
+                    Rectangle.Hidden, out var fp, out error), error?.Message);
+                Assert.IsTrue(ms.AddFunctionTemplateVariable(user, ft, fp, out error), error?.Message);
+
+                // ScriptedParameter<string> "result" referencing "myFP"
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "result",
+                    typeof(ScriptedParameter<string>), Rectangle.Hidden, out var resultNode, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetParameterExpression(user, resultNode, "myFP", out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetFunctionTemplateEntryNode(user, ft, resultNode, out error), error?.Message);
+
+                // ── GlobalBoundary: Start → ignore → SPM → FI ─────────────────────
+                Assert.IsTrue(ms.AddFunctionInstance(user, msys.GlobalBoundary, ft, "fi",
+                    Rectangle.Hidden, out var fi, out error), error?.Message);
+
+                // Wire FI's "myFP" hook to a BasicParameter<string> externally
+                Assert.IsTrue(ms.AddNode(user, msys.GlobalBoundary, "fpSource",
+                    typeof(BasicParameter<string>), Rectangle.Hidden, out var fpSource, out error), error?.Message);
+                Assert.IsTrue(ms.SetParameterValue(user, fpSource, "FP bound value", out error), error?.Message);
+
+                Assert.IsTrue(ms.AddModelSystemStart(user, msys.GlobalBoundary, "Start",
+                    Rectangle.Hidden, out var start, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, msys.GlobalBoundary, "AnIgnore",
+                    typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignore, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, msys.GlobalBoundary, "SPM",
+                    typeof(SimpleParameterModule), Rectangle.Hidden, out var spm, out error), error?.Message);
+
+                Assert.IsTrue(ms.AddLink(user, start, start.Hooks[0], ignore, out _, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, ignore, ignore.Hooks[0], spm, out _, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, spm, spm.Hooks[0], fi, out _, out error), error?.Message);
+                // Bind FI's myFP hook → fpSource
+                var fpHook = fi.Hooks.First(h => h.Name == "myFP");
+                Assert.IsTrue(ms.AddLink(user, fi, fpHook, fpSource, out _, out error), error?.Message);
+
+                // ── Run ───────────────────────────────────────────────────────────
+                TestHelper.CreateRunClient(true, (runBus) =>
+                {
+                    CommandError runError = null;
+                    bool success = false;
+                    using var sem = new SemaphoreSlim(0);
+                    runBus.ClientFinishedModelSystem += (_, _) => { success = true; sem.Release(); };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack) =>
+                    {
+                        runError = new CommandError(e + "\r\n" + stack);
+                        sem.Release();
+                    };
+                    Assert.IsTrue(runBus.RunModelSystem(ms,
+                        Path.Combine(pSession.RunsDirectory, "FPLocalVarRuntime"),
+                        "Start", out _, out runError), runError?.Message);
+                    Assert.IsTrue(sem.Wait(5000), "Model system did not complete in time!");
+                    Assert.IsTrue(success, "Model system failed: " + runError?.Message);
+                });
+            });
+    }
+
+    [TestMethod]
+    public void LocalVariable_SetableParameter_CanBeReferenced_AtRuntime()
+    {
+        // Feature test: a SetableParameter<T> local variable must be resolved via the
+        // per-instance cloned module (FunctionInstance.Current.GetRuntimeModule), not
+        // the shared template-node Module (which is null inside InternalModules).
+        TestHelper.RunInModelSystemContext(nameof(LocalVariable_SetableParameter_CanBeReferenced_AtRuntime),
+            (user, pSession, ms) =>
+            {
+                CommandError error = null;
+                var msys = ms.ModelSystem;
+
+                // ── FunctionTemplate ───────────────────────────────────────────────
+                Assert.IsTrue(ms.AddFunctionTemplate(user, msys.GlobalBoundary, "SetableFT",
+                    out var ft, out error), error?.Message);
+
+                // SetableParameter<string> "liveVar" = "Setable" → local variable
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "liveVar",
+                    typeof(SetableParameter<string>), Rectangle.Hidden, out var liveVarNode, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetParameterValue(user, liveVarNode, "Setable value", out error), error?.Message);
+                Assert.IsTrue(ms.AddFunctionTemplateVariable(user, ft, liveVarNode, out error), error?.Message);
+
+                // ScriptedParameter<string> "result" → expression = "liveVar"
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "result",
+                    typeof(ScriptedParameter<string>), Rectangle.Hidden, out var resultNode, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetParameterExpression(user, resultNode, "liveVar", out error), error?.Message);
+                Assert.IsTrue(ms.SetFunctionTemplateEntryNode(user, ft, resultNode, out error), error?.Message);
+
+                // ── GlobalBoundary: Start → ignore → SPM → FI ─────────────────────
+                Assert.IsTrue(ms.AddFunctionInstance(user, msys.GlobalBoundary, ft, "fi",
+                    Rectangle.Hidden, out var fi, out error), error?.Message);
+                Assert.IsTrue(ms.AddModelSystemStart(user, msys.GlobalBoundary, "Start",
+                    Rectangle.Hidden, out var start, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, msys.GlobalBoundary, "AnIgnore",
+                    typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignore, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, msys.GlobalBoundary, "SPM",
+                    typeof(SimpleParameterModule), Rectangle.Hidden, out var spm, out error), error?.Message);
+
+                Assert.IsTrue(ms.AddLink(user, start, start.Hooks[0], ignore, out _, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, ignore, ignore.Hooks[0], spm, out _, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, spm, spm.Hooks[0], fi, out _, out error), error?.Message);
+
+                TestHelper.CreateRunClient(true, (runBus) =>
+                {
+                    CommandError runError = null;
+                    bool success = false;
+                    using var sem = new SemaphoreSlim(0);
+                    runBus.ClientFinishedModelSystem += (_, _) => { success = true; sem.Release(); };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack) =>
+                    {
+                        runError = new CommandError(e + "\r\n" + stack);
+                        sem.Release();
+                    };
+                    Assert.IsTrue(runBus.RunModelSystem(ms,
+                        Path.Combine(pSession.RunsDirectory, "SetableLocalVarRuntime"),
+                        "Start", out _, out runError), runError?.Message);
+                    Assert.IsTrue(sem.Wait(5000), "Model system did not complete in time!");
+                    Assert.IsTrue(success, "Model system failed: " + runError?.Message);
+                });
+            });
+    }
+
+    [TestMethod]
+    public void LocalVariable_CanBeUsed_AtRuntime()
+    {
+        // Regression test: ScriptedParameter inside a FunctionTemplate should be able
+        // to reference a local variable at runtime (not just at compile time).
+        TestHelper.RunInModelSystemContext(nameof(LocalVariable_CanBeUsed_AtRuntime),
+            (user, pSession, ms) =>
+            {
+                CommandError error = null;
+                var msys = ms.ModelSystem;
+
+                // ── Build the FunctionTemplate ─────────────────────────────────────
+                Assert.IsTrue(ms.AddFunctionTemplate(user, msys.GlobalBoundary, "MyFT",
+                    out var ft, out error), error?.Message);
+
+                // BasicParameter<string> "helloParam" = "Hello" → register as local var
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "helloParam",
+                    typeof(BasicParameter<string>), Rectangle.Hidden, out var localVarNode, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetParameterValue(user, localVarNode, "Hello", out error), error?.Message);
+                Assert.IsTrue(ms.AddFunctionTemplateVariable(user, ft, localVarNode, out error), error?.Message);
+
+                // ScriptedParameter<string> "result" → expression = "helloParam" → set as EntryNode
+                Assert.IsTrue(ms.AddNode(user, ft.InternalModules, "result",
+                    typeof(ScriptedParameter<string>), Rectangle.Hidden, out var resultNode, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetParameterExpression(user, resultNode, "helloParam", out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetFunctionTemplateEntryNode(user, ft, resultNode, out error), error?.Message);
+
+                // ── Build the execution chain in GlobalBoundary ────────────────────
+                // FunctionInstance "fi" exposes ScriptedParameter<string> as IFunction<string>.
+                Assert.IsTrue(ms.AddFunctionInstance(user, msys.GlobalBoundary, ft, "fi",
+                    Rectangle.Hidden, out var fi, out error), error?.Message);
+
+                Assert.IsTrue(ms.AddModelSystemStart(user, msys.GlobalBoundary, "Start",
+                    Rectangle.Hidden, out var start, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, msys.GlobalBoundary, "AnIgnore",
+                    typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignore, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.AddNode(user, msys.GlobalBoundary, "SPM",
+                    typeof(SimpleParameterModule), Rectangle.Hidden, out var spm, out error),
+                    error?.Message);
+
+                // Start → ignore → spm → fi
+                Assert.IsTrue(ms.AddLink(user, start, start.Hooks[0], ignore, out _, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, ignore, ignore.Hooks[0], spm, out _, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, spm, spm.Hooks[0], fi, out _, out error), error?.Message);
+
+                // ── Run through RunBus (exercises the full serialise/deserialise path) ─
+                TestHelper.CreateRunClient(true, (runBus) =>
+                {
+                    CommandError runError = null;
+                    bool success = false;
+                    using var sem = new SemaphoreSlim(0);
+                    runBus.ClientFinishedModelSystem += (_, _) => { success = true; sem.Release(); };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack) =>
+                    {
+                        runError = new CommandError(e + "\r\n" + stack);
+                        sem.Release();
+                    };
+                    Assert.IsTrue(runBus.RunModelSystem(ms,
+                        Path.Combine(pSession.RunsDirectory, "LocalVarRuntime"),
+                        "Start", out _, out runError), runError?.Message);
+                    Assert.IsTrue(sem.Wait(5000), "Model system did not complete in time!");
+                    Assert.IsTrue(success, "Model system failed: " + runError?.Message);
+                });
             });
     }
 }

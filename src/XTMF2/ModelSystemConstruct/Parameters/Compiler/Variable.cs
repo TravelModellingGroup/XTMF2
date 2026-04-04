@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
@@ -51,17 +52,29 @@ internal abstract class Variable : Expression
             }
 
             var parameterValue = node.ParameterValue;
-            if(parameterValue is null)
+            // Determine the dispatch type. Prefer ParameterValue.Type (accurate at runtime),
+            // but fall back to the generic argument of the node's module type so that a
+            // freshly-created BasicParameter<int> node (ParameterValue still null) can still
+            // be used as a variable in expressions.
+            Type? valueType = parameterValue?.Type;
+            if (valueType is null && node.Type is { IsGenericType: true } nt)
             {
-                throw new CompilerException($"Unable to create a variable for node {node.Name} because it has no parameter value!", offset);
+                var td = nt.GetGenericTypeDefinition();
+                if (td == typeof(RuntimeModules.BasicParameter<>)
+                 || td == typeof(RuntimeModules.ScriptedParameter<>))
+                    valueType = nt.GetGenericArguments()[0];
             }
-            return parameterValue.Type.FullName switch
+            if (valueType is null)
+            {
+                throw new CompilerException($"Unable to create a variable for node {node.Name} because it has no parameter value and its type cannot be inferred!", offset);
+            }
+            return valueType.FullName switch
             {
                 "System.Boolean" => new BooleanVariable(text, offset, node),
                 "System.Int32" => new IntegerVariable(text, offset, node),
                 "System.Single" => new FloatVariable(text, offset, node),
                 "System.String" => new StringVariable(text, offset, node),
-                _ => throw new CompilerException($"Invalid type for a variable {parameterValue.Type.FullName} found when trying to" +
+                _ => throw new CompilerException($"Invalid type for a variable {valueType.FullName} found when trying to" +
                 $" use {node.Name}!", offset)
             };
         }

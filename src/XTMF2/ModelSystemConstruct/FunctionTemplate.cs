@@ -25,6 +25,7 @@ using System.Linq;
 using System.Text.Json;
 using XTMF2.Editing;
 using XTMF2.Repository;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.ModelSystemConstruct
 {
@@ -263,7 +264,18 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         public static bool IsValidLocalVariableNode(Node node, [NotNullWhen(false)] out CommandError? error)
         {
-            var t = node is FunctionParameter fp ? ExtractIFunctionInnerType(fp.Type) : node.ParameterValue?.Type;
+            Type? t;
+            if (node is FunctionParameter fp)
+            {
+                t = ExtractIFunctionInnerType(fp.Type);
+            }
+            else
+            {
+                // Prefer ParameterValue.Type (most accurate at runtime), but fall back to the
+                // generic argument of the node's module type so that a freshly-created
+                // BasicParameter<int> node (ParameterValue still null) is still eligible.
+                t = node.ParameterValue?.Type ?? ExtractBasicParameterInnerType(node.Type);
+            }
             if (t is null)
             {
                 error = new CommandError(
@@ -289,6 +301,25 @@ namespace XTMF2.ModelSystemConstruct
             if (type is null || !type.IsGenericType) return null;
             if (type.GetGenericTypeDefinition() != typeof(IFunction<>)) return null;
             var inner = type.GetGenericArguments()[0];
+            return (inner == typeof(bool) || inner == typeof(int)
+                 || inner == typeof(float) || inner == typeof(string))
+                ? inner : null;
+        }
+
+        /// <summary>
+        /// If <paramref name="nodeType"/> is the closed generic form of
+        /// <see cref="RuntimeModules.BasicParameter{T}"/> or
+        /// <see cref="RuntimeModules.ScriptedParameter{T}"/> for a supported basic T,
+        /// returns T; otherwise returns null.
+        /// </summary>
+        private static Type? ExtractBasicParameterInnerType(Type? nodeType)
+        {
+            if (nodeType is null || !nodeType.IsGenericType) return null;
+            var td = nodeType.GetGenericTypeDefinition();
+            if (td != typeof(RuntimeModules.BasicParameter<>)
+             && td != typeof(RuntimeModules.ScriptedParameter<>))
+                return null;
+            var inner = nodeType.GetGenericArguments()[0];
             return (inner == typeof(bool) || inner == typeof(int)
                  || inner == typeof(float) || inner == typeof(string))
                 ? inner : null;
