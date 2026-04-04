@@ -446,8 +446,8 @@ public sealed class ModelSystemCanvas : Control
         {
             FontFamily               = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
             FontSize                 = 11,
-            Foreground               = NodeTextBrush,
-            Background               = new SolidColorBrush(Color.FromRgb(0x22, 0x32, 0x44)),
+            Foreground               = new SolidColorBrush(Color.FromRgb(0xEE, 0xFF, 0xFF)),
+            Background               = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
             BorderThickness          = new Thickness(0),
             Padding                  = new Thickness(4, 1, 4, 1),
             Width                    = 52,
@@ -463,7 +463,7 @@ public sealed class ModelSystemCanvas : Control
             FontSize        = 13,
             Padding         = new Thickness(6, 1, 6, 1),
             Background      = Brushes.Transparent,
-            Foreground      = NodeTextBrush,
+            Foreground      = new SolidColorBrush(Color.FromRgb(0xEE, 0xFF, 0xFF)),
             BorderThickness = new Thickness(0),
         };
         _zoomMinusBtn.Click += (_, _) => ApplyScale(_scale - ScaleStep);
@@ -474,18 +474,18 @@ public sealed class ModelSystemCanvas : Control
             FontSize        = 13,
             Padding         = new Thickness(6, 1, 6, 1),
             Background      = Brushes.Transparent,
-            Foreground      = NodeTextBrush,
+            Foreground      = new SolidColorBrush(Color.FromRgb(0xEE, 0xFF, 0xFF)),
             BorderThickness = new Thickness(0),
         };
         _zoomPlusBtn.Click += (_, _) => ApplyScale(_scale + ScaleStep);
 
         _zoomBar = new Border
         {
-            Background      = new SolidColorBrush(Color.FromArgb(0xCC, 0x1A, 0x1A, 0x2E)),
-            BorderBrush     = new SolidColorBrush(Color.FromRgb(0x44, 0x55, 0x66)),
-            BorderThickness = new Thickness(1),
-            CornerRadius    = new CornerRadius(4),
-            Padding         = new Thickness(2),
+            Background      = new SolidColorBrush(Color.FromArgb(0xE6, 0x05, 0x05, 0x10)),
+            BorderBrush     = new SolidColorBrush(Color.FromRgb(0x00, 0xD4, 0xFF)),
+            BorderThickness = new Thickness(1.5),
+            CornerRadius    = new CornerRadius(16),
+            Padding         = new Thickness(4, 3),
             Child           = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -2180,21 +2180,23 @@ public sealed class ModelSystemCanvas : Control
         _zoomBarIsLight = isLight;
         if (isLight)
         {
-            _zoomBar.Background  = new SolidColorBrush(Color.FromArgb(0xE8, 0xF0, 0xF4, 0xFF));
-            _zoomBar.BorderBrush = new SolidColorBrush(Color.FromRgb(0xAA, 0xBB, 0xCC));
-            _zoomTextBox.Background = new SolidColorBrush(Color.FromRgb(0xF0, 0xF4, 0xFB));
-            _zoomTextBox.Foreground = Brushes.Black;
-            _zoomMinusBtn.Foreground = Brushes.Black;
-            _zoomPlusBtn.Foreground  = Brushes.Black;
+            // Light neon pill palette
+            _zoomBar.Background     = new SolidColorBrush(Color.FromArgb(0xF4, 0xF8, 0xFF, 0xEE));
+            _zoomBar.BorderBrush    = new SolidColorBrush(Color.FromRgb(0x00, 0x66, 0xCC));
+            _zoomTextBox.Background = new SolidColorBrush(Color.FromArgb(0x0A, 0x00, 0x00, 0x00));
+            _zoomTextBox.Foreground  = new SolidColorBrush(Color.FromRgb(0x00, 0x30, 0x88));
+            _zoomMinusBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x00, 0x30, 0x88));
+            _zoomPlusBtn.Foreground  = new SolidColorBrush(Color.FromRgb(0x00, 0x30, 0x88));
         }
         else
         {
-            _zoomBar.Background  = new SolidColorBrush(Color.FromArgb(0xCC, 0x1A, 0x1A, 0x2E));
-            _zoomBar.BorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x55, 0x66));
-            _zoomTextBox.Background = new SolidColorBrush(Color.FromRgb(0x22, 0x32, 0x44));
-            _zoomTextBox.Foreground = NodeTextBrush;
-            _zoomMinusBtn.Foreground = NodeTextBrush;
-            _zoomPlusBtn.Foreground  = NodeTextBrush;
+            // Dark neon pill palette
+            _zoomBar.Background     = new SolidColorBrush(Color.FromArgb(0xE6, 0x05, 0x05, 0x10));
+            _zoomBar.BorderBrush    = new SolidColorBrush(Color.FromRgb(0x00, 0xD4, 0xFF));
+            _zoomTextBox.Background = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
+            _zoomTextBox.Foreground  = new SolidColorBrush(Color.FromRgb(0xEE, 0xFF, 0xFF));
+            _zoomMinusBtn.Foreground = new SolidColorBrush(Color.FromRgb(0xEE, 0xFF, 0xFF));
+            _zoomPlusBtn.Foreground  = new SolidColorBrush(Color.FromRgb(0xEE, 0xFF, 0xFF));
         }
     }
 

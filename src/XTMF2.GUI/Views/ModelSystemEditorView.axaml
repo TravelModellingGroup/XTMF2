@@ -88,9 +88,9 @@
                       Grid.Column="1"
                       ItemsSource="{Binding BoundaryNavigationItems}"
                       PlaceholderText="{Binding CurrentBoundaryLabel}"
-                      Width="200"
+                      Width="250"
                       VerticalAlignment="Center"
-                      Margin="0,0,8,0"
+                      Margin="0,0,16,0"
                       ToolTip.Tip="Navigate to a boundary  (Ctrl+B)">
                 <ComboBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:BoundaryNavigationItem">
@@ -105,18 +105,20 @@
                              MinimumPrefixLength="0"
                              FilterMode="ContainsOrdinal"
                              ValueMemberBinding="{Binding Name}"
-                             Watermark="Find node…  (Ctrl+E)"
-                             Width="220"
+                             Watermark="Find... (Ctrl+E)"
+                             Width="250"
                              VerticalAlignment="Center"/>
         </Grid>
 
         <!-- ── Main content: full-width canvas with floating overlays ─────── -->
-        <Panel Grid.Row="1">
+        <Grid Grid.Row="1">
 
-            <!-- Canvas (fills the entire panel) -->
+            <!-- Canvas (fills the entire panel, bottom margin reserves space for the floating
+                 dock bar so the ScrollViewer does not intercept pointer events over it) -->
             <Border BorderBrush="{DynamicResource DlgListBorder}"
                     BorderThickness="1"
                     CornerRadius="4"
+                    Margin="0,0,0,0"
                     ClipToBounds="True">
                 <ScrollViewer x:Name="CanvasScrollViewer"
                               HorizontalScrollBarVisibility="Auto"
@@ -127,7 +129,7 @@
             </Border>
 
             <!-- ── Floating action bar (bottom-centre, neon pill) ───────── -->
-            <Border x:Name="NeonDockBar"
+            <Border x:Name="DockBar"
                     Classes="neon-pill"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
@@ -137,7 +139,7 @@
                     Background="{DynamicResource NeonPillBg}"
                     BorderBrush="{DynamicResource NeonPillBorder}"
                     BorderThickness="1.5"
-                    ZIndex="20">
+                    ZIndex="30">
                 <StackPanel Orientation="Horizontal" Spacing="8">
 
                     <StackPanel.Styles>
@@ -168,8 +170,8 @@
                     <!-- Step Out: exit function template or ascend to parent boundary -->
                     <Button Command="{Binding NavigateUpCommand}"
                             ToolTip.Tip="Step out to parent scope  (Alt+← / Mouse Back)"
-                            ToolTip.Placement="Top">
-                        <Viewbox Width="18" Height="18" IsHitTestVisible="False">
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Arrow shaft + head -->
                                 <Path Data="M 10,18 V 7 M 5,12 L 10,7 L 15,12"
@@ -191,19 +193,20 @@
                     <Button Command="{Binding UndoCommand}"
                             IsEnabled="{Binding CanUndo}"
                             ToolTip.Tip="Undo (Ctrl+Z)"
-                            ToolTip.Placement="Top">
-                        <Viewbox Width="18" Height="18" IsHitTestVisible="False">
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
-                                <!-- Curved arc over top -->
-                                <Path Data="M 16,8 C 16,2 4,2 4,8"
+                                <!-- J-hook body: arc sweeping from mid-right, over top, down to mid-left -->
+                                <Path Data="M 15.5,6 A 6.5,6.5 0 0 0 4.5,12"
                                       Stroke="{DynamicResource NeonIconPrimary}"
-                                      StrokeThickness="1.8" StrokeLineCap="Round"
-                                      Fill="Transparent"/>
-                                <!-- Arrowhead at left end -->
-                                <Path Data="M 1,5 L 4,8 L 7,5"
-                                      Stroke="{DynamicResource NeonIconSecondary}"
-                                      StrokeThickness="1.8" StrokeLineCap="Round"
-                                      StrokeJoin="Round" Fill="Transparent"/>
+                                      StrokeThickness="2.4" StrokeLineCap="Round" Fill="Transparent"/>
+                                <!-- Short descending stem at start -->
+                                <Path Data="M 15.5,3 V 6"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="2.4" StrokeLineCap="Round" Fill="Transparent"/>
+                                <!-- Filled arrowhead at arc end -->
+                                <Path Data="M 2,9.5 L 4.5,15.5 L 7.5,11 Z"
+                                      Fill="{DynamicResource NeonIconSecondary}" StrokeThickness="0"/>
                             </Canvas>
                         </Viewbox>
                     </Button>
@@ -212,19 +215,20 @@
                     <Button Command="{Binding RedoCommand}"
                             IsEnabled="{Binding CanRedo}"
                             ToolTip.Tip="Redo (Ctrl+Y)"
-                            ToolTip.Placement="Top">
-                        <Viewbox Width="18" Height="18" IsHitTestVisible="False">
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
-                                <!-- Curved arc over top (mirrored) -->
-                                <Path Data="M 4,8 C 4,2 16,2 16,8"
+                                <!-- J-hook body mirrored: arc sweeping from mid-left, over top, down to mid-right -->
+                                <Path Data="M 4.5,6 A 6.5,6.5 0 0 1 15.5,12"
                                       Stroke="{DynamicResource NeonIconPrimary}"
-                                      StrokeThickness="1.8" StrokeLineCap="Round"
-                                      Fill="Transparent"/>
-                                <!-- Arrowhead at right end -->
-                                <Path Data="M 13,5 L 16,8 L 19,5"
-                                      Stroke="{DynamicResource NeonIconSecondary}"
-                                      StrokeThickness="1.8" StrokeLineCap="Round"
-                                      StrokeJoin="Round" Fill="Transparent"/>
+                                      StrokeThickness="2.4" StrokeLineCap="Round" Fill="Transparent"/>
+                                <!-- Short descending stem at start -->
+                                <Path Data="M 4.5,3 V 6"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="2.4" StrokeLineCap="Round" Fill="Transparent"/>
+                                <!-- Filled arrowhead at arc end -->
+                                <Path Data="M 12.5,11 L 15.5,15.5 L 18,9.5 Z"
+                                      Fill="{DynamicResource NeonIconSecondary}" StrokeThickness="0"/>
                             </Canvas>
                         </Viewbox>
                     </Button>
@@ -234,9 +238,9 @@
                     <!-- Save -->
                     <Button Command="{Binding SaveModelSystemCommand}"
                             ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}"
-                            ToolTip.Placement="Top">
-                        <Viewbox Width="18" Height="18" IsHitTestVisible="False">
-                            <Canvas Width="20" Height="20">
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20" >
                                 <!-- Down arrow shaft + head -->
                                 <Path Data="M 10,3 V 13 M 5.5,8.5 L 10,13 L 14.5,8.5"
                                       Stroke="{DynamicResource NeonIconPrimary}"
@@ -254,8 +258,8 @@
                     <!-- Export -->
                     <Button Command="{Binding ExportModelSystemCommand}"
                             ToolTip.Tip="{res:Localize ModelSystemEditor_ExportTooltip}"
-                            ToolTip.Placement="Top">
-                        <Viewbox Width="18" Height="18" IsHitTestVisible="False">
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Up arrow shaft + head -->
                                 <Path Data="M 10,17 V 7 M 5.5,12 L 10,7 L 14.5,12"
@@ -274,19 +278,18 @@
                     <!-- Revert -->
                     <Button Command="{Binding RevertModelSystemCommand}"
                             ToolTip.Tip="{res:Localize ModelSystemEditor_RevertTooltip}"
-                            ToolTip.Placement="Top">
-                        <Viewbox Width="18" Height="18" IsHitTestVisible="False">
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
-                                <!-- ~300° CCW circular arc -->
-                                <Path Data="M 10,3 A 7,7 0 1 1 16.5,6.5"
+                                <!-- ~285° CCW arc: starts upper-right, sweeps almost all the way around,
+                                     ends just past 3-o'clock (right side pointing downward) -->
+                                <Path Data="M 16.9,4.5 A 7.5,7.5 0 1 0 17.5,10.5"
                                       Stroke="{DynamicResource NeonIconPrimary}"
-                                      StrokeThickness="1.8" StrokeLineCap="Round"
+                                      StrokeThickness="2.5" StrokeLineCap="Round"
                                       Fill="Transparent"/>
-                                <!-- Arrowhead at arc end -->
-                                <Path Data="M 14,8.5 L 16.5,6.5 L 18.5,9"
-                                      Stroke="{DynamicResource NeonIconSecondary}"
-                                      StrokeThickness="1.8" StrokeLineCap="Round"
-                                      StrokeJoin="Round" Fill="Transparent"/>
+                                <!-- Filled arrowhead at (17.5,10.5) pointing downward (CCW tangent = down at right side) -->
+                                <Path Data="M 15,8.5 L 17.5,14.5 L 20,8.5 Z"
+                                      Fill="{DynamicResource NeonIconSecondary}" StrokeThickness="0"/>
                             </Canvas>
                         </Viewbox>
                     </Button>
@@ -297,8 +300,8 @@
                     <Button Command="{Binding RunModelSystemCommand}"
                             IsEnabled="{Binding CanRun}"
                             ToolTip.Tip="Run this model system (save first to apply changes)"
-                            ToolTip.Placement="Top">
-                        <Viewbox Width="18" Height="18" IsHitTestVisible="False">
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Filled play triangle -->
                                 <Path Data="M 5,3 L 5,17 L 17,10 Z"
@@ -318,8 +321,8 @@
                     <!-- Variables -->
                     <Button Click="OnShowVariablesClick"
                             ToolTip.Tip="View / manage Model System Variables"
-                            ToolTip.Placement="Top">
-                        <Viewbox Width="18" Height="18" IsHitTestVisible="False">
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Three slider tracks -->
                                 <Path Data="M 2,5 H 18 M 2,10 H 18 M 2,15 H 18"
@@ -343,7 +346,7 @@
                 </StackPanel>
             </Border>
 
-        </Panel>
+        </Grid>
 
         <!-- ── Toast notification overlay ──────────────────────────────── -->
         <Border Grid.Row="1"
