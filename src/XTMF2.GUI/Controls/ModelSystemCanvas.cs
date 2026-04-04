@@ -714,6 +714,16 @@ public sealed class ModelSystemCanvas : Control
                 maxX = Math.Max(maxX, fi.X + fi.Width  + 400);
                 maxY = Math.Max(maxY, fi.Y + fi.Height + 400);
             }
+            foreach (var ft in _vm.FunctionTemplates)
+            {
+                maxX = Math.Max(maxX, ft.X + ft.Width  + 400);
+                maxY = Math.Max(maxY, ft.Y + ft.Height + 400);
+            }
+            foreach (var g in _vm.GhostNodes)
+            {
+                maxX = Math.Max(maxX, g.X + g.Width  + 400);
+                maxY = Math.Max(maxY, g.Y + g.Height + 400);
+            }
         }
         // Measure the inline editor so Avalonia knows its desired size.
         if (_editingParamNode is not null)
