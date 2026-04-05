@@ -44,9 +44,9 @@
                     <!-- hover / press highlights -->
                     <SolidColorBrush x:Key="NeonPillHover">#1A0066CC</SolidColorBrush>
                     <SolidColorBrush x:Key="NeonPillPress">#330066CC</SolidColorBrush>
-                    <!-- vector icon colours -->
-                    <SolidColorBrush x:Key="NeonIconPrimary">#FF0066CC</SolidColorBrush>
-                    <SolidColorBrush x:Key="NeonIconSecondary">#FF7C3AED</SolidColorBrush>
+                    <!-- vector icon colours: darker than neons so they read clearly on the near-white pill -->
+                    <SolidColorBrush x:Key="NeonIconPrimary">#FF0040A8</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonIconSecondary">#FF6020C0</SolidColorBrush>
                 </ResourceDictionary>
 
             </ResourceDictionary.ThemeDictionaries>
@@ -240,17 +240,26 @@
                             ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}"
                             ToolTip.Placement="Pointer">
                         <Viewbox Width="18" Height="18">
-                            <Canvas Width="20" Height="20" >
-                                <!-- Down arrow shaft + head -->
-                                <Path Data="M 10,3 V 13 M 5.5,8.5 L 10,13 L 14.5,8.5"
+                            <Canvas Width="20" Height="20">
+                                <!-- Floppy disk: outline body so details are visible in both themes -->
+                                <!-- Outer shell (stroke only) -->
+                                <Path Data="M 2,2 H 14 L 18,6 V 18 H 2 Z"
                                       Stroke="{DynamicResource NeonIconPrimary}"
-                                      StrokeThickness="1.8" StrokeLineCap="Round"
-                                      StrokeJoin="Round" Fill="Transparent"/>
-                                <!-- Tray (U open at top) -->
-                                <Path Data="M 2,15 V 18 H 18 V 15"
+                                      StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round"
+                                      Fill="Transparent"/>
+                                <!-- Corner fold crease -->
+                                <Path Data="M 14,2 L 14,6 H 18"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round"
+                                      Fill="Transparent"/>
+                                <!-- Shutter strip (filled) -->
+                                <Path Data="M 5,2.5 H 13 V 7 H 5 Z"
+                                      Fill="{DynamicResource NeonIconSecondary}" StrokeThickness="0"/>
+                                <!-- Label sticker (outlined) -->
+                                <Path Data="M 4,10.5 H 16 V 16.5 H 4 Z"
                                       Stroke="{DynamicResource NeonIconSecondary}"
-                                      StrokeThickness="1.8" StrokeLineCap="Round"
-                                      StrokeJoin="Round" Fill="Transparent"/>
+                                      StrokeThickness="1.2" StrokeLineCap="Round" StrokeJoin="Round"
+                                      Fill="Transparent"/>
                             </Canvas>
                         </Viewbox>
                     </Button>
