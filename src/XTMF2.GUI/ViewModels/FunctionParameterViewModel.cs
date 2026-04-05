@@ -109,7 +109,8 @@ public sealed partial class FunctionParameterViewModel : ObservableObject, ICanv
                 OnPropertyChanged(nameof(Height));
                 OnPropertyChanged(nameof(CenterX));
                 OnPropertyChanged(nameof(CenterY));
-                break;            case nameof(FunctionParameter.Type):
+                break;            
+            case nameof(FunctionParameter.Type):
                 OnPropertyChanged(nameof(TypeName));
                 break;
         }

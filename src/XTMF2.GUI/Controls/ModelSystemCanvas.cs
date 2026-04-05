@@ -1262,13 +1262,12 @@ public sealed class ModelSystemCanvas : Control
             }
 
             DrawRectGlow(ctx, rect, FiCornerRadius, glowColor);
-            ctx.DrawRectangle(bodyFill, border, rect, FiCornerRadius, FiCornerRadius);
 
-            // Header band.
-            ctx.DrawRectangle(headerFill, null,
-                new Rect(fp.X, fp.Y, rw, FtHeaderHeight), FiCornerRadius, FiCornerRadius);
+            // Header band: draw header fill over entire rect (preserving rounded corners),
+            // then overdraw the body area below the header — same pattern as FunctionTemplates.
+            ctx.DrawRectangle(headerFill, border, rect, FiCornerRadius, FiCornerRadius);
             ctx.DrawRectangle(bodyFill, null,
-                new Rect(fp.X, fp.Y + FtHeaderHeight / 2.0, rw, rh - FtHeaderHeight / 2.0));
+                new Rect(fp.X, fp.Y + FtHeaderHeight, rw, rh - FtHeaderHeight));
             ctx.DrawRectangle(null, border, rect, FiCornerRadius, FiCornerRadius);
 
             // Name label in header.
@@ -1377,151 +1376,6 @@ public sealed class ModelSystemCanvas : Control
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// Computes the four elbow points (start, bend1, bend2, end) for a link's
-    /// three-segment orthogonal routing. Uses the hook anchor cache and border-clip logic.
-    /// </summary>
-    private (Point p1, Point mid1, Point mid2, Point p2) ComputeElbow(LinkViewModel link)
-    {
-        var originCenter = new Point(link.X1, link.Y1);
-        var destCenter   = new Point(link.X2, link.Y2);
-
-        // p1: hook anchor when origin is a Node or FunctionInstance, else border-clip.
-        Point p1;
-        bool  hookOrigin = false;
-        if (link.Origin is NodeViewModel originNvm
-            && _hookAnchors.TryGetValue((originNvm, link.UnderlyingLink.OriginHook), out var hookPt))
-        {
-            p1         = hookPt;
-            hookOrigin = true;
-        }
-        else if (link.Origin is FunctionInstanceViewModel fiOriginElbow
-            && link.UnderlyingLink.OriginHook is FunctionParameterHook fphElbow
-            && _fiHookAnchors.TryGetValue((fiOriginElbow, fphElbow), out var fiHookPtElbow))
-        {
-            p1         = fiHookPtElbow;
-            hookOrigin = true;
-        }
-        else
-        {
-            p1 = BorderPoint(link.Origin, destCenter) ?? originCenter;
-        }
-
-        // H-V-H when the link exits a hook (rightward) or horizontal span >= vertical span.
-        // V-H-V otherwise.
-        bool hvh = hookOrigin ||
-                   Math.Abs(destCenter.X - p1.X) >= Math.Abs(destCenter.Y - p1.Y);
-
-        Point mid1, mid2, p2;
-        if (hvh)
-        {
-            double midX    = Math.Max(p1.X + ElbowMinOffset, (p1.X + destCenter.X) / 2.0);
-            mid1           = new Point(midX, p1.Y);
-
-            // Determine whether the vertical middle segment will intersect the
-            // destination's top or bottom border rather than a side border.
-            // This happens when midX falls inside the destination's horizontal span.
-            // In that case the old approach of using (midX, destCenter.Y) as the
-            // approach point is wrong: destCenter.Y equals the centre Y, so dy=0
-            // in ClipLineToRect and only side borders are checked.  Worse, when
-            // the approach point itself is inside the rect ClipLineToRect returns
-            // an exit intersection rather than an entry, misplacing the arrowhead.
-            bool midXInHSpan = false;
-            double borderY   = 0;
-            if (link.Destination is NodeViewModel destNode)
-            {
-                var dRect    = new Rect(destNode.X, destNode.Y,
-                                        NodeRenderWidth(destNode), NodeRenderHeight(destNode));
-                midXInHSpan  = midX >= dRect.X && midX <= dRect.Right;
-                if (midXInHSpan)
-                    borderY  = p1.Y <= destCenter.Y ? dRect.Y : dRect.Bottom;
-            }
-            else if (link.Destination is GhostNodeViewModel ghostDestH)
-            {
-                var dRect    = new Rect(ghostDestH.X, ghostDestH.Y, ghostDestH.Width, ghostDestH.Height);
-                midXInHSpan  = midX >= dRect.X && midX <= dRect.Right;
-                if (midXInHSpan)
-                    borderY  = p1.Y <= destCenter.Y ? dRect.Y : dRect.Bottom;
-            }
-            else if (link.Destination is FunctionInstanceViewModel fiDestH)
-            {
-                var dRect    = new Rect(fiDestH.X, fiDestH.Y, fiDestH.Width, fiDestH.Height);
-                midXInHSpan  = midX >= dRect.X && midX <= dRect.Right;
-                if (midXInHSpan)
-                    borderY  = p1.Y <= destCenter.Y ? dRect.Y : dRect.Bottom;
-            }
-
-            if (midXInHSpan)
-            {
-                // Vertical approach: arrow arrives straight down (or up) at the
-                // top (or bottom) border.  Collapse mid2 onto mid1 so the second
-                // segment has zero length and the full arrow is the vertical shaft.
-                p2   = new Point(midX, borderY);
-                mid2 = mid1;
-            }
-            else
-            {
-                // Normal case: midX is outside the destination's horizontal span,
-                // so the final segment is horizontal into a side border.
-                var approachPt = new Point(midX, destCenter.Y);
-                p2             = BorderPoint(link.Destination, approachPt) ?? destCenter;
-                mid2           = new Point(midX, p2.Y);
-            }
-        }
-        else
-        {
-            double midY    = (p1.Y + destCenter.Y) / 2.0;
-            mid1           = new Point(p1.X, midY);
-
-            // Determine whether the horizontal middle segment will intersect the
-            // destination's left or right border rather than a top/bottom border.
-            // This happens when midY falls inside the destination's vertical span.
-            // In that case the approach point (destCenter.X, midY) is inside the
-            // destination box, which causes BorderPoint/ClipLineToRect to return
-            // an exit intersection rather than an entry, misplacing the arrowhead.
-            bool midYInVSpan = false;
-            double borderX   = 0;
-            if (link.Destination is NodeViewModel destNodeV)
-            {
-                var dRect    = new Rect(destNodeV.X, destNodeV.Y,
-                                        NodeRenderWidth(destNodeV), NodeRenderHeight(destNodeV));
-                midYInVSpan  = midY >= dRect.Y && midY <= dRect.Bottom;
-                if (midYInVSpan)
-                    borderX  = p1.X <= destCenter.X ? dRect.X : dRect.Right;
-            }
-            else if (link.Destination is GhostNodeViewModel ghostDestV)
-            {
-                var dRect    = new Rect(ghostDestV.X, ghostDestV.Y, ghostDestV.Width, ghostDestV.Height);
-                midYInVSpan  = midY >= dRect.Y && midY <= dRect.Bottom;
-                if (midYInVSpan)
-                    borderX  = p1.X <= destCenter.X ? dRect.X : dRect.Right;
-            }
-            else if (link.Destination is FunctionInstanceViewModel fiDestV)
-            {
-                var dRect    = new Rect(fiDestV.X, fiDestV.Y, fiDestV.Width, fiDestV.Height);
-                midYInVSpan  = midY >= dRect.Y && midY <= dRect.Bottom;
-                if (midYInVSpan)
-                    borderX  = p1.X <= destCenter.X ? dRect.X : dRect.Right;
-            }
-
-            if (midYInVSpan)
-            {
-                // Horizontal approach: arrow arrives from the left or right border.
-                // Collapse mid2 onto mid1 so the second segment has zero length
-                // and the full arrow is the horizontal shaft.
-                p2   = new Point(borderX, midY);
-                mid2 = mid1;
-            }
-            else
-            {
-                var approachPt = new Point(destCenter.X, midY);
-                p2             = BorderPoint(link.Destination, approachPt) ?? destCenter;
-                mid2           = new Point(p2.X, midY);
-            }
-        }
-        return (p1, mid1, mid2, p2);
     }
 
     /// <summary>
@@ -1635,28 +1489,6 @@ public sealed class ModelSystemCanvas : Control
         double back   = ArrowSize * 1.5;
         var    normal = BorderInwardNormal(dest, borderPt);
         return new Point(borderPt.X - normal.X * back, borderPt.Y - normal.Y * back);
-    }
-
-    /// <summary>
-    /// Computes a straight-line (p1, p2) pair for a link:
-    /// p1 is the hook anchor (or origin border point), and p2 is the destination
-    /// border point along the direct p1→destination-centre direction.
-    /// </summary>
-    private (Point p1, Point p2) ComputeDirectLine(LinkViewModel link)
-    {
-        var destCenter = new Point(link.X2, link.Y2);
-
-        // p1: hook anchor when available, else origin border point toward dest centre.
-        Point p1;
-        if (link.Origin is NodeViewModel originNvm
-            && _hookAnchors.TryGetValue((originNvm, link.UnderlyingLink.OriginHook), out var hookPt))
-            p1 = hookPt;
-        else
-            p1 = BorderPoint(link.Origin, destCenter) ?? new Point(link.X1, link.Y1);
-
-        // p2: destination border point along the p1→dest direction.
-        var p2 = BorderPoint(link.Destination, p1) ?? destCenter;
-        return (p1, p2);
     }
 
     /// <summary>
