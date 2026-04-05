@@ -3058,7 +3058,7 @@ public sealed class ModelSystemCanvas : Control
             if (_editingCommentBlock is not null) CommitCommentEdit();
             if (_editingNameElement  is not null) CommitNameEdit();
 
-            if (hit is NodeViewModel or CommentBlockViewModel or GhostNodeViewModel or FunctionTemplateViewModel)
+            if (hit is NodeViewModel or CommentBlockViewModel or GhostNodeViewModel or FunctionTemplateViewModel or FunctionInstanceViewModel or FunctionParameterViewModel)
             {
                 // On the very first Ctrl+click, absorb the existing primary selection into the set.
                 if (_multiSelection.Count == 0 && _vm.SelectedElement is not null
@@ -3416,6 +3416,26 @@ public sealed class ModelSystemCanvas : Control
                         _multiSelection.Add(ft);
                         ft.IsSelected = true;
                         firstHit ??= ft;
+                    }
+                }
+                foreach (var fi in _vm.FunctionInstances)
+                {
+                    var fir = new Rect(fi.X, fi.Y, fi.Width, fi.Height);
+                    if (finalRect.Intersects(fir))
+                    {
+                        _multiSelection.Add(fi);
+                        fi.IsSelected = true;
+                        firstHit ??= fi;
+                    }
+                }
+                foreach (var fp in _vm.FunctionParameterVMs)
+                {
+                    var fpr = new Rect(fp.X, fp.Y, fp.Width, fp.Height);
+                    if (finalRect.Intersects(fpr))
+                    {
+                        _multiSelection.Add(fp);
+                        fp.IsSelected = true;
+                        firstHit ??= fp;
                     }
                 }
                 if (firstHit is not null)
