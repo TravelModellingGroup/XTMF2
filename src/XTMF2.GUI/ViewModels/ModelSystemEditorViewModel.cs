@@ -2465,6 +2465,57 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Opens the <see cref="LinkDestinationOrderDialog"/> for <paramref name="ml"/> and,
+    /// if the user confirms, applies the requested permutation to the session.
+    /// Each position swap is recorded as its own undoable command in the buffer.
+    /// </summary>
+    /// <param name="ml">The multi-destination link whose order should be edited.</param>
+    public async Task ReorderLinkDestinationsAsync(MultiLink ml)
+    {
+        if (ParentWindow is null) return;
+
+        var names = ml.Destinations.Select(d => d.Name).ToList();
+        var dlg   = new LinkDestinationOrderDialog(names);
+        await dlg.ShowDialog(ParentWindow);
+
+        if (dlg.WasCancelled) return;
+
+        // Apply the permutation returned by the dialog.
+        // FinalOrderIndices[i] = which original index should be at position i.
+        ApplyLinkDestinationPermutation(ml, dlg.FinalOrderIndices);
+    }
+
+    /// <summary>
+    /// Applies a permutation to a <see cref="MultiLink"/> via sequential
+    /// <see cref="ModelSystemSession.MoveLinkDestination"/> calls,
+    /// keeping an internal state array in sync so index arithmetic stays correct
+    /// even as earlier moves shift subsequent positions.
+    /// </summary>
+    private void ApplyLinkDestinationPermutation(MultiLink ml, IReadOnlyList<int> newOrder)
+    {
+        int n = newOrder.Count;
+        // current[i] holds the original index of the item currently sitting at position i.
+        var current = new List<int>(Enumerable.Range(0, n));
+
+        for (int targetPos = 0; targetPos < n; targetPos++)
+        {
+            int desiredOriginalIdx = newOrder[targetPos];
+            int currentPos         = current.IndexOf(desiredOriginalIdx);
+            if (currentPos == targetPos) continue;
+
+            if (!Session.MoveLinkDestination(User, ml, currentPos, targetPos, out var error) && error is not null)
+            {
+                _ = ShowError("Reorder Failed", error);
+                return;
+            }
+
+            // Mirror the move in our local tracking array.
+            current.RemoveAt(currentPos);
+            current.Insert(targetPos, desiredOriginalIdx);
+        }
+    }
+
+    /// <summary>
     /// Removes a single <paramref name="dest"/> entry from the currently selected MultiLink.
     /// Bound to the per-row delete button in the destination list.
     /// </summary>

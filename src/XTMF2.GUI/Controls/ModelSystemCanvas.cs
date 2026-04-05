@@ -42,7 +42,7 @@ namespace XTMF2.GUI.Controls;
 /// <summary>
 /// A custom Avalonia <see cref="Control"/> that renders the model system canvas
 /// using a <see cref="DrawingContext"/>.
-/// <para>
+/// <para>f
 /// Nodes are drawn as rounded rectangles, Starts as circles, and Links as lines.
 /// Click a node or start to select it; click empty space to deselect.
 /// </para>
@@ -2589,7 +2589,17 @@ public sealed class ModelSystemCanvas : Control
             var hookHit = HitTestHook(mpos);
             if (hookHit is { } hh)
             {
-                _ = _vm.CreateNodeFromHookAsync(hh.node, hh.hook, hh.anchor.X, hh.anchor.Y);
+                // If the hook already has a MultiLink, open the reorder dialog instead of
+                // creating a new auto-linked node if ctrl is down.
+                var hookMultiLink = _vm.Links
+                    .Select(lvm => lvm.UnderlyingLink)
+                    .OfType<MultiLink>()
+                    .FirstOrDefault(ml => ml.OriginHook == hh.hook
+                                       && ml.Origin == hh.node.UnderlyingNode);
+                if (hookMultiLink is not null && (e.KeyModifiers & KeyModifiers.Control) != 0)
+                    _ = _vm.ReorderLinkDestinationsAsync(hookMultiLink);
+                else
+                    _ = _vm.CreateNodeFromHookAsync(hh.node, hh.hook, hh.anchor.X, hh.anchor.Y);
                 e.Handled = true;
                 return;
             }
@@ -2655,6 +2665,15 @@ public sealed class ModelSystemCanvas : Control
             {
                 _vm.SelectElementCommand.Execute(fpHit);
                 BeginNameEdit(fpHit);
+                e.Handled = true;
+                return;
+            }
+
+            // ── Double-click on a MultiLink line: open destination-order dialog ──
+            var dblLinkHit = HitTestLink(mpos);
+            if (dblLinkHit?.UnderlyingLink is MultiLink dblMultiLink)
+            {
+                _ = _vm.ReorderLinkDestinationsAsync(dblMultiLink);
                 e.Handled = true;
                 return;
             }
@@ -3236,6 +3255,20 @@ public sealed class ModelSystemCanvas : Control
                 _ = vm.CreateInterBoundaryLinkAsync(capturedNode, capturedHook);
             menu.Items.Add(interBoundaryItem);
 
+            // If this hook already has a MultiLink, offer to reorder its destinations.
+            var hookMultiLink = _vm.Links
+                .Select(lvm => lvm.UnderlyingLink)
+                .OfType<MultiLink>()
+                .FirstOrDefault(ml => ml.OriginHook == capturedHook
+                                   && ml.Origin == capturedNode.UnderlyingNode);
+            if (hookMultiLink is not null)
+            {
+                var capturedHookMl = hookMultiLink;
+                var reorderHookItem = new MenuItem { Header = "Reorder Destinations…" };
+                reorderHookItem.Click += (_, _) => _ = vm.ReorderLinkDestinationsAsync(capturedHookMl);
+                menu.Items.Add(reorderHookItem);
+            }
+
             // Inside a function template, offer creating a FunctionParameter from a regular node hook.
             if (vm.IsInsideFunctionTemplate && capturedHook is not FunctionParameterHook)
             {
@@ -3260,6 +3293,16 @@ public sealed class ModelSystemCanvas : Control
             allBoundariesItem.Click += (_, _) =>
                 _ = vm.CreateInterBoundaryLinkAsync(capturedFiOrigin, capturedFpHook);
             menu.Items.Add(allBoundariesItem);
+            menu.Items.Add(new Separator());
+        }
+
+        // ── MultiLink: reorder destinations ──────────────────────────────────
+        if (link?.UnderlyingLink is MultiLink reorderMl)
+        {
+            var capturedReorderMl = reorderMl;
+            var reorderLinkItem   = new MenuItem { Header = "Reorder Destinations…" };
+            reorderLinkItem.Click += (_, _) => _ = vm.ReorderLinkDestinationsAsync(capturedReorderMl);
+            menu.Items.Add(reorderLinkItem);
             menu.Items.Add(new Separator());
         }
 
