@@ -26,6 +26,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
 using Avalonia.Layout;
@@ -272,6 +273,10 @@ public sealed class ModelSystemCanvas : Control
     private const double ScaleStep = 0.10;
     private const double ScaleMin  = 0.10;
     private const double ScaleMax  = 4.0;
+    // Auto-scroll while dragging: activate within this many screen-pixels from the viewport edge.
+    private const double AutoScrollZone  = 48.0 * 2.0;
+    /// <summary>Maximum scroll delta (screen pixels) applied per pointer-move event at the very edge.</summary>
+    private const double AutoScrollSpeed = 14.0 / 2.0;
 
     private static readonly Typeface DefaultTypeface = new Typeface("Segoe UI, Arial, sans-serif");
 
@@ -519,6 +524,14 @@ public sealed class ModelSystemCanvas : Control
         // that it only appears after a minimal-movement right-click, not after
         // a right-drag used to create a link connection.
         ContextRequested += SuppressContextRequested;
+
+        // Continuous auto-scroll timer — fires at ~60 Hz while the pointer is
+        // inside the scroll zone during an element drag, so the canvas keeps
+        // scrolling even when the mouse is stationary.
+        _autoScrollTimer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(16),
+            DispatcherPriority.Input,
+            OnAutoScrollTick);
     }
 
     // ── Drag state ────────────────────────────────────────────────────────
@@ -526,6 +539,13 @@ public sealed class ModelSystemCanvas : Control
     private ICanvasElement? _dragging;
     /// <summary>Offset from the element's top-left corner to the pointer position at drag start.</summary>
     private Point _dragOffset;
+    /// <summary>
+    /// Fires at ~60 Hz while the cursor is inside the auto-scroll edge zone during a drag,
+    /// so scrolling continues even when the mouse is stationary.
+    /// </summary>
+    private readonly DispatcherTimer _autoScrollTimer;
+    /// <summary>Last ScrollViewer-local cursor position, updated on every pointer-move for the timer to reuse.</summary>
+    private Point _lastSvPos;
 
     // ── Canvas pan state (left-drag on empty space) ───────────────────────
     /// <summary><c>true</c> while the user is panning by dragging empty canvas space.</summary>
@@ -2374,6 +2394,65 @@ public sealed class ModelSystemCanvas : Control
             _zoomTextBox.Text = $"{(int)Math.Round(_scale * 100)}%";
     }
 
+    /// <summary>
+    /// Scrolls the host <see cref="ScrollViewer"/> when the pointer is within
+    /// <see cref="AutoScrollZone"/> pixels of any viewport edge during an element drag.
+    /// The scroll delta is proportional to how far inside the zone the cursor sits,
+    /// reaching <see cref="AutoScrollSpeed"/> at the very edge.
+    /// Also starts/stops the continuous <see cref="_autoScrollTimer"/> based on whether
+    /// the cursor is currently inside the scroll zone.
+    /// </summary>
+    private void TryAutoScrollForDrag(Point svPos)
+    {
+        _lastSvPos = svPos;
+        var sv = GetScrollViewer();
+        if (sv is null) return;
+
+        double vw = sv.Bounds.Width;
+        double vh = sv.Bounds.Height;
+
+        double dx = 0.0, dy = 0.0;
+
+        if (svPos.X < AutoScrollZone)
+            dx = -(AutoScrollZone - svPos.X) / AutoScrollZone * AutoScrollSpeed;
+        else if (svPos.X > vw - AutoScrollZone)
+            dx =  (svPos.X - (vw - AutoScrollZone)) / AutoScrollZone * AutoScrollSpeed;
+
+        if (svPos.Y < AutoScrollZone)
+            dy = -(AutoScrollZone - svPos.Y) / AutoScrollZone * AutoScrollSpeed;
+        else if (svPos.Y > vh - AutoScrollZone)
+            dy =  (svPos.Y - (vh - AutoScrollZone)) / AutoScrollZone * AutoScrollSpeed;
+
+        if (dx != 0.0 || dy != 0.0)
+        {
+            sv.Offset = new Vector(
+                Math.Max(0, sv.Offset.X + dx),
+                Math.Max(0, sv.Offset.Y + dy));
+            if (!_autoScrollTimer.IsEnabled)
+                _autoScrollTimer.Start();
+        }
+        else
+        {
+            if (_autoScrollTimer.IsEnabled)
+                _autoScrollTimer.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Called by <see cref="_autoScrollTimer"/> (~60 Hz) while the cursor is stationary
+    /// inside the auto-scroll zone. Re-applies the scroll step so the canvas continues
+    /// to move even without new pointer-move events.
+    /// </summary>
+    private void OnAutoScrollTick(object? sender, EventArgs e)
+    {
+        if (_dragging is null)
+        {
+            _autoScrollTimer.Stop();
+            return;
+        }
+        TryAutoScrollForDrag(_lastSvPos);
+    }
+
     private void OnZoomTextBoxKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key is Key.Enter or Key.Return)
@@ -2717,6 +2796,10 @@ public sealed class ModelSystemCanvas : Control
         var pos  = e.GetCurrentPoint(this).Position;  // screen coords
         var mpos = ToCanvasPos(pos);                  // model coords
 
+        // Capture ScrollViewer-local position now for auto-scroll use later.
+        var svForScroll = GetScrollViewer();
+        var svPos = svForScroll is not null ? e.GetCurrentPoint(svForScroll).Position : pos;
+
         // Right-drag: update pending link preview.
         if (_linkOrigin is not null)
         {
@@ -2819,6 +2902,7 @@ public sealed class ModelSystemCanvas : Control
         }
 
         InvalidateAndMeasure();
+        TryAutoScrollForDrag(svPos);
         e.Handled = true;
     }
 
@@ -3059,6 +3143,7 @@ public sealed class ModelSystemCanvas : Control
         }
 
         _dragging = null;
+        _autoScrollTimer.Stop();
         e.Pointer.Capture(null);
         InvalidateAndMeasure();
         e.Handled = true;
