@@ -212,8 +212,10 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush FiHookTextBrush  = new SolidColorBrush(Color.FromRgb(0x80, 0xCB, 0xC4));
     private const double FiCornerRadius = 6.0;
     // Entry-node highlight: gold ring + label (shown when viewing InternalModules of a FunctionTemplate)
-    private static readonly IBrush EntryNodeRingBrush  = new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x00));
-    private static readonly IBrush EntryNodeLabelBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x00));
+    private static readonly IBrush EntryNodeRingBrush   = new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x00));
+    private static readonly IBrush EntryNodeLabelBrush  = new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x00));
+    /// <summary>Darker amber used for the "▶ Entry Point" badge in light mode.</summary>
+    private static readonly IBrush EntryNodeLabelBrushL = new SolidColorBrush(Color.FromRgb(0x88, 0x55, 0x00));
     private const double EntryNodeRingExtra     = 3.0;   // px of expansion each side beyond node rect
     private const double EntryNodeRingThick     = 2.5;   // pen width of the outer ring
     private const double EntryNodeLabelFontSize = 8.0;   // font size for the "▶ Entry Point" badge
@@ -1955,17 +1957,15 @@ public sealed class ModelSystemCanvas : Control
             double headerBottom = node.Y + NodeHeaderHeight;
             var ft = MakeText(node.Name, NodeFontSize, _isLight ? NodeTextBrushL : NodeTextBrush);
             double tx = node.X + (rw - ft.Width) / 2;
-            // Shift name to the upper portion of the header when a badge will be drawn below it.
-            double ty = isEntryNode
-                ? node.Y + 3.0
-                : node.Y + (NodeHeaderHeight - ft.Height) / 2;
+            double ty = node.Y + (NodeHeaderHeight - ft.Height) / 2;
             ctx.DrawText(ft, new Point(tx, ty));
 
-            // ── "▶ Entry Point" badge in the lower portion of the header ──────
+            // ── "▶ Entry Point" badge — left-aligned in the lower portion of the header ──
             if (isEntryNode)
             {
-                var badge  = MakeText("▶ Entry Point", EntryNodeLabelFontSize, EntryNodeLabelBrush);
-                double blx = node.X + (rw - badge.Width) / 2.0;
+                var labelBrush = _isLight ? EntryNodeLabelBrushL : EntryNodeLabelBrush;
+                var badge  = MakeText("▶ Entry Point", EntryNodeLabelFontSize, labelBrush);
+                double blx = node.X + 6.0;
                 double bly = node.Y + NodeHeaderHeight - badge.Height - 2.5;
                 using (ctx.PushClip(new Rect(node.X + 2, node.Y, rw - 4, NodeHeaderHeight)))
                     ctx.DrawText(badge, new Point(blx, bly));
