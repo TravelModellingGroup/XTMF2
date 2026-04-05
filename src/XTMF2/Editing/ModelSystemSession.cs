@@ -1900,6 +1900,36 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Sets the orthogonal-routing flag on a link and records the change in the undo buffer.
+        /// </summary>
+        public bool SetLinkOrthogonal(User user, Link link, bool orthogonal, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(link);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (link.SetOrthogonal(orthogonal, out error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (link.SetOrthogonal(!orthogonal, out var error), error);
+                    }, () =>
+                    {
+                        return (link.SetOrthogonal(orthogonal, out var error), error);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Save the model system
         /// </summary>
         /// <param name="error">An error message in case the save fails.</param>

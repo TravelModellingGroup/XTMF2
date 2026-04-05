@@ -39,19 +39,27 @@ namespace XTMF2
         protected const string DestinationProperty = "Destination";
         protected const string IndexProperty = "Index";
         protected const string DisabledProperty = "Disabled";
+        protected const string OrthogonalProperty = "Orthogonal";
 
         public Node Origin { get; }
         public NodeHook OriginHook { get; }
 
         public bool IsDisabled { get; private set; }
 
+        /// <summary>
+        /// When <c>true</c> this link is rendered using orthogonal (right-angle)
+        /// routing instead of the default smooth cubic Bézier curve.
+        /// </summary>
+        public bool IsOrthogonal { get; private set; }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        protected Link(Node origin, NodeHook hook, bool disabled)
+        protected Link(Node origin, NodeHook hook, bool disabled, bool orthogonal = false)
         {
             Origin = origin;
             OriginHook = hook;
             IsDisabled = disabled;
+            IsOrthogonal = orthogonal;
         }
 
         /// <summary>
@@ -82,6 +90,7 @@ namespace XTMF2
             List<Node>? destinations = null;
             string? hookName = null;
             bool disabled = false;
+            bool orthogonal = false;
             int listIndex = 0;
             // read in the values
             while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -141,6 +150,11 @@ namespace XTMF2
                     reader.Read();
                     disabled = reader.GetBoolean();
                 }
+                else if(reader.ValueTextEquals(OrthogonalProperty))
+                {
+                    reader.Read();
+                    orthogonal = reader.GetBoolean();
+                }
                 else
                 {
                     return FailWith(out link, out error, "Unknown parameter type when loading link " + reader.GetString());
@@ -168,12 +182,12 @@ namespace XTMF2
             }
             if (destination != null)
             {
-                link = new SingleLink(origin, hook, destination, disabled);
+                link = new SingleLink(origin, hook, destination, disabled, orthogonal);
             }
             else
             {
                 // destinations can not be null if destination was.
-                link = new MultiLink(origin, hook, destinations!, disabled);
+                link = new MultiLink(origin, hook, destinations!, disabled, orthogonal);
             }
             return true;
         }
@@ -184,6 +198,14 @@ namespace XTMF2
         {
             IsDisabled = disabled;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDisabled)));
+            error = null;
+            return true;
+        }
+
+        internal bool SetOrthogonal(bool orthogonal, [NotNullWhen(false)] out CommandError? error)
+        {
+            IsOrthogonal = orthogonal;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsOrthogonal)));
             error = null;
             return true;
         }

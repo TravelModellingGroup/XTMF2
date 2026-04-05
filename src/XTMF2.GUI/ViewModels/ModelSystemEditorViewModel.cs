@@ -2533,6 +2533,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Toggles the orthogonal-routing flag on the given link (undo-able).
+    /// </summary>
+    internal void ToggleLinkOrthogonal(Link link)
+    {
+        if (!Session.SetLinkOrthogonal(User, link, !link.IsOrthogonal, out var error) && error is not null)
+            ShowToast(error.Message ?? "Could not change link routing.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>
     /// Sets <see cref="LinkViewModel.IsSelected"/> on every VM whose
     /// <see cref="LinkViewModel.UnderlyingLink"/> equals <paramref name="underlyingLink"/>.
     /// This ensures all destination arrows for a MultiLink are highlighted together.

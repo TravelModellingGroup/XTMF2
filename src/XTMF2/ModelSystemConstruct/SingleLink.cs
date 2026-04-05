@@ -29,8 +29,8 @@ namespace XTMF2.ModelSystemConstruct
     {
         public Node Destination { get; private set; }
 
-        public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled)
-            : base(origin, hook, disabled)
+        public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled, bool orthogonal = false)
+            : base(origin, hook, disabled, orthogonal)
         {
             Destination = destination;
         }
@@ -52,6 +52,10 @@ namespace XTMF2.ModelSystemConstruct
             if (IsDisabled)
             {
                 writer.WriteBoolean(DisabledProperty, true);
+            }
+            if (IsOrthogonal)
+            {
+                writer.WriteBoolean(OrthogonalProperty, true);
             }
             writer.WriteEndObject();
         }

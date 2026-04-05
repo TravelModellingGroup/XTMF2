@@ -32,8 +32,8 @@ namespace XTMF2.ModelSystemConstruct
         private readonly ObservableCollection<Node> _Destinations;
         private readonly ReadOnlyObservableCollection<Node> _destinationsView;
 
-        public MultiLink(Node origin, NodeHook hook, List<Node> destinations, bool disabled)
-            : base(origin, hook, disabled)
+        public MultiLink(Node origin, NodeHook hook, List<Node> destinations, bool disabled, bool orthogonal = false)
+            : base(origin, hook, disabled, orthogonal)
         {
             _Destinations     = new ObservableCollection<Node>(destinations);
             _destinationsView = new ReadOnlyObservableCollection<Node>(_Destinations);
@@ -75,6 +75,10 @@ namespace XTMF2.ModelSystemConstruct
             if (IsDisabled)
             {
                 writer.WriteBoolean(DisabledProperty, true);
+            }
+            if (IsOrthogonal)
+            {
+                writer.WriteBoolean(OrthogonalProperty, true);
             }
             writer.WriteEndObject();
         }

@@ -1324,8 +1324,77 @@ public sealed class ModelSystemCanvas : Control
         }
     }
 
+    /// <summary>
+    /// Spine-X cache: for each orthogonal <see cref="Link"/> that is a <see cref="MultiLink"/>
+    /// (rendered as multiple <see cref="LinkViewModel"/>s), stores the shared vertical-trunk X
+    /// so all destination branches overlap on the common horizontal exit segment.
+    /// Built fresh at the start of every <see cref="RenderLinks"/> call.
+    /// </summary>
+    private readonly Dictionary<XTMF2.Link, double> _orthogonalSpineX = new();
+
+    /// <summary>
+    /// Tracks which orthogonal multi-link groups have already had their shared trunk
+    /// geometry (glow + stroke) drawn during the current <see cref="RenderLinks"/> pass.
+    /// Prevents the trunk glow from being painted N times causing it to appear too bright.
+    /// </summary>
+    private readonly HashSet<XTMF2.Link> _orthogonalTrunkDrawn = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>
+    /// For each orthogonal multi-link group, stores the full vertical extent
+    /// <c>(topY, bottomY)</c> of the shared spine — i.e. the min and max of all
+    /// sibling branch Y values plus the origin Y — so the trunk is drawn long enough
+    /// to reach every destination rather than stopping at the first one rendered.
+    /// </summary>
+    private readonly Dictionary<XTMF2.Link, (double TopY, double BottomY)> _orthogonalTrunkRange = new(ReferenceEqualityComparer.Instance);
+
     private void RenderLinks(DrawingContext ctx)
     {
+        // ── Precompute shared spine-X for every orthogonal multi-link group ──────
+        // Group all orthogonal LinkViewModels by their underlying Link object.
+        // Multi-destination links share the same XTMF2.Link instance, so grouping
+        // by reference identity collects all sibling arrows for the same hook.
+        _orthogonalSpineX.Clear();
+        _orthogonalTrunkDrawn.Clear();
+        _orthogonalTrunkRange.Clear();
+        var orthogonalGroups = _vm!.Links
+            .Where(l => l.UnderlyingLink.IsOrthogonal && l.Destination is not null
+                        && l.UnderlyingLink is MultiLink)
+            .GroupBy(l => l.UnderlyingLink, ReferenceEqualityComparer.Instance);
+
+        foreach (var group in orthogonalGroups)
+        {
+            var siblings = group.ToList();
+            if (siblings.Count < 2) continue;
+
+            // p1 is the same for every sibling (shared origin hook).
+            var p1 = ComputeOrthogonalOriginPoint(siblings[0]);
+
+            // Compute the individual spine X for each destination and take the
+            // maximum so that every branch can be reached from the shared trunk.
+            const double MinStub = 24.0;
+            double sharedSpineX = p1.X + MinStub;
+            double trunkTopY    = p1.Y;
+            double trunkBottomY = p1.Y;
+            foreach (var sib in siblings)
+            {
+                if (sib.Destination is null) continue;
+                // Approach the destination from the right of p1 for the initial estimate.
+                var approachPt = new Point(p1.X + 1, p1.Y);
+                var p2 = OrthogonalDestBorderPoint(sib.Destination, approachPt)
+                         ?? new Point(sib.X2, sib.Y2);
+                double indivMid = (p1.X + p2.X) * 0.5;
+                if (indivMid < p1.X + MinStub) indivMid = p1.X + MinStub;
+                if (indivMid > sharedSpineX) sharedSpineX = indivMid;
+
+                // Track the full Y range so the spine covers every destination.
+                if (p2.Y < trunkTopY)    trunkTopY    = p2.Y;
+                if (p2.Y > trunkBottomY) trunkBottomY = p2.Y;
+            }
+
+            _orthogonalSpineX[(XTMF2.Link)group.Key!]    = sharedSpineX;
+            _orthogonalTrunkRange[(XTMF2.Link)group.Key!] = (trunkTopY, trunkBottomY);
+        }
+
         foreach (var link in _vm!.Links)
         {
             // Don't render links whose destination is in a different boundary
@@ -1341,34 +1410,99 @@ public sealed class ModelSystemCanvas : Control
             var glowOuter  = new Pen(new SolidColorBrush(Color.FromArgb(0x10, glowColor.R, glowColor.G, glowColor.B)), LinkThickness + 8);
             var glowInner  = new Pen(new SolidColorBrush(Color.FromArgb(0x26, glowColor.R, glowColor.G, glowColor.B)), LinkThickness + 3);
 
-            // Draw an S-shaped cubic Bézier curve. Tension adapts to the span so short
-            // links curve gently and long ones sweep broadly, with no elbow kinks.
-            var (bp1, bc1, bc2, bp2) = ComputeSCurve(link);
-            // Derive arrowhead direction from the destination border normal so the
-            // head always arrives perfectly perpendicular to the face it hits.
-            var arrowFrom = BorderArrivalFrom(link.Destination, bp2);
-            Point approachFrom = arrowFrom, arrowTip = bp2;
-            var shaftEnd = DrawArrow(ctx, brush, arrowFrom, bp2);
+            Point bp2, arrowFrom;
+            Point shaftEnd;
 
-            // Build the geometry once; reuse for glow and main stroke.
-            static StreamGeometry MakeCurveGeo(Point p1, Point c1, Point c2, Point end)
+            if (link.UnderlyingLink.IsOrthogonal)
             {
-                var g = new StreamGeometry();
-                using var gc = g.Open();
-                gc.BeginFigure(p1, isFilled: false);
-                gc.CubicBezierTo(c1, c2, end);
-                gc.EndFigure(isClosed: false);
-                return g;
+                // Orthogonal (right-angle) routing: horizontal exit → vertical jog → horizontal entry.
+                // Use a shared spine X for multi-link groups so all branches overlap on the trunk.
+                _orthogonalSpineX.TryGetValue(link.UnderlyingLink, out var spineX);
+                bool hasSharedSpine = spineX > 0;
+                var pts  = ComputeOrthogonalPath(link, hasSharedSpine ? spineX : (double?)null);
+                // pts = [p1, corner1, corner2, p2]  (always 4 points)
+                bp2       = pts[^1];
+                arrowFrom = BorderArrivalFrom(link.Destination, bp2);
+                shaftEnd  = DrawArrow(ctx, brush, arrowFrom, bp2);
+
+                if (hasSharedSpine)
+                {
+                    // For multi-link groups the trunk is identical for every sibling.
+                    // Draw trunk glow + stroke only once to avoid stacking alpha.
+                    if (_orthogonalTrunkDrawn.Add(link.UnderlyingLink))
+                    {
+                        // Build the full-extent trunk from the precomputed range.
+                        // The trunk is two segments that share the junction at (spineX, p1.Y):
+                        //   1. Horizontal exit:  p1 → (spineX, p1.Y)
+                        //   2. Full vertical:    (spineX, topY) → (spineX, bottomY)
+                        // Drawing them as one polyline works when p1.Y is at one extreme;
+                        // for the mixed case (branches above AND below) we draw two
+                        // segments so the spine covers the complete range.
+                        var p1Trunk    = pts[0];   // hook anchor
+                        var corner1    = pts[1];   // (spineX, p1.Y)
+                        _orthogonalTrunkRange.TryGetValue(link.UnderlyingLink, out var range);
+                        var spineTop   = new Point(spineX, range.TopY);
+                        var spineBot   = new Point(spineX, range.BottomY);
+
+                        // Horizontal exit + vertical spine as a joined polyline.
+                        // The vertical goes from spineTop down to spineBot; corner1 is
+                        // somewhere along it, so we route: p1 → corner1 → spineTop
+                        // then a separate segment corner1 → spineBot (the other direction).
+                        // This draws the T/L shape correctly with a single extra segment.
+                        var mainTrunkGeo = MakePolyGeo([p1Trunk, corner1, spineTop]);
+                        var extGeo       = MakeSegGeo(corner1, spineBot);
+
+                        foreach (var trunkPen in new[] { glowOuter, glowInner, pen })
+                        {
+                            ctx.DrawGeometry(null, trunkPen, mainTrunkGeo);
+                            ctx.DrawGeometry(null, trunkPen, extGeo);
+                        }
+                    }
+
+                    // Branch segment: corner2 → p2  (glow) and corner2 → shaftEnd (stroke).
+                    var branchGlowGeo  = MakeSegGeo(pts[^2], pts[^1]);          // corner2 → bp2
+                    var branchShaftGeo = MakeSegGeo(pts[^2], shaftEnd);         // corner2 → shaftEnd
+                    ctx.DrawGeometry(null, glowOuter, branchGlowGeo);
+                    ctx.DrawGeometry(null, glowInner, branchGlowGeo);
+                    ctx.DrawGeometry(null, pen,       branchShaftGeo);
+                }
+                else
+                {
+                    // Single-destination orthogonal link: draw the full path normally.
+                    var glowGeo  = MakePolyGeo(pts);
+                    var shaftGeo = ReplacePolyGeoLastPoint(pts, shaftEnd);
+                    ctx.DrawGeometry(null, glowOuter, glowGeo);
+                    ctx.DrawGeometry(null, glowInner, glowGeo);
+                    ctx.DrawGeometry(null, pen,       shaftGeo);
+                }
             }
+            else
+            {
+                // Draw an S-shaped cubic Bézier curve. Tension adapts to the span so short
+                // links curve gently and long ones sweep broadly, with no elbow kinks.
+                var (bp1, bc1, bc2, bp2c) = ComputeSCurve(link);
+                bp2       = bp2c;
+                arrowFrom = BorderArrivalFrom(link.Destination, bp2);
+                shaftEnd  = DrawArrow(ctx, brush, arrowFrom, bp2);
 
-            // Glow halos extend to bp2 so the halo wraps the arrowhead too.
-            var glowGeo  = MakeCurveGeo(bp1, bc1, bc2, bp2);
-            ctx.DrawGeometry(null, glowOuter, glowGeo);
-            ctx.DrawGeometry(null, glowInner, glowGeo);
+                // Build the geometry once; reuse for glow and main stroke.
+                static StreamGeometry MakeCurveGeo(Point p1, Point c1, Point c2, Point end)
+                {
+                    var g = new StreamGeometry();
+                    using var gc = g.Open();
+                    gc.BeginFigure(p1, isFilled: false);
+                    gc.CubicBezierTo(c1, c2, end);
+                    gc.EndFigure(isClosed: false);
+                    return g;
+                }
 
-            // Main shaft stops at shaftEnd so it doesn't overlap the filled arrowhead.
-            var shaftGeo = MakeCurveGeo(bp1, bc1, bc2, shaftEnd);
-            ctx.DrawGeometry(null, pen, shaftGeo);
+                var glowGeo  = MakeCurveGeo(bp1, bc1, bc2, bp2);
+                var shaftGeo = MakeCurveGeo(bp1, bc1, bc2, shaftEnd);
+
+                ctx.DrawGeometry(null, glowOuter, glowGeo);
+                ctx.DrawGeometry(null, glowInner, glowGeo);
+                ctx.DrawGeometry(null, pen,       shaftGeo);
+            }
 
             // For multi-link destinations draw a small 1-based index number
             // beside the arrowhead so the user can see the hook slot ordering.
@@ -1383,12 +1517,12 @@ public sealed class ModelSystemCanvas : Control
                 if (idx >= 0)
                 {
                     var ft = MakeText((idx + 1).ToString(), LinkIndexFontSize, brush);
-                    double dx = arrowTip.X - approachFrom.X;
-                    double dy = arrowTip.Y - approachFrom.Y;
-                    double dlen = Math.Sqrt(dx * dx + dy * dy);
+                    double adx = bp2.X - arrowFrom.X;
+                    double ady = bp2.Y - arrowFrom.Y;
+                    double dlen = Math.Sqrt(adx * adx + ady * ady);
                     if (dlen >= 1)
                     {
-                        double ux = dx / dlen, uy = dy / dlen;
+                        double ux = adx / dlen, uy = ady / dlen;
                         double nx = -uy, ny = ux; // 90° CCW perpendicular unit vector
                         double offset = ft.Height * 0.5 + 3;
                         double lx = shaftEnd.X - ft.Width  * 0.5 + nx * offset;
@@ -1457,6 +1591,195 @@ public sealed class ModelSystemCanvas : Control
         var c2 = new Point(p2.X - entryDir.X * tension, p2.Y - entryDir.Y * tension);
 
         return (p1, c1, c2, p2);
+    }
+
+    /// <summary>
+    /// Computes the orthogonal-routing origin point (p1) for the given link —
+    /// the hook-anchor dot for nodes, or the side border midpoint for starts/other elements.
+    /// Extracted so both <see cref="ComputeOrthogonalPath"/> and the spine-X precomputation
+    /// in <see cref="RenderLinks"/> can call it without duplicating logic.
+    /// </summary>
+    private Point ComputeOrthogonalOriginPoint(LinkViewModel link)
+    {
+        var destCenter = new Point(link.X2, link.Y2);
+
+        if (link.Origin is NodeViewModel originNvm
+            && _hookAnchors.TryGetValue((originNvm, link.UnderlyingLink.OriginHook), out var hookPt))
+            return hookPt;
+
+        if (link.Origin is FunctionInstanceViewModel fiOriginO
+            && link.UnderlyingLink.OriginHook is FunctionParameterHook fphO
+            && _fiHookAnchors.TryGetValue((fiOriginO, fphO), out var fiHookPtO))
+            return fiHookPtO;
+
+        if (link.Origin is StartViewModel startOriginO)
+        {
+            var oc  = new Point(startOriginO.CenterX, startOriginO.CenterY);
+            var r   = StartViewModel.Radius;
+            var dir = destCenter.X >= oc.X ? 1.0 : -1.0;
+            return new Point(oc.X + r * dir, oc.Y);
+        }
+
+        return OrthogonalOriginBorderPoint(link.Origin, destCenter)
+               ?? new Point(link.X1, link.Y1);
+    }
+
+    /// <summary>
+    /// Computes a sequence of points forming an orthogonal (right-angle) routed path
+    /// from the link origin to the link destination.
+    /// <para>
+    /// The path exits the origin horizontally, jogs vertically at the horizontal midpoint,
+    /// then enters the destination horizontally.  When the destination is to the left of
+    /// the origin a small stub extends rightward before doubling back, so that the exit
+    /// direction is always respected.
+    /// </para>
+    /// <para>
+    /// Attachment to the destination always prefers the left or right face so that the
+    /// final segment enters horizontally rather than from the top or bottom.
+    /// </para>
+    /// <para>
+    /// When <paramref name="sharedSpineX"/> is provided (non-null), it is used as the
+    /// shared vertical-trunk X for all siblings of a multi-link group, so they all
+    /// overlap on the horizontal exit and trunk segments and only diverge on the final
+    /// horizontal branch to their individual destination.
+    /// </para>
+    /// </summary>
+    private Point[] ComputeOrthogonalPath(LinkViewModel link, double? sharedSpineX = null)
+    {
+        const double MinStub = 24.0; // minimum rightward stub length
+
+        var destCenter = new Point(link.X2, link.Y2);
+
+        // p1 — origin hook/border point.
+        var p1 = ComputeOrthogonalOriginPoint(link);
+
+        // Determine the vertical trunk X.  For a shared group this is supplied by
+        // the caller; otherwise derive it from the midpoint of this link alone.
+        double spineX;
+        if (sharedSpineX.HasValue)
+        {
+            spineX = sharedSpineX.Value;
+        }
+        else
+        {
+            // p2 needs to be estimated with the approach direction from p1's side.
+            var p2est = OrthogonalDestBorderPoint(link.Destination,
+                            new Point(p1.X + 1, p1.Y)) ?? destCenter;
+            spineX = (p1.X + p2est.X) * 0.5;
+            if (spineX < p1.X + MinStub) spineX = p1.X + MinStub;
+        }
+
+        // p2 — destination side border point chosen based on which side of the
+        //       destination the trunk sits on (left face when trunk is to the left,
+        //       right face when trunk is to the right).
+        var approachPt = new Point(spineX, p1.Y);
+        var p2 = OrthogonalDestBorderPoint(link.Destination, approachPt) ?? destCenter;
+
+        // Three intermediate points: exit stub, corner, entry corner.
+        var corner1 = new Point(spineX, p1.Y);  // end of horizontal exit segment
+        var corner2 = new Point(spineX, p2.Y);  // end of vertical segment
+
+        return [p1, corner1, corner2, p2];
+    }
+
+    /// <summary>
+    /// Returns a border point on the rightward (or leftward, when destination is to the left)
+    /// face of <paramref name="element"/>, at the element's vertical centre.
+    /// Used as the <em>origin</em> departure point for orthogonal links on non-hook elements.
+    /// Falls back to <see cref="BorderPoint"/> for non-rectangular origins.
+    /// </summary>
+    private Point? OrthogonalOriginBorderPoint(ICanvasElement? element, Point destCenter)
+    {
+        if (element is null) return null;
+
+        Rect? r = element switch {
+            NodeViewModel nvm             => new Rect(nvm.X,  nvm.Y,  NodeRenderWidth(nvm), NodeRenderHeight(nvm)),
+            GhostNodeViewModel gnvm       => new Rect(gnvm.X, gnvm.Y, gnvm.Width,  gnvm.Height),
+            FunctionInstanceViewModel fiv => new Rect(fiv.X,  fiv.Y,  fiv.Width,   fiv.Height),
+            FunctionParameterViewModel fp => new Rect(fp.X,   fp.Y,   fp.Width,    fp.Height),
+            _                             => (Rect?)null
+        };
+
+        if (r is { } rect)
+        {
+            double midY  = rect.Y + rect.Height * 0.5;
+            bool goRight = destCenter.X >= rect.X + rect.Width * 0.5;
+            return new Point(goRight ? rect.Right : rect.X, midY);
+        }
+
+        return BorderPoint(element, destCenter);
+    }
+
+    /// <summary>
+    /// Returns the attachment point on the <em>left</em> or <em>right</em> face of
+    /// <paramref name="element"/> (at the element's vertical centre) so that orthogonal
+    /// links always arrive horizontally.
+    /// For circular elements (Start nodes) the radial border point is returned instead.
+    /// </summary>
+    private Point? OrthogonalDestBorderPoint(ICanvasElement? element, Point approachFrom)
+    {
+        if (element is null) return null;
+
+        Rect? r = element switch {
+            NodeViewModel nvm             => new Rect(nvm.X,  nvm.Y,  NodeRenderWidth(nvm), NodeRenderHeight(nvm)),
+            GhostNodeViewModel gnvm       => new Rect(gnvm.X, gnvm.Y, gnvm.Width,  gnvm.Height),
+            FunctionInstanceViewModel fiv => new Rect(fiv.X,  fiv.Y,  fiv.Width,   fiv.Height),
+            FunctionParameterViewModel fp => new Rect(fp.X,   fp.Y,   fp.Width,    fp.Height),
+            _                             => (Rect?)null
+        };
+
+        if (r is { } rect)
+        {
+            double midY     = rect.Y + rect.Height * 0.5;
+            bool fromLeft   = approachFrom.X < rect.X + rect.Width * 0.5;
+            return new Point(fromLeft ? rect.X : rect.Right, midY);
+        }
+
+        // Circular (Start) or unknown: fall back to the standard radial border point.
+        return BorderPoint(element, approachFrom);
+    }
+
+    /// <summary>Builds a <see cref="StreamGeometry"/> polyline through <paramref name="pts"/>.</summary>
+    private static StreamGeometry MakePolyGeo(Point[] pts)
+    {
+        var g = new StreamGeometry();
+        using var gc = g.Open();
+        gc.BeginFigure(pts[0], isFilled: false);
+        for (int i = 1; i < pts.Length; i++)
+            gc.LineTo(pts[i]);
+        gc.EndFigure(isClosed: false);
+        return g;
+    }
+
+    /// <summary>
+    /// Builds a single-segment <see cref="StreamGeometry"/> from <paramref name="a"/> to <paramref name="b"/>.
+    /// Used to draw an individual branch segment without allocating a full array.
+    /// </summary>
+    private static StreamGeometry MakeSegGeo(Point a, Point b)
+    {
+        var g = new StreamGeometry();
+        using var gc = g.Open();
+        gc.BeginFigure(a, isFilled: false);
+        gc.LineTo(b);
+        gc.EndFigure(isClosed: false);
+        return g;
+    }
+
+    /// <summary>
+    /// Returns a new <see cref="StreamGeometry"/> identical to <see cref="MakePolyGeo"/>
+    /// but with the final point replaced by <paramref name="newLastPt"/>.
+    /// Used to shorten the shaft so it does not overlap a filled arrowhead.
+    /// </summary>
+    private static StreamGeometry ReplacePolyGeoLastPoint(Point[] pts, Point newLastPt)
+    {
+        var g = new StreamGeometry();
+        using var gc = g.Open();
+        gc.BeginFigure(pts[0], isFilled: false);
+        for (int i = 1; i < pts.Length - 1; i++)
+            gc.LineTo(pts[i]);
+        gc.LineTo(newLastPt);
+        gc.EndFigure(isClosed: false);
+        return g;
     }
 
     /// <summary>Evaluates a cubic Bézier curve at parameter <paramref name="t"/> ∈ [0, 1].</summary>
@@ -1703,20 +2026,35 @@ public sealed class ModelSystemCanvas : Control
             // Skip links to inlined nodes — no line is drawn for them.
             if (link.Destination is NodeViewModel dlNvm && dlNvm.IsInlined) continue;
 
-            // Sample the S-curve at 12 chords; any chord within tolerance is a hit.
-            var (hp1, hc1, hc2, hp2) = ComputeSCurve(link);
-            const int HitSamples = 12;
-            var prev = hp1;
-            bool curveHit = false;
-            for (int s = 1; s <= HitSamples && !curveHit; s++)
+            bool hit;
+            if (link.UnderlyingLink.IsOrthogonal)
             {
-                double t    = s / (double)HitSamples;
-                var    next = SampleCubicBezier(hp1, hc1, hc2, hp2, t);
-                if (DistToSeg(pos, prev, next) <= LinkHitTolerance)
-                    curveHit = true;
-                prev = next;
+                // For orthogonal paths, test each straight segment.
+                // Use the same shared spine X that was used when rendering.
+                _orthogonalSpineX.TryGetValue(link.UnderlyingLink, out var spineX);
+                var pts = ComputeOrthogonalPath(link, spineX > 0 ? spineX : (double?)null);
+                hit = false;
+                for (int i = 1; i < pts.Length && !hit; i++)
+                    if (DistToSeg(pos, pts[i - 1], pts[i]) <= LinkHitTolerance)
+                        hit = true;
             }
-            if (curveHit) return link;
+            else
+            {
+                // Sample the S-curve at 12 chords; any chord within tolerance is a hit.
+                var (hp1, hc1, hc2, hp2) = ComputeSCurve(link);
+                const int HitSamples = 12;
+                var prev = hp1;
+                hit = false;
+                for (int s = 1; s <= HitSamples && !hit; s++)
+                {
+                    double t    = s / (double)HitSamples;
+                    var    next = SampleCubicBezier(hp1, hc1, hc2, hp2, t);
+                    if (DistToSeg(pos, prev, next) <= LinkHitTolerance)
+                        hit = true;
+                    prev = next;
+                }
+            }
+            if (hit) return link;
         }
         return null;
     }
@@ -3293,6 +3631,19 @@ public sealed class ModelSystemCanvas : Control
             allBoundariesItem.Click += (_, _) =>
                 _ = vm.CreateInterBoundaryLinkAsync(capturedFiOrigin, capturedFpHook);
             menu.Items.Add(allBoundariesItem);
+            menu.Items.Add(new Separator());
+        }
+
+        // ── Link routing style ────────────────────────────────────────────────
+        if (link is not null)
+        {
+            var capturedRoutingLink = link;
+            var routingHeader = link.UnderlyingLink.IsOrthogonal
+                ? "Switch to Curved Routing"
+                : "Switch to Orthogonal Routing";
+            var routingItem = new MenuItem { Header = routingHeader };
+            routingItem.Click += (_, _) => vm.ToggleLinkOrthogonal(capturedRoutingLink.UnderlyingLink);
+            menu.Items.Add(routingItem);
             menu.Items.Add(new Separator());
         }
 

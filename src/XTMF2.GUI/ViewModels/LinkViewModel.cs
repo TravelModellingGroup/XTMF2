@@ -46,6 +46,12 @@ public sealed partial class LinkViewModel : ObservableObject
 
     [ObservableProperty] private bool _isSelected;
 
+    /// <summary>
+    /// Whether this link should be rendered using orthogonal (right-angle) routing.
+    /// Mirrors <see cref="XTMF2.Link.IsOrthogonal"/> and updates automatically when it changes.
+    /// </summary>
+    public bool IsOrthogonal => UnderlyingLink.IsOrthogonal;
+
     public LinkViewModel(XTMF2.Link link, ICanvasElement origin, ICanvasElement? destination)
     {
         UnderlyingLink  = link;
@@ -59,6 +65,15 @@ public sealed partial class LinkViewModel : ObservableObject
         origin.PropertyChanged      += OnConnectedElementChanged;
         if (destination is not null)
             destination.PropertyChanged += OnConnectedElementChanged;
+
+        // Forward link model property changes (e.g. IsOrthogonal) to the UI.
+        UnderlyingLink.PropertyChanged += OnUnderlyingLinkPropertyChanged;
+    }
+
+    private void OnUnderlyingLinkPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(XTMF2.Link.IsOrthogonal))
+            OnPropertyChanged(nameof(IsOrthogonal));
     }
 
     private void OnConnectedElementChanged(object? sender, PropertyChangedEventArgs e)
@@ -83,5 +98,6 @@ public sealed partial class LinkViewModel : ObservableObject
         Origin.PropertyChanged                       -= OnConnectedElementChanged;
         if (Destination is not null)
             Destination.PropertyChanged              -= OnConnectedElementChanged;
+        UnderlyingLink.PropertyChanged               -= OnUnderlyingLinkPropertyChanged;
     }
 }
