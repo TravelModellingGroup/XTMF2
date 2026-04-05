@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
@@ -126,6 +127,12 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
     {
         InitializeComponent();
         DataContext = this;
+        AddHandler(KeyDownEvent, (_, ke) =>
+        {
+            if (ke.Key != Key.Escape) return;
+            Close();
+            ke.Handled = true;
+        }, RoutingStrategies.Tunnel);
 
         for (int i = 0; i < destinationNames.Count; i++)
             Items.Add(new DestinationOrderItem(destinationNames[i], originalIndex: i, displayIndex: i + 1));
@@ -263,13 +270,17 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
     /// </summary>
     private DestinationOrderItem? GetItemAtPoint(Point pointRelativeToListBox)
     {
-        var hit = DestListBox.InputHitTest(pointRelativeToListBox);
-        var element = hit as Visual;
-        while (element is not null)
+        // InputHitTest is unreliable when the pointer is captured by the ListBox.
+        // Walk all visual descendants instead and use TranslatePoint to convert each
+        // ListBoxItem's top-left corner into ListBox-local coordinates.
+        foreach (var lbi in DestListBox.GetVisualDescendants().OfType<ListBoxItem>())
         {
-            if (element is ListBoxItem { DataContext: DestinationOrderItem item })
+            var topLeft = lbi.TranslatePoint(new Point(0, 0), DestListBox);
+            if (topLeft is not { } tl) continue;
+            var itemRect = new Rect(tl, new Size(lbi.Bounds.Width, lbi.Bounds.Height));
+            if (itemRect.Contains(pointRelativeToListBox)
+                && lbi.DataContext is DestinationOrderItem item)
                 return item;
-            element = element.GetVisualParent();
         }
         return null;
     }

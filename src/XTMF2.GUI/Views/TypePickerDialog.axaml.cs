@@ -21,6 +21,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using XTMF2.GUI.Controls;
 
@@ -110,6 +111,12 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
         if (prompt is not null) _prompt = prompt;
         InitializeComponent();
         DataContext = this;
+        AddHandler(KeyDownEvent, (_, ke) =>
+        {
+            if (ke.Key != Key.Escape) return;
+            Cancel_Click(null, new RoutedEventArgs());
+            ke.Handled = true;
+        }, RoutingStrategies.Tunnel);
         UpdateFilter();
         // Focus the filter box and honour an initial selection once the window is shown.
         Opened += (_, _) =>

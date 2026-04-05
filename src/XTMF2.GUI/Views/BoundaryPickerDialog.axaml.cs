@@ -100,6 +100,12 @@ public partial class BoundaryPickerDialog : Window, INotifyPropertyChanged
         InitializeComponent();
         DataContext    = this;
         _defaultParent = currentBoundary;
+        AddHandler(KeyDownEvent, (_, ke) =>
+        {
+            if (ke.Key != Key.Escape) return;
+            Cancel_Click(null, new RoutedEventArgs());
+            ke.Handled = true;
+        }, RoutingStrategies.Tunnel);
 
         BoundaryBrowseItem? preSelect = null;
         foreach (var (b, depth) in allBoundaries)

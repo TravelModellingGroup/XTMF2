@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using System;
 using System.ComponentModel;
@@ -121,6 +122,7 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
         _scriptedValidator = _ => null;
         InitializeComponent();
         DataContext = this;
+        RegisterEscapeClose();
     }
 
     /// <summary>
@@ -143,6 +145,7 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
 
         InitializeComponent();
         DataContext = this;
+        RegisterEscapeClose();
 
         TypeLabel   = $"Parameter type: {innerTypeName}";
         ValueText   = currentValue;
@@ -150,6 +153,14 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
 
         Opened += (_, _) => ValueTextBox.Focus();
     }
+
+    private void RegisterEscapeClose() =>
+        AddHandler(KeyDownEvent, (_, ke) =>
+        {
+            if (ke.Key != Key.Escape) return;
+            Cancel_Click(null, new RoutedEventArgs());
+            ke.Handled = true;
+        }, RoutingStrategies.Tunnel);
 
     // ── Button handlers ───────────────────────────────────────────────────────
 

@@ -46,6 +46,8 @@ public partial class ModelSystemVariablesDialog : Window
 
         // Escape clears the variable filter; second Escape closes the window.
         FilterBox.KeyDown += OnFilterBoxKeyDown;
+
+        Opened += (_, _) => FilterBox.Focus();
     }
 
     private void OnFilterBoxKeyDown(object? sender, KeyEventArgs e)

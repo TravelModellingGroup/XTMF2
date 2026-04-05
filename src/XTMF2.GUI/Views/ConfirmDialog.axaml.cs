@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using System.ComponentModel;
 
@@ -44,15 +45,25 @@ public partial class ConfirmDialog : Window, INotifyPropertyChanged
     {
         InitializeComponent();
         DataContext = this;
+        RegisterEscapeClose();
     }
 
     public ConfirmDialog(string title, string message)
     {
         InitializeComponent();
         DataContext = this;
+        RegisterEscapeClose();
         Title = title;
         Message = message;
     }
+
+    private void RegisterEscapeClose() =>
+        AddHandler(KeyDownEvent, (_, ke) =>
+        {
+            if (ke.Key != Key.Escape) return;
+            No_Click(null, new RoutedEventArgs());
+            ke.Handled = true;
+        }, RoutingStrategies.Tunnel);
 
     private void Yes_Click(object? sender, RoutedEventArgs e)
     {
