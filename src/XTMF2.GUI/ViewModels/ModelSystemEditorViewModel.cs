@@ -868,17 +868,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Step 1: choose the module type.
         var typePicker = new TypePickerDialog(
             Session.LoadedModuleTypes,
-            prompt: "Select the module type to add:");
+            prompt: "Select the module type to add:",
+            openGenericModuleTypes: Session.OpenGenericModuleTypes,
+            allAvailableTypes: Session.AllAvailableTypes);
         await typePicker.ShowDialog(ParentWindow);
 
         if (typePicker.WasCancelled || typePicker.SelectedType is null) return;
         var selectedType = typePicker.SelectedType;
 
-        // Step 2: choose a name (pre-filled from the type's short name).
+        // Step 2: choose a name (pre-filled from the type's friendly name).
         var nameDialog = new InputDialog(
             title: "Add Module",
             prompt: "Enter module name:",
-            defaultText: selectedType.Name);
+            defaultText: FriendlyTypeNameConverter.GetFriendlyName(selectedType));
         await nameDialog.ShowDialog(ParentWindow);
 
         var name = nameDialog.InputText?.Trim();
@@ -898,7 +900,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var typePicker = new TypePickerDialog(
             Session.LoadedModuleTypes,
             prompt: "Select a new module type:",
-            initialType: nvm.UnderlyingNode.Type);
+            initialType: nvm.UnderlyingNode.Type,
+            openGenericModuleTypes: Session.OpenGenericModuleTypes,
+            allAvailableTypes: Session.AllAvailableTypes);
         await typePicker.ShowDialog(ParentWindow);
 
         if (typePicker.WasCancelled || typePicker.SelectedType is null) return;
@@ -2699,14 +2703,16 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         var typePicker = new TypePickerDialog(
             Session.LoadedModuleTypes,
-            prompt: "Select the module type to add:");
+            prompt: "Select the module type to add:",
+            openGenericModuleTypes: Session.OpenGenericModuleTypes,
+            allAvailableTypes: Session.AllAvailableTypes);
         await typePicker.ShowDialog(ParentWindow);
 
         if (typePicker.WasCancelled || typePicker.SelectedType is null) return;
         var selectedType = typePicker.SelectedType;
 
         var location = new Rectangle((float)x, (float)y);
-        Session.AddNodeGenerateParameters(User, _currentBoundary, selectedType.Name, selectedType, location, out var addedNode, out _, out _);
+        Session.AddNodeGenerateParameters(User, _currentBoundary, FriendlyTypeNameConverter.GetFriendlyName(selectedType), selectedType, location, out var addedNode, out _, out _);
 
         // AddNodeGenerateParameters also adds parameter child nodes, each of which triggers
         // OnModulesChanged → SelectElement. Re-select the root module node so it ends up selected.

@@ -17,9 +17,11 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -30,17 +32,70 @@ namespace XTMF2.GUI.Views;
 /// <summary>
 /// A searchable type-picker dialog that lets the user choose a module type
 /// from the runtime's <see cref="XTMF2.Repository.ModuleRepository.LoadedModuleTypes"/> list.
+/// When the user selects an open-generic type that implements <c>IAction&lt;Context&gt;</c> or
+/// <c>IFunction&lt;Context, ReturnType&gt;</c>, an additional panel appears so the user can
+/// specify each generic type argument.
 /// </summary>
 public partial class TypePickerDialog : Window, INotifyPropertyChanged
 {
+    // ── Interface generic definitions used to detect context-parameterised types ──
+    private static readonly Type s_actionOf1  = typeof(IAction<>);
+    private static readonly Type s_functionOf2 = typeof(IFunction<,>);
+
+    // ── Data sources ──────────────────────────────────────────────────────────────
     private readonly ReadOnlyObservableCollection<Type> _allTypes;
+    private readonly ReadOnlyObservableCollection<Type>? _allAvailableTypes; // all runtime types (incl. non-IModule)
+    private readonly List<Type> _combinedTypes;   // closed + qualifying open generics
     private Type? _initialType;
 
+    // ── Filter state ─────────────────────────────────────────────────────────────
     private string _filterText = string.Empty;
     private ObservableCollection<Type> _filteredTypes = new();
     private string _prompt = "Select a module type:";
 
+    // ── Type-arg panel state ─────────────────────────────────────────────────────
+    private ObservableCollection<TypeArgEntry> _typeArgEntries = new();
+
     public new event PropertyChangedEventHandler? PropertyChanged;
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Nested helper: one row in the type-argument panel
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Represents a single generic type-argument slot that the user must fill in.
+    /// </summary>
+    public sealed class TypeArgEntry : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        /// <summary>Human-readable parameter name shown as the row label (e.g. "Context:").</summary>
+        public string Label { get; init; } = string.Empty;
+
+        private Type? _selectedType;
+
+        /// <summary>The type the user has chosen for this slot, or <c>null</c> if not yet chosen.</summary>
+        public Type? SelectedType
+        {
+            get => _selectedType;
+            set
+            {
+                _selectedType = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedType)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
+            }
+        }
+
+        /// <summary>Friendly name of the chosen type, or "Not chosen" when still unset.</summary>
+        public string DisplayName =>
+            _selectedType is null
+                ? "Not chosen"
+                : FriendlyTypeNameConverter.GetFriendlyName(_selectedType);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Public surface
+    // ─────────────────────────────────────────────────────────────────────────────
 
     /// <summary>Prompt text shown at the top of the dialog.</summary>
     public string Prompt
@@ -76,6 +131,70 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// The collection of type-argument slots that must be filled when the user selects an
+    /// open-generic type based on <c>IAction&lt;Context&gt;</c> or
+    /// <c>IFunction&lt;Context, ReturnType&gt;</c>.
+    /// Empty when a closed type is selected.
+    /// </summary>
+    public ObservableCollection<TypeArgEntry> TypeArgEntries
+    {
+        get => _typeArgEntries;
+        private set
+        {
+            _typeArgEntries = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TypeArgEntries)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsShowingTypeArgPanel)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasTypeArg0)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasTypeArg1)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TypeArg0)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TypeArg1)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanOK)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ResolvedTypePreview)));
+        }
+    }
+
+    /// <summary>True when the type-argument panel should be shown.</summary>
+    public bool IsShowingTypeArgPanel => _typeArgEntries.Count > 0;
+
+    // Sentinel entry returned when a slot is unused (avoids nullable binding issues).
+    private static readonly TypeArgEntry s_emptyEntry = new() { Label = string.Empty };
+
+    // Convenience access for AXAML binding (avoids complex ItemsControl templates).
+    public TypeArgEntry TypeArg0 => _typeArgEntries.Count > 0 ? _typeArgEntries[0] : s_emptyEntry;
+    public TypeArgEntry TypeArg1 => _typeArgEntries.Count > 1 ? _typeArgEntries[1] : s_emptyEntry;
+    public bool HasTypeArg0 => _typeArgEntries.Count > 0;
+    public bool HasTypeArg1 => _typeArgEntries.Count > 1;
+
+    /// <summary>
+    /// True when the dialog can be confirmed: there are results, and — if an open-generic type
+    /// is selected — all type-argument slots have been filled.
+    /// </summary>
+    public bool CanOK =>
+        !HasNoResults &&
+        (!IsShowingTypeArgPanel || _typeArgEntries.All(e => e.SelectedType is not null));
+
+    /// <summary>
+    /// A preview of the fully-constructed type name shown below the type-arg panel,
+    /// updated as the user fills in arguments.
+    /// </summary>
+    public string ResolvedTypePreview
+    {
+        get
+        {
+            if (!IsShowingTypeArgPanel) return string.Empty;
+            var selected = TypeListBox?.SelectedItem as Type;
+            if (selected is null || !selected.IsGenericTypeDefinition) return string.Empty;
+            if (_typeArgEntries.Any(e => e.SelectedType is null)) return string.Empty;
+            try
+            {
+                var closed = selected.MakeGenericType(_typeArgEntries.Select(e => e.SelectedType!).ToArray());
+                return $"Will create: {FriendlyTypeNameConverter.GetFriendlyName(closed)}";
+            }
+            catch { return string.Empty; }
+        }
+    }
+
     /// <summary>The type chosen by the user, or <c>null</c> if cancelled.</summary>
     public Type? SelectedType { get; private set; }
 
@@ -88,27 +207,54 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
     /// </summary>
     public bool HasNoResults => _filteredTypes.Count == 0;
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Constructors
+    // ─────────────────────────────────────────────────────────────────────────────
+
     /// <summary>
     /// Design-time / default constructor required by the Avalonia XAML compiler.
     /// Use the overload that accepts a module-type collection at runtime.
     /// </summary>
     public TypePickerDialog()
-        : this(new System.Collections.ObjectModel.ReadOnlyObservableCollection<Type>(
-               new System.Collections.ObjectModel.ObservableCollection<Type>()))
+        : this(new ReadOnlyObservableCollection<Type>(new ObservableCollection<Type>()))
     {
     }
 
     /// <summary>
-    /// Creates the dialog pre-populated with all types in <paramref name="moduleTypes"/>.
+    /// Creates the dialog pre-populated with all types in <paramref name="moduleTypes"/>
+    /// and, optionally, open-generic types that qualify for the context-type UX.
     /// </summary>
-    /// <param name="moduleTypes">The full list of available types.</param>
+    /// <param name="moduleTypes">The full list of closed module types.</param>
     /// <param name="prompt">Optional prompt text shown at the top of the dialog.</param>
     /// <param name="initialType">If provided, this type will be pre-selected when the dialog opens.</param>
-    public TypePickerDialog(ReadOnlyObservableCollection<Type> moduleTypes, string? prompt = null, Type? initialType = null)
+    /// <param name="openGenericModuleTypes">
+    /// Optional list of open-generic module types (e.g. <c>ExecuteWithContext&lt;&gt;</c>).
+    /// Only those that implement <c>IAction&lt;&gt;</c> or <c>IFunction&lt;,&gt;</c> are added to
+    /// the picker; when the user selects one, a type-argument panel appears.
+    /// </param>
+    public TypePickerDialog(
+        ReadOnlyObservableCollection<Type> moduleTypes,
+        string? prompt = null,
+        Type? initialType = null,
+        IReadOnlyList<Type>? openGenericModuleTypes = null,
+        ReadOnlyObservableCollection<Type>? allAvailableTypes = null)
     {
         _allTypes = moduleTypes;
+        _allAvailableTypes = allAvailableTypes;
         _initialType = initialType;
         if (prompt is not null) _prompt = prompt;
+
+        // Build the combined list: closed types first, then qualifying open generics.
+        _combinedTypes = new List<Type>(moduleTypes);
+        if (openGenericModuleTypes is not null)
+        {
+            foreach (var og in openGenericModuleTypes)
+            {
+                if (IsContextBasedOpenGeneric(og))
+                    _combinedTypes.Add(og);
+            }
+        }
+
         InitializeComponent();
         DataContext = this;
         AddHandler(KeyDownEvent, (_, ke) =>
@@ -118,6 +264,7 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
             ke.Handled = true;
         }, RoutingStrategies.Tunnel);
         UpdateFilter();
+
         // Focus the filter box and honour an initial selection once the window is shown.
         Opened += (_, _) =>
         {
@@ -137,16 +284,88 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
         {
             if (TypeListBox.SelectedItem is Type) OK_Click(null, null!);
         };
+
+        TypeListBox.SelectionChanged += (_, _) => OnListSelectionChanged();
     }
 
-    // ── Filtering ─────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Open-generic detection helpers
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns <c>true</c> when <paramref name="type"/> is an open-generic type whose
+    /// interface list includes the generic form of <c>IAction&lt;&gt;</c> or
+    /// <c>IFunction&lt;,&gt;</c>.
+    /// </summary>
+    private static bool IsContextBasedOpenGeneric(Type type)
+    {
+        if (!type.IsGenericTypeDefinition) return false;
+        return type.GetInterfaces().Any(i =>
+            i.IsGenericType &&
+            (i.GetGenericTypeDefinition() == s_actionOf1 ||
+             i.GetGenericTypeDefinition() == s_functionOf2));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Type-argument panel logic
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    private void OnListSelectionChanged()
+    {
+        if (TypeListBox.SelectedItem is not Type selected || !selected.IsGenericTypeDefinition)
+        {
+            // Closed type selected – clear the type-arg panel.
+            TypeArgEntries = new ObservableCollection<TypeArgEntry>();
+            return;
+        }
+
+        // Build one entry per generic parameter.
+        var entries = new ObservableCollection<TypeArgEntry>();
+        foreach (var param in selected.GetGenericArguments())
+        {
+            var entry = new TypeArgEntry { Label = $"{param.Name}:" };
+            entry.PropertyChanged += (_, _) =>
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanOK)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ResolvedTypePreview)));
+            };
+            entries.Add(entry);
+        }
+        TypeArgEntries = entries;
+    }
+
+    /// <summary>
+    /// Called by the "Pick…" button for each type-argument slot.
+    /// Opens a nested <see cref="TypePickerDialog"/> (using only closed module types)
+    /// and stores the result in the appropriate slot.
+    /// </summary>
+    public async Task PickTypeArgAsync(int index)
+    {
+        if (index < 0 || index >= _typeArgEntries.Count) return;
+
+        // Use all available runtime types (including non-IModule) so the user
+        // can select e.g. a plain data class as the context type.
+        var typePool = _allAvailableTypes ?? _allTypes;
+        var picker = new TypePickerDialog(
+            typePool,
+            prompt: $"Select type for '{_typeArgEntries[index].Label.TrimEnd(':')}':",
+            initialType: _typeArgEntries[index].SelectedType);
+        await picker.ShowDialog(this);
+
+        if (!picker.WasCancelled && picker.SelectedType is not null)
+            _typeArgEntries[index].SelectedType = picker.SelectedType;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Filtering
+    // ─────────────────────────────────────────────────────────────────────────────
 
     private void UpdateFilter()
     {
         var filter = _filterText.Trim();
         var source = string.IsNullOrEmpty(filter)
-            ? (System.Collections.Generic.IEnumerable<Type>)_allTypes
-            : _allTypes.Where(t =>
+            ? (IEnumerable<Type>)_combinedTypes
+            : _combinedTypes.Where(t =>
                 (t?.Name     ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                 (t?.FullName ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                 FriendlyTypeNameConverter.GetFriendlyName(t!).Contains(filter, StringComparison.OrdinalIgnoreCase));
@@ -159,12 +378,45 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
             TypeListBox.SelectedIndex = 0;
     }
 
-    // ── Button handlers ───────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Button handlers
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Pick button for the first type-argument slot (always the Context type).</summary>
+    private async void PickTypeArg0_Click(object? sender, RoutedEventArgs e) => await PickTypeArgAsync(0);
+
+    /// <summary>Pick button for the second type-argument slot (the ReturnType for IFunction).</summary>
+    private async void PickTypeArg1_Click(object? sender, RoutedEventArgs e) => await PickTypeArgAsync(1);
 
     private void OK_Click(object? sender, RoutedEventArgs e)
     {
-        SelectedType = TypeListBox.SelectedItem as Type;
-        WasCancelled = SelectedType is null;
+        if (!CanOK) return;
+
+        var rawSelected = TypeListBox.SelectedItem as Type;
+        if (rawSelected is null) { WasCancelled = true; Close(); return; }
+
+        if (rawSelected.IsGenericTypeDefinition)
+        {
+            // Construct the closed generic from the user-supplied type arguments.
+            try
+            {
+                SelectedType = rawSelected.MakeGenericType(
+                    _typeArgEntries.Select(arg => arg.SelectedType!).ToArray());
+            }
+            catch
+            {
+                // Construction failed (e.g. constraint violation) – treat as cancel.
+                WasCancelled = true;
+                Close();
+                return;
+            }
+        }
+        else
+        {
+            SelectedType = rawSelected;
+        }
+
+        WasCancelled = false;
         Close();
     }
 

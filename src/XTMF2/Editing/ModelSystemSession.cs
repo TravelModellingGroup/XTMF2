@@ -89,6 +89,15 @@ namespace XTMF2.Editing
             => GetModuleRepository().OpenGenericModuleTypes;
 
         /// <summary>
+        /// All types exported from every assembly loaded into this runtime, including
+        /// non-IModule types.  Use this as the candidate pool when the user needs to pick
+        /// a context type for <c>IAction&lt;Context&gt;</c> or
+        /// <c>IFunction&lt;Context, ReturnType&gt;</c>.
+        /// </summary>
+        public System.Collections.ObjectModel.ReadOnlyObservableCollection<Type> AllAvailableTypes
+            => _session.GetTypeRepository().Store;
+
+        /// <summary>
         /// Returns every module type that is compatible with <paramref name="hookType"/>:
         /// closed types already in <see cref="LoadedModuleTypes"/> that are directly assignable,
         /// plus any closed generics that can be constructed from open-generic module types.

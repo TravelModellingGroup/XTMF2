@@ -10,80 +10,170 @@
         Classes="neon-dialog"
         Title="Select Module Type"
         Width="540"
-        Height="440"
+        MinHeight="440"
+        MaxHeight="700"
+        SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         CanResize="True">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <Grid RowDefinitions="Auto,Auto,300,Auto,Auto" Margin="16">
 
-        <!-- Prompt -->
-        <TextBlock Grid.Row="0"
-                   Text="{Binding Prompt}"
-                   FontSize="14"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,10"/>
+            <!-- Prompt -->
+            <TextBlock Grid.Row="0"
+                       Text="{Binding Prompt}"
+                       FontSize="14"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,10"/>
 
-        <!-- Search box -->
-        <ctrl:SearchBox Grid.Row="1"
-                        x:Name="FilterBox"
-                        Text="{Binding FilterText, Mode=TwoWay}"
-                        Watermark="Filter by type name…"
-                        Margin="0,0,0,6"/>
+            <!-- Search box -->
+            <ctrl:SearchBox Grid.Row="1"
+                            x:Name="FilterBox"
+                            Text="{Binding FilterText, Mode=TwoWay}"
+                            Watermark="Filter by type name…"
+                            Margin="0,0,0,6"/>
 
-        <!-- Filtered list of types (or empty-state message) -->
-        <Border Grid.Row="2"
-                Classes="dlg-list">
-            <Grid>
-                <!-- The type list, hidden when nothing matches -->
-                <ListBox x:Name="TypeListBox"
-                         ItemsSource="{Binding FilteredTypes}"
-                         SelectionMode="Single"
-                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                         IsVisible="{Binding !HasNoResults}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="system:Type" x:CompileBindings="False">
-                            <StackPanel Spacing="1" Margin="4,2">
-                                <TextBlock Text="{Binding Converter={x:Static ctrl:FriendlyTypeNameConverter.Instance}}"
-                                           FontWeight="SemiBold"
-                                           FontSize="13"/>
-                                <TextBlock Text="{Binding Namespace}"
-                                           FontSize="11"
-                                           Opacity="0.6"/>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+            <!-- Filtered list of types (or empty-state message) -->
+            <Border Grid.Row="2"
+                    Classes="dlg-list">
+                <Grid>
+                    <!-- The type list, hidden when nothing matches -->
+                    <ListBox x:Name="TypeListBox"
+                             ItemsSource="{Binding FilteredTypes}"
+                             SelectionMode="Single"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                             IsVisible="{Binding !HasNoResults}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="system:Type" x:CompileBindings="False">
+                                <StackPanel Spacing="1" Margin="4,2">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding Converter={x:Static ctrl:FriendlyTypeNameConverter.Instance}}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="13"/>
+                                        <!-- Badge shown for open-generic types that need type args -->
+                                        <Border Background="#33C0A0FF"
+                                                CornerRadius="3"
+                                                Padding="4,1"
+                                                IsVisible="{Binding IsGenericTypeDefinition}">
+                                            <TextBlock Text="generic"
+                                                       FontSize="10"
+                                                       Foreground="#A0C8FF"
+                                                       FontStyle="Italic"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Namespace}"
+                                               FontSize="11"
+                                               Opacity="0.6"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
 
-                <!-- Empty-state overlay shown when the filter has no matches -->
-                <TextBlock Text="No types match the current filter."
-                           IsVisible="{Binding HasNoResults}"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           FontSize="13"
-                           Opacity="0.5"
-                           FontStyle="Italic"/>
-            </Grid>
-        </Border>
+                    <!-- Empty-state overlay shown when the filter has no matches -->
+                    <TextBlock Text="No types match the current filter."
+                               IsVisible="{Binding HasNoResults}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontSize="13"
+                               Opacity="0.5"
+                               FontStyle="Italic"/>
+                </Grid>
+            </Border>
 
-        <!-- OK / Cancel -->
-        <StackPanel Grid.Row="3"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Spacing="10"
-                    Margin="0,12,0,0">
-            <Button Content="{res:Localize Dialog_OK}"
-                    Classes="dlg-primary"
-                    Click="OK_Click"
-                    IsDefault="True"
-                    IsEnabled="{Binding !HasNoResults}"
-                    Padding="24,8"
-                    MinWidth="80"/>
-            <Button Content="{res:Localize Dialog_Cancel}"
-                    Click="Cancel_Click"
-                    IsCancel="True"
-                    Padding="24,8"
-                    MinWidth="80"/>
-        </StackPanel>
+            <!-- ── Type-argument panel (only visible for context-generic types) ──── -->
+            <Border Grid.Row="3"
+                    IsVisible="{Binding IsShowingTypeArgPanel}"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="#33FFFFFF"
+                    Margin="0,10,0,0"
+                    Padding="0,10,0,0">
+                <StackPanel Spacing="8">
 
-    </Grid>
+                    <!-- Section header -->
+                    <TextBlock Text="Generic Type Arguments"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Opacity="0.7"/>
+
+                    <!-- Slot 0 — always the Context type -->
+                    <Grid ColumnDefinitions="120,*,Auto"
+                          IsVisible="{Binding HasTypeArg0}">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding TypeArg0.Label}"
+                                   VerticalAlignment="Center"
+                                   FontSize="13"/>
+                        <Border Grid.Column="1"
+                                Classes="dlg-list"
+                                Padding="6,4"
+                                CornerRadius="4"
+                                Margin="4,0">
+                            <TextBlock Text="{Binding TypeArg0.DisplayName}"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Opacity="0.85"/>
+                        </Border>
+                        <Button Grid.Column="2"
+                                Content="Pick…"
+                                Click="PickTypeArg0_Click"
+                                Padding="10,4"
+                                FontSize="12"/>
+                    </Grid>
+
+                    <!-- Slot 1 — the ReturnType for IFunction<Context, ReturnType> -->
+                    <Grid ColumnDefinitions="120,*,Auto"
+                          IsVisible="{Binding HasTypeArg1}">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding TypeArg1.Label}"
+                                   VerticalAlignment="Center"
+                                   FontSize="13"/>
+                        <Border Grid.Column="1"
+                                Classes="dlg-list"
+                                Padding="6,4"
+                                CornerRadius="4"
+                                Margin="4,0">
+                            <TextBlock Text="{Binding TypeArg1.DisplayName}"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Opacity="0.85"/>
+                        </Border>
+                        <Button Grid.Column="2"
+                                Content="Pick…"
+                                Click="PickTypeArg1_Click"
+                                Padding="10,4"
+                                FontSize="12"/>
+                    </Grid>
+
+                    <!-- Resolved type preview -->
+                    <TextBlock Text="{Binding ResolvedTypePreview}"
+                               FontSize="11"
+                               FontStyle="Italic"
+                               Opacity="0.7"
+                               IsVisible="{Binding IsShowingTypeArgPanel}"/>
+
+                </StackPanel>
+            </Border>
+
+            <!-- OK / Cancel -->
+            <StackPanel Grid.Row="4"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Spacing="10"
+                        Margin="0,12,0,0">
+                <Button Content="{res:Localize Dialog_OK}"
+                        Classes="dlg-primary"
+                        Click="OK_Click"
+                        IsDefault="True"
+                        IsEnabled="{Binding CanOK}"
+                        Padding="24,8"
+                        MinWidth="80"/>
+                <Button Content="{res:Localize Dialog_Cancel}"
+                        Click="Cancel_Click"
+                        IsCancel="True"
+                        Padding="24,8"
+                        MinWidth="80"/>
+            </StackPanel>
+
+        </Grid>
+    </ScrollViewer>
 </Window>
