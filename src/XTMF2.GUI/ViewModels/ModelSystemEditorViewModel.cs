@@ -2042,6 +2042,34 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Shows the <see cref="FunctionParameterPickerDialog"/>, then adds the new
+    /// <see cref="FunctionParameter"/> at the given canvas position.
+    /// Only valid while inside a function template.
+    /// </summary>
+    public async Task AddFunctionParameterDirectAsync(double x, double y)
+    {
+        if (ParentWindow is null || _currentFunctionTemplate is null) return;
+
+        // Suggest a unique name: "Param", "Param2", "Param3", …
+        var baseName = "Param";
+        var suggestedName = baseName;
+        int idx = 2;
+        while (_currentFunctionTemplate.UnderlyingTemplate.FunctionParameters
+                   .Any(fp => string.Equals(fp.Name, suggestedName, StringComparison.OrdinalIgnoreCase)))
+            suggestedName = $"{baseName}{idx++}";
+
+        var dialog = new FunctionParameterPickerDialog(
+            defaultName: suggestedName,
+            allAvailableTypes: Session.AllAvailableTypes);
+        await dialog.ShowDialog(ParentWindow);
+
+        if (dialog.WasCancelled || dialog.SelectedType is null) return;
+
+        var location = new Rectangle((float)x, (float)y, 180f, 40f);
+        await AddFunctionParameterAsync(dialog.ParameterName, dialog.SelectedType, location);
+    }
+
+    /// <summary>
     /// Creates a <see cref="FunctionParameter"/> whose type matches <paramref name="hook"/>'s
     /// element type, places it at (<paramref name="x"/>, <paramref name="y"/>) on the canvas,
     /// and immediately creates a link from <paramref name="nodeVm"/> via <paramref name="hook"/>

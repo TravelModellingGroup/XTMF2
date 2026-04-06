@@ -3666,6 +3666,14 @@ public sealed class ModelSystemCanvas : Control
             addFiItem.Click += (_, _) => _ = _vm.AddFunctionInstanceAtAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addFiItem);
 
+            if (_vm.IsInsideFunctionTemplate)
+            {
+                bgMenu.Items.Add(new Separator());
+                var addFpItem = new MenuItem { Header = "Add Function Parameter…" };
+                addFpItem.Click += (_, _) => _ = _vm.AddFunctionParameterDirectAsync(spawnPt.X, spawnPt.Y);
+                bgMenu.Items.Add(addFpItem);
+            }
+
             ContextMenu = bgMenu;
             ContextMenu.Open(this);
             return;
