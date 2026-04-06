@@ -300,6 +300,12 @@ public sealed class ModelSystemCanvas : Control
     // ── Inline parameter editor ───────────────────────────────────────────
     /// <summary>Overlay TextBox used for in-canvas parameter value editing.</summary>
     private readonly TextBox _inlineEditor;
+    /// <summary>Overlay ComboBox used for in-canvas enum parameter editing.</summary>
+    private readonly ComboBox _inlineEnumEditor;
+    /// <summary><c>true</c> when the node currently being edited has an enum inner type.</summary>
+    private bool _editingParamIsEnum;
+    /// <summary><c>true</c> while <see cref="_inlineEnumEditor"/> is being initialised (prevents premature commit).</summary>
+    private bool _enumEditorLoading;
     /// <summary>The node whose parameter value row is currently being edited, or <c>null</c> when idle.</summary>
     private NodeViewModel? _editingParamNode;
     /// <summary>Screen position and width of the inline editor overlay (set in <see cref="BeginParamEdit"/>).</summary>
@@ -399,6 +405,25 @@ public sealed class ModelSystemCanvas : Control
 
         LogicalChildren.Add(_inlineEditor);
         VisualChildren.Add(_inlineEditor);
+
+        // Build the enum ComboBox overlay (shown instead of _inlineEditor for enum parameters).
+        _inlineEnumEditor = new ComboBox
+        {
+            FontFamily = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize = HookFontSize,
+            Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38)),
+            BorderThickness = new Thickness(1),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x88, 0xCC)),
+            Padding = new Thickness(2, 0, 2, 0),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+            IsVisible = false,
+        };
+        _inlineEnumEditor.DropDownClosed += OnInlineEnumEditorDropDownClosed;
+        _inlineEnumEditor.LostFocus      += OnInlineEnumEditorLostFocus;
+        _inlineEnumEditor.AddHandler(InputElement.KeyDownEvent, OnInlineEnumEditorKeyDown,
+            Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        LogicalChildren.Add(_inlineEnumEditor);
+        VisualChildren.Add(_inlineEnumEditor);
 
         // Syntax-highlight overlay – must be added AFTER _inlineEditor so it
         // renders on top of the TextBox, not underneath it.
@@ -782,9 +807,12 @@ public sealed class ModelSystemCanvas : Control
         // Measure the inline editor so Avalonia knows its desired size.
         if (_editingParamNode is not null)
         {
-            _inlineEditor.Measure(new Size(_editingParamEditorW > 0 ? _editingParamEditorW * _scale
-                                                                     : NodeRenderWidth(_editingParamNode) * _scale,
-                                           HookRowHeight * _scale));
+            double editorW = (_editingParamEditorW > 0 ? _editingParamEditorW : NodeRenderWidth(_editingParamNode)) * _scale;
+            double editorH = HookRowHeight * _scale;
+            if (_editingParamIsEnum)
+                _inlineEnumEditor.Measure(new Size(editorW, editorH));
+            else
+                _inlineEditor.Measure(new Size(editorW, editorH));
         }
         // Measure the syntax-highlight overlay (same footprint as the TextBox).
         if (_editingParamNode is { IsScriptedParameter: true })
@@ -815,12 +843,21 @@ public sealed class ModelSystemCanvas : Control
         // Position the inline editor at the stored row location (scaled to screen coords).
         if (_editingParamNode is not null && _editingParamEditorW > 0)
         {
-            _inlineEditor.FontSize = HookFontSize * _scale;
-            _inlineEditor.Arrange(new Rect(
+            var editorRect = new Rect(
                 _editingParamEditorX * _scale,
                 _editingParamEditorY * _scale,
                 _editingParamEditorW * _scale,
-                HookRowHeight * _scale));
+                HookRowHeight * _scale);
+            if (_editingParamIsEnum)
+            {
+                _inlineEnumEditor.FontSize = HookFontSize * _scale;
+                _inlineEnumEditor.Arrange(editorRect);
+            }
+            else
+            {
+                _inlineEditor.FontSize = HookFontSize * _scale;
+                _inlineEditor.Arrange(editorRect);
+            }
         }
         // Position the syntax-highlight overlay exactly over the TextBox.
         if (_editingParamNode is { IsScriptedParameter: true })
@@ -4095,6 +4132,32 @@ public sealed class ModelSystemCanvas : Control
         _scriptOverlay.HorizontalScrollOffset = 0;
     }
 
+    /// <summary>
+    /// Returns the effective enum <see cref="Type"/> for a parameter node, or <c>null</c> if the
+    /// node's inner type is not (or does not implement) an enum-returning function.
+    /// </summary>
+    private static Type? GetEffectiveEnumType(NodeViewModel node)
+    {
+        var nodeType = node.UnderlyingNode.Type;
+        if (nodeType is null || !nodeType.IsGenericType) return null;
+        var innerType = nodeType.GetGenericArguments().FirstOrDefault();
+        if (innerType is null) return null;
+        if (innerType.IsEnum) return innerType;
+        // Walk interfaces: look for IFunction<EnumT>.
+        var candidates = innerType.IsInterface
+            ? new[] { innerType }.Concat(innerType.GetInterfaces())
+            : (IEnumerable<Type>)innerType.GetInterfaces();
+        foreach (var iface in candidates)
+        {
+            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IFunction<>))
+            {
+                var arg = iface.GetGenericArguments()[0];
+                if (arg.IsEnum) return arg;
+            }
+        }
+        return null;
+    }
+
     private void BeginParamEdit(NodeViewModel node, double rowX = -1, double rowY = -1, double rowW = -1)
     {
         HideVarDropdown();
@@ -4102,6 +4165,35 @@ public sealed class ModelSystemCanvas : Control
         _editingParamEditorX = rowX >= 0 ? rowX : node.X;
         _editingParamEditorY = rowY >= 0 ? rowY : node.Y + NodeHeaderHeight;
         _editingParamEditorW = rowW >= 0 ? rowW : NodeRenderWidth(node);
+
+        var enumType = GetEffectiveEnumType(node);
+        _editingParamIsEnum = enumType is not null && !node.IsScriptedParameter;
+
+        if (_editingParamIsEnum)
+        {
+            // Populate the ComboBox with enum member names and pre-select the current value.
+            // Guard with _enumEditorLoading so SelectionChanged / DropDownClosed don't fire
+            // prematurely while we're setting ItemsSource and SelectedItem.
+            _enumEditorLoading = true;
+            var names = Enum.GetNames(enumType!);
+            _inlineEnumEditor.ItemsSource = names;
+            var current = node.ParameterValueRepresentation;
+            _inlineEnumEditor.SelectedItem = names.Contains(current) ? current
+                : (names.Length > 0 ? names[0] : null);
+            _enumEditorLoading = false;
+
+            _inlineEditor.IsVisible = false;
+            _inlineEnumEditor.IsVisible = true;
+            InvalidateMeasure();
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                _inlineEnumEditor.Focus();
+                _inlineEnumEditor.IsDropDownOpen = true;
+            }, Avalonia.Threading.DispatcherPriority.Render);
+            return;
+        }
+
+        _inlineEnumEditor.IsVisible = false;
         _inlineEditor.Text = node.ParameterValueRepresentation;
 
         // For scripted parameters the text is rendered by Render() with syntax colours;
@@ -4178,7 +4270,9 @@ public sealed class ModelSystemCanvas : Control
             HideVarDropdown();
             if (_editingParamNode is null) return;
             var node = _editingParamNode;
-            var value = _inlineEditor.Text ?? string.Empty;
+            var value = _editingParamIsEnum
+                ? (_inlineEnumEditor.SelectedItem as string ?? string.Empty)
+                : (_inlineEditor.Text ?? string.Empty);
 
             // Attempt to save. For ScriptedParameter this validates the expression first.
             if (!node.SetParameterValue(value, out var error))
@@ -4194,8 +4288,11 @@ public sealed class ModelSystemCanvas : Control
 
             // Save succeeded – close the editor.
             UnsubscribeInlineEditorScroll();
-            _editingParamNode = null;
-            _inlineEditor.IsVisible = false;
+            _editingParamNode   = null;
+            _editingParamIsEnum = false;
+            _enumEditorLoading  = false;
+            _inlineEditor.IsVisible     = false;
+            _inlineEnumEditor.IsVisible = false;
             _inlineEditor.Foreground = ParamValueTextBrush;
             _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
             _inlineEditor.CaretBrush = null;
@@ -4215,8 +4312,11 @@ public sealed class ModelSystemCanvas : Control
     {
         HideVarDropdown();
         UnsubscribeInlineEditorScroll();
-        _editingParamNode = null;
-        _inlineEditor.IsVisible = false;
+        _editingParamNode   = null;
+        _editingParamIsEnum = false;
+        _enumEditorLoading  = false;
+        _inlineEditor.IsVisible     = false;
+        _inlineEnumEditor.IsVisible = false;
         _inlineEditor.Foreground = ParamValueTextBrush;
         _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
         _inlineEditor.CaretBrush = null;
@@ -4225,6 +4325,43 @@ public sealed class ModelSystemCanvas : Control
         _scriptOverlay.IsVisible = false;
         InvalidateAndMeasure();
         Focus();
+    }
+
+    // ── Inline enum editor handlers ───────────────────────────────────────
+
+    private void OnInlineEnumEditorDropDownClosed(object? sender, EventArgs e)
+    {
+        // Fires when the user picks an item or presses Escape to dismiss.
+        // Escape is handled by OnInlineEnumEditorKeyDown first (which sets _enumEditorLoading
+        // before closing the dropdown), so the guard below prevents a commit on cancel.
+        if (_enumEditorLoading || _commitParamEditInProgress) return;
+        if (_editingParamNode is not null && _editingParamIsEnum
+            && _inlineEnumEditor.SelectedItem is not null)
+        {
+            CommitParamEdit();
+        }
+    }
+
+    private void OnInlineEnumEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // Don't commit if loading, committing, or if the dropdown popup just took focus.
+        if (_enumEditorLoading || _commitParamEditInProgress) return;
+        if (_editingParamNode is not null && _editingParamIsEnum && !_inlineEnumEditor.IsDropDownOpen)
+            CommitParamEdit();
+    }
+
+    private void OnInlineEnumEditorKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            // Set loading flag so the DropDownClosed event that fires when we close
+            // the dropdown programmatically does not trigger a commit.
+            _enumEditorLoading = true;
+            _inlineEnumEditor.IsDropDownOpen = false;
+            _enumEditorLoading = false;
+            CancelParamEdit();
+            e.Handled = true;
+        }
     }
 
     private void OnInlineEditorKeyDown(object? sender, KeyEventArgs e)

@@ -1506,17 +1506,46 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var innerType = nodeType.GetGenericArguments().FirstOrDefault();
         if (innerType is null) return;
 
+        // Resolve the effective enum type for the dialog:
+        //   • BasicParameter<SomeEnum>                         → use SomeEnum directly
+        //   • BasicParameter<X> where X (or a base/interface) →
+        //       implements IFunction<SomeEnum>                 → use SomeEnum
+        Type? effectiveEnumType = null;
+        if (innerType.IsEnum)
+        {
+            effectiveEnumType = innerType;
+        }
+        else
+        {
+            // Check innerType itself and every interface it carries.
+            var candidates = innerType.IsInterface
+                ? new[] { innerType }.Concat(innerType.GetInterfaces())
+                : (IEnumerable<Type>)innerType.GetInterfaces();
+            foreach (var iface in candidates)
+            {
+                if (iface.IsGenericType
+                    && iface.GetGenericTypeDefinition() == typeof(IFunction<>))
+                {
+                    var arg = iface.GetGenericArguments()[0];
+                    if (arg.IsEnum) { effectiveEnumType = arg; break; }
+                }
+            }
+        }
+
+        // effectiveInnerType drives enum detection and basic validation.
+        var effectiveInnerType = effectiveEnumType ?? innerType;
+
         var innerTypeName      = FriendlyTypeNameConverter.GetFriendlyName(innerType);
         var currentValue       = node.ParameterValue?.Representation ?? string.Empty;
         var isCurrentlyScripted =
             nodeType.IsGenericType &&
             nodeType.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
 
-        // Basic validator: use ArbitraryParameterParser
+        // Basic validator: validate against the effective type (enum sub-type when applicable).
         string? BasicValidator(string v)
         {
             string? err = null;
-            return ArbitraryParameterParser.Check(innerType, v, ref err) ? null : (err ?? $"'{v}' is not valid for type {innerTypeName}.");
+            return ArbitraryParameterParser.Check(effectiveInnerType, v, ref err) ? null : (err ?? $"'{v}' is not valid for type {innerTypeName}.");
         }
 
         // Scripted validator: accept any non-empty text; the session will catch compile errors.
@@ -1528,7 +1557,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             currentValue:       currentValue,
             isCurrentlyScripted: isCurrentlyScripted,
             basicValidator:     BasicValidator,
-            scriptedValidator:  ScriptedValidator);
+            scriptedValidator:  ScriptedValidator,
+            innerType:          effectiveInnerType);
 
         await dialog.ShowDialog(ParentWindow);
 

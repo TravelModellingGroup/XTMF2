@@ -34,12 +34,22 @@
                          GroupName="ParameterMode"/>
         </StackPanel>
 
-        <!-- Row 2: value / expression text box -->
+        <!-- Row 2: enum picker (basic mode, enum type only) -->
+        <ComboBox Grid.Row="2"
+                  x:Name="EnumComboBox"
+                  ItemsSource="{Binding EnumValues}"
+                  SelectedItem="{Binding SelectedEnumValue, Mode=TwoWay}"
+                  IsVisible="{Binding ShowEnumPicker}"
+                  HorizontalAlignment="Stretch"
+                  Margin="0,0,0,4"/>
+
+        <!-- Row 2: value / expression text box (non-enum, or scripted mode) -->
         <TextBox Grid.Row="2"
                  x:Name="ValueTextBox"
                  Text="{Binding ValueText}"
                  Watermark="Enter value…"
                  AcceptsReturn="False"
+                 IsVisible="{Binding ShowTextBox}"
                  Margin="0,0,0,4"/>
 
         <!-- Row 3: inline error message -->

@@ -21,6 +21,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using System;
 using System.ComponentModel;
+using System.Linq;
 
 namespace XTMF2.GUI.Views;
 
@@ -36,10 +37,15 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
     private readonly Func<string, string?> _scriptedValidator;
 
     // ── Backing fields ────────────────────────────────────────────────────────
-    private string  _typeLabel     = string.Empty;
-    private bool    _isBasicMode   = true;
-    private string  _valueText     = string.Empty;
-    private string  _errorMessage  = string.Empty;
+    private string   _typeLabel        = string.Empty;
+    private bool     _isBasicMode      = true;
+    private string   _valueText        = string.Empty;
+    private string   _errorMessage     = string.Empty;
+
+    // ── Enum support ──────────────────────────────────────────────────────────
+    private readonly bool     _isEnumType;
+    private readonly string[] _enumValues = Array.Empty<string>();
+    private string?  _selectedEnumValue;
 
     public new event PropertyChangedEventHandler? PropertyChanged;
 
@@ -62,6 +68,8 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
             _isBasicMode = value;
             RaisePropertyChanged(nameof(IsBasicMode));
             RaisePropertyChanged(nameof(IsScriptedMode));
+            RaisePropertyChanged(nameof(ShowTextBox));
+            RaisePropertyChanged(nameof(ShowEnumPicker));
             ErrorMessage = string.Empty;
         }
     }
@@ -72,13 +80,42 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
         get => !_isBasicMode;
         set
         {
-            if (_isBasicMode == value) return;  // inverted: setting scripted = setting basic to false
+            // value==true means "switch to scripted" → _isBasicMode should become false;
+            // guard: skip if already in the requested state.
+            if (_isBasicMode == !value) return;
             _isBasicMode = !value;
             RaisePropertyChanged(nameof(IsBasicMode));
             RaisePropertyChanged(nameof(IsScriptedMode));
+            RaisePropertyChanged(nameof(ShowTextBox));
+            RaisePropertyChanged(nameof(ShowEnumPicker));
             ErrorMessage = string.Empty;
         }
     }
+
+    // ── Enum properties ───────────────────────────────────────────────────────
+
+    /// <summary>True when the parameter's inner type is an enumeration.</summary>
+    public bool IsEnumType => _isEnumType;
+
+    /// <summary>The names of all enum members, used to populate the ComboBox.</summary>
+    public string[] EnumValues => _enumValues;
+
+    /// <summary>The currently selected enum member name.</summary>
+    public string? SelectedEnumValue
+    {
+        get => _selectedEnumValue;
+        set
+        {
+            _selectedEnumValue = value;
+            RaisePropertyChanged(nameof(SelectedEnumValue));
+        }
+    }
+
+    /// <summary>True when the free-text box should be visible.</summary>
+    public bool ShowTextBox   => !_isEnumType || !_isBasicMode;
+
+    /// <summary>True when the enum ComboBox should be visible.</summary>
+    public bool ShowEnumPicker => _isEnumType && _isBasicMode;
 
     /// <summary>The value / expression text currently in the text box.</summary>
     public string ValueText
@@ -138,20 +175,42 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
         string           currentValue,
         bool             isCurrentlyScripted,
         Func<string, string?> basicValidator,
-        Func<string, string?> scriptedValidator)
+        Func<string, string?> scriptedValidator,
+        Type?            innerType = null)
     {
         _basicValidator    = basicValidator;
         _scriptedValidator = scriptedValidator;
+
+        // Set the mode BEFORE InitializeComponent so bindings see the final state.
+        _isBasicMode = !isCurrentlyScripted;
+
+        // Detect enumeration types.
+        if (innerType is not null && innerType.IsEnum)
+        {
+            _isEnumType  = true;
+            _enumValues  = Enum.GetNames(innerType);
+            // Pre-select the current value if it is a valid enum name.
+            _selectedEnumValue = _enumValues.Contains(currentValue, StringComparer.OrdinalIgnoreCase)
+                ? currentValue
+                : (_enumValues.Length > 0 ? _enumValues[0] : null);
+        }
+
+        // Initialise caption / text box text before DataContext so the
+        // one-time reads in InitializeComponent see correct values.
+        _typeLabel  = $"Parameter type: {innerTypeName}";
+        _valueText  = currentValue;
 
         InitializeComponent();
         DataContext = this;
         RegisterEscapeClose();
 
-        TypeLabel   = $"Parameter type: {innerTypeName}";
-        ValueText   = currentValue;
-        _isBasicMode = !isCurrentlyScripted;
-
-        Opened += (_, _) => ValueTextBox.Focus();
+        Opened += (_, _) =>
+        {
+            if (_isEnumType && _isBasicMode)
+                EnumComboBox.Focus();
+            else
+                ValueTextBox.Focus();
+        };
     }
 
     private void RegisterEscapeClose() =>
@@ -166,7 +225,22 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
 
     private void OK_Click(object? sender, RoutedEventArgs e)
     {
-        var text      = ValueText ?? string.Empty;
+        string text;
+        if (_isEnumType && _isBasicMode)
+        {
+            // Use the selected enum value; it is always valid by construction.
+            text = _selectedEnumValue ?? string.Empty;
+            if (string.IsNullOrEmpty(text))
+            {
+                ErrorMessage = "Please select a value.";
+                return;
+            }
+        }
+        else
+        {
+            text = ValueText ?? string.Empty;
+        }
+
         var validator = _isBasicMode ? _basicValidator : _scriptedValidator;
         var errorMsg  = validator(text);
 
