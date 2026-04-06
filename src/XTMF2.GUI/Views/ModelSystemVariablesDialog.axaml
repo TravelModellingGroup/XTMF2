@@ -1,0 +1,217 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
+        x:Class="XTMF2.GUI.Views.ModelSystemVariablesDialog"
+        x:DataType="vm:ModelSystemEditorViewModel"
+        x:CompileBindings="True"
+        Title="Model System Variables"
+        Width="480"
+        Height="520"
+        MinWidth="320"
+        MinHeight="280"
+        Classes="neon-dialog"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+
+        <!-- ── Header ──────────────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="Model System Variables"
+                       FontSize="18"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource DlgAccent}"/>
+            <TextBlock Text="Variables are named parameter nodes referenced across the model system."
+                       FontSize="11"
+                       Opacity="0.6"
+                       TextWrapping="Wrap"
+                       Margin="0,4,0,8"/>
+
+            <!-- Filter box -->
+            <TextBox x:Name="FilterBox"
+                     Text="{Binding VariableFilter, Mode=TwoWay}"
+                     Watermark="Filter by name or boundary…"
+                     FontSize="12"
+                     IsVisible="{Binding !HasNoVariablesAtAll}"/>
+        </StackPanel>
+
+        <!-- ── Variable list ────────────────────────────────────────────────── -->
+        <Border Grid.Row="1"
+                Classes="dlg-list"
+                ClipToBounds="True">
+            <ScrollViewer>
+                <StackPanel Spacing="6">
+
+                    <!-- Combined empty state (no local AND no global variables) -->
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="6"
+                                Margin="0,24,0,0"
+                                IsVisible="{Binding HasNoVariablesAtAll}">
+                        <TextBlock Text="∅"
+                                   FontSize="36"
+                                   Foreground="{DynamicResource DlgAccentFaint}"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="No variables defined."
+                                   FontSize="13"
+                                   Opacity="0.5"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="Right-click a parameter node on the canvas and choose"
+                                   FontSize="11"
+                                   Opacity="0.4"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="&quot;Add to Model System Variables&quot;."
+                                   FontSize="11"
+                                   Opacity="0.4"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- ── Local Variables section (FunctionTemplate scope) ─── -->
+                    <StackPanel IsVisible="{Binding HasLocalVariables}" Spacing="2">
+                        <TextBlock Text="LOCAL VARIABLES"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   LetterSpacing="1.2"
+                                   Opacity="0.55"
+                                   Margin="4,4,0,4"
+                                   Foreground="{DynamicResource DlgAccent}"/>
+                        <ListBox ItemsSource="{Binding FilteredLocalVariables}"
+                                 Background="Transparent"
+                                 ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ModelSystemVariableViewModel">
+                                    <Grid ColumnDefinitions="*,Auto,Auto"
+                                          Margin="2,3">
+                                        <StackPanel Grid.Column="0"
+                                                    VerticalAlignment="Center"
+                                                    Spacing="1">
+                                            <TextBlock Text="{Binding Name}"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding BoundaryPath}"
+                                                       FontSize="10"
+                                                       Foreground="{DynamicResource DlgAccentText}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+
+                                        <!-- Go to node -->
+                                        <Button Grid.Column="1"
+                                                Classes="dlg-icon"
+                                                ToolTip.Tip="Navigate canvas to this node"
+                                                Margin="6,0,2,0"
+                                                Command="{Binding $parent[Window].((vm:ModelSystemEditorViewModel)DataContext).GoToVariableNodeCommand}"
+                                                CommandParameter="{Binding}">
+                                            <TextBlock Text="→" FontSize="14"/>
+                                        </Button>
+
+                                        <!-- Remove -->
+                                        <Button Grid.Column="2"
+                                                Classes="dlg-danger"
+                                                ToolTip.Tip="Remove from local variables"
+                                                Command="{Binding $parent[Window].((vm:ModelSystemEditorViewModel)DataContext).RemoveLocalVariableNodeCommand}"
+                                                CommandParameter="{Binding}">
+                                            <TextBlock Text="✕" FontSize="12"/>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+
+                    <!-- Divider shown only when both sections are present -->
+                    <Rectangle Height="1"
+                               Margin="4,2"
+                               Fill="{DynamicResource DlgSep}"
+                               IsVisible="{Binding HasLocalVariables}"/>
+
+                    <!-- ── Global Variables section ─────────────────────────── -->
+                    <StackPanel IsVisible="{Binding !HasNoVariablesAtAll}" Spacing="2">
+                        <TextBlock Text="GLOBAL VARIABLES"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   LetterSpacing="1.2"
+                                   Opacity="0.55"
+                                   Margin="4,4,0,4"
+                                   Foreground="{DynamicResource DlgAccent}"
+                                   IsVisible="{Binding HasLocalVariables}"/>
+
+                        <!-- Empty-global sub-state: local vars present but no globals -->
+                        <TextBlock Text="No global variables defined."
+                                   FontSize="12"
+                                   Opacity="0.45"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,6,0,0"
+                                   IsVisible="{Binding HasNoModelSystemVariables}"/>
+
+                        <ListBox ItemsSource="{Binding FilteredModelSystemVariables}"
+                                 Background="Transparent"
+                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                 IsVisible="{Binding !HasNoModelSystemVariables}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ModelSystemVariableViewModel">
+                                    <Grid ColumnDefinitions="*,Auto,Auto"
+                                          Margin="2,3">
+                                        <!-- Name + path -->
+                                        <StackPanel Grid.Column="0"
+                                                    VerticalAlignment="Center"
+                                                    Spacing="1">
+                                            <TextBlock Text="{Binding Name}"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding BoundaryPath}"
+                                                       FontSize="10"
+                                                       Foreground="{DynamicResource DlgAccentText}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+
+                                        <!-- Go to node -->
+                                        <Button Grid.Column="1"
+                                                Classes="dlg-icon"
+                                                ToolTip.Tip="Navigate canvas to this node"
+                                                Margin="6,0,2,0"
+                                                Command="{Binding $parent[Window].((vm:ModelSystemEditorViewModel)DataContext).GoToVariableNodeCommand}"
+                                                CommandParameter="{Binding}">
+                                            <TextBlock Text="→" FontSize="14"/>
+                                        </Button>
+
+                                        <!-- Remove -->
+                                        <Button Grid.Column="2"
+                                                Classes="dlg-danger"
+                                                ToolTip.Tip="Remove from variables"
+                                                Command="{Binding $parent[Window].((vm:ModelSystemEditorViewModel)DataContext).RemoveVariableNodeCommand}"
+                                                CommandParameter="{Binding}">
+                                            <TextBlock Text="✕" FontSize="12"/>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- ── Footer ───────────────────────────────────────────────────────── -->
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource DlgSep}"
+                BorderThickness="0,1,0,0"
+                Margin="0,12,0,0"
+                Padding="0,10,0,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           VerticalAlignment="Center"
+                           FontSize="11"
+                           Opacity="0.45"
+                           Text="Tip: right-click a parameter on the canvas to add variables."/>
+                <Button Grid.Column="1"
+                        Click="OnCloseClick">
+                    <TextBlock Text="Close" FontSize="13"/>
+                </Button>
+            </Grid>
+        </Border>
+
+    </Grid>
+
+</Window>

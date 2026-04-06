@@ -19,6 +19,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 
 namespace XTMF2.GUI.Views;
@@ -70,6 +71,12 @@ public partial class HookPickerDialog : Window, INotifyPropertyChanged
         if (prompt is not null) _prompt = prompt;
         InitializeComponent();
         DataContext = this;
+        AddHandler(KeyDownEvent, (_, ke) =>
+        {
+            if (ke.Key != Key.Escape) return;
+            Cancel_Click(null, new RoutedEventArgs());
+            ke.Handled = true;
+        }, RoutingStrategies.Tunnel);
 
         // Pre-select the first item and focus the list on open.
         Opened += (_, _) =>

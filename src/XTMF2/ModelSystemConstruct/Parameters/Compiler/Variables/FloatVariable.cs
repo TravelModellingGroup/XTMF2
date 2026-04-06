@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.ModelSystemConstruct.Parameters.Compiler;
 
@@ -41,8 +42,10 @@ internal sealed class FloatVariable : Variable
     internal override Result GetResult(IModule caller)
     {
         string? error = null;
-        // Check to see if we're dealing with a variable that can change.
-        if(_backingNode.Module is ISetableValue<float> setable)
+        // Prefer the per-instance module from the active FunctionInstance (if any),
+        // then fall back to the shared node module (global-variable case).
+        var backingModule = FunctionInstance.Current?.GetRuntimeModule(_backingNode) ?? _backingNode.Module;
+        if (backingModule is ISetableValue<float> setable)
         {
             return new FloatResult(setable.Get());
         }

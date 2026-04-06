@@ -89,6 +89,16 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>Pushes a pre-built <see cref="CommandBatch"/> as a single undoable entry.</summary>
+        internal void AddUndo(CommandBatch batch)
+        {
+            lock (_executionLock)
+            {
+                _undo.Add(batch);
+                _redo.Clear();
+            }
+        }
+
         /// <summary>True when there is at least one undoable command.</summary>
         public bool CanUndo => _undo.Count > 0;
 

@@ -53,6 +53,7 @@ namespace XTMF2.ModelSystemConstruct
         private const string CommentBlocksProperty = "CommentBlocks";
         private const string FunctionTemplateProperty = "FunctionTemplates";
         private const string GhostNodesProperty = "GhostNodes";
+        private const string FunctionInstancesProperty = "FunctionInstances";
 
         /// <summary>
         /// This lock must be obtained before changing any local settings.
@@ -65,18 +66,31 @@ namespace XTMF2.ModelSystemConstruct
         private readonly ObservableCollection<CommentBlock> _commentBlocks = new ObservableCollection<CommentBlock>();
         private readonly ObservableCollection<FunctionTemplate> _functionTemplates = new ObservableCollection<FunctionTemplate>();
         private readonly ObservableCollection<GhostNode> _ghostNodes = new ObservableCollection<GhostNode>();
+        private readonly ObservableCollection<FunctionInstance> _functionInstances = new ObservableCollection<FunctionInstance>();
+
+        // Cached read-only wrappers — must be the same instance on every access so that
+        // subscribe/unsubscribe pairs in the GUI always refer to the identical object.
+        private ReadOnlyObservableCollection<Node>?           _modulesView;
+        private ReadOnlyObservableCollection<Start>?          _startsView;
+        private ReadOnlyObservableCollection<Boundary>?       _boundariesView;
+        private ReadOnlyObservableCollection<Link>?           _linksView;
+        private ReadOnlyObservableCollection<FunctionTemplate>? _functionTemplatesView;
+        private ReadOnlyObservableCollection<GhostNode>?      _ghostNodesView;
+        private ReadOnlyObservableCollection<FunctionInstance>? _functionInstancesView;
 
         /// <summary>
         /// Get readonly access to the links contained in this boundary.
         /// </summary>
-        public ReadOnlyObservableCollection<Link> Links => new ReadOnlyObservableCollection<Link>(_links);
+        public ReadOnlyObservableCollection<Link> Links
+            => _linksView ??= new ReadOnlyObservableCollection<Link>(_links);
 
         /// <summary>
         /// Get readonly access to the ghost nodes contained in this boundary.
         /// Ghost nodes are visual aliases that point to real nodes which may reside
         /// on a different boundary.
         /// </summary>
-        public ReadOnlyObservableCollection<GhostNode> GhostNodes => new ReadOnlyObservableCollection<GhostNode>(_ghostNodes);
+        public ReadOnlyObservableCollection<GhostNode> GhostNodes
+            => _ghostNodesView ??= new ReadOnlyObservableCollection<GhostNode>(_ghostNodes);
 
         /// <summary>
         /// Create a new boundary, optionally with a parent
@@ -111,7 +125,9 @@ namespace XTMF2.ModelSystemConstruct
             {
                 throw new ArgumentNullException(nameof(boundary));
             }
-            return _boundaries.Any(b => b == boundary || b.Contains(boundary));
+            return _boundaries.Any(b => b == boundary || b.Contains(boundary))
+                || _functionTemplates.Any(ft =>
+                    ft.InternalModules == boundary || ft.InternalModules.Contains(boundary));
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -120,40 +136,27 @@ namespace XTMF2.ModelSystemConstruct
         /// Provides a readonly view of the locally contained modules.
         /// </summary>
         public ReadOnlyObservableCollection<Node> Modules
-        {
-            get
-            {
-                lock (_writeLock)
-                {
-                    return new ReadOnlyObservableCollection<Node>(_modules);
-                }
-            }
-        }
+            => _modulesView ??= new ReadOnlyObservableCollection<Node>(_modules);
 
         /// <summary>
         /// Provides a readonly view of the locally contained Starts.
         /// </summary>
         public ReadOnlyObservableCollection<Start> Starts
-        {
-            get
-            {
-                lock (_writeLock)
-                {
-                    return new ReadOnlyObservableCollection<Start>(_starts);
-                }
-            }
-        }
+            => _startsView ??= new ReadOnlyObservableCollection<Start>(_starts);
 
         public ReadOnlyObservableCollection<FunctionTemplate> FunctionTemplates
-        {
-            get
-            {
-                lock(_writeLock)
-                {
-                    return new ReadOnlyObservableCollection<FunctionTemplate>(_functionTemplates);
-                }
-            }
-        }
+            => _functionTemplatesView ??= new ReadOnlyObservableCollection<FunctionTemplate>(_functionTemplates);
+
+        /// <summary>Read-only view of the <see cref="FunctionInstance"/> objects placed in this boundary.</summary>
+        public ReadOnlyObservableCollection<FunctionInstance> FunctionInstances
+            => _functionInstancesView ??= new ReadOnlyObservableCollection<FunctionInstance>(_functionInstances);
+
+        /// <summary>
+        /// When this boundary serves as the <c>InternalModules</c> of a
+        /// <see cref="FunctionTemplate"/>, this property returns that template.
+        /// <c>null</c> for all other boundaries.
+        /// </summary>
+        public FunctionTemplate? OwningFunctionTemplate { get; internal set; }
 
         internal bool Validate(ref string? moduleName, ref string? error)
         {
@@ -170,6 +173,12 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     return false;
                 }
+            }
+            // Validate the internal structure of each FunctionTemplate once (shared across all instances).
+            foreach (var ft in _functionTemplates)
+            {
+                if (!ft.InternalModules.Validate(ref moduleName, ref error))
+                    return false;
             }
             return true;
         }
@@ -196,6 +205,17 @@ namespace XTMF2.ModelSystemConstruct
                 foreach (var child in current._boundaries)
                 {
                     GetUsedTypes(child, included);
+                }
+                foreach (var ft in current._functionTemplates)
+                {
+                    // Include types used by FunctionParameters (they may not appear in any regular node).
+                    foreach (var fp in ft.FunctionParameters)
+                    {
+                        var fpt = fp.Type;
+                        if (fpt != null && !included.Contains(fpt))
+                            included.Add(fpt);
+                    }
+                    GetUsedTypes(ft.InternalModules, included);
                 }
                 return included;
             }
@@ -234,6 +254,11 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         return false;
                     }
+                }
+                // Construct per-instance runtime modules for each FunctionInstance.
+                foreach (var fi in _functionInstances)
+                {
+                    if (!fi.ConstructRuntimeModules(runtime, ref error)) return false;
                 }
                 error = null;
                 return true;
@@ -344,6 +369,13 @@ namespace XTMF2.ModelSystemConstruct
                 foreach (var child in current._boundaries)
                 {
                     stack.Push(child);
+                }
+                // Also traverse the InternalModules of every FunctionTemplate in this
+                // boundary — they are not part of _boundaries and would otherwise be
+                // invisible to the search, leaving links inside templates un-cleaned.
+                foreach (var ft in current._functionTemplates)
+                {
+                    stack.Push(ft.InternalModules);
                 }
                 // don't bother analyzing the boundary being removed
                 if (current != boundary)
@@ -461,6 +493,151 @@ namespace XTMF2.ModelSystemConstruct
             }
         }
 
+        // ── FunctionInstance ──────────────────────────────────────────────
+
+        internal bool AddFunctionInstance(string name, FunctionTemplate template, Rectangle location,
+            out FunctionInstance? instance, [NotNullWhen(false)] out CommandError? error)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                instance = null;
+                error = new CommandError("A function instance name must not be empty.");
+                return false;
+            }
+            lock (_writeLock)
+            {
+                if (_functionInstances.Any(fi => fi.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    instance = null;
+                    error = new CommandError($"A function instance named '{name}' already exists in this boundary.");
+                    return false;
+                }
+                instance = new FunctionInstance(name, template, this, location);
+                _functionInstances.Add(instance);
+                error = null;
+                return true;
+            }
+        }
+
+        internal bool AddFunctionInstance(FunctionInstance instance, [NotNullWhen(false)] out CommandError? error)
+        {
+            lock (_writeLock)
+            {
+                if (_functionInstances.Contains(instance))
+                {
+                    error = new CommandError("The function instance already exists in this boundary.");
+                    return false;
+                }
+                _functionInstances.Add(instance);
+                error = null;
+                return true;
+            }
+        }
+
+        internal bool RemoveFunctionInstance(FunctionInstance instance, [NotNullWhen(false)] out CommandError? error)
+        {
+            lock (_writeLock)
+            {
+                if (!_functionInstances.Remove(instance))
+                {
+                    error = new CommandError("The function instance does not exist in this boundary.");
+                    return false;
+                }
+                error = null;
+                return true;
+            }
+        }
+
+        // ── Accessible FunctionTemplate helpers ───────────────────────────
+
+        /// <summary>
+        /// Returns <see langword="true"/> when <paramref name="name"/> is already used by any
+        /// <see cref="FunctionTemplate"/> reachable from this boundary (i.e. here or in any
+        /// descendant <see cref="Boundaries"/>). Does NOT descend into
+        /// <see cref="FunctionTemplate.InternalModules"/> sub-boundaries.
+        /// </summary>
+        public bool ContainsFunctionTemplateName(string name)
+        {
+            if (_functionTemplates.Any(ft => ft.Name.Equals(name, StringComparison.Ordinal)))
+                return true;
+            foreach (var child in _boundaries)
+            {
+                if (child.ContainsFunctionTemplateName(name))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Collects all <see cref="FunctionTemplate"/> objects accessible from this boundary:
+        /// those defined directly here and in any descendant <see cref="Boundaries"/> (recursive).
+        /// Does not descend into <see cref="FunctionTemplate.InternalModules"/> sub-boundaries.
+        /// </summary>
+        public void CollectAccessibleFunctionTemplates(List<FunctionTemplate> results)
+        {
+            foreach (var ft in _functionTemplates)
+                results.Add(ft);
+            foreach (var child in _boundaries)
+                child.CollectAccessibleFunctionTemplates(results);
+        }
+
+        /// <summary>
+        /// Returns the qualified name of <paramref name="ft"/> relative to <paramref name="root"/>.
+        /// Returns just <c>ft.Name</c> when the template lives directly in <paramref name="root"/>;
+        /// otherwise returns a slash-separated boundary path (e.g. <c>"ChildA/MyTemplate"</c>).
+        /// Returns <see langword="null"/> when the template is not reachable from <paramref name="root"/>.
+        /// </summary>
+        public static string? GetQualifiedTemplateName(Boundary root, FunctionTemplate ft)
+        {
+            var path = GetBoundaryRelativePath(root, ft.Parent);
+            if (path is null) return null;
+            return path.Length == 0 ? ft.Name : path + "/" + ft.Name;
+        }
+
+        private static string? GetBoundaryRelativePath(Boundary root, Boundary target)
+        {
+            if (root == target) return string.Empty;
+            foreach (var child in root._boundaries)
+            {
+                var childPath = GetBoundaryRelativePath(child, target);
+                if (childPath != null)
+                    return childPath.Length == 0 ? child.Name : child.Name + "/" + childPath;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Resolves a <see cref="FunctionTemplate"/> by qualified name relative to <paramref name="root"/>.
+        /// A plain name (e.g. <c>"MyTemplate"</c>) resolves within <paramref name="root"/> itself;
+        /// a slash-prefixed name (e.g. <c>"ChildA/MyTemplate"</c>) navigates to the named child boundary first.
+        /// </summary>
+        public static FunctionTemplate? ResolveTemplate(Boundary root, string qualifiedName)
+        {
+            var lastSlash = qualifiedName.LastIndexOf('/');
+            if (lastSlash < 0)
+            {
+                return root._functionTemplates.FirstOrDefault(ft =>
+                    ft.Name.Equals(qualifiedName, StringComparison.Ordinal));
+            }
+            var boundaryPath  = qualifiedName.Substring(0, lastSlash);
+            var templateName  = qualifiedName.Substring(lastSlash + 1);
+            var boundary = ResolveBoundary(root, boundaryPath);
+            if (boundary is null) return null;
+            return boundary._functionTemplates.FirstOrDefault(ft =>
+                ft.Name.Equals(templateName, StringComparison.Ordinal));
+        }
+
+        private static Boundary? ResolveBoundary(Boundary root, string path)
+        {
+            if (string.IsNullOrEmpty(path)) return root;
+            var slashIdx  = path.IndexOf('/');
+            var childName = slashIdx < 0 ? path : path.Substring(0, slashIdx);
+            var rest      = slashIdx < 0 ? string.Empty : path.Substring(slashIdx + 1);
+            var child = root._boundaries.FirstOrDefault(b =>
+                b.Name.Equals(childName, StringComparison.Ordinal));
+            return child is null ? null : ResolveBoundary(child, rest);
+        }
+
         internal bool ConstructLinks(ref string? error)
         {
             lock (_writeLock)
@@ -479,6 +656,11 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         return false;
                     }
+                }
+                // Wire the per-instance cloned modules for each FunctionInstance.
+                foreach (var fi in _functionInstances)
+                {
+                    if (!fi.ConstructRuntimeLinks(ref error)) return false;
                 }
                 return true;
             }
@@ -502,20 +684,15 @@ namespace XTMF2.ModelSystemConstruct
                         return false;
                     }
                 }
+                // Fill empty AnyNumber hooks on per-instance FunctionInstance modules.
+                foreach (var fi in _functionInstances)
+                    fi.ConstructEmptyRuntimeLinks();
                 return true;
             }
         }
 
         public ReadOnlyObservableCollection<Boundary> Boundaries
-        {
-            get
-            {
-                lock (_writeLock)
-                {
-                    return new ReadOnlyObservableCollection<Boundary>(_boundaries);
-                }
-            }
-        }
+            => _boundariesView ??= new ReadOnlyObservableCollection<Boundary>(_boundaries);
 
         /// <summary>The parent boundary, or <c>null</c> if this is the root boundary.</summary>
         public Boundary? Parent { get; private set; }
@@ -599,6 +776,20 @@ namespace XTMF2.ModelSystemConstruct
                     child.Save(ref index, nodeDictionary, typeDictionary, writer);
                 }
                 writer.WriteEndArray();
+                writer.WritePropertyName(FunctionTemplateProperty);
+                writer.WriteStartArray();
+                foreach(var functionTemplate in FunctionTemplates)
+                {
+                    functionTemplate.Save(ref index, nodeDictionary, typeDictionary, writer);
+                }
+                writer.WriteEndArray();
+                writer.WritePropertyName(FunctionInstancesProperty);
+                writer.WriteStartArray();
+                foreach (var fi in _functionInstances)
+                {
+                    fi.Save(ref index, nodeDictionary, writer);
+                }
+                writer.WriteEndArray();
                 writer.WritePropertyName(LinksProperty);
                 writer.WriteStartArray();
                 foreach (var link in _links)
@@ -611,13 +802,6 @@ namespace XTMF2.ModelSystemConstruct
                 foreach (var docBlock in _commentBlocks)
                 {
                     docBlock.Save(writer);
-                }
-                writer.WriteEndArray();
-                writer.WritePropertyName(FunctionTemplateProperty);
-                writer.WriteStartArray();
-                foreach(var functionTemplate in FunctionTemplates)
-                {
-                    functionTemplate.Save(ref index, nodeDictionary, typeDictionary, writer);
                 }
                 writer.WriteEndArray();
                 // Ghost nodes are written last so that all referenced nodes already have
@@ -697,6 +881,8 @@ namespace XTMF2.ModelSystemConstruct
                 child.PreAssignNodeIndices(ref index, nodeDictionary);
             foreach (var ft in _functionTemplates)
                 ft.InternalModules.PreAssignNodeIndices(ref index, nodeDictionary);
+            foreach (var fi in _functionInstances)
+                if (!nodeDictionary.ContainsKey(fi)) nodeDictionary[fi] = index++;
             foreach (var ghost in _ghostNodes)
                 if (!nodeDictionary.ContainsKey(ghost)) nodeDictionary[ghost] = index++;
         }
@@ -870,6 +1056,24 @@ namespace XTMF2.ModelSystemConstruct
                                 return false;
                             }
                             _functionTemplates.Add(template!);
+                        }
+                    }
+                }
+                else if (reader.ValueTextEquals(FunctionInstancesProperty))
+                {
+                    if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                    {
+                        return Helper.FailWith(out error, "Unexpected token when starting to read FunctionInstances for a boundary.");
+                    }
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        if (reader.TokenType != JsonTokenType.Comment)
+                        {
+                            if (!FunctionInstance.Load(ref reader, this, node, out var fi, ref error))
+                            {
+                                return false;
+                            }
+                            _functionInstances.Add(fi!);
                         }
                     }
                 }

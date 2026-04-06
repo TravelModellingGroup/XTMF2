@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using System.ComponentModel;
 
@@ -55,19 +56,29 @@ public partial class InputDialog : Window, INotifyPropertyChanged
     {
         InitializeComponent();
         DataContext = this;
+        RegisterEscapeClose();
     }
 
     public InputDialog(string title, string prompt, string defaultText = "")
     {
         InitializeComponent();
         DataContext = this;
+        RegisterEscapeClose();
         Title = title;
         Prompt = prompt;
         InputText = defaultText;
-        
+
         // Focus the input when the window is opened
         Opened += (s, e) => InputTextBox.Focus();
     }
+
+    private void RegisterEscapeClose() =>
+        AddHandler(KeyDownEvent, (_, ke) =>
+        {
+            if (ke.Key != Key.Escape) return;
+            Cancel_Click(null, new RoutedEventArgs());
+            ke.Handled = true;
+        }, RoutingStrategies.Tunnel);
 
     private void OK_Click(object? sender, RoutedEventArgs e)
     {

@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -65,6 +66,7 @@ public partial class StartPickerDialog : Window, INotifyPropertyChanged
         InitializeComponent();
         StartNames  = [];
         DataContext = this;
+        RegisterEscapeClose();
     }
 
     /// <param name="title">Window title.</param>
@@ -81,9 +83,18 @@ public partial class StartPickerDialog : Window, INotifyPropertyChanged
         StartNames        = startNames;
         SelectedStartName = defaultStart ?? (startNames.Count > 0 ? startNames[0] : null);
         DataContext       = this;
+        RegisterEscapeClose();
 
         Opened += (_, _) => StartComboBox.Focus();
     }
+
+    private void RegisterEscapeClose() =>
+        AddHandler(KeyDownEvent, (_, ke) =>
+        {
+            if (ke.Key != Key.Escape) return;
+            Cancel_Click(null, new RoutedEventArgs());
+            ke.Handled = true;
+        }, RoutingStrategies.Tunnel);
 
     private void OK_Click(object? sender, RoutedEventArgs e)
     {

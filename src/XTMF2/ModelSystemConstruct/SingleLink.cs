@@ -29,8 +29,8 @@ namespace XTMF2.ModelSystemConstruct
     {
         public Node Destination { get; private set; }
 
-        public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled)
-            : base(origin, hook, disabled)
+        public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled, bool orthogonal = false)
+            : base(origin, hook, disabled, orthogonal)
         {
             Destination = destination;
         }
@@ -53,13 +53,66 @@ namespace XTMF2.ModelSystemConstruct
             {
                 writer.WriteBoolean(DisabledProperty, true);
             }
+            if (IsOrthogonal)
+            {
+                writer.WriteBoolean(OrthogonalProperty, true);
+            }
             writer.WriteEndObject();
         }
 
         internal override bool Construct(ref string? error)
         {
-            // Resolve ghost-node destinations to their real node at runtime.
-            var effectiveDest = Destination is GhostNode gn ? gn.ReferencedNode : Destination!;
+            // FunctionParameter destinations are resolved transitively at runtime by
+            // FunctionInstance.ConstructRuntimeLink(); no static wiring is needed here.
+            if (Destination is FunctionParameter)
+            {
+                error = null;
+                return true;
+            }
+
+            // If the origin is a FunctionInstance wired through a FunctionParameterHook,
+            // record the parameter binding so FunctionInstance can route internal links
+            // to the actual external module at runtime.
+            if (Origin is FunctionInstance fiBinder && OriginHook is FunctionParameterHook fph)
+            {
+                var resolvedFiDest = Destination is GhostNode gnFi
+                    ? gnFi.ReferencedNode
+                    : Destination!;
+                IModule? bindModule;
+                if (resolvedFiDest is FunctionInstance destFiBinder)
+                {
+                    bindModule = destFiBinder.Template.EntryNode is not null
+                        ? destFiBinder.GetRuntimeModule(destFiBinder.Template.EntryNode)
+                        : null;
+                }
+                else
+                {
+                    bindModule = resolvedFiDest.Module;
+                }
+                fiBinder.BindParameter(fph.Parameter, bindModule);
+                error = null;
+                return true;
+            }
+
+            // Resolve ghost-node destinations to their real node.
+            var resolved = Destination is GhostNode gn ? gn.ReferencedNode : Destination!;
+
+            // Determine the effective destination node (for cardinality/disabled checks)
+            // and the actual IModule to wire (per-instance clone for FunctionInstances).
+            Node effectiveDest;
+            IModule? destModule;
+            if (resolved is FunctionInstance fi)
+            {
+                effectiveDest = fi.Template.EntryNode ?? resolved;
+                destModule    = fi.Template.EntryNode is not null
+                    ? fi.GetRuntimeModule(fi.Template.EntryNode)
+                    : null;
+            }
+            else
+            {
+                effectiveDest = resolved;
+                destModule    = resolved.Module;
+            }
 
             // if not optional
             if (OriginHook!.Cardinality == HookCardinality.Single)
@@ -75,10 +128,9 @@ namespace XTMF2.ModelSystemConstruct
                     return false;
                 }
             }
-            if (!IsDisabled)
+            if (!IsDisabled && destModule is not null)
             {
-                // The index doesn't matter for this type
-                OriginHook.Install(Origin!, effectiveDest, 0);
+                OriginHook.Install(Origin!.Module!, destModule, 0);
             }
             return true;
         }

@@ -9,13 +9,64 @@
              x:Class="XTMF2.GUI.Views.ModelSystemEditorView"
              x:DataType="vm:ModelSystemEditorViewModel"
              x:CompileBindings="True"
+             Classes="neon-view"
              Focusable="True">
+
+    <!-- ── Per-theme colour tokens for the floating neon dock bar ──────── -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+
+                <ResourceDictionary x:Key="Dark">
+                    <!-- pill shell -->
+                    <SolidColorBrush x:Key="NeonPillBg">#E6050510</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonPillBorder">#FF00D4FF</SolidColorBrush>
+                    <!-- button text / icons -->
+                    <SolidColorBrush x:Key="NeonPillFg">#FFEEFFFF</SolidColorBrush>
+                    <!-- separator line -->
+                    <SolidColorBrush x:Key="NeonPillSep">#4400D4FF</SolidColorBrush>
+                    <!-- hover / press highlights -->
+                    <SolidColorBrush x:Key="NeonPillHover">#2200D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonPillPress">#4400D4FF</SolidColorBrush>
+                    <!-- vector icon colours -->
+                    <SolidColorBrush x:Key="NeonIconPrimary">#FF00D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonIconSecondary">#FFBF7FFF</SolidColorBrush>
+                </ResourceDictionary>
+
+                <ResourceDictionary x:Key="Light">
+                    <!-- pill shell: white-tinted, slightly translucent -->
+                    <SolidColorBrush x:Key="NeonPillBg">#F4F8FFEE</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonPillBorder">#FF0066CC</SolidColorBrush>
+                    <!-- button text / icons: dark navy -->
+                    <SolidColorBrush x:Key="NeonPillFg">#FF003088</SolidColorBrush>
+                    <!-- separator line -->
+                    <SolidColorBrush x:Key="NeonPillSep">#550066CC</SolidColorBrush>
+                    <!-- hover / press highlights -->
+                    <SolidColorBrush x:Key="NeonPillHover">#1A0066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonPillPress">#330066CC</SolidColorBrush>
+                    <!-- vector icon colours: darker than neons so they read clearly on the near-white pill -->
+                    <SolidColorBrush x:Key="NeonIconPrimary">#FF0040A8</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonIconSecondary">#FF6020C0</SolidColorBrush>
+                </ResourceDictionary>
+
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- BoxShadow cannot be set via DynamicResource (struct, no runtime type-conversion).
+         Set via code-behind in UpdateThemeClass() using the x:Name on the Border. -->
+    <UserControl.Styles>
+        <Style Selector="Border.neon-pill">
+            <Setter Property="BoxShadow" Value="0 0 14 3 #8000D4FF, 0 0 40 10 #4000A0FF, 0 6 24 0 #80000000"/>
+        </Style>
+    </UserControl.Styles>
 
     <UserControl.KeyBindings>
         <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveModelSystemCommand}"/>
         <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}"/>
         <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoCommand}"/>
         <KeyBinding Gesture="Ctrl+B" Command="{Binding BrowseBoundariesCommand}"/>
+        <KeyBinding Gesture="Alt+Left" Command="{Binding NavigateUpCommand}"/>
     </UserControl.KeyBindings>
 
     <Grid RowDefinitions="Auto,*" Margin="10">
@@ -37,9 +88,9 @@
                       Grid.Column="1"
                       ItemsSource="{Binding BoundaryNavigationItems}"
                       PlaceholderText="{Binding CurrentBoundaryLabel}"
-                      Width="200"
+                      Width="250"
                       VerticalAlignment="Center"
-                      Margin="0,0,8,0"
+                      Margin="0,0,16,0"
                       ToolTip.Tip="Navigate to a boundary  (Ctrl+B)">
                 <ComboBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:BoundaryNavigationItem">
@@ -54,275 +105,20 @@
                              MinimumPrefixLength="0"
                              FilterMode="ContainsOrdinal"
                              ValueMemberBinding="{Binding Name}"
-                             Watermark="Find node…  (Ctrl+E)"
-                             Width="220"
+                             Watermark="Find... (Ctrl+E)"
+                             Width="250"
                              VerticalAlignment="Center"/>
         </Grid>
 
-        <!-- ── Main content: toolbox + canvas ──────────────────────── -->
+        <!-- ── Main content: full-width canvas with floating overlays ─────── -->
         <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="275"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
 
-            <!-- Left: Toolbox -->
-            <Border Grid.Column="0"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+            <!-- Canvas (fills the entire panel, bottom margin reserves space for the floating
+                 dock bar so the ScrollViewer does not intercept pointer events over it) -->
+            <Border BorderBrush="{DynamicResource DlgListBorder}"
                     BorderThickness="1"
                     CornerRadius="4"
-                    Padding="8">
-                <DockPanel>
-
-                    <!-- ── File action buttons (bottom) ───────────────── -->
-                    <Border DockPanel.Dock="Bottom"
-                            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                            BorderThickness="0,1,0,0"
-                            Padding="0,8,0,0"
-                            Margin="0,8,0,0">
-                        <StackPanel Orientation="Horizontal"
-                                    HorizontalAlignment="Center"
-                                    Spacing="6"
-                                    >
-
-                            <!-- Undo -->
-                            <Button Command="{Binding UndoCommand}"
-                                    IsEnabled="{Binding CanUndo}"
-                                    ToolTip.Tip="Undo (Ctrl+Z)">
-                                <TextBlock Text="&#x21B6;" FontSize="18" HorizontalAlignment="Center"/>
-                            </Button>
-
-                            <!-- Redo -->
-                            <Button Command="{Binding RedoCommand}"
-                                    IsEnabled="{Binding CanRedo}"
-                                    ToolTip.Tip="Redo (Ctrl+Y)">
-                                <TextBlock Text="&#x21B7;" FontSize="18" HorizontalAlignment="Center"/>
-                            </Button>
-
-                            <!-- Save -->
-                            <Button Command="{Binding SaveModelSystemCommand}"
-                                    ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                    <TextBlock Text="💾" FontSize="18" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-
-                            <!-- Export -->
-                            <Button Command="{Binding ExportModelSystemCommand}"
-                                    ToolTip.Tip="{res:Localize ModelSystemEditor_ExportTooltip}">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                    <TextBlock Text="📤" FontSize="18" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-
-                            <!-- Revert -->
-                            <Button Command="{Binding RevertModelSystemCommand}"
-                                    ToolTip.Tip="{res:Localize ModelSystemEditor_RevertTooltip}">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                    <TextBlock Text="↩" FontSize="18" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-
-                            <!-- Run -->
-                            <Button Command="{Binding RunModelSystemCommand}"
-                                    IsEnabled="{Binding CanRun}"
-                                    ToolTip.Tip="Run this model system (save first to apply changes)">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                    <TextBlock Text="▶" FontSize="18" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-
-                        </StackPanel>
-                    </Border>
-
-                    <!-- ── Scrollable toolbox content (fills remaining space) ── -->
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="6" Margin="0,0,10,0">
-
-                            <!-- Section: Add elements -->
-                            <TextBlock Text="Toolbox"
-                                       FontWeight="SemiBold"
-                                       FontSize="14"
-                                       Margin="0,0,0,4"/>
-
-                            <Button Content="Add Start"
-                                    Command="{Binding AddStartCommand}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"/>
-
-                            <Button Content="Add Module"
-                                    Command="{Binding AddModuleCommand}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"/>
-
-                            <Button Content="Add Comment"
-                                    Command="{Binding AddCommentBlockCommand}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"/>
-
-                            <CheckBox Content="Show all hooks"
-                                      IsChecked="{Binding ShowAllHooks}"
-                                      FontSize="12"
-                                      Margin="0,6,0,0"/>
-
-                            <Separator Margin="0,8"/>
-
-                            <!-- Section: Selected element properties -->
-                            <TextBlock Text="Selected Element"
-                                       FontWeight="SemiBold"
-                                       FontSize="13"
-                                       Margin="0,0,0,2"/>
-
-                            <StackPanel Spacing="4"
-                                        IsVisible="{Binding SelectedElement, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                <Separator Margin="0,4"/>
-                                <TextBlock Text="Type:"
-                                           FontSize="12"
-                                           Opacity="0.7"/>
-                                <TextBlock Text="{Binding SelectedElementTypeName}"
-                                           FontSize="12"
-                                           TextWrapping="Wrap"/>
-                                <Button Content="Change Type…"
-                                        Command="{Binding ChangeModuleTypeCommand}"
-                                        IsVisible="{Binding SelectedElementIsNode}"
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Center"
-                                        FontSize="12"
-                                        Margin="0,4,0,0"/>
-
-                                <!-- ── Parameter value editor ──────────────── -->
-                                <StackPanel Spacing="4"
-                                            IsVisible="{Binding SelectedElementIsParameter}"
-                                            Margin="0,4,0,0">
-                                    <Separator Margin="0,4"/>
-                                    <TextBlock Text="Value:"
-                                               FontSize="12"
-                                               Opacity="0.7"/>
-                                    <TextBox x:Name="ParameterValueEditBox"
-                                             Text="{Binding SelectedElementParameterValue, Mode=TwoWay}"
-                                             FontSize="12"
-                                             Watermark="Enter value…"/>
-                                    <Button Content="Apply Value"
-                                            Command="{Binding CommitParameterValueCommand}"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Center"
-                                            FontSize="12"/>
-                                </StackPanel>
-                            </StackPanel>
-
-                            <!-- Section: MultiLink destinations -->
-                            <StackPanel IsVisible="{Binding SelectedLinkIsMulti}" Spacing="4" Margin="0,4,0,0">
-                                <TextBlock Text="Link Destinations"
-                                           FontWeight="SemiBold"
-                                           FontSize="13"/>
-                                <TextBlock Text="Drag to reorder  ·  select + Delete to remove"
-                                           FontSize="10"
-                                           Opacity="0.6"
-                                           TextWrapping="Wrap"/>
-                                <!-- Wrap in Grid so the drop-indicator Canvas can overlay the ListBox. -->
-                                <Grid>
-                                    <ListBox x:Name="DestinationListBox"
-                                             ItemsSource="{Binding SelectedLinkDestinationEntries}"
-                                             SelectedItem="{Binding SelectedLinkDestinationEntry, Mode=TwoWay}"
-                                             MaxHeight="180">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:LinkDestinationViewModel">
-                                                <TextBlock Text="{Binding Name}" Padding="4,2"/>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
-                                    <!-- Drop indicator: shown while dragging to mark the insert position. -->
-                                    <Canvas IsHitTestVisible="False">
-                                        <Border x:Name="DestDropIndicator"
-                                                IsVisible="False"
-                                                Height="2"
-                                                CornerRadius="1"
-                                                Background="{DynamicResource SystemAccentColor}"/>
-                                    </Canvas>
-                                </Grid>
-                            </StackPanel>
-
-                            <!-- ── Model System Variables ─────────────────── -->
-                            <Separator Margin="0,8"/>
-                            <TextBlock Text="Model System Variables"
-                                       FontWeight="SemiBold"
-                                       FontSize="13"
-                                       Margin="0,0,0,2"/>
-                            <TextBlock Text="Right-click a parameter node to add it. Type to filter."
-                                       FontSize="10"
-                                       Opacity="0.6"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,4"/>
-                            <TextBox x:Name="VariableFilterBox"
-                                     Text="{Binding VariableFilter, Mode=TwoWay}"
-                                     Watermark="Filter variables…"
-                                     FontSize="12"
-                                     Margin="0,0,0,4"
-                                     IsVisible="{Binding !HasNoModelSystemVariables}"/>
-                            <ListBox ItemsSource="{Binding FilteredModelSystemVariables}"
-                                     MaxHeight="200"
-                                     SelectionMode="Single">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:ModelSystemVariableViewModel">
-                                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
-                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Name}"
-                                                           FontSize="12"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding BoundaryPath}"
-                                                           FontSize="10"
-                                                           Opacity="0.55"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                            </StackPanel>
-                                            <Button Grid.Column="1"
-                                                    Content="→"
-                                                    ToolTip.Tip="Go to node"
-                                                    Padding="6,2"
-                                                    Margin="4,0,2,0"
-                                                    FontSize="12"
-                                                    Command="{Binding $parent[UserControl].((vm:ModelSystemEditorViewModel)DataContext).GoToVariableNodeCommand}"
-                                                    CommandParameter="{Binding}"/>
-                                            <Button Grid.Column="2"
-                                                    Content="✕"
-                                                    ToolTip.Tip="Remove from variables"
-                                                    Padding="6,2"
-                                                    FontSize="12"
-                                                    Command="{Binding $parent[UserControl].((vm:ModelSystemEditorViewModel)DataContext).RemoveVariableNodeCommand}"
-                                                    CommandParameter="{Binding}"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                            <TextBlock Text="(no variables defined)"
-                                       FontSize="11"
-                                       Opacity="0.45"
-                                       IsVisible="{Binding HasNoModelSystemVariables}"
-                                       Margin="0,2,0,0"/>
-
-                            <TextBlock Text="Nothing selected."
-                                       FontSize="12"
-                                       Opacity="0.5"
-                                       IsVisible="{Binding NothingSelected}"/>
-
-                        </StackPanel>
-                    </ScrollViewer>
-
-                </DockPanel>
-            </Border>
-
-            <!-- Splitter -->
-            <GridSplitter Grid.Column="1"
-                          ResizeDirection="Columns"
-                          Width="5"
-                          Background="Transparent"
-                          Margin="2,0"/>
-
-            <!-- Right: Canvas area -->
-            <Border Grid.Column="2"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                    BorderThickness="1"
-                    CornerRadius="4"
+                    Margin="0,0,0,0"
                     ClipToBounds="True">
                 <ScrollViewer x:Name="CanvasScrollViewer"
                               HorizontalScrollBarVisibility="Auto"
@@ -330,6 +126,233 @@
                     <ctrl:ModelSystemCanvas x:Name="TheCanvas"
                                             DataContext="{Binding}"/>
                 </ScrollViewer>
+            </Border>
+
+            <!-- ── Floating action bar (bottom-centre, neon pill) ───────── -->
+            <Border x:Name="DockBar"
+                    Classes="neon-pill"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,0,20"
+                    Padding="14,9"
+                    CornerRadius="40"
+                    Background="{DynamicResource NeonPillBg}"
+                    BorderBrush="{DynamicResource NeonPillBorder}"
+                    BorderThickness="1.5"
+                    ZIndex="30">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+
+                    <StackPanel.Styles>
+                        <Style Selector="Separator">
+                            <Setter Property="Width" Value="1"/>
+                            <Setter Property="Height" Value="24"/>
+                            <Setter Property="Background" Value="{DynamicResource NeonPillSep}"/>
+                            <Setter Property="Margin" Value="4,0"/>
+                        </Style>
+                        <Style Selector="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="{DynamicResource NeonPillFg}"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="CornerRadius" Value="20"/>
+                            <Setter Property="Padding" Value="10,6"/>
+                        </Style>
+                        <Style Selector="Button:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource NeonPillHover}"/>
+                        </Style>
+                        <Style Selector="Button:pressed /template/ ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource NeonPillPress}"/>
+                        </Style>
+                        <Style Selector="Button:disabled">
+                            <Setter Property="Opacity" Value="0.35"/>
+                        </Style>
+                    </StackPanel.Styles>
+
+                    <!-- Step Out: exit function template or ascend to parent boundary -->
+                    <Button Command="{Binding NavigateUpCommand}"
+                            ToolTip.Tip="Step out to parent scope  (Alt+← / Mouse Back)"
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- Arrow shaft + head -->
+                                <Path Data="M 10,18 V 7 M 5,12 L 10,7 L 15,12"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="1.8" StrokeLineCap="Round"
+                                      StrokeJoin="Round" Fill="Transparent"/>
+                                <!-- Exit bar -->
+                                <Path Data="M 3,2.5 H 17"
+                                      Stroke="{DynamicResource NeonIconSecondary}"
+                                      StrokeThickness="2.2" StrokeLineCap="Round"
+                                      Fill="Transparent"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <Separator/>
+
+                    <!-- Undo -->
+                    <Button Command="{Binding UndoCommand}"
+                            IsEnabled="{Binding CanUndo}"
+                            ToolTip.Tip="Undo (Ctrl+Z)"
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- J-hook body: arc sweeping from mid-right, over top, down to mid-left -->
+                                <Path Data="M 15.5,6 A 6.5,6.5 0 0 0 4.5,12"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="2.4" StrokeLineCap="Round" Fill="Transparent"/>
+                                <!-- Short descending stem at start -->
+                                <Path Data="M 15.5,3 V 6"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="2.4" StrokeLineCap="Round" Fill="Transparent"/>
+                                <!-- Filled arrowhead at arc end -->
+                                <Path Data="M 2,9.5 L 4.5,15.5 L 7.5,11 Z"
+                                      Fill="{DynamicResource NeonIconSecondary}" StrokeThickness="0"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Redo -->
+                    <Button Command="{Binding RedoCommand}"
+                            IsEnabled="{Binding CanRedo}"
+                            ToolTip.Tip="Redo (Ctrl+Y)"
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- J-hook body mirrored: arc sweeping from mid-left, over top, down to mid-right -->
+                                <Path Data="M 4.5,6 A 6.5,6.5 0 0 1 15.5,12"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="2.4" StrokeLineCap="Round" Fill="Transparent"/>
+                                <!-- Short descending stem at start -->
+                                <Path Data="M 4.5,3 V 6"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="2.4" StrokeLineCap="Round" Fill="Transparent"/>
+                                <!-- Filled arrowhead at arc end -->
+                                <Path Data="M 12.5,11 L 15.5,15.5 L 18,9.5 Z"
+                                      Fill="{DynamicResource NeonIconSecondary}" StrokeThickness="0"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <Separator/>
+
+                    <!-- Save -->
+                    <Button Command="{Binding SaveModelSystemCommand}"
+                            ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}"
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- Floppy disk: outline body so details are visible in both themes -->
+                                <!-- Outer shell (stroke only) -->
+                                <Path Data="M 2,2 H 14 L 18,6 V 18 H 2 Z"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round"
+                                      Fill="Transparent"/>
+                                <!-- Corner fold crease -->
+                                <Path Data="M 14,2 L 14,6 H 18"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round"
+                                      Fill="Transparent"/>
+                                <!-- Shutter strip (filled) -->
+                                <Path Data="M 5,2.5 H 13 V 7 H 5 Z"
+                                      Fill="{DynamicResource NeonIconSecondary}" StrokeThickness="0"/>
+                                <!-- Label sticker (outlined) -->
+                                <Path Data="M 4,10.5 H 16 V 16.5 H 4 Z"
+                                      Stroke="{DynamicResource NeonIconSecondary}"
+                                      StrokeThickness="1.2" StrokeLineCap="Round" StrokeJoin="Round"
+                                      Fill="Transparent"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Export -->
+                    <Button Command="{Binding ExportModelSystemCommand}"
+                            ToolTip.Tip="{res:Localize ModelSystemEditor_ExportTooltip}"
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- Up arrow shaft + head -->
+                                <Path Data="M 10,17 V 7 M 5.5,12 L 10,7 L 14.5,12"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="1.8" StrokeLineCap="Round"
+                                      StrokeJoin="Round" Fill="Transparent"/>
+                                <!-- Box open at top (left + bottom + right) -->
+                                <Path Data="M 2,10 V 18 H 18 V 10"
+                                      Stroke="{DynamicResource NeonIconSecondary}"
+                                      StrokeThickness="1.8" StrokeLineCap="Round"
+                                      StrokeJoin="Round" Fill="Transparent"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Revert -->
+                    <Button Command="{Binding RevertModelSystemCommand}"
+                            ToolTip.Tip="{res:Localize ModelSystemEditor_RevertTooltip}"
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- ~285° CCW arc: starts upper-right, sweeps almost all the way around,
+                                     ends just past 3-o'clock (right side pointing downward) -->
+                                <Path Data="M 16.9,4.5 A 7.5,7.5 0 1 0 17.5,10.5"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="2.5" StrokeLineCap="Round"
+                                      Fill="Transparent"/>
+                                <!-- Filled arrowhead at (17.5,10.5) pointing downward (CCW tangent = down at right side) -->
+                                <Path Data="M 15,8.5 L 17.5,14.5 L 20,8.5 Z"
+                                      Fill="{DynamicResource NeonIconSecondary}" StrokeThickness="0"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <Separator/>
+
+                    <!-- Run -->
+                    <Button Command="{Binding RunModelSystemCommand}"
+                            IsEnabled="{Binding CanRun}"
+                            ToolTip.Tip="Run this model system (save first to apply changes)"
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- Filled play triangle -->
+                                <Path Data="M 5,3 L 5,17 L 17,10 Z"
+                                      Fill="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="0"/>
+                                <!-- Accent bar -->
+                                <Path Data="M 3,3 V 17"
+                                      Stroke="{DynamicResource NeonIconSecondary}"
+                                      StrokeThickness="2.5" StrokeLineCap="Round"
+                                      Fill="Transparent"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <Separator/>
+
+                    <!-- Variables -->
+                    <Button Click="OnShowVariablesClick"
+                            ToolTip.Tip="View / manage Model System Variables"
+                            ToolTip.Placement="Pointer">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- Three slider tracks -->
+                                <Path Data="M 2,5 H 18 M 2,10 H 18 M 2,15 H 18"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="1.8" StrokeLineCap="Round"
+                                      Fill="Transparent"/>
+                                <!-- Slider handles -->
+                                <Ellipse Width="4" Height="4"
+                                         Fill="{DynamicResource NeonIconSecondary}"
+                                         Canvas.Left="5" Canvas.Top="3"/>
+                                <Ellipse Width="4" Height="4"
+                                         Fill="{DynamicResource NeonIconSecondary}"
+                                         Canvas.Left="11" Canvas.Top="8"/>
+                                <Ellipse Width="4" Height="4"
+                                         Fill="{DynamicResource NeonIconSecondary}"
+                                         Canvas.Left="6" Canvas.Top="13"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                </StackPanel>
             </Border>
 
         </Grid>

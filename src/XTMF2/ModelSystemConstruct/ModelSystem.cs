@@ -380,7 +380,13 @@ namespace XTMF2
                 // Now that all of the modules have been loaded we can process the scripted parameters
                 foreach (var (toAssignTo, parameterExpression) in scriptedParameters)
                 {
-                    if (!toAssignTo.SetParameterExpression(modelSystem.Variables, parameterExpression, out CommandError? cmdError))
+                    // Nodes inside a FunctionTemplate's InternalModules have template-local
+                    // variables that shadow the global ones; combine them (local first).
+                    var localVars = toAssignTo.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+                    IList<Node> allVars = localVars is { Count: > 0 }
+                        ? localVars.Concat(modelSystem.Variables).ToList()
+                        : (IList<Node>)modelSystem.Variables;
+                    if (!toAssignTo.SetParameterExpression(allVars, parameterExpression, out CommandError? cmdError))
                     {
                         // TODO: Think about what to do in order to heal the model system
                     }

@@ -33,6 +33,12 @@ namespace XTMF2.Editing
         private List<Command> _Commands = new List<Command>();
         
         /// <summary>
+        /// Create an empty command batch.
+        /// Use <see cref="Add"/> to populate it before pushing to the buffer.
+        /// </summary>
+        public CommandBatch() { }
+
+        /// <summary>
         /// Create a command batch from a single command.
         /// </summary>
         /// <param name="command">The command to set in a batch</param>

@@ -200,6 +200,12 @@ public partial class InterBoundaryLinkDialog : Window, INotifyPropertyChanged
 
         InitializeComponent();
         DataContext = this;
+        AddHandler(KeyDownEvent, (_, ke) =>
+        {
+            if (ke.Key != Key.Escape) return;
+            Cancel_Click(null, new RoutedEventArgs());
+            ke.Handled = true;
+        }, RoutingStrategies.Tunnel);
 
         // Initialise the filtered boundary list with everything.
         foreach (var item in BoundaryItems)

@@ -29,7 +29,7 @@ public partial class ProjectsViewModel : ObservableObject
     private readonly User? _currentUser;
 
     // Used by Dock ItemsSource for the tab title and close behaviour
-    public string Title => "Projects";
+    public string Title => "⊞  Projects";
     public bool CanClose => false;
 
     [ObservableProperty]

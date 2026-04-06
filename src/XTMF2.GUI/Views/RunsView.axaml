@@ -6,7 +6,8 @@
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="500"
              x:Class="XTMF2.GUI.Views.RunsView"
              x:DataType="vm:RunsViewModel"
-             x:CompileBindings="True">
+             x:CompileBindings="True"
+             Classes="neon-view">
 
     <Grid RowDefinitions="Auto,*" Margin="10">
 
@@ -26,7 +27,7 @@
 
             <!-- Left: run list -->
             <Border Grid.Column="0"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                    BorderBrush="{DynamicResource DlgListBorder}"
                     BorderThickness="1"
                     CornerRadius="4">
                 <Grid RowDefinitions="Auto,*">
@@ -35,6 +36,7 @@
                     <Button Grid.Row="0"
                             Content="Clear Completed"
                             Command="{Binding ClearCompletedRunsCommand}"
+                            Classes="dlg-primary"
                             HorizontalAlignment="Stretch"
                             Margin="4,4,4,2"/>
 
@@ -61,8 +63,8 @@
                                     </StackPanel>
                                     <Button Grid.Column="2"
                                             Content="🗑"
+                                            Classes="dlg-danger"
                                             FontSize="14"
-                                            Padding="4,2"
                                             VerticalAlignment="Center"
                                             IsEnabled="{Binding IsCompleted}"
                                             Command="{Binding DataContext.RemoveRunCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
@@ -83,7 +85,7 @@
 
             <!-- Right: message log for the selected run -->
             <Border Grid.Column="2"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                    BorderBrush="{DynamicResource DlgListBorder}"
                     BorderThickness="1"
                     CornerRadius="4"
                     Padding="8">

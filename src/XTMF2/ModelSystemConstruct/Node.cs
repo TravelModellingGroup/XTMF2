@@ -68,7 +68,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <summary>
         /// The type that this will represent
         /// </summary>
-        public Type Type => _type;
+        public virtual Type Type => _type;
 
         /// <summary>
         /// A parameter value to use if this is a parameter type
@@ -87,7 +87,7 @@ namespace XTMF2.ModelSystemConstruct
         /// <summary>
         /// Get a readonly list of possible hooks to use to interface with other nodes.
         /// </summary>
-        public IReadOnlyList<NodeHook> Hooks { get; private set; }
+        public virtual IReadOnlyList<NodeHook> Hooks { get; private set; }
 
         /// <summary>
         /// The name of the node
@@ -106,6 +106,13 @@ namespace XTMF2.ModelSystemConstruct
         public IModule? Module { get; private set; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
+
+        /// <summary>
+        /// Raises <see cref="PropertyChanged"/> for subclasses that cannot access the
+        /// backing delegate directly.
+        /// </summary>
+        protected void InvokePropertyChanged(string propertyName)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
         /// <summary>
         /// Set the location of the node
@@ -253,6 +260,29 @@ namespace XTMF2.ModelSystemConstruct
             {
                 return ParameterValue.AssignToParameter(module, ref error);
             }
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Instantiates a fresh <see cref="IModule"/> for this node's type without storing
+        /// it in <see cref="Module"/>. Used by FunctionInstance runtime cloning so that each
+        /// instance has its own independent module objects.
+        /// </summary>
+        internal bool ConstructModuleInstance(XTMFRuntime runtime, out IModule? module, ref string? error)
+        {
+            module = null;
+            if (_type is null)
+                return FailWith(out error, $"Unable to construct a module instance for '{Name}' without a type!");
+            var typeInfo = _type.GetTypeInfo();
+            if ((
+                typeInfo.GetConstructor(RuntimeConstructor)?.Invoke(new[] { runtime })
+                ?? typeInfo.GetConstructor(EmptyConstructor)?.Invoke(EmptyConstructor)) is not IModule m)
+                return FailWith(out error, $"Unable to construct a module instance of type {_type.GetTypeInfo().AssemblyQualifiedName}!");
+            module = m;
+            module.Name = Name;
+            if (ParameterValue is not null)
+                return ParameterValue.AssignToParameter(module, ref error);
             error = null;
             return true;
         }

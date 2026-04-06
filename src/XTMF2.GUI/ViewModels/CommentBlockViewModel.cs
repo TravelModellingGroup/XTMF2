@@ -128,6 +128,23 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
     }
 
     /// <summary>
+    /// Returns the target <see cref="Rectangle"/> for the pending drag preview and clears the
+    /// preview state, without making a session call. Returns <c>null</c> when no preview is active.
+    /// </summary>
+    internal Rectangle? TakePendingMoveRect()
+    {
+        if (_previewX is null) return null;
+        var x = _previewX.Value;
+        var y = _previewY!.Value;
+        _previewX = null;
+        _previewY = null;
+        var loc = UnderlyingBlock.Location;
+        var w = loc.Width  is 0 ? (float)DefaultWidth  : loc.Width;
+        var h = loc.Height is 0 ? (float)DefaultHeight : loc.Height;
+        return new Rectangle((float)x, (float)y, w, h);
+    }
+
+    /// <summary>
     /// Move the comment block to a new canvas position, persisting the change via the session
     /// (supports undo/redo).
     /// </summary>

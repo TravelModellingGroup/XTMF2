@@ -909,6 +909,19 @@ namespace XTMF2.Editing
                 var oldBoundary = node.ContainedWithin!;
                 if (ReferenceEquals(oldBoundary, targetBoundary)) { error = null; return true; }
 
+                // A node that lives inside a FunctionTemplate's InternalModules may only be moved
+                // to other boundaries within the *same* FunctionTemplate, never outside it.
+                var oldFt = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, oldBoundary);
+                var newFt = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, targetBoundary);
+                if (!ReferenceEquals(oldFt, newFt))
+                {
+                    error = new CommandError(
+                        oldFt is not null
+                            ? $"Node '{node.Name}' is contained within FunctionTemplate '{oldFt.Name}' and cannot be moved outside of it."
+                            : $"Cannot move a node from the global scope into FunctionTemplate '{newFt!.Name}'.");
+                    return false;
+                }
+
                 // Outgoing links live in the origin node's boundary and must follow the node.
                 var outgoingLinks = oldBoundary.Links.Where(l => l.Origin == node).ToList();
 
@@ -1012,6 +1025,18 @@ namespace XTMF2.Editing
                 var oldBoundary = ghostNode.ContainedWithin!;
                 if (ReferenceEquals(oldBoundary, targetBoundary)) { error = null; return true; }
 
+                // Ghost nodes are subject to the same FunctionTemplate scope restriction as nodes.
+                var oldFt = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, oldBoundary);
+                var newFt = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, targetBoundary);
+                if (!ReferenceEquals(oldFt, newFt))
+                {
+                    error = new CommandError(
+                        oldFt is not null
+                            ? $"Ghost node '{ghostNode.Name}' is contained within FunctionTemplate '{oldFt.Name}' and cannot be moved outside of it."
+                            : $"Cannot move a ghost node from the global scope into FunctionTemplate '{newFt!.Name}'.");
+                    return false;
+                }
+
                 if (!oldBoundary.RemoveGhostNode(ghostNode, out error)) return false;
 
                 ghostNode.UpdateContainedWithin(targetBoundary);
@@ -1077,6 +1102,35 @@ namespace XTMF2.Editing
                     })
                     .ToList();
 
+                // Collect hidden (embedded) nodes: destination nodes of outgoing links that
+                // reside in the same boundary and carry a Rectangle.Hidden location.
+                // These are visually embedded within the owning node and must be deleted with it.
+                var hiddenNodes = outgoingLinks
+                    .SelectMany<Link, Node>(l =>
+                        l is SingleLink sl && sl.Destination is not null ? new[] { sl.Destination }
+                        : l is MultiLink ml ? ml.Destinations.ToArray()
+                        : Array.Empty<Node>())
+                    .Where(n => n.Location.Equals(Rectangle.Hidden) && ReferenceEquals(n.ContainedWithin, boundary))
+                    .Distinct()
+                    .ToList();
+
+                // For each hidden node, capture any OTHER incoming links (not the owner→hidden
+                // links already in outgoingLinks) plus its ghost cascade, for clean undo/redo.
+                var hiddenCascadeData = hiddenNodes
+                    .Select(hn =>
+                    {
+                        var hnLinks     = GetLinksGoingTo(hn).Where(l => !outgoingLinks.Contains(l)).ToList();
+                        var hnMulti     = BuildMultiLinkRestoreInfo(hnLinks, hn);
+                        var hnGhosts    = GetAllGhostNodesOf(hn);
+                        var hnGhostData = hnGhosts.Select(g =>
+                        {
+                            var gLinks = GetLinksGoingTo(g);
+                            return (Ghost: g, Links: gLinks, MultiInfo: BuildMultiLinkRestoreInfo(gLinks, g));
+                        }).ToList();
+                        return (Node: hn, OtherIncoming: hnLinks, MultiInfo: hnMulti, GhostData: hnGhostData);
+                    })
+                    .ToList();
+
                 // Remove all incoming links (or just the relevant destination entries).
                 void RemoveIncoming()
                 {
@@ -1107,11 +1161,41 @@ namespace XTMF2.Editing
                     }
                 }
 
-                // Remove incoming links, then ghost cascade, then outgoing links, then the node itself.
+                void RemoveHiddenCascade()
+                {
+                    foreach (var (hn, hnLinks, hnMulti, hnGhostData) in hiddenCascadeData)
+                    {
+                        foreach (var (ghost, gLinks, gMulti) in hnGhostData)
+                        {
+                            RemoveIncomingLinks(gLinks, ghost, gMulti);
+                            ghost.ContainedWithin!.RemoveGhostNode(ghost, out _);
+                        }
+                        RemoveIncomingLinks(hnLinks, hn, hnMulti);
+                        boundary.RemoveNode(hn, out _);
+                    }
+                }
+
+                void RestoreHiddenCascade()
+                {
+                    foreach (var (hn, hnLinks, hnMulti, hnGhostData) in hiddenCascadeData)
+                    {
+                        boundary.AddNode(hn, out _);
+                        RestoreIncomingLinks(hnLinks, hn, hnMulti);
+                        foreach (var (ghost, gLinks, gMulti) in hnGhostData)
+                        {
+                            ghost.ContainedWithin!.AddGhostNode(ghost, out _);
+                            RestoreIncomingLinks(gLinks, ghost, gMulti);
+                        }
+                    }
+                }
+
+                // Remove incoming links, then ghost cascade, then outgoing links,
+                // then the hidden embedded nodes, then the node itself.
                 RemoveIncoming();
                 RemoveGhostCascade();
                 foreach (var link in outgoingLinks)
                     boundary.RemoveLink(link, out _);
+                RemoveHiddenCascade();
 
                 // Also remove from model system variables if present, capturing position for undo.
                 var variableIndex = ModelSystem.Variables.IndexOf(node);
@@ -1122,9 +1206,10 @@ namespace XTMF2.Editing
                 {
                     Buffer.AddUndo(new Command(() =>
                     {
-                        // Undo: restore node first, then its outgoing links, then all incoming links, then ghosts.
+                        // Undo: restore node first, then hidden nodes, then outgoing links, then incoming links + ghosts.
                         if (boundary.AddNode(node, out var e))
                         {
+                            RestoreHiddenCascade();
                             foreach (var link in outgoingLinks)
                                 boundary.AddLink(link, out e);
                             RestoreIncoming();
@@ -1144,6 +1229,7 @@ namespace XTMF2.Editing
                         RemoveGhostCascade();
                         foreach (var link in outgoingLinks)
                             boundary.RemoveLink(link, out _);
+                        RemoveHiddenCascade();
                         ModelSystem.Variables.Remove(node);
                         return (boundary.RemoveNode(node, out var e), e);
                     }));
@@ -1151,7 +1237,8 @@ namespace XTMF2.Editing
                 }
                 else
                 {
-                    // Node removal failed; roll back the link removals and ghost cascade.
+                    // Node removal failed; roll back the link removals, hidden cascade, and ghost cascade.
+                    RestoreHiddenCascade();
                     foreach (var link in outgoingLinks)
                         boundary.AddLink(link, out _);
                     RestoreGhostCascade();
@@ -1336,6 +1423,59 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Walks the entire boundary tree rooted at <paramref name="root"/> and returns the
+        /// <see cref="FunctionTemplate"/> whose <see cref="FunctionTemplate.InternalModules"/>
+        /// subtree contains <paramref name="boundary"/>, or <see langword="null"/> when the
+        /// boundary belongs to the global (non-FunctionTemplate) scope.
+        /// </summary>
+        private static FunctionTemplate? FindOwningFunctionTemplate(Boundary root, Boundary boundary)
+        {
+            foreach (var ft in root.FunctionTemplates)
+            {
+                if (ReferenceEquals(ft.InternalModules, boundary) || ft.InternalModules.Contains(boundary))
+                    return ft;
+            }
+            foreach (var child in root.Boundaries)
+            {
+                var result = FindOwningFunctionTemplate(child, boundary);
+                if (result is not null)
+                    return result;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Returns <c>true</c> if any <see cref="FunctionInstance"/> of <paramref name="template"/>
+        /// anywhere in the model system has an active link originating at the
+        /// <see cref="FunctionParameterHook"/> that corresponds to <paramref name="parameter"/>.
+        /// Traverses every reachable boundary (including <see cref="FunctionTemplate.InternalModules"/>).
+        /// </summary>
+        private static bool HasActiveFunctionParameterLink(
+            Boundary root, FunctionTemplate template, FunctionParameter parameter)
+        {
+            var stack = new Stack<Boundary>();
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+                foreach (var child in current.Boundaries)
+                    stack.Push(child);
+                foreach (var ft in current.FunctionTemplates)
+                    stack.Push(ft.InternalModules);
+
+                foreach (var link in current.Links)
+                {
+                    if (link.Origin is FunctionInstance fi
+                        && ReferenceEquals(fi.Template, template)
+                        && link.OriginHook is FunctionParameterHook fph
+                        && ReferenceEquals(fph.Parameter, parameter))
+                        return true;
+                }
+            }
+            return false;
+        }
+
         private List<Link> GetLinksGoingTo(Node destNode)
         {
             var ret = new List<Link>();
@@ -1430,6 +1570,29 @@ namespace XTMF2.Editing
         /// Returns every <see cref="GhostNode"/> anywhere in the model system that
         /// references <paramref name="realNode"/>.
         /// </summary>
+        /// <summary>
+        /// Returns every <see cref="FunctionInstance"/> anywhere in the model system that
+        /// references <paramref name="template"/>.
+        /// </summary>
+        private List<FunctionInstance> GetAllFunctionInstancesOf(FunctionTemplate template)
+        {
+            var result = new List<FunctionInstance>();
+            var stack = new Stack<Boundary>();
+            stack.Push(ModelSystem.GlobalBoundary);
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+                foreach (var child in current.Boundaries)
+                    stack.Push(child);
+                foreach (var ft in current.FunctionTemplates)
+                    stack.Push(ft.InternalModules);
+                foreach (var fi in current.FunctionInstances)
+                    if (fi.Template == template)
+                        result.Add(fi);
+            }
+            return result;
+        }
+
         private List<GhostNode> GetAllGhostNodesOf(Node realNode)
         {
             var result = new List<GhostNode>();
@@ -1440,6 +1603,11 @@ namespace XTMF2.Editing
                 var current = stack.Pop();
                 foreach (var child in current.Boundaries)
                     stack.Push(child);
+                // Also traverse the InternalModules of every FunctionTemplate in this
+                // boundary — they are not exposed through Boundaries and would otherwise
+                // be missed, leaving orphaned ghost nodes after the real node is deleted.
+                foreach (var ft in current.FunctionTemplates)
+                    stack.Push(ft.InternalModules);
                 foreach (var ghost in current.GhostNodes)
                     if (ghost.ReferencedNode == realNode)
                         result.Add(ghost);
@@ -1506,7 +1674,13 @@ namespace XTMF2.Editing
                 }
                 var previousType = basicParameter.Type;
                 var previousValue = basicParameter.ParameterValue;
-                if(basicParameter.SetParameterExpression(ModelSystem.Variables, expression, out error))
+                // Nodes inside a FunctionTemplate's InternalModules have template-local
+                // variables that shadow the global model-system variables.
+                var localVars = basicParameter.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+                IList<Node> allVars = localVars is { Count: > 0 }
+                    ? localVars.Concat(ModelSystem.Variables).ToList()
+                    : (IList<Node>)ModelSystem.Variables;
+                if(basicParameter.SetParameterExpression(allVars, expression, out error))
                 {
                     var newType = basicParameter.Type;
                     var newExpression = basicParameter.ParameterValue;
@@ -1570,8 +1744,7 @@ namespace XTMF2.Editing
         /// <param name="node">The node to remove.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        public bool RemoveVariable(User user, Node node, [NotNullWhen(false)] out CommandError? error)
-        {
+        public bool RemoveVariable(User user, Node node, [NotNullWhen(false)] out CommandError? error)        {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(node);
 
@@ -1597,6 +1770,60 @@ namespace XTMF2.Editing
                     },
                     () => { ModelSystem.Variables.Remove(node); return (true, null); }));
                 error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Designates a node inside a <see cref="FunctionTemplate"/>'s
+        /// <see cref="FunctionTemplate.InternalModules"/> as a template-local variable.
+        /// Local variables are resolved before global model-system variables when compiling
+        /// scripted parameter expressions for nodes inside the same template.
+        /// Scripts outside the template cannot reference these variables.
+        /// </summary>
+        public bool AddFunctionTemplateVariable(User user, FunctionTemplate template, Node node,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(node);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (!template.AddLocalVariable(node, out error)) return false;
+                Buffer.AddUndo(new Command(
+                    () => { template.RemoveLocalVariable(node, out _); return (true, null); },
+                    () => { template.AddLocalVariable(node, out _);    return (true, null); }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Removes a node from a <see cref="FunctionTemplate"/>'s local variable list.
+        /// </summary>
+        public bool RemoveFunctionTemplateVariable(User user, FunctionTemplate template, Node node,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(node);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (!template.RemoveLocalVariable(node, out error)) return false;
+                Buffer.AddUndo(new Command(
+                    () => { template.AddLocalVariable(node, out _);    return (true, null); },
+                    () => { template.RemoveLocalVariable(node, out _); return (true, null); }));
                 return true;
             }
         }
@@ -1665,6 +1892,36 @@ namespace XTMF2.Editing
                     }, () =>
                     {
                         return (link.SetDisabled(disabled, out var error), error);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Sets the orthogonal-routing flag on a link and records the change in the undo buffer.
+        /// </summary>
+        public bool SetLinkOrthogonal(User user, Link link, bool orthogonal, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(link);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (link.SetOrthogonal(orthogonal, out error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (link.SetOrthogonal(!orthogonal, out var error), error);
+                    }, () =>
+                    {
+                        return (link.SetOrthogonal(orthogonal, out var error), error);
                     }));
                     return true;
                 }
@@ -1868,6 +2125,11 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
+                if (ModelSystem.GlobalBoundary.ContainsFunctionTemplateName(functionTemplateName))
+                {
+                    error = new CommandError($"A function template named '{functionTemplateName}' already exists in the model system.");
+                    return false;
+                }
                 if (!boundary.AddFunctionTemplate(functionTemplateName, out var template, out error))
                 {
                     return false;
@@ -1907,6 +2169,19 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
+
+                // Refuse the removal if at least one FunctionInstance still references this template.
+                var referencing = GetAllFunctionInstancesOf(functionTemplate);
+                if (referencing.Count > 0)
+                {
+                    var names = string.Join(", ", referencing.Select(fi => $"'{fi.Name}'"));
+                    error = new CommandError(
+                        $"Cannot remove FunctionTemplate '{functionTemplate.Name}' because it is still " +
+                        $"referenced by the following function instance(s): {names}. " +
+                        $"Remove those instances first.");
+                    return false;
+                }
+
                 if (!boundary.RemoveFunctionTemplate(functionTemplate, out error))
                 {
                     error = new CommandError($"Failed to remove function template {functionTemplate.Name} from boundary {boundary.Name}: {error?.Message}");
@@ -1924,12 +2199,523 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Renames a function template within a boundary.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="template">The function template to rename.</param>
+        /// <param name="newName">The new name. Must not be null or whitespace.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool RenameFunctionTemplate(User user, FunctionTemplate template, string newName,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            error = null;
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                error = new CommandError("A function template name must not be empty.");
+                return false;
+            }
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var oldName = template.Name;
+                if (!string.Equals(oldName, newName, StringComparison.Ordinal)
+                    && ModelSystem.GlobalBoundary.ContainsFunctionTemplateName(newName))
+                {
+                    error = new CommandError($"A function template named '{newName}' already exists in the model system.");
+                    return false;
+                }
+                template.Name = newName;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    template.Name = oldName;
+                    return (true, null);
+                }, () =>
+                {
+                    template.Name = newName;
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Moves or resizes a function template's canvas container box.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="template">The function template whose location is being updated.</param>
+        /// <param name="newLocation">The new canvas location rectangle.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
+        public bool SetFunctionTemplateLocation(User user, FunctionTemplate template, Rectangle newLocation,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            error = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var oldLocation = template.Location;
+                template.SetLocation(newLocation);
+                Buffer.AddUndo(new Command(() =>
+                {
+                    template.SetLocation(oldLocation);
+                    return (true, null);
+                }, () =>
+                {
+                    template.SetLocation(newLocation);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Designates <paramref name="entryNode"/> as the <see cref="FunctionTemplate.EntryNode"/>
+        /// of <paramref name="template"/>, or clears it when <paramref name="entryNode"/> is <c>null</c>.
+        /// <para>
+        /// The entry node must be a <see cref="Start"/> that belongs to
+        /// <paramref name="template"/>'s <see cref="FunctionTemplate.InternalModules"/>.
+        /// It defines the runtime type of the template so that
+        /// <see cref="FunctionInstance"/> objects can participate in hook-compatibility checks.
+        /// </para>
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="template">The function template to modify.</param>
+        /// <param name="entryNode">The start node to use as the entry point, or <c>null</c> to clear.</param>
+        /// <param name="error">An error description when the method returns <c>false</c>.</param>
+        /// <returns><c>true</c> on success; <c>false</c> with a populated <paramref name="error"/> on failure.</returns>
+        public bool SetFunctionTemplateEntryNode(User user, FunctionTemplate template, Node? entryNode,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            error = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                // Validate: the entry node (when non-null) must live in InternalModules.
+                if (entryNode != null && entryNode.ContainedWithin != template.InternalModules)
+                {
+                    error = new CommandError(
+                        $"The node '{entryNode.Name}' does not belong to the InternalModules of template '{template.Name}'.");
+                    return false;
+                }
+
+                // Reject the change when it would break at least one existing link whose
+                // destination is a FunctionInstance of this template.
+                // FunctionInstance.Type returns entryNode.Type (or typeof(object) when null).
+                var newType = entryNode?.Type;
+                var instances = GetAllFunctionInstancesOf(template);
+                foreach (var fi in instances)
+                {
+                    var incomingLinks = GetLinksGoingTo(fi);
+                    foreach (var link in incomingLinks)
+                    {
+                        var hookType = link.OriginHook!.Type;
+                        // For array hooks, check the element type.
+                        var effectiveHookType = hookType.IsArray
+                            ? hookType.GetElementType()!
+                            : hookType;
+                        // A null newType maps to typeof(object), which satisfies no typed hook.
+                        bool compatible = newType is not null
+                            && effectiveHookType.IsAssignableFrom(newType);
+                        if (!compatible)
+                        {
+                            error = new CommandError(
+                                $"Cannot change the entry node of template '{template.Name}': " +
+                                $"FunctionInstance '{fi.Name}' is wired to hook '{link.OriginHook.Name}' " +
+                                $"(type '{effectiveHookType.Name}') on node '{link.Origin?.Name}', " +
+                                $"which is incompatible with the new entry-node type '{newType?.Name ?? "none"}'.");
+                            return false;
+                        }
+                    }
+                }
+
+                var oldEntryNode = template.EntryNode;
+                template.SetEntryNode(entryNode);
+                Buffer.AddUndo(new Command(() =>
+                {
+                    template.SetEntryNode(oldEntryNode);
+                    return (true, null);
+                }, () =>
+                {
+                    template.SetEntryNode(entryNode);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Adds a new <see cref="FunctionParameter"/> to <paramref name="template"/>.
+        /// The parameter becomes a valid link destination inside the template and a hook
+        /// on every <see cref="FunctionInstance"/> that references the template.
+        /// </summary>
+        public bool AddFunctionParameter(User user, FunctionTemplate template, string name, Type type,
+            Rectangle location, out FunctionParameter? parameter,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(name);
+            ArgumentNullException.ThrowIfNull(type);
+            parameter = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (!template.AddFunctionParameter(name, type, location, out parameter, out error))
+                    return false;
+                var captured = parameter!;
+                var capturedIdx = template.FunctionParameters.Count - 1;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    template.RemoveFunctionParameter(captured, out var e);
+                    return (true, e);
+                }, () =>
+                {
+                    template.RestoreFunctionParameter(captured, capturedIdx);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Removes a <see cref="FunctionParameter"/> from <paramref name="template"/>.
+        /// Any links inside the template that point to the parameter are also removed.
+        /// </summary>
+        public bool RemoveFunctionParameter(User user, FunctionTemplate template, FunctionParameter parameter,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(parameter);
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                // Refuse deletion if any FunctionInstance in the model has an active link
+                // from the hook that corresponds to this FunctionParameter.
+                if (HasActiveFunctionParameterLink(ModelSystem.GlobalBoundary, template, parameter))
+                {
+                    error = new CommandError(
+                        $"Cannot remove FunctionParameter '{parameter.Name}': one or more FunctionInstances have a link connected to this parameter's hook.");
+                    return false;
+                }
+                // Capture state before any mutations.
+                var internalBoundary = template.InternalModules;
+                var linksToRemove = internalBoundary.Links
+                    .Where(l => l.HasDestination(parameter))
+                    .ToList();
+                int restoreIndex = template.FunctionParameters.IndexOf(parameter);
+
+                // Remove links that reference this parameter as a destination.
+                foreach (var link in linksToRemove)
+                    internalBoundary.RemoveLink(link, out _);
+
+                if (!template.RemoveFunctionParameter(parameter, out error))
+                {
+                    // Roll back link removals on failure.
+                    foreach (var link in linksToRemove)
+                        internalBoundary.AddLink(link, out _);
+                    return false;
+                }
+                Buffer.AddUndo(new Command(() =>
+                {
+                    // Undo: restore parameter and its links.
+                    template.RestoreFunctionParameter(parameter, restoreIndex);
+                    foreach (var link in linksToRemove)
+                        internalBoundary.AddLink(link, out _);
+                    return (true, null);
+                }, () =>
+                {
+                    // Redo: re-remove links then the parameter.
+                    foreach (var link in linksToRemove)
+                        internalBoundary.RemoveLink(link, out _);
+                    return (template.RemoveFunctionParameter(parameter, out var e), e);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Renames a <see cref="FunctionParameter"/> within <paramref name="template">>.
+        /// Also updates the corresponding <see cref="FunctionParameterHook"/> name on every
+        /// live <see cref="FunctionInstance"/> because the hook derives its name from the parameter.
+        /// </summary>
+        public bool RenameFunctionParameter(User user, FunctionTemplate template, FunctionParameter parameter,
+            string newName, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(parameter);
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var oldName = parameter.Name;
+                if (!template.RenameFunctionParameter(parameter, newName, out error))
+                    return false;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    template.RenameFunctionParameter(parameter, oldName, out _);
+                    return (true, null);
+                }, () =>
+                {
+                    template.RenameFunctionParameter(parameter, newName, out _);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        // ── FunctionInstance ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Places a new <see cref="FunctionInstance"/> of <paramref name="template"/> into
+        /// <paramref name="boundary"/>.
+        /// </summary>
+        public bool AddFunctionInstance(User user, Boundary boundary, FunctionTemplate template,
+            string name, Rectangle location,
+            out FunctionInstance? instance, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+            ArgumentNullException.ThrowIfNull(template);
+            instance = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (!boundary.AddFunctionInstance(name, template, location, out instance, out error))
+                    return false;
+                var captured = instance!;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    return (boundary.RemoveFunctionInstance(captured, out var e), e);
+                }, () =>
+                {
+                    return (boundary.AddFunctionInstance(captured, out var e), e);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Removes <paramref name="instance"/> from its containing boundary.
+        /// </summary>
+        public bool RemoveFunctionInstance(User user, FunctionInstance instance,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(instance);
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var boundary = instance.ContainedWithin;
+                if (!boundary.RemoveFunctionInstance(instance, out error))
+                    return false;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    return (boundary.AddFunctionInstance(instance, out var e), e);
+                }, () =>
+                {
+                    return (boundary.RemoveFunctionInstance(instance, out var e), e);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Renames <paramref name="instance"/>.
+        /// </summary>
+        public bool RenameFunctionInstance(User user, FunctionInstance instance, string newName,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(instance);
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var oldName = instance.Name;
+                if (!instance.SetName(newName, out error))
+                    return false;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    instance.SetName(oldName, out _);
+                    return (true, null);
+                }, () =>
+                {
+                    instance.SetName(newName, out _);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Moves / resizes a <see cref="FunctionInstance"/> on the canvas.
+        /// </summary>
+        public bool SetFunctionInstanceLocation(User user, FunctionInstance instance, Rectangle newLocation,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(instance);
+            error = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var oldLocation = instance.Location;
+                instance.SetLocation(newLocation);
+                Buffer.AddUndo(new Command(() =>
+                {
+                    instance.SetLocation(oldLocation);
+                    return (true, null);
+                }, () =>
+                {
+                    instance.SetLocation(newLocation);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Moves a heterogeneous collection of canvas elements as a single undoable operation.
+        /// All supplied moves are applied and recorded in one <see cref="CommandBatch"/> so that
+        /// a single undo reverses the entire group drag.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="nodeMoves">Node / Start / GhostNode / FunctionParameter moves (all are <see cref="Node"/> subclasses).</param>
+        /// <param name="commentMoves">Comment-block moves.</param>
+        /// <param name="templateMoves">Function-template moves.</param>
+        /// <param name="instanceMoves">Function-instance moves.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns><c>true</c> on success; <c>false</c> with an error on failure.</returns>
+        public bool MoveElements(
+            User user,
+            IReadOnlyList<(Node node, Rectangle newLocation)>? nodeMoves,
+            IReadOnlyList<(CommentBlock block, Rectangle newLocation)>? commentMoves,
+            IReadOnlyList<(FunctionTemplate template, Rectangle newLocation)>? templateMoves,
+            IReadOnlyList<(FunctionInstance instance, Rectangle newLocation)>? instanceMoves,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            error = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var batch = new CommandBatch();
+
+                if (nodeMoves is not null)
+                {
+                    foreach (var (node, newLoc) in nodeMoves)
+                    {
+                        var oldLoc = node.Location;
+                        node.SetLocation(newLoc);
+                        var n = node; var o = oldLoc; var nl = newLoc;
+                        batch.Add(new Command(
+                            () => { n.SetLocation(o);  return (true, null); },
+                            () => { n.SetLocation(nl); return (true, null); }));
+                    }
+                }
+
+                if (commentMoves is not null)
+                {
+                    foreach (var (block, newLoc) in commentMoves)
+                    {
+                        var oldLoc = block.Location;
+                        block.Location = newLoc;
+                        var b = block; var o = oldLoc; var nl = newLoc;
+                        batch.Add(new Command(
+                            () => { b.Location = o;  return (true, null); },
+                            () => { b.Location = nl; return (true, null); }));
+                    }
+                }
+
+                if (templateMoves is not null)
+                {
+                    foreach (var (template, newLoc) in templateMoves)
+                    {
+                        var oldLoc = template.Location;
+                        template.SetLocation(newLoc);
+                        var t = template; var o = oldLoc; var nl = newLoc;
+                        batch.Add(new Command(
+                            () => { t.SetLocation(o);  return (true, null); },
+                            () => { t.SetLocation(nl); return (true, null); }));
+                    }
+                }
+
+                if (instanceMoves is not null)
+                {
+                    foreach (var (instance, newLoc) in instanceMoves)
+                    {
+                        var oldLoc = instance.Location;
+                        instance.SetLocation(newLoc);
+                        var inst = instance; var o = oldLoc; var nl = newLoc;
+                        batch.Add(new Command(
+                            () => { inst.SetLocation(o);  return (true, null); },
+                            () => { inst.SetLocation(nl); return (true, null); }));
+                    }
+                }
+
+                Buffer.AddUndo(batch);
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Create a model system session to use for a run
         /// </summary>
         /// <param name="runtime">The XTMF runtime the run will occur in</param>
         /// <returns></returns>
-        internal static ModelSystemSession CreateRunSession(ProjectSession session, ModelSystem modelSystem)
-        {
+        internal static ModelSystemSession CreateRunSession(ProjectSession session, ModelSystem modelSystem)        {
             return new ModelSystemSession(session, modelSystem);
         }
 

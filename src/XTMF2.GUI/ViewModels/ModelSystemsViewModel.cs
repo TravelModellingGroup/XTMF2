@@ -43,7 +43,7 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
     private Window? _parentWindow;
 
     // Used by Dock ItemsSource for the tab title and close behaviour
-    public string Title => _project.Name ?? "Untitled Project";
+    public string Title => $"⊟  {_project.Name ?? "Untitled Project"}";
     public bool CanClose => true;
 
     /// <summary>Gets the project this view model is for.</summary>

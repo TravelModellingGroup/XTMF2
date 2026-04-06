@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System.ComponentModel;
+using Avalonia;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -46,9 +47,35 @@ public interface ICanvasElement : INotifyPropertyChanged
     /// The X and Y coordinates of the center of the element on the canvas, in pixels.
     /// </summary>
     double CenterY { get; }
+
+    /// <summary>
+    /// The width of the element on the canvas, in pixels. Used for layout and hit-testing.
+    /// </summary>
+    double Width { get; }
+
+    /// <summary>
+    /// The height of the element on the canvas, in pixels. Used for layout and hit-testing.
+    /// </summary>
+    double Height { get; }
+
     /// <summary>
     /// Whether the element is currently selected.
     /// </summary>
     bool IsSelected { get; set; }
+
+    /// <summary>
+    /// Commits any pending move of this element to the underlying model. Should be called after a drag operation completes.
+    /// </summary>
+    void CommitMove();
     
+    /// <summary>
+    /// Commits any pending resize of this element to the underlying model. Should be called after a resize operation completes.
+    /// </summary>
+    void CommitResize();
+
+    bool IsPointWithin(Point point)
+    {
+        return new Rect(X - Width / 2, Y - Height / 2, Width, Height).Contains(point);
+    }
+
 }

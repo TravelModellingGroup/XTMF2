@@ -16,7 +16,9 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
 using System.ComponentModel;
+using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
 using XTMF2.Configuration;
 using XTMF2.Editing;
@@ -57,6 +59,10 @@ public sealed partial class StartViewModel : ObservableObject, ICanvasElement
 
     /// <summary>Diameter = 2 * Radius, for Width/Height bindings.</summary>
     public double Diameter => Radius * 2.0;
+
+    public double Width => Diameter;
+
+    public double Height => Diameter;
 
     [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty] private bool _isSelected;
@@ -117,6 +123,20 @@ public sealed partial class StartViewModel : ObservableObject, ICanvasElement
     }
 
     /// <summary>
+    /// Returns the target <see cref="Rectangle"/> for the pending drag preview and clears the
+    /// preview state, without making a session call. Returns <c>null</c> when no preview is active.
+    /// </summary>
+    internal Rectangle? TakePendingMoveRect()
+    {
+        if (_previewX is null) return null;
+        var x = _previewX.Value;
+        var y = _previewY!.Value;
+        _previewX = null;
+        _previewY = null;
+        return new Rectangle((float)x, (float)y, (float)Diameter, (float)Diameter);
+    }
+
+    /// <summary>
     /// Move the start to a new canvas position, persisting the change to the
     /// underlying model via the session (supports undo/redo).
     /// </summary>
@@ -131,4 +151,19 @@ public sealed partial class StartViewModel : ObservableObject, ICanvasElement
     /// <summary>Rename the start, persisting the change via the session (supports undo/redo).</summary>
     public bool SetName(string name, out CommandError? error)
         => _session.SetNodeName(_user, UnderlyingStart, name, out error);
+
+    /// <summary>
+    /// Starts are fixed-size, so ignore resize attempts. This method is still required to satisfy the <see cref="ICanvasElement"/> interface.
+    /// </summary>
+    public void CommitResize()
+    {
+        // Starts are fixed-size, so ignore resize attempts.
+    }
+
+    bool IsPointWithin(Point point)
+    {
+        var dx = X - CenterX;
+        var dy = Y - CenterY;
+        return (Math.Sqrt(dx * dx + dy * dy) <= StartViewModel.Radius);
+    }
 }
