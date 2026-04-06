@@ -2126,7 +2126,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         if (dialog.WasCancelled || dialog.SelectedType is null) return;
 
-        var location = new Rectangle((float)x, (float)y, 180f, 40f);
+        var location = new Rectangle((float)x, (float)y, 250f, 50f);
         await AddFunctionParameterAsync(dialog.ParameterName, dialog.SelectedType, location);
     }
 
@@ -2154,7 +2154,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                    .Any(fp => string.Equals(fp.Name, name, StringComparison.OrdinalIgnoreCase)))
             name = $"{baseName}{idx++}";
 
-        var location = new Rectangle((float)x, (float)y, 180f, 40f);
+        var location = new Rectangle((float)x, (float)y, 250f, 50f);
 
         if (!Session.AddFunctionParameter(
                 User, _currentFunctionTemplate.UnderlyingTemplate,
