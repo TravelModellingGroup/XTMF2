@@ -182,6 +182,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     public ObservableCollection<FunctionParameterViewModel> FunctionParameterVMs { get; } = new();
 
+    /// <summary>
+    /// Flat, searchable list of all visible canvas elements in the current boundary view:
+    /// non-inlined <see cref="NodeViewModel"/>s, <see cref="StartViewModel"/>s,
+    /// <see cref="FunctionTemplateViewModel"/>s, <see cref="FunctionInstanceViewModel"/>s,
+    /// and <see cref="FunctionParameterViewModel"/>s.
+    /// Rebuilt automatically whenever any constituent collection or a node's inline state changes.
+    /// </summary>
+    public ObservableCollection<ICanvasElement> SearchItems { get; } = new();
+
     /// <summary>Observable view-models for the model system's variable list.</summary>
     public ObservableCollection<ModelSystemVariableViewModel> ModelSystemVariables { get; } = new();
 
@@ -257,20 +266,73 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>True when neither an element nor a link is selected.</summary>
     public bool NothingSelected => SelectedElement is null && SelectedLink is null;
 
-    // ── Node search ───────────────────────────────────────────────────────
-    /// <summary>Fires when the user picks a node from the search box; the view should scroll to it.</summary>
-    public event Action<NodeViewModel>? ScrollToNodeRequested;
+    // ── Canvas element search ─────────────────────────────────────────────
+    /// <summary>Fires when the user picks an element from the search box; the view should scroll to it.</summary>
+    public event Action<ICanvasElement>? ScrollToElementRequested;
 
     /// <summary>Bound to the AutoCompleteBox SelectedItem; triggers navigation when set.</summary>
     [ObservableProperty]
-    private NodeViewModel? _nodeSearchSelection;
+    private ICanvasElement? _canvasSearchSelection;
 
-    partial void OnNodeSearchSelectionChanged(NodeViewModel? value)
+    partial void OnCanvasSearchSelectionChanged(ICanvasElement? value)
     {
         if (value is null) return;
         SelectElement(value);
-        ScrollToNodeRequested?.Invoke(value);
-        NodeSearchSelection = null; // reset so the box is ready for the next search
+        ScrollToElementRequested?.Invoke(value);
+        CanvasSearchSelection = null; // reset so the box is ready for the next search
+    }
+
+    // ── SearchItems tracking ──────────────────────────────────────────────
+    private readonly HashSet<NodeViewModel> _searchTrackedNodes = new();
+
+    /// <summary>
+    /// Rebuilds <see cref="SearchItems"/> from the current boundary's VM collections.
+    /// Non-inlined nodes and all Starts, FunctionTemplates, FunctionInstances,
+    /// and FunctionParameters are included.
+    /// </summary>
+    private void RebuildSearchItems()
+    {
+        SearchItems.Clear();
+        foreach (var nvm in Nodes)
+            if (!nvm.IsInlined)
+                SearchItems.Add(nvm);
+        foreach (var svm in Starts)
+            SearchItems.Add(svm);
+        foreach (var ftvm in FunctionTemplates)
+            SearchItems.Add(ftvm);
+        foreach (var fivm in FunctionInstances)
+            SearchItems.Add(fivm);
+        foreach (var fpvm in FunctionParameterVMs)
+            SearchItems.Add(fpvm);
+    }
+
+    private void OnNodesCollectionChangedForSearch(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Manage per-node IsInlined subscriptions so SearchItems stays in sync.
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            foreach (var nvm in _searchTrackedNodes)
+                nvm.PropertyChanged -= OnTrackedNodePropertyChanged;
+            _searchTrackedNodes.Clear();
+        }
+        else
+        {
+            if (e.NewItems is not null)
+                foreach (NodeViewModel nvm in e.NewItems)
+                    if (_searchTrackedNodes.Add(nvm))
+                        nvm.PropertyChanged += OnTrackedNodePropertyChanged;
+            if (e.OldItems is not null)
+                foreach (NodeViewModel nvm in e.OldItems)
+                    if (_searchTrackedNodes.Remove(nvm))
+                        nvm.PropertyChanged -= OnTrackedNodePropertyChanged;
+        }
+        RebuildSearchItems();
+    }
+
+    private void OnTrackedNodePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(NodeViewModel.IsInlined))
+            RebuildSearchItems();
     }
 
     // Subscription to the live MultiLink.Destinations collection.
@@ -495,6 +557,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         _canUndo = Session.CanUndo;
         _canRedo = Session.CanRedo;
         ((System.ComponentModel.INotifyPropertyChanged)Session).PropertyChanged += OnSessionPropertyChanged;
+
+        // Keep SearchItems in sync with the canvas collections.
+        // Nodes: also handles per-node IsInlined tracking.
+        Nodes.CollectionChanged            += OnNodesCollectionChangedForSearch;
+        Starts.CollectionChanged           += (_, _) => RebuildSearchItems();
+        FunctionTemplates.CollectionChanged += (_, _) => RebuildSearchItems();
+        FunctionInstances.CollectionChanged += (_, _) => RebuildSearchItems();
+        FunctionParameterVMs.CollectionChanged += (_, _) => RebuildSearchItems();
+        // Subscribe to nodes already populated by BuildFromBoundary.
+        foreach (var nvm in Nodes)
+            if (_searchTrackedNodes.Add(nvm))
+                nvm.PropertyChanged += OnTrackedNodePropertyChanged;
+        RebuildSearchItems();
     }
 
     private void OnSessionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -1700,7 +1775,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (nvm is not null)
         {
             SelectElement(nvm);
-            ScrollToNodeRequested?.Invoke(nvm);
+            ScrollToElementRequested?.Invoke(nvm);
         }
     }
 
@@ -2546,7 +2621,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // After a possible boundary switch, Nodes has been rebuilt — look up the fresh VM.
         var nodeVm = Nodes.FirstOrDefault(n => n.UnderlyingNode == node);
         if (nodeVm is not null)
-            ScrollToNodeRequested?.Invoke(nodeVm);
+            ScrollToElementRequested?.Invoke(nodeVm);
     }
 
     /// <summary>Move a MultiLink destination from one index to another (called from code-behind).</summary>
