@@ -32,6 +32,13 @@ namespace XTMF2.Editing
         private readonly EditingStack _redo = new EditingStack(MaxCapacity);
         private readonly object _executionLock = new object();
 
+        /// <summary>
+        /// When non-null, all incoming <see cref="AddUndo"/> calls accumulate here
+        /// instead of being pushed to the undo stack individually.
+        /// Committed as one atomic entry by <see cref="CommitAggregateBatch"/>.
+        /// </summary>
+        private CommandBatch? _activeBatch = null;
+
         public CommandBuffer()
         {
             _undo.PropertyChanged += (_, _) =>
@@ -82,20 +89,62 @@ namespace XTMF2.Editing
 
         internal void AddUndo(Command command)
         {
-            lock(_executionLock)
+            lock (_executionLock)
             {
-                _undo.Add(new CommandBatch(command));
-                _redo.Clear();
+                if (_activeBatch is not null)
+                    _activeBatch.Add(command);
+                else
+                {
+                    _undo.Add(new CommandBatch(command));
+                    _redo.Clear();
+                }
             }
         }
 
-        /// <summary>Pushes a pre-built <see cref="CommandBatch"/> as a single undoable entry.</summary>
+        /// <summary>Pushes a pre-built <see cref="CommandBatch"/> as a single undoable entry.
+        /// When an aggregate batch is active the pre-built batch is merged into it.</summary>
         internal void AddUndo(CommandBatch batch)
         {
             lock (_executionLock)
             {
-                _undo.Add(batch);
-                _redo.Clear();
+                if (_activeBatch is not null)
+                    batch.MergeInto(_activeBatch);
+                else
+                {
+                    _undo.Add(batch);
+                    _redo.Clear();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Begins collecting all subsequent <see cref="AddUndo"/> calls into a single
+        /// <see cref="CommandBatch"/>. Must be paired with <see cref="CommitAggregateBatch"/>.
+        /// </summary>
+        internal void BeginAggregateBatch()
+        {
+            lock (_executionLock)
+                _activeBatch = new CommandBatch();
+        }
+
+        /// <summary>
+        /// Commits the accumulated batch as one undoable entry and clears batch mode.
+        /// If no commands were accumulated the batch is discarded rather than pushed.
+        /// </summary>
+        internal void CommitAggregateBatch()
+        {
+            lock (_executionLock)
+            {
+                if (_activeBatch is { } batch)
+                {
+                    _activeBatch = null;
+                    // Only push if the batch actually contains commands.
+                    if (batch.HasCommands)
+                    {
+                        _undo.Add(batch);
+                        _redo.Clear();
+                    }
+                }
             }
         }
 

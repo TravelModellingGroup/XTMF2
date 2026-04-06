@@ -2869,6 +2869,8 @@ public sealed class ModelSystemCanvas : Control
             : (_vm.SelectedElement is { } sel ? [sel] : []);
 
         var dtos = new List<CanvasElementDto>();
+        // Tracks which selected real node maps to which index in dtos, so we can add cross-links.
+        var nodeToDtoIndex = new Dictionary<Node, int>();
 
         foreach (var el in source)
         {
@@ -2876,6 +2878,7 @@ public sealed class ModelSystemCanvas : Control
             switch (el)
             {
                 case NodeViewModel nvm when !nvm.IsInlined:
+                    nodeToDtoIndex[nvm.UnderlyingNode] = dtos.Count;
                     dto = BuildNodeDto(nvm);
                     break;
 
@@ -2923,6 +2926,33 @@ public sealed class ModelSystemCanvas : Control
                     continue; // StartViewModel and others are not copyable.
             }
             dtos.Add(dto);
+        }
+
+        // Second pass: detect links where both origin and destination are in the copied set
+        // and record them as cross-node links on the origin's DTO.
+        if (nodeToDtoIndex.Count > 1 && _vm is not null)
+        {
+            foreach (var lvm in _vm.Links)
+            {
+                if (lvm.Origin is not NodeViewModel originNvm) continue;
+                if (!nodeToDtoIndex.TryGetValue(originNvm.UnderlyingNode, out var originIdx)) continue;
+
+                if (lvm.Destination is not NodeViewModel destNvm) continue;
+                if (destNvm.IsInlined) continue;
+                if (!nodeToDtoIndex.ContainsKey(destNvm.UnderlyingNode)) continue;
+
+                // Both ends are in the selection — record a cross-link.
+                var hookName = lvm.UnderlyingLink.OriginHook.Name;
+                var destName = destNvm.UnderlyingNode.Name;
+                var origDto  = dtos[originIdx];
+                var crossLinks = origDto.CrossLinks ?? new System.Collections.Generic.List<CrossNodeLinkDto>();
+                if (origDto.CrossLinks is null)
+                {
+                    origDto = origDto with { CrossLinks = crossLinks };
+                    dtos[originIdx] = origDto;
+                }
+                crossLinks.Add(new CrossNodeLinkDto(hookName, destName));
+            }
         }
 
         if (dtos.Count == 0) return;

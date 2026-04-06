@@ -49,6 +49,20 @@ namespace XTMF2.Editing
 
         private readonly CommandBuffer Buffer = new CommandBuffer();
 
+        /// <summary>
+        /// Starts collecting all subsequent undoable operations into a single batch entry
+        /// so that the entire group can be undone with one Ctrl+Z.
+        /// Must always be paired with <see cref="CommitBatch"/>.
+        /// </summary>
+        public void BeginBatch() => Buffer.BeginAggregateBatch();
+
+        /// <summary>
+        /// Closes the active aggregate batch and pushes it as one undoable entry.
+        /// All operations recorded since the matching <see cref="BeginBatch"/> call
+        /// will be reversed together by a single undo.
+        /// </summary>
+        public void CommitBatch() => Buffer.CommitAggregateBatch();
+
         public ModelSystemSession(ProjectSession session, ModelSystem modelSystem)
         {
             ModelSystem = modelSystem;

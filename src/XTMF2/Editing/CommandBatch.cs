@@ -57,6 +57,9 @@ namespace XTMF2.Editing
             _Commands.Add(command ?? throw new ArgumentNullException(nameof(command)));
         }
 
+        /// <summary>Returns <c>true</c> when the batch contains at least one command.</summary>
+        internal bool HasCommands => _Commands.Count > 0;
+
         /// <summary>
         /// Undo the batch of commands.
         /// </summary>
@@ -95,6 +98,16 @@ namespace XTMF2.Editing
             }
             error = null;
             return true;
+        }
+
+        /// <summary>
+        /// Appends every command in this batch into <paramref name="target"/>.
+        /// Used when merging a pre-built batch into an active aggregate batch.
+        /// </summary>
+        internal void MergeInto(CommandBatch target)
+        {
+            foreach (var cmd in _Commands)
+                target.Add(cmd);
         }
     }
 }

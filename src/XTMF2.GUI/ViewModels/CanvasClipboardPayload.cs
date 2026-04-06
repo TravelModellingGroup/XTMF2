@@ -81,6 +81,11 @@ internal sealed record CanvasClipboardPayload(
 /// Ordered list of function-parameter names.
 /// Applies to <see cref="CanvasElementKind.FunctionTemplate"/>.
 /// </param>
+/// <param name="CrossLinks">
+/// Links from this <see cref="CanvasElementKind.Node"/> to other nodes that were also
+/// part of the same copy operation.  Destination is identified by the element's
+/// <see cref="CanvasElementDto.Name"/> within the same payload.
+/// </param>
 internal sealed record CanvasElementDto(
     [property: JsonPropertyName("kind")]               string  Kind,
     [property: JsonPropertyName("name")]               string  Name,
@@ -94,8 +99,23 @@ internal sealed record CanvasElementDto(
     [property: JsonPropertyName("inlinedChildren")]    List<InlinedChildDto>? InlinedChildren   = null,
     [property: JsonPropertyName("templateName")]       string?              TemplateName        = null,
     [property: JsonPropertyName("referencedNodeName")] string?             ReferencedNodeName  = null,
-    [property: JsonPropertyName("functionParameters")] List<FunctionParameterDto>? FunctionParameters = null
+    [property: JsonPropertyName("functionParameters")] List<FunctionParameterDto>? FunctionParameters = null,
+    [property: JsonPropertyName("crossLinks")]         List<CrossNodeLinkDto>? CrossLinks        = null
 );
+
+/// <summary>
+/// A link from one copied <see cref="CanvasElementKind.Node"/> to another node that
+/// was in the same copy selection.  Stored per-origin so it can be recreated on paste
+/// once all nodes have been constructed.
+/// </summary>
+/// <param name="HookName">The name of the hook on the <em>origin</em> node.</param>
+/// <param name="DestName">
+/// The <see cref="CanvasElementDto.Name"/> of the destination node within the same
+/// <see cref="CanvasClipboardPayload"/>.
+/// </param>
+internal sealed record CrossNodeLinkDto(
+    [property: JsonPropertyName("hookName")] string HookName,
+    [property: JsonPropertyName("destName")] string DestName);
 
 /// <summary>
 /// A single function-parameter slot captured from a <see cref="CanvasElementKind.FunctionTemplate"/>.

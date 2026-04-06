@@ -3042,49 +3042,89 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         float dx = (float)anchorX - minX + StackOffset;
         float dy = (float)anchorY - minY + StackOffset;
 
-        // Paste FunctionTemplates first so FunctionInstances that reference them can be resolved.
-        foreach (var element in payload.Elements)
+        // The entire paste is a single undoable operation.
+        Session.BeginBatch();
+        try
         {
-            if (element.Kind != CanvasElementKind.FunctionTemplate) continue;
-            PasteFunctionTemplate(element, dx, dy);
-        }
-
-        // Now paste all other kinds.
-        Node? firstNode = null;
-        foreach (var element in payload.Elements)
-        {
-            switch (element.Kind)
+            // Paste FunctionTemplates first so FunctionInstances that reference them can be resolved.
+            foreach (var element in payload.Elements)
             {
-                case CanvasElementKind.Node:
-                    firstNode ??= await PasteNodeEntryAsync(element, dx, dy);
-                    break;
+                if (element.Kind != CanvasElementKind.FunctionTemplate) continue;
+                PasteFunctionTemplate(element, dx, dy);
+            }
 
-                case CanvasElementKind.CommentBlock:
-                    PasteCommentBlockEntry(element, dx, dy);
-                    break;
+            // Pass 1: create all nodes (without linking inlined children yet).
+            var createdNodes = new List<(CanvasElementDto Element, Node Node)>();
+            Node? firstNode = null;
+            foreach (var element in payload.Elements)
+            {
+                switch (element.Kind)
+                {
+                    case CanvasElementKind.Node:
+                        var pastedNode = await PasteNodeBodyAsync(element, dx, dy);
+                        if (pastedNode is not null)
+                        {
+                            firstNode ??= pastedNode;
+                            createdNodes.Add((element, pastedNode));
+                        }
+                        break;
 
-                case CanvasElementKind.FunctionInstance:
-                    PasteFunctionInstance(element, dx, dy);
-                    break;
+                    case CanvasElementKind.CommentBlock:
+                        PasteCommentBlockEntry(element, dx, dy);
+                        break;
 
-                case CanvasElementKind.GhostNode:
-                    PasteGhostNodeEntry(element, dx, dy);
-                    break;
+                    case CanvasElementKind.FunctionInstance:
+                        PasteFunctionInstance(element, dx, dy);
+                        break;
 
-                // FunctionTemplate was already handled above.
+                    case CanvasElementKind.GhostNode:
+                        PasteGhostNodeEntry(element, dx, dy);
+                        break;
+
+                    // FunctionTemplate was already handled above.
+                }
+            }
+
+            // Pass 2: now that all nodes exist, restore inlined children and their links.
+            foreach (var (element, node) in createdNodes)
+                PasteNodeInlinedChildren(element, node);
+
+            // Pass 3: restore links between pasted nodes (cross-node links).
+            if (createdNodes.Count > 1)
+            {
+                var nameToNode = createdNodes.ToDictionary(e => e.Element.Name, e => e.Node);
+                foreach (var (element, originNode) in createdNodes)
+                {
+                    foreach (var crossLink in element.CrossLinks ?? [])
+                    {
+                        if (!nameToNode.TryGetValue(crossLink.DestName, out var destNode)) continue;
+                        var hook = originNode.Hooks?.FirstOrDefault(h => h.Name == crossLink.HookName);
+                        if (hook is null) continue;
+                        Session.AddLink(User, originNode, hook, destNode, out _, out _);
+                    }
+                }
+            }
+
+            if (firstNode is not null)
+            {
+                var nvm = Nodes.FirstOrDefault(n => n.UnderlyingNode == firstNode);
+                if (nvm is not null) SelectElement(nvm);
             }
         }
-
-        if (firstNode is not null)
+        finally
         {
-            var nvm = Nodes.FirstOrDefault(n => n.UnderlyingNode == firstNode);
-            if (nvm is not null) SelectElement(nvm);
+            Session.CommitBatch();
         }
     }
 
     // ── Per-element paste helpers ─────────────────────────────────────────
 
-    private async Task<Node?> PasteNodeEntryAsync(
+    /// <summary>
+    /// Creates the node and restores its parameter value, but does NOT yet create
+    /// inlined children or links.  Call <see cref="PasteNodeInlinedChildren"/> in a
+    /// second pass once all top-level nodes have been constructed.
+    /// </summary>
+    private async Task<Node?> PasteNodeBodyAsync(
         CanvasElementDto element, float dx, float dy)
     {
         if (element.TypeName is null) return null;
@@ -3111,10 +3151,20 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 Session.SetParameterValue(User, newNode, element.ParameterValue, out _);
         }
 
+        return newNode;
+    }
+
+    /// <summary>
+    /// Second-pass helper: re-creates inlined (hidden) child nodes for <paramref name="newNode"/>
+    /// and wires them to their hooks.  Must be called after all top-level nodes have been
+    /// created by <see cref="PasteNodeBodyAsync"/>.
+    /// </summary>
+    private void PasteNodeInlinedChildren(CanvasElementDto element, Node newNode)
+    {
         // Re-create inlined (hidden) child nodes.
         foreach (var inlined in element.InlinedChildren ?? [])
         {
-            if (inlined.Child.TypeName is null || newNode is null) continue;
+            if (inlined.Child.TypeName is null) continue;
             var childType = Type.GetType(inlined.Child.TypeName);
             if (childType is null) continue;
 
@@ -3136,8 +3186,6 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             if (childNode is not null)
                 Session.AddLink(User, newNode, hook, childNode, out _, out _);
         }
-
-        return newNode;
     }
 
     private void PasteCommentBlockEntry(CanvasElementDto element, float dx, float dy)
