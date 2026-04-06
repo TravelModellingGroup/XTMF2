@@ -39,6 +39,33 @@ using XTMF2.RuntimeModules;
 namespace XTMF2.GUI.ViewModels;
 
 /// <summary>
+/// Holds the data captured for a single node (and its inlined parameter children)
+/// at the moment it is copied, ready to be replicated by a paste operation.
+/// </summary>
+/// <param name="Name">The node's name at copy time.</param>
+/// <param name="Type">The CLR type of the node's module.</param>
+/// <param name="OriginalLocation">The canvas rectangle of the node at copy time.</param>
+/// <param name="ParameterValue">
+/// The string representation of the parameter value, or <c>null</c> when the node
+/// is not a parameter node.
+/// </param>
+/// <param name="IsScriptedParam">
+/// <c>true</c> when the parameter is a <c>ScriptedParameter</c>; <c>false</c>
+/// for a <c>BasicParameter</c>.  Ignored when <paramref name="ParameterValue"/> is <c>null</c>.
+/// </param>
+/// <param name="InlinedChildren">
+/// One entry per hidden (inlined) child node that was connected to this node's hook
+/// at copy time.  The tuple stores the hook name and the child's own copy data.
+/// </param>
+internal sealed record NodePasteEntry(
+    string Name,
+    Type Type,
+    Rectangle OriginalLocation,
+    string? ParameterValue,
+    bool IsScriptedParam,
+    IReadOnlyList<(string HookName, NodePasteEntry Child)> InlinedChildren);
+
+/// <summary>
 /// View model for editing a single model system. Owns the <see cref="ModelSystemSession"/>
 /// and disposes it when the tab is closed.
 /// </summary>
@@ -2857,6 +2884,102 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 out _, out var addError))
         {
             await ShowError("Add Function Instance Failed", addError);
+        }
+    }
+
+    // ── Copy / Paste ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Pastes a batch of previously copied nodes into <see cref="_currentBoundary"/>,
+    /// placing them relative to (<paramref name="anchorX"/>, <paramref name="anchorY"/>)
+    /// in canvas (model) coordinates.
+    /// <para>
+    /// For each entry the method:
+    /// <list type="number">
+    ///   <item>Creates the main node at the offset position.</item>
+    ///   <item>If the node is a parameter node, restores its value.</item>
+    ///   <item>Re-creates any hidden (inlined) child nodes that were attached to
+    ///         parameter hooks and links them back to their hooks.</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    internal async Task PasteNodesAsync(IReadOnlyList<NodePasteEntry> clipboard, double anchorX, double anchorY)
+    {
+        if (clipboard.Count == 0) return;
+
+        // Compute the translation that maps the top-left corner of the original bounding
+        // box onto (anchorX, anchorY) with a small additional offset so duplicate pastes
+        // do not stack exactly on top of each other.
+        const float StackOffset = 24f;
+        float minX = clipboard.Min(e => e.OriginalLocation.X >= 0 ? e.OriginalLocation.X : 0f);
+        float minY = clipboard.Min(e => e.OriginalLocation.Y >= 0 ? e.OriginalLocation.Y : 0f);
+        float dx = (float)anchorX - minX + StackOffset;
+        float dy = (float)anchorY - minY + StackOffset;
+
+        Node? firstPasted = null;
+
+        foreach (var entry in clipboard)
+        {
+            if (entry.Type is null) continue;
+
+            float w = entry.OriginalLocation.Width > 0 ? entry.OriginalLocation.Width : 120f;
+            float h = entry.OriginalLocation.Height > 0 ? entry.OriginalLocation.Height : 50f;
+            var newLoc = new Rectangle(
+                entry.OriginalLocation.X + dx,
+                entry.OriginalLocation.Y + dy,
+                w, h);
+
+            if (!Session.AddNode(User, _currentBoundary, entry.Name, entry.Type, newLoc,
+                    out var newNode, out var addError))
+            {
+                await ShowError("Paste Failed", addError);
+                return;
+            }
+
+            firstPasted ??= newNode;
+
+            // Restore parameter value.
+            if (entry.ParameterValue is not null && newNode is not null)
+            {
+                if (entry.IsScriptedParam)
+                    Session.SetParameterExpression(User, newNode, entry.ParameterValue, out _);
+                else
+                    Session.SetParameterValue(User, newNode, entry.ParameterValue, out _);
+            }
+
+            // Re-create each inlined (hidden) child node and link it to its hook.
+            foreach (var (hookName, child) in entry.InlinedChildren)
+            {
+                if (newNode is null || child.Type is null) continue;
+
+                // Find the hook by name on the newly created node.
+                var hook = newNode.Hooks?.FirstOrDefault(h => h.Name == hookName);
+                if (hook is null) continue;
+
+                if (!Session.AddNode(User, _currentBoundary, child.Name, child.Type,
+                        Rectangle.Hidden, out var childNode, out _))
+                    continue;
+
+                // Restore child parameter value.
+                if (child.ParameterValue is not null && childNode is not null)
+                {
+                    if (child.IsScriptedParam)
+                        Session.SetParameterExpression(User, childNode, child.ParameterValue, out _);
+                    else
+                        Session.SetParameterValue(User, childNode, child.ParameterValue, out _);
+                }
+
+                // Wire hook → child.
+                if (childNode is not null)
+                    Session.AddLink(User, newNode, hook, childNode, out _, out _);
+            }
+        }
+
+        // Select the first pasted node so the user can see where the paste landed.
+        if (firstPasted is not null)
+        {
+            var nvm = Nodes.FirstOrDefault(n => n.UnderlyingNode == firstPasted);
+            if (nvm is not null) SelectElement(nvm);
         }
     }
 

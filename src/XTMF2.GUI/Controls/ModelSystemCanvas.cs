@@ -632,6 +632,13 @@ public sealed class ModelSystemCanvas : Control
     /// <summary>Cursor model-coordinate recorded at the start of each group-drag frame, used to compute per-frame deltas.</summary>
     private Point _groupDragLastPos;
 
+    // ── Copy / Paste clipboard ────────────────────────────────────────────
+    /// <summary>
+    /// In-memory clipboard that stores the data for nodes captured by the last Copy operation.
+    /// <c>null</c> (or empty) means no copy has been performed yet.
+    /// </summary>
+    private List<NodePasteEntry>? _nodePasteClipboard;
+
     // ── Rubber-band (Ctrl+drag) selection rectangle ───────────────────────
     /// <summary>Model-coord anchor of the in-progress Ctrl+drag selection rect, or <c>null</c> when idle.</summary>
     private Point? _selRectStart;
@@ -2752,6 +2759,105 @@ public sealed class ModelSystemCanvas : Control
             _vm?.NavigateUpCommand.Execute(null);
             e.Handled = true;
         }
+        else if (e.Key == Key.C && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            CopySelectedNodes();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.V && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            // Paste at the centre of the current viewport.
+            var sv = GetScrollViewer();
+            double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width  ?? Bounds.Width)  / 2.0) / _scale;
+            double vy = ((sv?.Offset.Y ?? 0) + (sv?.Viewport.Height ?? Bounds.Height) / 2.0) / _scale;
+            PasteNodes(vx, vy);
+            e.Handled = true;
+        }
+    }
+
+    // ── Copy / Paste helpers ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a <see cref="NodePasteEntry"/> from a <see cref="NodeViewModel"/>,
+    /// optionally including pre-computed inlined-children data.
+    /// </summary>
+    private static NodePasteEntry BuildPasteEntry(
+        NodeViewModel nvm,
+        List<(string HookName, NodePasteEntry Child)>? inlined = null)
+    {
+        var node = nvm.UnderlyingNode;
+        string? paramValue = null;
+        bool isScriptedParam = false;
+        if (nvm.IsParameterNode && node.ParameterValue is { } pv)
+        {
+            paramValue = pv.Representation;
+            isScriptedParam = nvm.IsScriptedParameter;
+        }
+        return new NodePasteEntry(
+            node.Name,
+            node.Type!,
+            node.Location,
+            paramValue,
+            isScriptedParam,
+            inlined ?? []);
+    }
+
+    /// <summary>
+    /// Captures the currently selected <see cref="NodeViewModel"/>s (and any hidden
+    /// parameter children attached to their hooks) into <see cref="_nodePasteClipboard"/>.
+    /// <para>
+    /// Selection priority:
+    /// <list type="bullet">
+    ///   <item>If <see cref="_multiSelection"/> contains nodes, only those nodes are copied.</item>
+    ///   <item>If only a single element is selected (<see cref="ModelSystemEditorViewModel.SelectedElement"/>),
+    ///         that node is copied.</item>
+    /// </list>
+    /// Unselected nodes, hidden (inlined) nodes, and non-node canvas elements are excluded
+    /// from the primary copy set.  Hidden children of selected nodes are included automatically.
+    /// </para>
+    /// </summary>
+    private void CopySelectedNodes()
+    {
+        if (_vm is null) return;
+
+        // Collect the top-level nodes to copy.
+        var nodesToCopy = new List<NodeViewModel>();
+        if (_multiSelection.Count > 0)
+        {
+            foreach (var el in _multiSelection)
+                if (el is NodeViewModel nvm && !nvm.IsInlined)
+                    nodesToCopy.Add(nvm);
+        }
+        else if (_vm.SelectedElement is NodeViewModel single && !single.IsInlined)
+        {
+            nodesToCopy.Add(single);
+        }
+
+        if (nodesToCopy.Count == 0) return;
+
+        _nodePasteClipboard = new List<NodePasteEntry>(nodesToCopy.Count);
+
+        foreach (var nvm in nodesToCopy)
+        {
+            // Collect inlined (hidden) children connected to this node's hooks.
+            var inlined = new List<(string HookName, NodePasteEntry Child)>();
+            foreach (var kvp in _hookInlinedParam)
+            {
+                if (ReferenceEquals(kvp.Key.Item1, nvm))
+                    inlined.Add((kvp.Key.Item2.Name, BuildPasteEntry(kvp.Value)));
+            }
+            _nodePasteClipboard.Add(BuildPasteEntry(nvm, inlined));
+        }
+    }
+
+    /// <summary>
+    /// Pastes the clipboard contents into the current boundary, anchored
+    /// at (<paramref name="anchorX"/>, <paramref name="anchorY"/>) in model coordinates.
+    /// </summary>
+    private void PasteNodes(double anchorX, double anchorY)
+    {
+        if (_vm is null || _nodePasteClipboard is null || _nodePasteClipboard.Count == 0) return;
+        _ = _vm.PasteNodesAsync(_nodePasteClipboard, anchorX, anchorY);
     }
 
     // ── Scaling helpers ───────────────────────────────────────────────────
@@ -3711,6 +3817,15 @@ public sealed class ModelSystemCanvas : Control
                 bgMenu.Items.Add(addFpItem);
             }
 
+            // ── Paste (when clipboard is non-empty) ───────────────────────────
+            if (_nodePasteClipboard is { Count: > 0 })
+            {
+                bgMenu.Items.Add(new Separator());
+                var pasteItem = new MenuItem { Header = "Paste\tCtrl+V" };
+                pasteItem.Click += (_, _) => PasteNodes(spawnPt.X, spawnPt.Y);
+                bgMenu.Items.Add(pasteItem);
+            }
+
             ContextMenu = bgMenu;
             ContextMenu.Open(this);
             return;
@@ -4084,6 +4199,33 @@ public sealed class ModelSystemCanvas : Control
             };
             menu.Items.Add(new Separator());
             menu.Items.Add(entryItem);
+        }
+
+        // ── Copy ──────────────────────────────────────────────────────────────
+        if (element is NodeViewModel copyCandidate && !copyCandidate.IsInlined)
+        {
+            var capturedCopyNode = copyCandidate;
+            menu.Items.Add(new Separator());
+
+            // Show how many nodes will be copied.
+            int copyCount = _multiSelection.Count > 0 && _multiSelection.Contains(capturedCopyNode)
+                ? _multiSelection.Count(el => el is NodeViewModel nvm && !nvm.IsInlined)
+                : 1;
+            string copyHeader = copyCount > 1 ? $"Copy {copyCount} Nodes\tCtrl+C" : "Copy\tCtrl+C";
+
+            var copyItem = new MenuItem { Header = copyHeader };
+            copyItem.Click += (_, _) =>
+            {
+                // If the right-clicked node is not already part of the multi-selection,
+                // narrow the copy set to just this one node.
+                if (_multiSelection.Count == 0 || !_multiSelection.Contains(capturedCopyNode))
+                {
+                    ClearMultiSelection();
+                    if (_vm is not null) _vm.SelectElementCommand.Execute(capturedCopyNode);
+                }
+                CopySelectedNodes();
+            };
+            menu.Items.Add(copyItem);
         }
 
         menu.Items.Add(deleteItem);
