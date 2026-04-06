@@ -527,6 +527,12 @@ public sealed class ModelSystemCanvas : Control
             TimeSpan.FromMilliseconds(16),
             DispatcherPriority.Input,
             OnAutoScrollTick);
+
+        // Tunneling PointerPressed fires before any child TextBox overlay can
+        // consume the event, giving resize-handle hits higher priority than
+        // the inline editors.
+        this.AddHandler(InputElement.PointerPressedEvent, OnPointerPressedTunnel,
+                        Avalonia.Interactivity.RoutingStrategies.Tunnel);
     }
 
     // ── Drag state ────────────────────────────────────────────────────────
@@ -2860,6 +2866,42 @@ public sealed class ModelSystemCanvas : Control
         base.OnPointerWheelChanged(e);
     }
 
+    /// <summary>
+    /// Tunneling pointer-press handler — runs before any child TextBox overlay
+    /// can consume the event. If the press lands on a resize handle, the active
+    /// inline editor is committed and resizing begins immediately, regardless of
+    /// which overlay control is visually on top.
+    /// </summary>
+    private void OnPointerPressedTunnel(object? sender, PointerPressedEventArgs e)
+    {
+        if (_vm is null) return;
+        var point = e.GetCurrentPoint(this);
+        // Only intercept plain left-button presses (not right-button link-drags,
+        // not Ctrl+left multi-selection).
+        if (!point.Properties.IsLeftButtonPressed) return;
+        if ((e.KeyModifiers & KeyModifiers.Control) != 0) return;
+
+        var mpos = ToCanvasPos(point.Position);
+        var resizeHit = HitTestResizeHandle(mpos);
+        if (resizeHit is null) return;
+
+        // Commit any open editor so its LostFocus handler doesn't fire after
+        // we capture the pointer, which would interfere with the resize drag.
+        if (_editingParamNode is not null) CommitParamEdit();
+        if (_editingCommentBlock is not null) CommitCommentEdit();
+        if (_editingNameElement is not null) CommitNameEdit();
+
+        ClearMultiSelection();
+        _resizing = resizeHit;
+        _resizeStartPos = mpos;
+        _resizeStartW = ElementRenderWidth(resizeHit);
+        _resizeStartH = ElementRenderHeight(resizeHit);
+        _vm.SelectElementCommand.Execute(resizeHit);
+        e.Pointer.Capture(this);
+        Focus();
+        e.Handled = true;
+    }
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
@@ -4772,8 +4814,12 @@ public sealed class ModelSystemCanvas : Control
         {
             foreach(var element in collection)
             {
-                double w = element.Width;
-                double h = element.Height;
+                // Use the same rendered dimensions used when drawing the resize handle,
+                // so that the hit-test rectangle matches the visual even when a node's
+                // stored Height is smaller than its actual rendered height (e.g. when
+                // the node has hook rows that push the bottom edge down).
+                double w = ElementRenderWidth(element);
+                double h = ElementRenderHeight(element);
                 double x = element.X;
                 double y = element.Y;
                 var handle = new Rect(x + w - ResizeHandleSize, y + h - ResizeHandleSize,
