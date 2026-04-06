@@ -2539,8 +2539,120 @@ namespace XTMF2.Editing
             }
         }
 
+        private static readonly HashSet<Type> _simpleFunctionParamTypes = new()
+        {
+            typeof(int), typeof(bool), typeof(string), typeof(float)
+        };
+
+        private static string GetDefaultValueString(Type primitiveType)
+        {
+            if (primitiveType == typeof(bool))   return "false";
+            if (primitiveType == typeof(string)) return "";
+            return "0";
+        }
+
         /// <summary>
-        /// Removes <paramref name="instance"/> from its containing boundary.
+        /// Creates a new <see cref="FunctionInstance"/> and automatically generates a hidden
+        /// <see cref="RuntimeModules.BasicParameter{T}"/> node for each
+        /// <see cref="NodeHook.FunctionParameterHook"/> whose type is <c>IFunction&lt;T&gt;</c>
+        /// where <c>T</c> is one of <see cref="int"/>, <see cref="bool"/>,
+        /// <see cref="string"/>, or <see cref="float"/>.
+        /// </summary>
+        public bool AddFunctionInstanceGenerateParameters(
+            User user, Boundary boundary, FunctionTemplate template,
+            string name, Rectangle location,
+            out FunctionInstance? instance, out List<Node>? children,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+            ArgumentNullException.ThrowIfNull(template);
+
+            children = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    instance = null;
+                    return false;
+                }
+
+                if (!boundary.AddFunctionInstance(name, template, location, out instance, out error))
+                    return false;
+
+                var fi = instance!;
+                var nodes = new List<Node>();
+                var links = new List<Link>();
+
+                foreach (var hook in fi.Hooks.OfType<FunctionParameterHook>())
+                {
+                    var hookType = hook.Type;
+                    if (!hookType.IsGenericType) continue;
+
+                    var args = hookType.GetGenericArguments();
+                    if (args.Length != 1) continue;
+
+                    var argType = args[0];
+                    if (!_simpleFunctionParamTypes.Contains(argType)) continue;
+
+                    var basicParamType = typeof(RuntimeModules.BasicParameter<>).MakeGenericType(argType);
+                    if (!hookType.IsAssignableFrom(basicParamType)) continue;
+
+                    var defaultStr = GetDefaultValueString(argType);
+                    var child = Node.Create(GetModuleRepository(), hook.Name, basicParamType, boundary, Rectangle.Hidden);
+                    if (child?.SetParameterValue(ParameterExpression.CreateParameter(defaultStr, argType), out var _) == true)
+                    {
+                        nodes.Add(child);
+                        links.Add(new SingleLink(fi, hook, child, false));
+                    }
+                }
+
+                children = nodes;
+
+                void Add()
+                {
+                    CommandError? e = null;
+                    foreach (var child in nodes)
+                        boundary.AddNode(child, out e);
+                    foreach (var link in links)
+                        boundary.AddLink(link, out e);
+                }
+
+                void Remove()
+                {
+                    CommandError? e = null;
+                    foreach (var link in links)
+                        boundary.RemoveLink(link, out e);
+                    foreach (var child in nodes)
+                        boundary.RemoveNode(child, out e);
+                }
+
+                Add();
+
+                Buffer.AddUndo(new Command(() =>
+                {
+                    Remove();
+                    return (boundary.RemoveFunctionInstance(fi, out var e), e);
+                }, () =>
+                {
+                    if (boundary.AddFunctionInstance(fi, out var e))
+                    {
+                        Add();
+                        return (true, null);
+                    }
+                    return (false, e);
+                }));
+
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Removes <paramref name="instance"/> from its containing boundary, and cleans up
+        /// all links that reference it (both as origin and as destination) as well as any
+        /// hidden/inlined embedded parameter nodes that were destinations of its outgoing links.
+        /// The operation is fully undo/redo-able.
         /// </summary>
         public bool RemoveFunctionInstance(User user, FunctionInstance instance,
             [NotNullWhen(false)] out CommandError? error)
@@ -2554,17 +2666,116 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
-                var boundary = instance.ContainedWithin;
-                if (!boundary.RemoveFunctionInstance(instance, out error))
+                var boundary = instance.ContainedWithin!;
+
+                // Outgoing links: this FI is the origin (FunctionParameterHook connections to external nodes).
+                var outgoingLinks = boundary.Links.Where(l => l.Origin == instance).ToList();
+
+                // Incoming links: other nodes/starts/FIs have this FI as a destination.
+                var incomingLinks = GetLinksGoingTo(instance);
+                var multiLinkRestoreInfo = BuildMultiLinkRestoreInfo(incomingLinks, instance);
+
+                // Hidden/inlined embedded parameter nodes: destinations of outgoing links whose
+                // location is Rectangle.Hidden and that live in the same boundary.
+                var hiddenNodes = outgoingLinks
+                    .SelectMany<Link, Node>(l =>
+                        l is SingleLink sl && sl.Destination is not null ? new[] { sl.Destination }
+                        : l is MultiLink ml ? ml.Destinations.ToArray()
+                        : Array.Empty<Node>())
+                    .Where(n => n.Location.Equals(Rectangle.Hidden) && ReferenceEquals(n.ContainedWithin, boundary))
+                    .Distinct()
+                    .ToList();
+
+                // For each hidden node, capture any OTHER incoming links plus its ghost cascade.
+                var hiddenCascadeData = hiddenNodes
+                    .Select(hn =>
+                    {
+                        var hnLinks     = GetLinksGoingTo(hn).Where(l => !outgoingLinks.Contains(l)).ToList();
+                        var hnMulti     = BuildMultiLinkRestoreInfo(hnLinks, hn);
+                        var hnGhosts    = GetAllGhostNodesOf(hn);
+                        var hnGhostData = hnGhosts.Select(g =>
+                        {
+                            var gLinks = GetLinksGoingTo(g);
+                            return (Ghost: g, Links: gLinks, MultiInfo: BuildMultiLinkRestoreInfo(gLinks, g));
+                        }).ToList();
+                        return (Node: hn, OtherIncoming: hnLinks, MultiInfo: hnMulti, GhostData: hnGhostData);
+                    })
+                    .ToList();
+
+                void RemoveIncoming()
+                    => RemoveIncomingLinks(incomingLinks, instance, multiLinkRestoreInfo);
+
+                void RestoreIncoming()
+                    => RestoreIncomingLinks(incomingLinks, instance, multiLinkRestoreInfo);
+
+                void RemoveHiddenCascade()
+                {
+                    foreach (var (hn, hnLinks, hnMulti, hnGhostData) in hiddenCascadeData)
+                    {
+                        foreach (var (ghost, gLinks, gMulti) in hnGhostData)
+                        {
+                            RemoveIncomingLinks(gLinks, ghost, gMulti);
+                            ghost.ContainedWithin!.RemoveGhostNode(ghost, out _);
+                        }
+                        RemoveIncomingLinks(hnLinks, hn, hnMulti);
+                        boundary.RemoveNode(hn, out _);
+                    }
+                }
+
+                void RestoreHiddenCascade()
+                {
+                    foreach (var (hn, hnLinks, hnMulti, hnGhostData) in hiddenCascadeData)
+                    {
+                        boundary.AddNode(hn, out _);
+                        RestoreIncomingLinks(hnLinks, hn, hnMulti);
+                        foreach (var (ghost, gLinks, gMulti) in hnGhostData)
+                        {
+                            ghost.ContainedWithin!.AddGhostNode(ghost, out _);
+                            RestoreIncomingLinks(gLinks, ghost, gMulti);
+                        }
+                    }
+                }
+
+                // Remove incoming links, then outgoing links, then hidden embedded nodes.
+                RemoveIncoming();
+                foreach (var link in outgoingLinks)
+                    boundary.RemoveLink(link, out _);
+                RemoveHiddenCascade();
+
+                if (boundary.RemoveFunctionInstance(instance, out error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        // Undo: restore the FI first, then hidden nodes, then outgoing links, then incoming.
+                        if (boundary.AddFunctionInstance(instance, out var e))
+                        {
+                            RestoreHiddenCascade();
+                            foreach (var link in outgoingLinks)
+                                boundary.AddLink(link, out _);
+                            RestoreIncoming();
+                            return (true, null);
+                        }
+                        return (false, e);
+                    }, () =>
+                    {
+                        // Redo: repeat the original removal sequence.
+                        RemoveIncoming();
+                        foreach (var link in outgoingLinks)
+                            boundary.RemoveLink(link, out _);
+                        RemoveHiddenCascade();
+                        return (boundary.RemoveFunctionInstance(instance, out var e), e);
+                    }));
+                    return true;
+                }
+                else
+                {
+                    // FI removal failed; roll back all link removals.
+                    RestoreHiddenCascade();
+                    foreach (var link in outgoingLinks)
+                        boundary.AddLink(link, out _);
+                    RestoreIncoming();
                     return false;
-                Buffer.AddUndo(new Command(() =>
-                {
-                    return (boundary.AddFunctionInstance(instance, out var e), e);
-                }, () =>
-                {
-                    return (boundary.RemoveFunctionInstance(instance, out var e), e);
-                }));
-                return true;
+                }
             }
         }
 

@@ -1919,10 +1919,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var offset = FunctionInstances.Count * 40;
         var location = new Rectangle(80f + offset % 800, 80f + (offset / 800) * 100f, 160f, 70f);
 
-        if (!Session.AddFunctionInstance(User, _currentBoundary, selectedTemplate, name, location,
-                out _, out var error))
+        if (!Session.AddFunctionInstanceGenerateParameters(User, _currentBoundary, selectedTemplate, name, location,
+                out _, out var children, out var error))
         {
             await ShowError("Add Function Instance Failed", error);
+        }
+        else
+        {
+            // TODO: We might need to deal with the children here.   
         }
     }
 
@@ -2569,9 +2573,33 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         if (dlg.WasCancelled) return;
 
-        // Apply the permutation returned by the dialog.
-        // FinalOrderIndices[i] = which original index should be at position i.
-        ApplyLinkDestinationPermutation(ml, dlg.FinalOrderIndices);
+        var finalOrder    = dlg.FinalOrderIndices;
+        int originalCount = names.Count;
+
+        // 1. Remove destinations that were deleted in the dialog.
+        //    Iterate original indices from highest to lowest so that removals
+        //    do not shift the positions of items still to be removed.
+        var finalOrderSet = new HashSet<int>(finalOrder);
+        for (int origIdx = originalCount - 1; origIdx >= 0; origIdx--)
+        {
+            if (finalOrderSet.Contains(origIdx)) continue;
+            if (!Session.RemoveLinkDestination(User, ml, origIdx, out var removeError) && removeError is not null)
+            {
+                _ = ShowError("Remove Failed", removeError);
+                return;
+            }
+        }
+
+        // 2. Apply the permutation on the surviving items.
+        //    Remap each original index to its post-removal position
+        //    (surviving items retain their relative order).
+        var surviving     = finalOrderSet.OrderBy(x => x).ToList();
+        var origToRemapped = new Dictionary<int, int>(surviving.Count);
+        for (int i = 0; i < surviving.Count; i++)
+            origToRemapped[surviving[i]] = i;
+        var remappedOrder = finalOrder.Select(origIdx => origToRemapped[origIdx]).ToList();
+
+        ApplyLinkDestinationPermutation(ml, remappedOrder);
     }
 
     /// <summary>
@@ -2880,10 +2908,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         var location = new Rectangle((float)x, (float)y, 160f, 70f);
 
-        if (!Session.AddFunctionInstance(User, _currentBoundary, selectedTemplate, name, location,
-                out _, out var addError))
+        if (!Session.AddFunctionInstanceGenerateParameters(User, _currentBoundary, selectedTemplate, name, location,
+                out _, out var children, out var addError))
         {
             await ShowError("Add Function Instance Failed", addError);
+        }
+        else
+        {
+            // TODO: We might need to do something with the children here.
         }
     }
 
@@ -2981,6 +3013,208 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             var nvm = Nodes.FirstOrDefault(n => n.UnderlyingNode == firstPasted);
             if (nvm is not null) SelectElement(nvm);
         }
+    }
+
+    // ── Universal clipboard paste ─────────────────────────────────────────
+
+    /// <summary>
+    /// Pastes all elements contained in <paramref name="payload"/> into the current boundary,
+    /// translating each element so its top-left corner is placed at
+    /// (<paramref name="anchorX"/>, <paramref name="anchorY"/>) plus a small stack offset.
+    /// <para>Supported element kinds:</para>
+    /// <list type="bullet">
+    ///   <item><see cref="CanvasElementKind.Node"/> — creates a new module node and restores parameter values and inlined children.</item>
+    ///   <item><see cref="CanvasElementKind.CommentBlock"/> — creates a new comment block.</item>
+    ///   <item><see cref="CanvasElementKind.FunctionTemplate"/> — creates an empty function template shell with matching name and function parameters.</item>
+    ///   <item><see cref="CanvasElementKind.FunctionInstance"/> — creates an instance referencing a template with the same name; skipped when no matching template is found.</item>
+    ///   <item><see cref="CanvasElementKind.GhostNode"/> — creates a ghost referencing a node with the same name in the current boundary; skipped across model systems.</item>
+    /// </list>
+    /// </summary>
+    internal async Task PasteElementsAsync(CanvasClipboardPayload payload, double anchorX, double anchorY)
+    {
+        if (payload.Elements.Count == 0) return;
+
+        const float StackOffset = 24f;
+
+        // Compute the translation that maps the bounding-box top-left to (anchorX, anchorY).
+        float minX = payload.Elements.Min(e => e.X >= 0 ? e.X : 0f);
+        float minY = payload.Elements.Min(e => e.Y >= 0 ? e.Y : 0f);
+        float dx = (float)anchorX - minX + StackOffset;
+        float dy = (float)anchorY - minY + StackOffset;
+
+        // Paste FunctionTemplates first so FunctionInstances that reference them can be resolved.
+        foreach (var element in payload.Elements)
+        {
+            if (element.Kind != CanvasElementKind.FunctionTemplate) continue;
+            PasteFunctionTemplate(element, dx, dy);
+        }
+
+        // Now paste all other kinds.
+        Node? firstNode = null;
+        foreach (var element in payload.Elements)
+        {
+            switch (element.Kind)
+            {
+                case CanvasElementKind.Node:
+                    firstNode ??= await PasteNodeEntryAsync(element, dx, dy);
+                    break;
+
+                case CanvasElementKind.CommentBlock:
+                    PasteCommentBlockEntry(element, dx, dy);
+                    break;
+
+                case CanvasElementKind.FunctionInstance:
+                    PasteFunctionInstance(element, dx, dy);
+                    break;
+
+                case CanvasElementKind.GhostNode:
+                    PasteGhostNodeEntry(element, dx, dy);
+                    break;
+
+                // FunctionTemplate was already handled above.
+            }
+        }
+
+        if (firstNode is not null)
+        {
+            var nvm = Nodes.FirstOrDefault(n => n.UnderlyingNode == firstNode);
+            if (nvm is not null) SelectElement(nvm);
+        }
+    }
+
+    // ── Per-element paste helpers ─────────────────────────────────────────
+
+    private async Task<Node?> PasteNodeEntryAsync(
+        CanvasElementDto element, float dx, float dy)
+    {
+        if (element.TypeName is null) return null;
+        var type = Type.GetType(element.TypeName);
+        if (type is null) return null;
+
+        float w = element.W > 0 ? element.W : 120f;
+        float h = element.H > 0 ? element.H : 50f;
+        var newLoc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+
+        if (!Session.AddNode(User, _currentBoundary, element.Name, type, newLoc,
+                out var newNode, out var addError))
+        {
+            await ShowError("Paste Failed", addError);
+            return null;
+        }
+
+        // Restore parameter value.
+        if (element.ParameterValue is not null && newNode is not null)
+        {
+            if (element.IsScriptedParam)
+                Session.SetParameterExpression(User, newNode, element.ParameterValue, out _);
+            else
+                Session.SetParameterValue(User, newNode, element.ParameterValue, out _);
+        }
+
+        // Re-create inlined (hidden) child nodes.
+        foreach (var inlined in element.InlinedChildren ?? [])
+        {
+            if (inlined.Child.TypeName is null || newNode is null) continue;
+            var childType = Type.GetType(inlined.Child.TypeName);
+            if (childType is null) continue;
+
+            var hook = newNode.Hooks?.FirstOrDefault(h => h.Name == inlined.HookName);
+            if (hook is null) continue;
+
+            if (!Session.AddNode(User, _currentBoundary, inlined.Child.Name, childType,
+                    Rectangle.Hidden, out var childNode, out _))
+                continue;
+
+            if (inlined.Child.ParameterValue is not null && childNode is not null)
+            {
+                if (inlined.Child.IsScriptedParam)
+                    Session.SetParameterExpression(User, childNode, inlined.Child.ParameterValue, out _);
+                else
+                    Session.SetParameterValue(User, childNode, inlined.Child.ParameterValue, out _);
+            }
+
+            if (childNode is not null)
+                Session.AddLink(User, newNode, hook, childNode, out _, out _);
+        }
+
+        return newNode;
+    }
+
+    private void PasteCommentBlockEntry(CanvasElementDto element, float dx, float dy)
+    {
+        float w = element.W > 0 ? element.W : (float)CommentBlockViewModel.DefaultWidth;
+        float h = element.H > 0 ? element.H : (float)CommentBlockViewModel.DefaultHeight;
+        var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+        // Name on CommentBlock stores the comment text.
+        Session.AddCommentBlock(User, _currentBoundary, element.Name, loc, out _, out _);
+    }
+
+    private void PasteFunctionTemplate(CanvasElementDto element, float dx, float dy)
+    {
+        // Generate a unique name to avoid collision in the target boundary.
+        string name = element.Name;
+        int suffix = 2;
+        while (FunctionTemplates.Any(ft => string.Equals(ft.Name, name, StringComparison.OrdinalIgnoreCase)))
+            name = $"{element.Name} ({suffix++})";
+
+        float w = element.W > 0 ? element.W : 220f;
+        float h = element.H > 0 ? element.H : 140f;
+        var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+
+        if (!Session.AddFunctionTemplate(User, _currentBoundary, name, out var ft, out _))
+            return;
+
+        Session.SetFunctionTemplateLocation(User, ft!, loc, out _);
+
+        // Re-create function parameters where the CLR type can be resolved.
+        foreach (var fp in element.FunctionParameters ?? [])
+        {
+            if (fp.TypeName is null) continue;
+            var fpType = Type.GetType(fp.TypeName);
+            if (fpType is null) continue;
+            Session.AddFunctionParameter(User, ft!, fp.Name, fpType, Rectangle.Hidden, out _, out _);
+        }
+    }
+
+    private void PasteFunctionInstance(CanvasElementDto element, float dx, float dy)
+    {
+        if (element.TemplateName is null) return;
+
+        // Find an accessible function template by that name.
+        var candidates = new System.Collections.Generic.List<XTMF2.ModelSystemConstruct.FunctionTemplate>();
+        _currentBoundary.CollectAccessibleFunctionTemplates(candidates);
+        var template = candidates.FirstOrDefault(ft =>
+            string.Equals(ft.Name, element.TemplateName, StringComparison.OrdinalIgnoreCase));
+        if (template is null) return;
+
+        // Generate a unique name if needed.
+        string name = element.Name;
+        int suffix = 2;
+        while (FunctionInstances.Any(fi => string.Equals(fi.Name, name, StringComparison.OrdinalIgnoreCase)))
+            name = $"{element.Name} ({suffix++})";
+
+        float w = element.W > 0 ? element.W : 160f;
+        float h = element.H > 0 ? element.H : 70f;
+        var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+
+        Session.AddFunctionInstance(User, _currentBoundary, template, name, loc, out _, out _);
+    }
+
+    private void PasteGhostNodeEntry(CanvasElementDto element, float dx, float dy)
+    {
+        if (element.ReferencedNodeName is null) return;
+
+        // Try to find the referenced real node by name in the current boundary's visible nodes.
+        var referencedNvm = Nodes.FirstOrDefault(n =>
+            string.Equals(n.Name, element.ReferencedNodeName, StringComparison.OrdinalIgnoreCase)
+            && !n.IsInlined);
+        if (referencedNvm is null) return;
+
+        float w = element.W > 0 ? element.W : 120f;
+        float h = element.H > 0 ? element.H : 50f;
+        var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+
+        Session.AddGhostNode(User, _currentBoundary, referencedNvm.UnderlyingNode, loc, out _, out _);
     }
 
     // ── IDisposable ───────────────────────────────────────────────────────

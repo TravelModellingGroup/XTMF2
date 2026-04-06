@@ -22,9 +22,11 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
@@ -368,8 +370,14 @@ public sealed class ModelSystemCanvas : Control
     private readonly Dictionary<(NodeViewModel, NodeHook), NodeViewModel>
         _hookInlinedParam = new();
     /// <summary>
-    /// BasicParameter nodes that are visible on the canvas AND connected via a Single hook,
-    /// so they can offer a "minimize to inline" button.
+    /// Maps (origin FunctionInstance, FunctionParameterHook) → the BasicParameter/ScriptedParameter
+    /// node that is currently inlined into that FI hook row.
+    /// </summary>
+    private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), NodeViewModel>
+        _fiHookInlinedParam = new();
+    /// <summary>
+    /// BasicParameter nodes that are visible on the canvas AND connected via a Single (or
+    /// FunctionParameterHook) hook, so they can offer a "minimize to inline" button.
     /// </summary>
     private readonly HashSet<NodeViewModel> _canInlineNodes = new();
 
@@ -633,11 +641,7 @@ public sealed class ModelSystemCanvas : Control
     private Point _groupDragLastPos;
 
     // ── Copy / Paste clipboard ────────────────────────────────────────────
-    /// <summary>
-    /// In-memory clipboard that stores the data for nodes captured by the last Copy operation.
-    /// <c>null</c> (or empty) means no copy has been performed yet.
-    /// </summary>
-    private List<NodePasteEntry>? _nodePasteClipboard;
+    // System clipboard is used — no in-memory clipboard field needed.
 
     // ── Rubber-band (Ctrl+drag) selection rectangle ───────────────────────
     /// <summary>Model-coord anchor of the in-progress Ctrl+drag selection rect, or <c>null</c> when idle.</summary>
@@ -1269,26 +1273,35 @@ public sealed class ModelSystemCanvas : Control
                 var fp = fi.FunctionParameters[fi_i];
                 var fpHook = fi_i < fiHooks.Count ? fiHooks[fi_i] as FunctionParameterHook : null;
                 bool fpConn = fiConnected is not null && fpHook is not null && fiConnected.Contains(fpHook);
+                NodeViewModel? inlinedFiParam = null;
+                bool hasInlinedFi = fpHook is not null
+                    && _fiHookInlinedParam.TryGetValue((fi, fpHook), out inlinedFiParam);
 
-                // Tinted background matching unsatisfied hook style (FP hooks are always required).
-                if (!fpConn)
+                // Tinted background: skip for connected or inlined rows.
+                if (!fpConn && !hasInlinedFi)
                     ctx.DrawRectangle(InlineParamRowBg, null,
                         new Rect(fi.X, rowY, rw, FtHookRowHeight));
 
                 ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
                     new Point(fi.X, rowY), new Point(fi.X + rw, rowY));
 
-                // Dot on the RIGHT edge — green if connected, red if not (FP hooks are required).
+                // Dot on the RIGHT edge — green if connected or inlined, red if not.
                 double dotCy = rowY + FtHookRowHeight / 2.0;
-                var dotBrush = fpConn ? (_isLight ? HookConnectedBrushL : HookConnectedBrush)
-                                      : (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush);
+                var dotBrush = (fpConn || hasInlinedFi)
+                    ? (_isLight ? HookConnectedBrushL : HookConnectedBrush)
+                    : (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush);
                 ctx.DrawEllipse(dotBrush, null,
                     new Point(fi.X + rw, dotCy), HookDotRadius, HookDotRadius);
 
                 const double textPad = 6.0;
-                var hookNameFt = MakeText(fp.Name ?? string.Empty, HookFontSize,
-                    fpConn ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
-                           : (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush));
+                // Show «hook: value» label when a parameter is inlined into this FI hook row.
+                string hookLabel = hasInlinedFi && inlinedFiParam is not null
+                    ? $"{fp.Name}: {(string.IsNullOrEmpty(inlinedFiParam.ParameterValueRepresentation) ? "(no value)" : inlinedFiParam.ParameterValueRepresentation)}"
+                    : fp.Name ?? string.Empty;
+                var hookNameFt = MakeText(hookLabel, HookFontSize,
+                    (fpConn || hasInlinedFi)
+                        ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
+                        : (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush));
                 double maxW = rw - textPad * 2 - HookDotRadius * 2;
                 double hookTy = dotCy - hookNameFt.Height / 2.0;
                 using (ctx.PushClip(new Rect(fi.X + textPad, hookTy, Math.Max(0, maxW), hookNameFt.Height + 1)))
@@ -2223,6 +2236,7 @@ public sealed class ModelSystemCanvas : Control
         _nodeVisibleHooks.Clear();
         _nodeConnectedHooks.Clear();
         _hookInlinedParam.Clear();
+        _fiHookInlinedParam.Clear();
         _canInlineNodes.Clear();
         _fiHookAnchors.Clear();
         _fiConnectedHooks.Clear();
@@ -2249,21 +2263,41 @@ public sealed class ModelSystemCanvas : Control
 
         // Identify inlined BasicParameter nodes and which hook rows they occupy.
         // Also identify canvas-visible BasicParameter nodes eligible for the minimize button.
+        // First pass: count qualifying links per destination to enforce the single-destination rule
+        // (a parameter node wired to more than one hook cannot be collapsed inline).
+        var paramDestCount = new Dictionary<NodeViewModel, int>(ReferenceEqualityComparer.Instance);
         foreach (var link in _vm.Links)
         {
+            if (link.Destination is not NodeViewModel dstCount || !dstCount.IsParameterNode) continue;
+            var originHookCount = link.UnderlyingLink.OriginHook;
+            bool eligible = (link.Origin is NodeViewModel && originHookCount.Cardinality == HookCardinality.Single)
+                         || (link.Origin is FunctionInstanceViewModel && originHookCount is FunctionParameterHook);
+            if (!eligible) continue;
+            paramDestCount.TryGetValue(dstCount, out var c);
+            paramDestCount[dstCount] = c + 1;
+        }
+
+        foreach (var link in _vm.Links)
+        {
+            if (link.Destination is not NodeViewModel destVm || !destVm.IsParameterNode) continue;
+            // Nodes reached by more than one qualifying link cannot be inlined.
+            if (paramDestCount.TryGetValue(destVm, out var destCnt) && destCnt > 1) continue;
+
             if (link.Origin is NodeViewModel originVm2
-                && link.Destination is NodeViewModel destVm
-                && destVm.IsParameterNode
                 && link.UnderlyingLink.OriginHook.Cardinality == HookCardinality.Single)
             {
                 if (destVm.IsInlined)
-                {
                     _hookInlinedParam[(originVm2, link.UnderlyingLink.OriginHook)] = destVm;
-                }
                 else
-                {
                     _canInlineNodes.Add(destVm);
-                }
+            }
+            else if (link.Origin is FunctionInstanceViewModel originFiVm
+                     && link.UnderlyingLink.OriginHook is FunctionParameterHook fpHookInline)
+            {
+                if (destVm.IsInlined)
+                    _fiHookInlinedParam[(originFiVm, fpHookInline)] = destVm;
+                else
+                    _canInlineNodes.Add(destVm);
             }
         }
 
@@ -2761,7 +2795,7 @@ public sealed class ModelSystemCanvas : Control
         }
         else if (e.Key == Key.C && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
-            CopySelectedNodes();
+            _ = CopySelectedElementsAsync();
             e.Handled = true;
         }
         else if (e.Key == Key.V && (e.KeyModifiers & KeyModifiers.Control) != 0)
@@ -2770,7 +2804,7 @@ public sealed class ModelSystemCanvas : Control
             var sv = GetScrollViewer();
             double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width  ?? Bounds.Width)  / 2.0) / _scale;
             double vy = ((sv?.Offset.Y ?? 0) + (sv?.Viewport.Height ?? Bounds.Height) / 2.0) / _scale;
-            PasteNodes(vx, vy);
+            _ = PasteElementsAsync(vx, vy);
             e.Handled = true;
         }
     }
@@ -2778,12 +2812,10 @@ public sealed class ModelSystemCanvas : Control
     // ── Copy / Paste helpers ──────────────────────────────────────────────
 
     /// <summary>
-    /// Builds a <see cref="NodePasteEntry"/> from a <see cref="NodeViewModel"/>,
-    /// optionally including pre-computed inlined-children data.
+    /// Builds a <see cref="CanvasElementDto"/> for a <see cref="NodeViewModel"/>,
+    /// including any inlined child parameter nodes.
     /// </summary>
-    private static NodePasteEntry BuildPasteEntry(
-        NodeViewModel nvm,
-        List<(string HookName, NodePasteEntry Child)>? inlined = null)
+    private CanvasElementDto BuildNodeDto(NodeViewModel nvm)
     {
         var node = nvm.UnderlyingNode;
         string? paramValue = null;
@@ -2793,71 +2825,129 @@ public sealed class ModelSystemCanvas : Control
             paramValue = pv.Representation;
             isScriptedParam = nvm.IsScriptedParameter;
         }
-        return new NodePasteEntry(
+
+        // Collect inlined (hidden) child parameter nodes.
+        List<InlinedChildDto>? inlined = null;
+        foreach (var kvp in _hookInlinedParam)
+        {
+            if (!ReferenceEquals(kvp.Key.Item1, nvm)) continue;
+            inlined ??= [];
+            var childDto = BuildNodeDto(kvp.Value) with
+            {
+                X = kvp.Value.UnderlyingNode.Location.X,
+                Y = kvp.Value.UnderlyingNode.Location.Y,
+                W = (float)NodeRenderWidth(kvp.Value),
+                H = (float)NodeRenderHeight(kvp.Value),
+            };
+            inlined.Add(new InlinedChildDto(kvp.Key.Item2.Name, childDto));
+        }
+
+        return new CanvasElementDto(
+            CanvasElementKind.Node,
             node.Name,
-            node.Type!,
-            node.Location,
-            paramValue,
-            isScriptedParam,
-            inlined ?? []);
+            node.Location.X,
+            node.Location.Y,
+            (float)NodeRenderWidth(nvm),
+            (float)NodeRenderHeight(nvm),
+            TypeName:        node.Type?.AssemblyQualifiedName,
+            ParameterValue:  paramValue,
+            IsScriptedParam: isScriptedParam,
+            InlinedChildren: inlined);
     }
 
     /// <summary>
-    /// Captures the currently selected <see cref="NodeViewModel"/>s (and any hidden
-    /// parameter children attached to their hooks) into <see cref="_nodePasteClipboard"/>.
-    /// <para>
-    /// Selection priority:
-    /// <list type="bullet">
-    ///   <item>If <see cref="_multiSelection"/> contains nodes, only those nodes are copied.</item>
-    ///   <item>If only a single element is selected (<see cref="ModelSystemEditorViewModel.SelectedElement"/>),
-    ///         that node is copied.</item>
-    /// </list>
-    /// Unselected nodes, hidden (inlined) nodes, and non-node canvas elements are excluded
-    /// from the primary copy set.  Hidden children of selected nodes are included automatically.
-    /// </para>
+    /// Captures all selected canvas elements (nodes, comment blocks, function templates,
+    /// function instances, ghost nodes) and writes them to the system clipboard as JSON.
     /// </summary>
-    private void CopySelectedNodes()
+    private async Task CopySelectedElementsAsync()
     {
         if (_vm is null) return;
 
-        // Collect the top-level nodes to copy.
-        var nodesToCopy = new List<NodeViewModel>();
-        if (_multiSelection.Count > 0)
-        {
-            foreach (var el in _multiSelection)
-                if (el is NodeViewModel nvm && !nvm.IsInlined)
-                    nodesToCopy.Add(nvm);
-        }
-        else if (_vm.SelectedElement is NodeViewModel single && !single.IsInlined)
-        {
-            nodesToCopy.Add(single);
-        }
+        // Build the set of top-level elements to copy.
+        IEnumerable<ICanvasElement> source = _multiSelection.Count > 0
+            ? _multiSelection
+            : (_vm.SelectedElement is { } sel ? [sel] : []);
 
-        if (nodesToCopy.Count == 0) return;
+        var dtos = new List<CanvasElementDto>();
 
-        _nodePasteClipboard = new List<NodePasteEntry>(nodesToCopy.Count);
-
-        foreach (var nvm in nodesToCopy)
+        foreach (var el in source)
         {
-            // Collect inlined (hidden) children connected to this node's hooks.
-            var inlined = new List<(string HookName, NodePasteEntry Child)>();
-            foreach (var kvp in _hookInlinedParam)
+            CanvasElementDto dto;
+            switch (el)
             {
-                if (ReferenceEquals(kvp.Key.Item1, nvm))
-                    inlined.Add((kvp.Key.Item2.Name, BuildPasteEntry(kvp.Value)));
+                case NodeViewModel nvm when !nvm.IsInlined:
+                    dto = BuildNodeDto(nvm);
+                    break;
+
+                case CommentBlockViewModel cb:
+                    dto = new CanvasElementDto(
+                        CanvasElementKind.CommentBlock,
+                        cb.Name,
+                        (float)cb.X, (float)cb.Y,
+                        (float)cb.Width, (float)cb.Height);
+                    break;
+
+                case FunctionTemplateViewModel ft:
+                    var fpDtos = ft.FunctionParameters
+                        .Select(fp => new FunctionParameterDto(
+                            fp.Name,
+                            fp.Type?.AssemblyQualifiedName))
+                        .ToList();
+                    dto = new CanvasElementDto(
+                        CanvasElementKind.FunctionTemplate,
+                        ft.Name,
+                        (float)ft.X, (float)ft.Y,
+                        (float)ft.Width, (float)ft.Height,
+                        FunctionParameters: fpDtos.Count > 0 ? fpDtos : null);
+                    break;
+
+                case FunctionInstanceViewModel fi:
+                    dto = new CanvasElementDto(
+                        CanvasElementKind.FunctionInstance,
+                        fi.Name,
+                        (float)fi.X, (float)fi.Y,
+                        (float)fi.Width, (float)fi.Height,
+                        TemplateName: fi.TemplateName);
+                    break;
+
+                case GhostNodeViewModel ghost:
+                    dto = new CanvasElementDto(
+                        CanvasElementKind.GhostNode,
+                        ghost.Name,
+                        (float)ghost.X, (float)ghost.Y,
+                        (float)ghost.Width, (float)ghost.Height,
+                        ReferencedNodeName: ghost.UnderlyingGhostNode.ReferencedNode.Name);
+                    break;
+
+                default:
+                    continue; // StartViewModel and others are not copyable.
             }
-            _nodePasteClipboard.Add(BuildPasteEntry(nvm, inlined));
+            dtos.Add(dto);
         }
+
+        if (dtos.Count == 0) return;
+
+        var payload = CanvasClipboardSerializer.CreatePayload(dtos);
+        var json    = CanvasClipboardSerializer.Serialize(payload);
+
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard is not null)
+            await clipboard.SetTextAsync(json);
     }
 
     /// <summary>
-    /// Pastes the clipboard contents into the current boundary, anchored
-    /// at (<paramref name="anchorX"/>, <paramref name="anchorY"/>) in model coordinates.
+    /// Reads XTMF2 canvas JSON from the system clipboard and pastes the elements
+    /// into the current boundary, anchored at the given model coordinates.
     /// </summary>
-    private void PasteNodes(double anchorX, double anchorY)
+    private async Task PasteElementsAsync(double anchorX, double anchorY)
     {
-        if (_vm is null || _nodePasteClipboard is null || _nodePasteClipboard.Count == 0) return;
-        _ = _vm.PasteNodesAsync(_nodePasteClipboard, anchorX, anchorY);
+        if (_vm is null) return;
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard is null) return;
+        var text    = await ClipboardExtensions.TryGetTextAsync(clipboard);
+        var payload = CanvasClipboardSerializer.TryDeserialize(text);
+        if (payload is null) return;
+        await _vm.PasteElementsAsync(payload, anchorX, anchorY);
     }
 
     // ── Scaling helpers ───────────────────────────────────────────────────
@@ -3119,12 +3209,13 @@ public sealed class ModelSystemCanvas : Control
                 e.Handled = true;
                 return;
             }
-            // Inlined BasicParameter hook row inside the origin node.
+            // Inlined BasicParameter hook row inside the origin node or FunctionInstance.
             var inlinedRowHit = HitTestInlinedParamRow(mpos);
             if (inlinedRowHit is not null)
             {
-                var (originNode, _, inlinedParam, rx, ry, rw2) = inlinedRowHit.Value;
-                _vm.SelectElementCommand.Execute(originNode);
+                var (originEl, _, inlinedParam, rx, ry, rw2) = inlinedRowHit.Value;
+                if (originEl is not null)
+                    _vm.SelectElementCommand.Execute(originEl);
                 BeginParamEdit(inlinedParam, rx, ry, rw2);
                 e.Handled = true;
                 return;
@@ -3817,14 +3908,11 @@ public sealed class ModelSystemCanvas : Control
                 bgMenu.Items.Add(addFpItem);
             }
 
-            // ── Paste (when clipboard is non-empty) ───────────────────────────
-            if (_nodePasteClipboard is { Count: > 0 })
-            {
-                bgMenu.Items.Add(new Separator());
-                var pasteItem = new MenuItem { Header = "Paste\tCtrl+V" };
-                pasteItem.Click += (_, _) => PasteNodes(spawnPt.X, spawnPt.Y);
-                bgMenu.Items.Add(pasteItem);
-            }
+            // ── Paste (always available; reads system clipboard at click-time) ────
+            bgMenu.Items.Add(new Separator());
+            var pasteItem = new MenuItem { Header = "Paste\tCtrl+V" };
+            pasteItem.Click += (_, _) => _ = PasteElementsAsync(spawnPt.X, spawnPt.Y);
+            bgMenu.Items.Add(pasteItem);
 
             ContextMenu = bgMenu;
             ContextMenu.Open(this);
@@ -3910,6 +3998,35 @@ public sealed class ModelSystemCanvas : Control
         {
             var capturedFiOrigin = fiHookEntry.Fi;
             var capturedFpHook = fiHookEntry.Hook;
+
+            // "Expand parameter to its own module" when the FI hook has an inlined param.
+            if (_fiHookInlinedParam.TryGetValue((capturedFiOrigin, capturedFpHook), out var inlinedFiParamNode))
+            {
+                var capturedFiParam = inlinedFiParamNode;
+                var expandFiItem = new MenuItem { Header = "Expand parameter to its own module" };
+                expandFiItem.Click += (_, _) =>
+                {
+                    double rw2 = capturedFiOrigin.Width;
+                    capturedFiParam.ExpandToCanvas(capturedFiOrigin.X + rw2 + 30.0, capturedFiOrigin.Y);
+                };
+                menu.Items.Add(expandFiItem);
+
+                // Offer switching between BasicParameter and ScriptedParameter.
+                if (capturedFiParam.IsBasicParameter || capturedFiParam.IsScriptedParameter)
+                {
+                    var switchFiHeader = capturedFiParam.IsBasicParameter
+                        ? "Switch to Scripted Parameter"
+                        : "Switch to Basic Parameter";
+                    var switchFiItem = new MenuItem { Header = switchFiHeader };
+                    switchFiItem.Click += (_, _) =>
+                    {
+                        if (!capturedFiParam.SwitchParameterType(out var err))
+                            vm.ShowToast(err?.Message ?? "Could not switch parameter type.",
+                                         isError: true, durationMs: 6000);
+                    };
+                    menu.Items.Add(switchFiItem);
+                }
+            }
 
             var allBoundariesItem = new MenuItem { Header = "Link to node in another boundary…" };
             allBoundariesItem.Click += (_, _) =>
@@ -4202,28 +4319,44 @@ public sealed class ModelSystemCanvas : Control
         }
 
         // ── Copy ──────────────────────────────────────────────────────────────
-        if (element is NodeViewModel copyCandidate && !copyCandidate.IsInlined)
+        bool isCopyable = element switch
         {
-            var capturedCopyNode = copyCandidate;
+            NodeViewModel nvm            => !nvm.IsInlined,
+            CommentBlockViewModel        => true,
+            FunctionTemplateViewModel    => true,
+            FunctionInstanceViewModel    => true,
+            GhostNodeViewModel           => true,
+            _                            => false,
+        };
+        if (isCopyable)
+        {
+            var capturedElement = element;
             menu.Items.Add(new Separator());
 
-            // Show how many nodes will be copied.
-            int copyCount = _multiSelection.Count > 0 && _multiSelection.Contains(capturedCopyNode)
-                ? _multiSelection.Count(el => el is NodeViewModel nvm && !nvm.IsInlined)
+            // Count copyable elements in the active selection.
+            int copyCount = _multiSelection.Count > 0 && _multiSelection.Contains(capturedElement!)
+                ? _multiSelection.Count(el => el switch
+                  {
+                      NodeViewModel nvm2   => !nvm2.IsInlined,
+                      CommentBlockViewModel    => true,
+                      FunctionTemplateViewModel => true,
+                      FunctionInstanceViewModel => true,
+                      GhostNodeViewModel       => true,
+                      _                        => false,
+                  })
                 : 1;
-            string copyHeader = copyCount > 1 ? $"Copy {copyCount} Nodes\tCtrl+C" : "Copy\tCtrl+C";
+            string copyHeader = copyCount > 1 ? $"Copy {copyCount} Elements\tCtrl+C" : "Copy\tCtrl+C";
 
             var copyItem = new MenuItem { Header = copyHeader };
             copyItem.Click += (_, _) =>
             {
-                // If the right-clicked node is not already part of the multi-selection,
-                // narrow the copy set to just this one node.
-                if (_multiSelection.Count == 0 || !_multiSelection.Contains(capturedCopyNode))
+                // Narrow selection to just this element when it isn't already multi-selected.
+                if (_multiSelection.Count == 0 || !_multiSelection.Contains(capturedElement!))
                 {
                     ClearMultiSelection();
-                    if (_vm is not null) _vm.SelectElementCommand.Execute(capturedCopyNode);
+                    if (_vm is not null) _vm.SelectElementCommand.Execute(capturedElement);
                 }
-                CopySelectedNodes();
+                _ = CopySelectedElementsAsync();
             };
             menu.Items.Add(copyItem);
         }
@@ -5200,8 +5333,11 @@ public sealed class ModelSystemCanvas : Control
     /// <summary>
     /// Returns information about an inlined-param hook row that contains
     /// <paramref name="pos"/>, or <c>null</c> when no such row is hit.
+    /// The first element of the returned tuple is the canvas origin (either a
+    /// <see cref="NodeViewModel"/> or a <see cref="FunctionInstanceViewModel"/>),
+    /// or <c>null</c> when the origin could not be determined.
     /// </summary>
-    private (NodeViewModel originNode, NodeHook hook, NodeViewModel paramNode,double rowX, double rowY, double rowW)? HitTestInlinedParamRow(Point pos)        
+    private (ICanvasElement? originEl, NodeHook hook, NodeViewModel paramNode, double rowX, double rowY, double rowW)? HitTestInlinedParamRow(Point pos)
     {
         foreach (var ((originNode, hook), paramNode) in _hookInlinedParam)
         {
@@ -5220,6 +5356,24 @@ public sealed class ModelSystemCanvas : Control
             if (rowRect.Contains(pos))
                 return (originNode, hook, paramNode, originNode.X, rowTop, rw);
         }
+
+        // Also check FunctionInstance-originated inlined params.
+        foreach (var ((fi, fpHook), paramNode) in _fiHookInlinedParam)
+        {
+            var fiHooks = fi.UnderlyingInstance.Hooks;
+            int hookIdx = -1;
+            for (int j = 0; j < fiHooks.Count; j++)
+                if (ReferenceEquals(fiHooks[j], fpHook)) { hookIdx = j; break; }
+            if (hookIdx < 0) continue;
+
+            double rw = fi.Width;
+            double rowTop = fi.Y + FtHeaderHeight + hookIdx * FtHookRowHeight;
+            var rowRect = new Rect(fi.X, rowTop, rw, FtHookRowHeight);
+
+            if (rowRect.Contains(pos))
+                return (fi, fpHook, paramNode, fi.X, rowTop, rw);
+        }
+
         return null;
     }
 

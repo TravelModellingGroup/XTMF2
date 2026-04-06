@@ -16,9 +16,12 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.UnitTests.Modules;
 
 namespace XTMF2.UnitTests.Editing
 {
@@ -171,6 +174,136 @@ namespace XTMF2.UnitTests.Editing
                 // Redo: instance removed again
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.IsEmpty(instances);
+            });
+        }
+
+        [TestMethod]
+        public void TestRemoveFunctionInstance_CleansUpIncomingLink()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestRemoveFunctionInstance_CleansUpIncomingLink),
+            (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var gb       = mSession.ModelSystem.GlobalBoundary;
+                var template = AddTemplate(user, mSession);
+                var instance = AddInstance(user, mSession, template);
+
+                // Add an external node with a Single hook and wire it to the FI as destination.
+                Assert.IsTrue(mSession.AddNode(user, gb, "Caller", typeof(SimpleParameterModule),
+                    new Rectangle(200f, 0f, 120f, 50f), out var caller, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, caller!, caller!.Hooks[0], instance,
+                    out _, out error), error?.Message);
+                Assert.HasCount(1, gb.Links, "Incoming link should exist before removal.");
+
+                // Removing the FI must also remove the incoming link.
+                Assert.IsTrue(mSession.RemoveFunctionInstance(user, instance, out error), error?.Message);
+                Assert.IsEmpty(gb.FunctionInstances, "FI should be gone.");
+                Assert.IsEmpty(gb.Links, "Incoming link should be cleaned up when FI is removed.");
+            });
+        }
+
+        [TestMethod]
+        public void TestRemoveFunctionInstance_CleansUpIncomingLink_UndoRedo()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestRemoveFunctionInstance_CleansUpIncomingLink_UndoRedo),
+            (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var gb       = mSession.ModelSystem.GlobalBoundary;
+                var template = AddTemplate(user, mSession);
+                var instance = AddInstance(user, mSession, template);
+
+                Assert.IsTrue(mSession.AddNode(user, gb, "Caller", typeof(SimpleParameterModule),
+                    new Rectangle(200f, 0f, 120f, 50f), out var caller, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, caller!, caller!.Hooks[0], instance,
+                    out _, out error), error?.Message);
+                Assert.HasCount(1, gb.Links);
+
+                // Remove FI → link disappears.
+                Assert.IsTrue(mSession.RemoveFunctionInstance(user, instance, out error), error?.Message);
+                Assert.IsEmpty(gb.FunctionInstances);
+                Assert.IsEmpty(gb.Links, "Link must be removed with the FI.");
+
+                // Undo → both FI and link are restored.
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.HasCount(1, gb.FunctionInstances, "FI should be restored on undo.");
+                Assert.HasCount(1, gb.Links, "Incoming link should be restored on undo.");
+
+                // Redo → FI and link are removed again.
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.IsEmpty(gb.FunctionInstances, "FI should be gone again after redo.");
+                Assert.IsEmpty(gb.Links, "Link should be removed again after redo.");
+            });
+        }
+
+        [TestMethod]
+        public void TestRemoveFunctionInstance_CleansUpOutgoingLink()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestRemoveFunctionInstance_CleansUpOutgoingLink),
+            (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var gb       = mSession.ModelSystem.GlobalBoundary;
+                var template = AddTemplate(user, mSession);
+
+                // Give the template a FunctionParameter so the FI has an outgoing hook.
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "Param",
+                    typeof(SimpleTestModule), new Rectangle(0f, 0f, 120f, 50f),
+                    out _, out error), error?.Message);
+
+                var instance = AddInstance(user, mSession, template);
+                Assert.HasCount(1, instance.Hooks, "FI should expose one FunctionParameterHook.");
+
+                // Add an external destination node and link the FI's outgoing hook to it.
+                Assert.IsTrue(mSession.AddNode(user, gb, "Dest", typeof(SimpleTestModule),
+                    new Rectangle(300f, 0f, 120f, 50f), out var dest, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, instance, instance.Hooks[0], dest!,
+                    out _, out error), error?.Message);
+                Assert.HasCount(1, gb.Links, "Outgoing FP link should exist before removal.");
+
+                // Removing the FI must also remove its outgoing link.
+                Assert.IsTrue(mSession.RemoveFunctionInstance(user, instance, out error), error?.Message);
+                Assert.IsEmpty(gb.FunctionInstances);
+                Assert.IsEmpty(gb.Links, "Outgoing FP link should be cleaned up when FI is removed.");
+            });
+        }
+
+        [TestMethod]
+        public void TestRemoveFunctionInstance_CleansUpOutgoingLink_UndoRedo()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestRemoveFunctionInstance_CleansUpOutgoingLink_UndoRedo),
+            (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var gb       = mSession.ModelSystem.GlobalBoundary;
+                var template = AddTemplate(user, mSession);
+
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "Param",
+                    typeof(SimpleTestModule), new Rectangle(0f, 0f, 120f, 50f),
+                    out _, out error), error?.Message);
+
+                var instance = AddInstance(user, mSession, template);
+
+                Assert.IsTrue(mSession.AddNode(user, gb, "Dest", typeof(SimpleTestModule),
+                    new Rectangle(300f, 0f, 120f, 50f), out var dest, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, instance, instance.Hooks[0], dest!,
+                    out _, out error), error?.Message);
+                Assert.HasCount(1, gb.Links);
+
+                // Remove FI → outgoing link gone.
+                Assert.IsTrue(mSession.RemoveFunctionInstance(user, instance, out error), error?.Message);
+                Assert.IsEmpty(gb.FunctionInstances);
+                Assert.IsEmpty(gb.Links, "Outgoing link must be removed with the FI.");
+
+                // Undo → FI and outgoing link restored.
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.HasCount(1, gb.FunctionInstances, "FI should be restored.");
+                Assert.HasCount(1, gb.Links, "Outgoing link should be restored.");
+
+                // Redo → both gone again.
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.IsEmpty(gb.FunctionInstances);
+                Assert.IsEmpty(gb.Links, "Outgoing link should be removed again after redo.");
             });
         }
 
@@ -372,6 +505,134 @@ namespace XTMF2.UnitTests.Editing
                 var instance = AddInstance(user, mSession, template);
 
                 Assert.AreSame(boundary, instance.ContainedWithin);
+            });
+        }
+
+        // ── AddFunctionInstanceGenerateParameters ──────────────────────────────
+
+        [TestMethod]
+        public void TestAddFunctionInstanceGenerateParameters_SimpleTypes()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestAddFunctionInstanceGenerateParameters_SimpleTypes),
+            (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var gb       = mSession.ModelSystem.GlobalBoundary;
+                var template = AddTemplate(user, mSession);
+
+                // Add simple FunctionParameters (int, bool, string, float).
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "IntParam",   typeof(IFunction<int>),    new Rectangle(0f, 0f, 120f, 50f), out _, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "BoolParam",  typeof(IFunction<bool>),   new Rectangle(0f, 0f, 120f, 50f), out _, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "StrParam",   typeof(IFunction<string>), new Rectangle(0f, 0f, 120f, 50f), out _, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "FloatParam", typeof(IFunction<float>),  new Rectangle(0f, 0f, 120f, 50f), out _, out error), error?.Message);
+
+                Assert.IsTrue(mSession.AddFunctionInstanceGenerateParameters(
+                    user, gb, template, "MyInstance", new Rectangle(10f, 20f, 160f, 70f),
+                    out var instance, out var children, out error), error?.Message);
+
+                Assert.IsNotNull(instance);
+                Assert.IsNotNull(children);
+                Assert.HasCount(4, children!, "One hidden BasicParameter per simple FunctionParameter.");
+                Assert.HasCount(4, gb.Links, "One link per generated parameter.");
+
+                // Every generated node must be hidden.
+                Assert.IsTrue(children.All(c => c.Location.Equals(Rectangle.Hidden)),
+                    "All generated parameter nodes must carry Rectangle.Hidden as their location.");
+
+                // Every generated node must live in the global boundary.
+                Assert.IsTrue(children.All(c => ReferenceEquals(c.ContainedWithin, gb)),
+                    "All generated parameter nodes must be in the global boundary.");
+            });
+        }
+
+        [TestMethod]
+        public void TestAddFunctionInstanceGenerateParameters_NonSimpleTypeProducesNoChildren()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestAddFunctionInstanceGenerateParameters_NonSimpleTypeProducesNoChildren),
+            (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var gb       = mSession.ModelSystem.GlobalBoundary;
+                var template = AddTemplate(user, mSession);
+
+                // Add a FunctionParameter whose type is not one of the simple ones.
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "ComplexParam",
+                    typeof(SimpleTestModule),
+                    new Rectangle(0f, 0f, 120f, 50f), out _, out error), error?.Message);
+
+                Assert.IsTrue(mSession.AddFunctionInstanceGenerateParameters(
+                    user, gb, template, "MyInstance", new Rectangle(10f, 20f, 160f, 70f),
+                    out var instance, out var children, out error), error?.Message);
+
+                Assert.IsNotNull(instance);
+                Assert.IsNotNull(children);
+                Assert.IsEmpty(children!, "Non-simple FunctionParameter should produce no auto-generated child.");
+                Assert.IsEmpty(gb.Links,     "No links should be created for non-simple types.");
+                Assert.IsEmpty(gb.Modules,   "No hidden nodes should be created for non-simple types.");
+            });
+        }
+
+        [TestMethod]
+        public void TestAddFunctionInstanceGenerateParameters_MixedTypes()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestAddFunctionInstanceGenerateParameters_MixedTypes),
+            (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var gb       = mSession.ModelSystem.GlobalBoundary;
+                var template = AddTemplate(user, mSession);
+
+                // One simple, one non-simple.
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "IntParam",
+                    typeof(IFunction<int>), new Rectangle(0f, 0f, 120f, 50f), out _, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "ComplexParam",
+                    typeof(SimpleTestModule), new Rectangle(0f, 0f, 120f, 50f), out _, out error), error?.Message);
+
+                Assert.IsTrue(mSession.AddFunctionInstanceGenerateParameters(
+                    user, gb, template, "MyInstance", new Rectangle(10f, 20f, 160f, 70f),
+                    out var instance, out var children, out error), error?.Message);
+
+                Assert.IsNotNull(instance);
+                Assert.IsNotNull(children);
+                Assert.HasCount(1, children!, "Only the simple FunctionParameter should produce a child.");
+                Assert.HasCount(1, gb.Links, "Only one link for the simple parameter.");
+            });
+        }
+
+        [TestMethod]
+        public void TestAddFunctionInstanceGenerateParameters_UndoRedo()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestAddFunctionInstanceGenerateParameters_UndoRedo),
+            (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var gb       = mSession.ModelSystem.GlobalBoundary;
+                var template = AddTemplate(user, mSession);
+
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "IntParam",
+                    typeof(IFunction<int>), new Rectangle(0f, 0f, 120f, 50f), out _, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "BoolParam",
+                    typeof(IFunction<bool>), new Rectangle(0f, 0f, 120f, 50f), out _, out error), error?.Message);
+
+                Assert.IsTrue(mSession.AddFunctionInstanceGenerateParameters(
+                    user, gb, template, "MyInstance", new Rectangle(10f, 20f, 160f, 70f),
+                    out _, out _, out error), error?.Message);
+
+                Assert.HasCount(1, gb.FunctionInstances, "FI should exist after create.");
+                Assert.HasCount(2, gb.Modules, "Two hidden parameter nodes should exist after create.");
+                Assert.HasCount(2, gb.Links, "Two links should exist after create.");
+
+                // Undo: FI, hidden nodes, and links should all disappear.
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.IsEmpty(gb.FunctionInstances, "Undo should remove the FI.");
+                Assert.IsEmpty(gb.Modules,           "Undo should remove all hidden parameter nodes.");
+                Assert.IsEmpty(gb.Links,             "Undo should remove all generated links.");
+
+                // Redo: everything is restored.
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.HasCount(1, gb.FunctionInstances, "Redo should restore the FI.");
+                Assert.HasCount(2, gb.Modules, "Redo should restore hidden parameter nodes.");
+                Assert.HasCount(2, gb.Links, "Redo should restore generated links.");
             });
         }
     }
