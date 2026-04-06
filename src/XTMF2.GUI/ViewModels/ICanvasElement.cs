@@ -75,7 +75,7 @@ public interface ICanvasElement : INotifyPropertyChanged
 
     bool IsPointWithin(Point point)
     {
-        return new Rect(X - Width / 2, Y - Height / 2, Width, Height).Contains(point);
+        return new Rect(X, Y, Width, Height).Contains(point);
     }
 
 }
