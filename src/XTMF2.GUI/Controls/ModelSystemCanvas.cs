@@ -4270,9 +4270,18 @@ public sealed class ModelSystemCanvas : Control
                 InvalidateAndMeasure();
             };
 
+            // Move to Boundary
+            var moveFtItem = new MenuItem { Header = "Move to Boundary…" };
+            moveFtItem.Click += async (_, _) =>
+            {
+                await vm.MoveFunctionTemplateToBoundaryAsync(capturedFt);
+                InvalidateAndMeasure();
+            };
+
             menu.Items.Add(new Separator());
             menu.Items.Add(enterItem);
             menu.Items.Add(renameItem);
+            menu.Items.Add(moveFtItem);
         }
 
         // ── Function instance – specific items ─────────────────────────────
@@ -4285,8 +4294,16 @@ public sealed class ModelSystemCanvas : Control
                 InvalidateAndMeasure();
             };
 
+            var moveFiItem = new MenuItem { Header = "Move to Boundary…" };
+            moveFiItem.Click += async (_, _) =>
+            {
+                await vm.MoveFunctionInstanceToBoundaryAsync(capturedFi);
+                InvalidateAndMeasure();
+            };
+
             menu.Items.Add(new Separator());
             menu.Items.Add(renameItem);
+            menu.Items.Add(moveFiItem);
         }
 
         // ── "Add Function Parameter" — when we're inside a function template ─────

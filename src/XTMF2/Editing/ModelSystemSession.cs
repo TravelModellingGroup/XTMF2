@@ -2305,6 +2305,110 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Moves <paramref name="template"/> from <paramref name="sourceBoundary"/> to
+        /// <paramref name="destinationBoundary"/> with full undo/redo support.
+        /// <para>
+        /// The operation fails if any <see cref="FunctionInstance"/> that references this
+        /// template would lose access to it after the move.  Access is lost when the template
+        /// is relocated to a different scope than the instance: specifically when one party is
+        /// inside a <see cref="FunctionTemplate.InternalModules"/> boundary that the other
+        /// cannot reach through the regular <see cref="Boundary.Boundaries"/> hierarchy.
+        /// </para>
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="template">The function template to move.</param>
+        /// <param name="sourceBoundary">The boundary that currently owns <paramref name="template"/>.</param>
+        /// <param name="destinationBoundary">The boundary to move <paramref name="template"/> into.</param>
+        /// <param name="error">An error description when the method returns <c>false</c>.</param>
+        /// <returns><c>true</c> on success; <c>false</c> with a populated <paramref name="error"/> on failure.</returns>
+        public bool MoveFunctionTemplate(User user, FunctionTemplate template,
+            Boundary sourceBoundary, Boundary destinationBoundary,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(sourceBoundary);
+            ArgumentNullException.ThrowIfNull(destinationBoundary);
+            error = null;
+
+            if (sourceBoundary == destinationBoundary)
+            {
+                error = new CommandError("The source and destination boundaries are the same.");
+                return false;
+            }
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                // The template must currently live in sourceBoundary.
+                if (!sourceBoundary.FunctionTemplates.Contains(template))
+                {
+                    error = new CommandError(
+                        $"FunctionTemplate '{template.Name}' does not belong to the specified source boundary.");
+                    return false;
+                }
+
+                // Determine the owning FunctionTemplate scope for the destination boundary.
+                var destScope = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, destinationBoundary);
+
+                // Check every existing FunctionInstance that references this template.
+                var instances = GetAllFunctionInstancesOf(template);
+                foreach (var fi in instances)
+                {
+                    var instScope = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, fi.ContainedWithin);
+                    if (instScope != destScope)
+                    {
+                        string instanceDescription = instScope is null
+                            ? "the global scope"
+                            : $"FunctionTemplate '{instScope.Name}'";
+                        string destDescription = destScope is null
+                            ? "the global scope"
+                            : $"FunctionTemplate '{destScope.Name}'";
+                        error = new CommandError(
+                            $"Cannot move FunctionTemplate '{template.Name}': " +
+                            $"FunctionInstance '{fi.Name}' is in {instanceDescription} and would " +
+                            $"no longer be able to reference the template after it is moved to {destDescription}.");
+                        return false;
+                    }
+                }
+
+                // Perform the move.
+                if (!sourceBoundary.RemoveFunctionTemplate(template, out error))
+                    return false;
+
+                if (!destinationBoundary.AddFunctionTemplate(template, out error))
+                {
+                    // Roll back the removal if the add fails (e.g. name clash).
+                    _ = sourceBoundary.AddFunctionTemplate(template, out _);
+                    return false;
+                }
+                template.SetParent(destinationBoundary);
+
+                Buffer.AddUndo(new Command(() =>
+                {
+                    // Undo: move back to sourceBoundary.
+                    _ = destinationBoundary.RemoveFunctionTemplate(template, out _);
+                    _ = sourceBoundary.AddFunctionTemplate(template, out _);
+                    template.SetParent(sourceBoundary);
+                    return (true, null);
+                }, () =>
+                {
+                    // Redo: move to destinationBoundary again.
+                    _ = sourceBoundary.RemoveFunctionTemplate(template, out _);
+                    _ = destinationBoundary.AddFunctionTemplate(template, out _);
+                    template.SetParent(destinationBoundary);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Designates <paramref name="entryNode"/> as the <see cref="FunctionTemplate.EntryNode"/>
         /// of <paramref name="template"/>, or clears it when <paramref name="entryNode"/> is <c>null</c>.
         /// <para>
@@ -2790,6 +2894,146 @@ namespace XTMF2.Editing
                     RestoreIncoming();
                     return false;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Moves <paramref name="instance"/> from its current boundary to
+        /// <paramref name="targetBoundary"/> with full undo/redo support.
+        /// Outgoing <see cref="FunctionParameterHook"/> links and any inlined hidden
+        /// parameter nodes travel with the instance.
+        /// The operation fails when the destination boundary is in a different
+        /// <see cref="FunctionTemplate"/> scope from the template's parent boundary.
+        /// </summary>
+        public bool MoveFunctionInstanceToBoundary(User user, FunctionInstance instance,
+            Boundary targetBoundary, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(instance);
+            ArgumentNullException.ThrowIfNull(targetBoundary);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var oldBoundary = instance.ContainedWithin!;
+                if (ReferenceEquals(oldBoundary, targetBoundary)) { error = null; return true; }
+
+                // The destination must be in the same scope as the template.
+                var destScope = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, targetBoundary);
+                var tmplScope = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, instance.Template.Parent);
+                if (!ReferenceEquals(destScope, tmplScope))
+                {
+                    string destDescription = destScope is null
+                        ? "the global scope"
+                        : $"FunctionTemplate '{destScope.Name}'";
+                    string tmplDescription = tmplScope is null
+                        ? "the global scope"
+                        : $"FunctionTemplate '{tmplScope.Name}'";
+                    error = new CommandError(
+                        $"Cannot move FunctionInstance '{instance.Name}': " +
+                        $"the destination is in {destDescription} but the template " +
+                        $"'{instance.Template.Name}' lives in {tmplDescription}.");
+                    return false;
+                }
+
+                // Outgoing links: the FI is the origin (FunctionParameterHook connections).
+                // These are stored in the FI's boundary and must travel with it.
+                var outgoingLinks = oldBoundary.Links.Where(l => l.Origin == instance).ToList();
+
+                // Hidden inlined parameter nodes that are destinations of outgoing links.
+                var hiddenNodes = outgoingLinks
+                    .SelectMany<Link, Node>(l =>
+                        l is SingleLink sl && sl.Destination is not null ? new[] { sl.Destination }
+                        : l is MultiLink ml ? ml.Destinations.ToArray()
+                        : Array.Empty<Node>())
+                    .Where(n => n.Location.Equals(Rectangle.Hidden)
+                             && ReferenceEquals(n.ContainedWithin, oldBoundary))
+                    .Distinct()
+                    .ToList();
+
+                // Remove from old boundary.
+                foreach (var link in outgoingLinks)
+                    oldBoundary.RemoveLink(link, out _);
+                foreach (var hidden in hiddenNodes)
+                    oldBoundary.RemoveNode(hidden, out _);
+
+                if (!oldBoundary.RemoveFunctionInstance(instance, out error))
+                {
+                    // Roll back.
+                    foreach (var hidden in hiddenNodes)
+                        oldBoundary.AddNode(hidden, out _);
+                    foreach (var link in outgoingLinks)
+                        oldBoundary.AddLink(link, out _);
+                    return false;
+                }
+
+                // Update ContainedWithin and add to new boundary.
+                instance.UpdateContainedWithin(targetBoundary);
+                foreach (var hidden in hiddenNodes)
+                    hidden.UpdateContainedWithin(targetBoundary);
+
+                if (!targetBoundary.AddFunctionInstance(instance, out error))
+                {
+                    // Roll back.
+                    instance.UpdateContainedWithin(oldBoundary);
+                    foreach (var hidden in hiddenNodes)
+                        hidden.UpdateContainedWithin(oldBoundary);
+                    oldBoundary.AddFunctionInstance(instance, out _);
+                    foreach (var hidden in hiddenNodes)
+                        oldBoundary.AddNode(hidden, out _);
+                    foreach (var link in outgoingLinks)
+                        oldBoundary.AddLink(link, out _);
+                    return false;
+                }
+
+                foreach (var hidden in hiddenNodes)
+                    targetBoundary.AddNode(hidden, out _);
+                foreach (var link in outgoingLinks)
+                    targetBoundary.AddLink(link, out _);
+
+                Buffer.AddUndo(new Command(() =>
+                {
+                    // Undo: move back to oldBoundary.
+                    foreach (var link in outgoingLinks) targetBoundary.RemoveLink(link, out _);
+                    foreach (var hidden in hiddenNodes)
+                    {
+                        targetBoundary.RemoveNode(hidden, out _);
+                        hidden.UpdateContainedWithin(oldBoundary);
+                    }
+                    targetBoundary.RemoveFunctionInstance(instance, out _);
+                    instance.UpdateContainedWithin(oldBoundary);
+                    oldBoundary.AddFunctionInstance(instance, out _);
+                    foreach (var hidden in hiddenNodes)
+                        oldBoundary.AddNode(hidden, out _);
+                    foreach (var link in outgoingLinks)
+                        oldBoundary.AddLink(link, out _);
+                    return (true, null);
+                }, () =>
+                {
+                    // Redo: move to targetBoundary again.
+                    foreach (var link in outgoingLinks) oldBoundary.RemoveLink(link, out _);
+                    foreach (var hidden in hiddenNodes)
+                    {
+                        oldBoundary.RemoveNode(hidden, out _);
+                        hidden.UpdateContainedWithin(targetBoundary);
+                    }
+                    oldBoundary.RemoveFunctionInstance(instance, out _);
+                    instance.UpdateContainedWithin(targetBoundary);
+                    targetBoundary.AddFunctionInstance(instance, out _);
+                    foreach (var hidden in hiddenNodes)
+                        targetBoundary.AddNode(hidden, out _);
+                    foreach (var link in outgoingLinks)
+                        targetBoundary.AddLink(link, out _);
+                    return (true, null);
+                }));
+
+                error = null;
+                return true;
             }
         }
 

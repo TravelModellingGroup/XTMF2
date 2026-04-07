@@ -1220,6 +1220,36 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Shows a boundary picker and moves the given function template to the chosen boundary.
+    /// </summary>
+    internal async Task MoveFunctionTemplateToBoundaryAsync(FunctionTemplateViewModel ftvm)
+    {
+        if (ParentWindow is null) return;
+        var dialog = new Views.BoundaryPickerDialog(GetAllBoundaries(GlobalBoundary), _currentBoundary);
+        await dialog.ShowDialog(ParentWindow);
+        if (dialog.Result != Views.BoundaryPickerResult.Navigate || dialog.SelectedBoundary is null) return;
+        var template = ftvm.UnderlyingTemplate;
+        if (ReferenceEquals(dialog.SelectedBoundary, template.Parent)) return;
+        if (!Session.MoveFunctionTemplate(User, template, template.Parent, dialog.SelectedBoundary, out var error))
+            ShowToast(error?.Message ?? "Failed to move function template.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>
+    /// Shows a boundary picker and moves the given function instance to the chosen boundary.
+    /// </summary>
+    internal async Task MoveFunctionInstanceToBoundaryAsync(FunctionInstanceViewModel fivm)
+    {
+        if (ParentWindow is null) return;
+        var dialog = new Views.BoundaryPickerDialog(GetAllBoundaries(GlobalBoundary), _currentBoundary);
+        await dialog.ShowDialog(ParentWindow);
+        if (dialog.Result != Views.BoundaryPickerResult.Navigate || dialog.SelectedBoundary is null) return;
+        var instance = fivm.UnderlyingInstance;
+        if (ReferenceEquals(dialog.SelectedBoundary, instance.ContainedWithin)) return;
+        if (!Session.MoveFunctionInstanceToBoundary(User, instance, dialog.SelectedBoundary, out var error))
+            ShowToast(error?.Message ?? "Failed to move function instance.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>
     /// Attempt to create a link from <paramref name="originElement"/> to <paramref name="destVm"/>.
     /// If any compatible hooks are found, either uses the sole hook automatically or
     /// presents a <see cref="HookPickerDialog"/> when there are multiple options.
