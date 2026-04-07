@@ -32,15 +32,15 @@ namespace XTMF2.GUI.Views;
 /// <summary>
 /// A searchable type-picker dialog that lets the user choose a module type
 /// from the runtime's <see cref="XTMF2.Repository.ModuleRepository.LoadedModuleTypes"/> list.
-/// When the user selects an open-generic type that implements <c>IAction&lt;Context&gt;</c> or
-/// <c>IFunction&lt;Context, ReturnType&gt;</c>, an additional panel appears so the user can
+/// When the user selects an open-generic type (e.g. one implementing <c>IAction&lt;Context&gt;</c>,
+/// <c>IFunction&lt;Result&gt;</c>, <c>IFunction&lt;Context, ReturnType&gt;</c>, or any other
+/// open-generic <c>IModule</c>), an additional panel appears so the user can
 /// specify each generic type argument.
 /// </summary>
 public partial class TypePickerDialog : Window, INotifyPropertyChanged
 {
-    // ── Interface generic definitions used to detect context-parameterised types ──
-    private static readonly Type s_actionOf1  = typeof(IAction<>);
-    private static readonly Type s_functionOf2 = typeof(IFunction<,>);
+    // (No longer needed: we now admit all open-generic IModule types, not just
+    //  IAction<> / IFunction<,> implementors.)
 
     // ── Data sources ──────────────────────────────────────────────────────────────
     private readonly ReadOnlyObservableCollection<Type> _allTypes;
@@ -133,8 +133,7 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
 
     /// <summary>
     /// The collection of type-argument slots that must be filled when the user selects an
-    /// open-generic type based on <c>IAction&lt;Context&gt;</c> or
-    /// <c>IFunction&lt;Context, ReturnType&gt;</c>.
+    /// open-generic type.  One slot per generic type parameter.
     /// Empty when a closed type is selected.
     /// </summary>
     public ObservableCollection<TypeArgEntry> TypeArgEntries
@@ -228,9 +227,10 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
     /// <param name="prompt">Optional prompt text shown at the top of the dialog.</param>
     /// <param name="initialType">If provided, this type will be pre-selected when the dialog opens.</param>
     /// <param name="openGenericModuleTypes">
-    /// Optional list of open-generic module types (e.g. <c>ExecuteWithContext&lt;&gt;</c>).
-    /// Only those that implement <c>IAction&lt;&gt;</c> or <c>IFunction&lt;,&gt;</c> are added to
-    /// the picker; when the user selects one, a type-argument panel appears.
+    /// Optional list of open-generic module types (e.g. any open-generic <c>IModule</c>
+    /// implementor such as <c>IgnoreResult&lt;&gt;</c> or <c>BasicParameter&lt;&gt;</c>).
+    /// All open-generic types in this list are added to the picker; when the user
+    /// selects one, a type-argument panel appears for each generic parameter.
     /// </param>
     public TypePickerDialog(
         ReadOnlyObservableCollection<Type> moduleTypes,
@@ -244,13 +244,13 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
         _initialType = initialType;
         if (prompt is not null) _prompt = prompt;
 
-        // Build the combined list: closed types first, then qualifying open generics.
+        // Build the combined list: closed types first, then all open-generic module types.
         _combinedTypes = new List<Type>(moduleTypes);
         if (openGenericModuleTypes is not null)
         {
             foreach (var og in openGenericModuleTypes)
             {
-                if (IsContextBasedOpenGeneric(og))
+                if (og.IsGenericTypeDefinition)
                     _combinedTypes.Add(og);
             }
         }
@@ -288,23 +288,8 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
         TypeListBox.SelectionChanged += (_, _) => OnListSelectionChanged();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────────
-    //  Open-generic detection helpers
-    // ─────────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Returns <c>true</c> when <paramref name="type"/> is an open-generic type whose
-    /// interface list includes the generic form of <c>IAction&lt;&gt;</c> or
-    /// <c>IFunction&lt;,&gt;</c>.
-    /// </summary>
-    private static bool IsContextBasedOpenGeneric(Type type)
-    {
-        if (!type.IsGenericTypeDefinition) return false;
-        return type.GetInterfaces().Any(i =>
-            i.IsGenericType &&
-            (i.GetGenericTypeDefinition() == s_actionOf1 ||
-             i.GetGenericTypeDefinition() == s_functionOf2));
-    }
+    // (IsContextBasedOpenGeneric removed — all open-generic IModule types are now
+    //  admitted directly in the constructor via og.IsGenericTypeDefinition.)
 
     // ─────────────────────────────────────────────────────────────────────────────
     //  Type-argument panel logic

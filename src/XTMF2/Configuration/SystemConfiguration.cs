@@ -60,6 +60,10 @@ public class SystemConfiguration
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "XTMF2", "Users"));
         Modules = new ModuleRepository();
         Types = new TypeRepository();
+        // Seed the type repository with common BCL types so that the GUI type-picker
+        // can offer them as context-type arguments (e.g. IFunction<string, bool>)
+        // even when no XTMF module assembly happens to reference them.
+        SeedBuiltInTypes();
         // Load the entry assembly for types
         LoadAssembly(Assembly.GetEntryAssembly()!);
         // Load the baked in XTMF2 modules
@@ -72,6 +76,55 @@ public class SystemConfiguration
             if (Directory.Exists(modulesDir))
             {
                 LoadAssemblies(modulesDir, Path.Combine(modulesDir, "exclude.txt"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Common BCL/primitive types registered in the <see cref="TypeRepository"/> at
+    /// startup so they are available in the GUI type-picker even if no loaded XTMF
+    /// assembly happens to reference them directly.
+    /// </summary>
+    private static readonly Type[] s_builtInTypes =
+    [
+        // Primitives and their aliases
+        typeof(bool),
+        typeof(byte),
+        typeof(sbyte),
+        typeof(char),
+        typeof(short),
+        typeof(ushort),
+        typeof(int),
+        typeof(uint),
+        typeof(long),
+        typeof(ulong),
+        typeof(float),
+        typeof(double),
+        typeof(decimal),
+        // Core BCL types
+        typeof(string),
+        typeof(object),
+        typeof(Guid),
+        typeof(Uri),
+        typeof(DateTime),
+        typeof(DateOnly),
+        typeof(TimeOnly),
+        typeof(TimeSpan),
+        typeof(DateTimeOffset),
+    ];
+
+    /// <summary>
+    /// Adds every entry in <see cref="s_builtInTypes"/> to <see cref="Types"/> so that the
+    /// GUI type-picker can offer them as context-type arguments for open-generic hooks.
+    /// </summary>
+    private void SeedBuiltInTypes()
+    {
+        foreach (var t in s_builtInTypes)
+        {
+            if (!Types.Contains(t))
+            {
+                string? error = null;
+                Types.Add(t, ref error);
             }
         }
     }

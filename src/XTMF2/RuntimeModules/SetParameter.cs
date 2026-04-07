@@ -18,14 +18,17 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Set Parameter", Description = "Sets the value of a parameter to the provided value.",
     DocumentationLink = "http://tmg.utoronto.ca/doc/2.0")]
-public sealed class SetParameter<T> : BaseAction<T>
+public sealed class SetParameter<T> : BaseAction
 {
     [Parameter(Required = true, Name = "Value", Description = "The value to set the parameter to.", Index = 0)]
     public ISetableValue<T> Value = null!;
 
-    public override void Invoke(T value)
+    [Parameter(Required = true, Name = "New Value", Description = "The value to set the parameter to.", Index = 1)]
+    public IFunction<T> NewValue = null!;
+
+    public override void Invoke()
     {
-        Value.Set(value);
+        Value.Set(NewValue.Invoke());
     }
 
 }
