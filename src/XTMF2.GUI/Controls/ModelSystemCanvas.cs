@@ -4020,6 +4020,18 @@ public sealed class ModelSystemCanvas : Control
                 menu.Items.Add(addFpItem);
             }
 
+            // Clear all links from this hook if any exist.
+            var hookLinks = _vm.Links
+                .Where(lvm => lvm.UnderlyingLink.Origin == capturedNode.UnderlyingNode
+                           && lvm.UnderlyingLink.OriginHook == capturedHook)
+                .ToList();
+            if (hookLinks.Count > 0)
+            {
+                var clearHookItem = new MenuItem { Header = "Clear Hook" };
+                clearHookItem.Click += (_, _) => vm.ClearHookLinks(capturedNode, capturedHook);
+                menu.Items.Add(clearHookItem);
+            }
+
             menu.Items.Add(new Separator());
         }
 
@@ -4062,6 +4074,19 @@ public sealed class ModelSystemCanvas : Control
             allBoundariesItem.Click += (_, _) =>
                 _ = vm.CreateInterBoundaryLinkAsync(capturedFiOrigin, capturedFpHook);
             menu.Items.Add(allBoundariesItem);
+
+            // Clear all links from this FI hook if any exist.
+            var fiHookLinks = _vm.Links
+                .Where(lvm => lvm.UnderlyingLink.Origin == capturedFiOrigin.UnderlyingInstance
+                           && lvm.UnderlyingLink.OriginHook == capturedFpHook)
+                .ToList();
+            if (fiHookLinks.Count > 0)
+            {
+                var clearFiHookItem = new MenuItem { Header = "Clear Hook" };
+                clearFiHookItem.Click += (_, _) => vm.ClearFiHookLinks(capturedFiOrigin, capturedFpHook);
+                menu.Items.Add(clearFiHookItem);
+            }
+
             menu.Items.Add(new Separator());
         }
 

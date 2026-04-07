@@ -1626,6 +1626,42 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Removes all links originating from the given <see cref="NodeHook"/> on the given node.
+    /// </summary>
+    public void ClearHookLinks(NodeViewModel node, NodeHook hook)
+    {
+        var linksToRemove = Links
+            .Where(lvm => lvm.UnderlyingLink.Origin == node.UnderlyingNode
+                       && lvm.UnderlyingLink.OriginHook == hook)
+            .Select(lvm => lvm.UnderlyingLink)
+            .ToList();
+
+        foreach (var link in linksToRemove)
+        {
+            if (!Session.RemoveLink(User, link, out var error))
+                ShowToast(error?.Message ?? "Could not remove link.", isError: true, durationMs: 5000);
+        }
+    }
+
+    /// <summary>
+    /// Removes all links originating from the given <see cref="FunctionParameterHook"/> on the given FunctionInstance.
+    /// </summary>
+    public void ClearFiHookLinks(FunctionInstanceViewModel fi, FunctionParameterHook hook)
+    {
+        var linksToRemove = Links
+            .Where(lvm => lvm.UnderlyingLink.Origin == fi.UnderlyingInstance
+                       && lvm.UnderlyingLink.OriginHook == hook)
+            .Select(lvm => lvm.UnderlyingLink)
+            .ToList();
+
+        foreach (var link in linksToRemove)
+        {
+            if (!Session.RemoveLink(User, link, out var error))
+                ShowToast(error?.Message ?? "Could not remove link.", isError: true, durationMs: 5000);
+        }
+    }
+
+    /// <summary>
     /// Apply the value in <see cref="SelectedElementParameterValue"/> to the
     /// selected BasicParameter / ScriptedParameter node.
     /// </summary>
