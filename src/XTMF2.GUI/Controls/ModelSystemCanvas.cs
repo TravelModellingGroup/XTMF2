@@ -4832,12 +4832,14 @@ public sealed class ModelSystemCanvas : Control
                 continue;
             }
 
-            // ── Whitespace ────────────────────────────────────────────────
-            if (char.IsWhiteSpace(c))
+            // ── Whitespace ─────────────────────────────────────────────────
+            // Emit whitespace as its own invisible token so it does not bleed
+            // into the operator brush and the overlay advances correctly.
+            if (c == ' ' || c == '\t')
             {
                 int start = i;
-                while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
-                tokens.Add((text[start..i], _isLight ? ParamValueTextBrushL : ParamValueTextBrush));
+                while (i < text.Length && (text[i] == ' ' || text[i] == '\t')) i++;
+                tokens.Add((text[start..i], Brushes.Transparent));
                 continue;
             }
 
@@ -4846,6 +4848,33 @@ public sealed class ModelSystemCanvas : Control
             {
                 int start = i;
                 while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_')) i++;
+
+                // Greedily extend the token by consuming "<spaces><word>" segments
+                // when the resulting substring matches a known variable name that
+                // contains spaces (e.g. "Home Based Work").
+                int extended = i;
+                while (extended < text.Length && text[extended] == ' ')
+                {
+                    int spaceEnd = extended;
+                    while (spaceEnd < text.Length && text[spaceEnd] == ' ') spaceEnd++;
+                    if (spaceEnd >= text.Length ||
+                        (!char.IsLetterOrDigit(text[spaceEnd]) && text[spaceEnd] != '_'))
+                        break;
+                    int wordEnd = spaceEnd;
+                    while (wordEnd < text.Length &&
+                           (char.IsLetterOrDigit(text[wordEnd]) || text[wordEnd] == '_'))
+                        wordEnd++;
+                    if (knownNames.Contains(text[start..wordEnd]))
+                    {
+                        i = wordEnd;
+                        extended = wordEnd;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
                 var word = text[start..i];
                 IBrush brush = word switch
                 {
@@ -4932,7 +4961,7 @@ public sealed class ModelSystemCanvas : Control
         while (tokenStart > 0)
         {
             char ch = text[tokenStart - 1];
-            if (char.IsWhiteSpace(ch) || IsExpressionSpecialChar(ch))
+            if (IsExpressionSpecialChar(ch))
             {
                 break;
             }
@@ -4940,6 +4969,17 @@ public sealed class ModelSystemCanvas : Control
         }
 
         var token = text[tokenStart..caret];
+
+        // Strip any leading whitespace that the backward walk included (e.g. a
+        // space immediately after an operator).  Adjust _varTokenStart so that
+        // CompleteVariable() replaces only the real identifier text.
+        int leadingSpaces = token.Length - token.TrimStart().Length;
+        tokenStart += leadingSpaces;
+        token = token.TrimStart();
+
+        // Also strip trailing whitespace (caret resting just after a space).
+        token = token.TrimEnd();
+
         _varTokenStart = tokenStart;
 
         if (token.Length == 0)
