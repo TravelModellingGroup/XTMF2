@@ -4438,6 +4438,22 @@ public sealed class ModelSystemCanvas : Control
             AddAlignItem("Center on Vertical Axis",   AlignMode.CenterVertical);
             AddAlignItem("Center on Horizontal Axis", AlignMode.CenterHorizontal);
             menu.Items.Add(alignMenu);
+
+            // Distribute requires at least 3 elements to have visible effect.
+            if (_multiSelection.Count >= 3)
+            {
+                var distributeMenu = new MenuItem { Header = "Distribute" };
+
+                var distH = new MenuItem { Header = "Distribute Horizontally" };
+                distH.Click += (_, _) => DistributeSelectedElements(horizontal: true);
+                distributeMenu.Items.Add(distH);
+
+                var distV = new MenuItem { Header = "Distribute Vertically" };
+                distV.Click += (_, _) => DistributeSelectedElements(horizontal: false);
+                distributeMenu.Items.Add(distV);
+
+                menu.Items.Add(distributeMenu);
+            }
         }
 
         menu.Items.Add(deleteItem);
@@ -5594,7 +5610,104 @@ public sealed class ModelSystemCanvas : Control
         InvalidateAndMeasure();
     }
 
-    // ── Multi-selection helpers ────────────────────────────────────────────────
+    /// <summary>
+    /// Spaces all elements in <see cref="_multiSelection"/> evenly along the horizontal
+    /// (when <paramref name="horizontal"/> is <c>true</c>) or vertical axis, preserving the
+    /// positions of the outermost elements and distributing the gap equally between the rest.
+    /// The operation is committed as a single undoable batch via
+    /// <see cref="ModelSystemSession.MoveElements"/>.
+    /// Requires at least 3 selected elements to have any visible effect.
+    /// </summary>
+    private void DistributeSelectedElements(bool horizontal)
+    {
+        if (_vm is null || _multiSelection.Count < 3) return;
+
+        // Helper that returns the element's dimension used for this axis.
+        double Lead(ICanvasElement e)  => horizontal ? e.X        : e.Y;
+        double Trail(ICanvasElement e) => horizontal ? e.X + e.Width : e.Y + e.Height;
+        double Size(ICanvasElement e)  => horizontal ? e.Width    : e.Height;
+
+        // Sort by leading edge along the chosen axis.
+        var sorted = _multiSelection.OrderBy(Lead).ToList();
+
+        // The outermost elements stay fixed; we distribute the inner ones.
+        double totalSpan   = Trail(sorted[^1]) - Lead(sorted[0]);
+        double totalSizes  = sorted.Sum(Size);
+        double totalGaps   = totalSpan - totalSizes;
+        double gapBetween  = totalGaps / (sorted.Count - 1);
+
+        // Build new positions: first element unchanged, each subsequent one
+        // placed directly after the previous with the uniform gap.
+        var positions = new double[sorted.Count];
+        positions[0] = Lead(sorted[0]);
+        for (int i = 1; i < sorted.Count; i++)
+            positions[i] = positions[i - 1] + Size(sorted[i - 1]) + gapBetween;
+
+        var nodeMoves     = new List<(Node, Rectangle)>();
+        var commentMoves  = new List<(CommentBlock, Rectangle)>();
+        var templateMoves = new List<(FunctionTemplate, Rectangle)>();
+        var instanceMoves = new List<(FunctionInstance, Rectangle)>();
+
+        for (int i = 0; i < sorted.Count; i++)
+        {
+            var el     = sorted[i];
+            float newX = horizontal ? (float)Math.Max(0, positions[i]) : (float)el.X;
+            float newY = horizontal ? (float)el.Y : (float)Math.Max(0, positions[i]);
+
+            switch (el)
+            {
+                case NodeViewModel nvm:
+                {
+                    var loc = nvm.UnderlyingNode.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((nvm.UnderlyingNode, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+                case StartViewModel svm:
+                    nodeMoves.Add((svm.UnderlyingStart,
+                        new Rectangle(newX, newY, (float)svm.Diameter, (float)svm.Diameter)));
+                    break;
+                case CommentBlockViewModel cvm:
+                    commentMoves.Add((cvm.UnderlyingBlock,
+                        new Rectangle(newX, newY, (float)cvm.Width, (float)cvm.Height)));
+                    break;
+                case GhostNodeViewModel gvm:
+                {
+                    var loc = gvm.UnderlyingGhostNode.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((gvm.UnderlyingGhostNode, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+                case FunctionTemplateViewModel ftvm:
+                    templateMoves.Add((ftvm.UnderlyingTemplate,
+                        new Rectangle(newX, newY, (float)ftvm.Width, (float)ftvm.Height)));
+                    break;
+                case FunctionInstanceViewModel fivm:
+                    instanceMoves.Add((fivm.UnderlyingInstance,
+                        new Rectangle(newX, newY, (float)fivm.Width, (float)fivm.Height)));
+                    break;
+                case FunctionParameterViewModel fpvm:
+                {
+                    var loc = fpvm.UnderlyingParameter.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((fpvm.UnderlyingParameter, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+            }
+        }
+
+        _vm.Session.MoveElements(
+            _vm.User,
+            nodeMoves.Count     > 0 ? nodeMoves     : null,
+            commentMoves.Count  > 0 ? commentMoves  : null,
+            templateMoves.Count > 0 ? templateMoves : null,
+            instanceMoves.Count > 0 ? instanceMoves : null,
+            out _);
+        InvalidateAndMeasure();
+    }
     /// <summary>
     /// Clears the multi-selection set, restoring <see cref="ICanvasElement.IsSelected"/> to
     /// <c>false</c> on every element that was in the set.
