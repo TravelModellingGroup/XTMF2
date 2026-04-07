@@ -4287,6 +4287,13 @@ public sealed class ModelSystemCanvas : Control
         // ── Function instance – specific items ─────────────────────────────
         if (element is FunctionInstanceViewModel capturedFi)
         {
+            var openTemplateItem = new MenuItem { Header = "Open Template" };
+            openTemplateItem.Click += (_, _) =>
+            {
+                vm.OpenFunctionTemplateOfInstance(capturedFi);
+                InvalidateAndMeasure();
+            };
+
             var renameItem = new MenuItem { Header = "Rename…" };
             renameItem.Click += async (_, _) =>
             {
@@ -4302,6 +4309,7 @@ public sealed class ModelSystemCanvas : Control
             };
 
             menu.Items.Add(new Separator());
+            menu.Items.Add(openTemplateItem);
             menu.Items.Add(renameItem);
             menu.Items.Add(moveFiItem);
         }

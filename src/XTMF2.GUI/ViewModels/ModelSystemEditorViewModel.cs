@@ -1250,6 +1250,23 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Navigates into the InternalModules of the <see cref="FunctionTemplate"/> associated with
+    /// <paramref name="fivm"/>, switching to the template's parent boundary first if necessary.
+    /// </summary>
+    internal void OpenFunctionTemplateOfInstance(FunctionInstanceViewModel fivm)
+    {
+        var template = fivm.UnderlyingInstance.Template;
+        // If the template lives in a different boundary than the one currently shown,
+        // navigate there so FunctionTemplates is rebuilt for that boundary.
+        if (!ReferenceEquals(template.Parent, _currentBoundary))
+            SwitchToBoundary(template.Parent);
+        // Locate the corresponding view-model (it must now be in FunctionTemplates).
+        var ftvm = FunctionTemplates.FirstOrDefault(ft => ReferenceEquals(ft.UnderlyingTemplate, template));
+        if (ftvm is null) return;
+        NavigateIntoFunctionTemplate(ftvm);
+    }
+
+    /// <summary>
     /// Attempt to create a link from <paramref name="originElement"/> to <paramref name="destVm"/>.
     /// If any compatible hooks are found, either uses the sole hook automatically or
     /// presents a <see cref="HookPickerDialog"/> when there are multiple options.
