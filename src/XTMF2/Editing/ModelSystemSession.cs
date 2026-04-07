@@ -19,9 +19,11 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.ComponentModel;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.ModelSystemConstruct.Parameters;
 using XTMF2.Repository;
 
 namespace XTMF2.Editing
@@ -1403,19 +1405,173 @@ namespace XTMF2.Editing
                 }
 
                 var oldName = node.Name;
+                // Collect affected scripted parameters BEFORE the rename so we know the old name.
+                var affected = CollectScriptedParamsReferencingVariable(node, oldName);
+                var savedOldExprs = affected.Select(n => n.ParameterValue).ToList();
+
                 if (node.SetName(name, out error))
                 {
+                    // Recompile every affected scripted parameter with the updated expression text.
+                    var savedNewExprs = new List<ParameterExpression?>(affected.Count);
+                    foreach (var paramNode in affected)
+                    {
+                        var oldText = paramNode.ParameterValue!.Representation;
+                        var newText = ReplaceVariableNameInExpression(oldText, oldName, name);
+                        var localVars = paramNode.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+                        IList<Node> allVars = localVars is { Count: > 0 }
+                            ? localVars.Concat(ModelSystem.Variables).ToList()
+                            : (IList<Node>)ModelSystem.Variables;
+                        paramNode.SetParameterExpression(allVars, newText, out _);
+                        savedNewExprs.Add(paramNode.ParameterValue);
+                    }
+
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (node.SetName(oldName, out var e), e);
+                        node.SetName(oldName, out _);
+                        for (int i = 0; i < affected.Count; i++)
+                            affected[i].SetParameterValue(savedOldExprs[i], out _);
+                        return (true, null);
                     }, () =>
                     {
-                        return (node.SetName(name, out var e), e);
+                        node.SetName(name, out _);
+                        for (int i = 0; i < affected.Count; i++)
+                            affected[i].SetParameterValue(savedNewExprs[i], out _);
+                        return (true, null);
                     }));
                     return true;
                 }
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Returns all nodes whose <see cref="ParameterExpression"/> is a
+        /// <see cref="ScriptedParameter"/> that textually references <paramref name="oldName"/>
+        /// as a variable token, scoped to the visibility of <paramref name="variableNode"/>:
+        /// the entire model system for global model-system variables, or only the owning
+        /// <see cref="FunctionTemplate"/>'s internal boundary for local variables.
+        /// </summary>
+        private List<Node> CollectScriptedParamsReferencingVariable(Node variableNode, string oldName)
+        {
+            bool isGlobalVar = ModelSystem.Variables.Contains(variableNode);
+            FunctionTemplate? ownerTemplate = null;
+
+            if (!isGlobalVar)
+            {
+                // Check whether the node is a local variable of any FunctionTemplate.
+                var stack = new Stack<Boundary>();
+                stack.Push(ModelSystem.GlobalBoundary);
+                while (stack.Count > 0 && ownerTemplate is null)
+                {
+                    var current = stack.Pop();
+                    foreach (var child in current.Boundaries) stack.Push(child);
+                    foreach (var ft in current.FunctionTemplates)
+                    {
+                        if (ft.LocalVariables.Contains(variableNode))
+                        {
+                            ownerTemplate = ft;
+                            break;
+                        }
+                        stack.Push(ft.InternalModules);
+                    }
+                }
+            }
+
+            // If the node is neither a global variable nor a local variable, nothing to update.
+            if (!isGlobalVar && ownerTemplate is null)
+                return [];
+
+            var result = new List<Node>();
+            var searchRoot = ownerTemplate is null
+                ? ModelSystem.GlobalBoundary
+                : ownerTemplate.InternalModules;
+
+            // For global variable renaming we skip any FunctionTemplate whose LocalVariables
+            // already contain a node with the same old name (shadowing the global).
+            CollectScriptedParamsInBoundary(
+                searchRoot, oldName, variableNode, isGlobalVar, result);
+            return result;
+        }
+
+        /// <summary>
+        /// Recursively collects nodes with scripted parameters that reference
+        /// <paramref name="oldName"/> as a token inside <paramref name="boundary"/>.
+        /// When <paramref name="guardShadowing"/> is <see langword="true"/> (global-variable
+        /// rename), FunctionTemplate sub-trees whose LocalVariables shadow <paramref name="oldName"/>
+        /// are skipped.
+        /// </summary>
+        private static void CollectScriptedParamsInBoundary(
+            Boundary boundary,
+            string oldName,
+            Node variableNode,
+            bool guardShadowing,
+            List<Node> result)
+        {
+            foreach (var node in boundary.Modules)
+            {
+                if (node.ParameterValue is ScriptedParameter sp
+                    && ContainsVariableToken(sp.Representation, oldName))
+                {
+                    result.Add(node);
+                }
+            }
+
+            foreach (var child in boundary.Boundaries)
+                CollectScriptedParamsInBoundary(child, oldName, variableNode, guardShadowing, result);
+
+            foreach (var ft in boundary.FunctionTemplates)
+            {
+                // If this is a global-variable rename and the template already has a local
+                // variable named oldName (that is NOT the node being renamed), the local
+                // variable shadows the global one inside this template — skip it.
+                if (guardShadowing
+                    && ft.LocalVariables.Any(lv => lv.Name == oldName && !ReferenceEquals(lv, variableNode)))
+                {
+                    continue;
+                }
+                CollectScriptedParamsInBoundary(ft.InternalModules, oldName, variableNode, guardShadowing, result);
+            }
+        }
+
+        /// <summary>
+        /// Returns <see langword="true"/> when <paramref name="expression"/> contains
+        /// <paramref name="name"/> as a complete variable token (not a substring of a
+        /// larger token and not inside a quoted string literal).
+        /// </summary>
+        private static bool ContainsVariableToken(string expression, string name)
+            => !string.IsNullOrEmpty(name)
+            && Regex.IsMatch(expression,
+                BuildVariableTokenPattern(Regex.Escape(name.Trim())));
+
+        /// <summary>
+        /// Replaces all occurrences of <paramref name="oldName"/> as a complete variable
+        /// token in <paramref name="expression"/> with <paramref name="newName"/>,
+        /// preserving surrounding whitespace.
+        /// </summary>
+        internal static string ReplaceVariableNameInExpression(
+            string expression, string oldName, string newName)
+        {
+            if (string.IsNullOrEmpty(expression) || string.IsNullOrEmpty(oldName))
+                return expression;
+            var pattern = BuildVariableTokenPattern(Regex.Escape(oldName.Trim()));
+            return Regex.Replace(expression, pattern,
+                m => m.Groups[1].Value + newName + m.Groups[2].Value);
+        }
+
+        /// <summary>
+        /// Builds a regex pattern that matches the escaped variable name <paramref name="escapedName"/>
+        /// (capturing surrounding optional whitespace in groups 1 and 2) only when it
+        /// appears as a whole token — bounded by a special character, whitespace,
+        /// or a string boundary on each side.
+        /// Special characters are the same set as <c>ParameterCompiler.IsSpecialCharacter</c>:
+        /// <c>? : &amp; | + - * / ^ &lt; &gt; = ! ( ) "</c>.
+        /// </summary>
+        private static string BuildVariableTokenPattern(string escapedName)
+        {
+            const string delimiters = @"[\s?:&|+\-*/^<>=!()""]";
+            // Group 1: optional leading whitespace after a delimiter or string start.
+            // Group 2: optional trailing whitespace before a delimiter or string end.
+            return $@"(?<=\A|{delimiters})(\s*){escapedName}(\s*)(?=\z|{delimiters})";
         }
 
         public bool SetNodeLocation(User user, Node mss, Rectangle newLocation, [NotNullWhen(false)] out CommandError? error)
