@@ -92,8 +92,8 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IFunction<Log> Log = null!;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
-        public IAction ToInvoke = null!;
+        [SubModule(Required = false, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
+        public IAction? ToInvoke;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
         public IFunction<string> Message = null!;
@@ -102,7 +102,7 @@ namespace XTMF2.RuntimeModules
         {
             var log = Log.Invoke();
             log.Invoke(Message.Invoke());
-            ToInvoke.Invoke();
+            ToInvoke?.Invoke();
         }
     }
 
@@ -113,8 +113,8 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IFunction<Log> Log = null!;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
-        public IAction<Context> ToInvoke = null!;
+        [SubModule(Required = false, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
+        public IAction<Context>? ToInvoke;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
         public IFunction<string> Message = null!;
@@ -123,7 +123,7 @@ namespace XTMF2.RuntimeModules
         {
             var log = Log.Invoke();
             log.Invoke(Message.Invoke());
-            ToInvoke.Invoke(context);
+            ToInvoke?.Invoke(context);
         }
     }
 
