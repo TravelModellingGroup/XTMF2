@@ -791,11 +791,22 @@ namespace XTMF2.Editing
                 var genericParameters = type.GetGenericArguments();
                 if (genericParameters.Length == 1)
                 {
-                    var functionType = typeof(RuntimeModules.BasicParameter<>).MakeGenericType(genericParameters[0]);
-                    if (type.IsAssignableFrom(functionType))
+                    var funcType     = typeof(RuntimeModules.BasicParameter<>).MakeGenericType(genericParameters[0]);
+                    var setableType  = typeof(RuntimeModules.SetableParameter<>).MakeGenericType(genericParameters[0]);
+
+                    // Use SetableParameter when BasicParameter cannot satisfy the hook
+                    // (e.g. the hook requires ISetableValue<T>) but SetableParameter can.
+                    // Otherwise fall back to BasicParameter for plain IFunction<T> hooks.
+                    Type? selectedType = null;
+                    if (!type.IsAssignableFrom(funcType) && type.IsAssignableFrom(setableType))
+                        selectedType = setableType;
+                    else if (type.IsAssignableFrom(funcType))
+                        selectedType = funcType;
+
+                    if (selectedType is not null)
                     {
-                        var child = Node.Create(this.GetModuleRepository(), hook.Name, functionType, boundary, Rectangle.Hidden);
-                        
+                        var child = Node.Create(this.GetModuleRepository(), hook.Name, selectedType, boundary, Rectangle.Hidden);
+
                         if (child?.SetParameterValue(ParameterExpression.CreateParameter(hook.DefaultValue!, genericParameters[0]), out var error) == true)
                         {
                             nodes.Add(child);
@@ -1307,7 +1318,9 @@ namespace XTMF2.Editing
                     {
                         var destNode = singleLink.Destination!;
                         var destType = destNode.Type;
-                        if (destType != null && destType.IsGenericType && destType.GetGenericTypeDefinition() == typeof(RuntimeModules.BasicParameter<>))
+                        if (destType != null && destType.IsGenericType &&
+                            (destType.GetGenericTypeDefinition() == typeof(RuntimeModules.BasicParameter<>) ||
+                             destType.GetGenericTypeDefinition() == typeof(RuntimeModules.SetableParameter<>)))
                         {
                             // check to see if this would be the only link referencing it.
                             List<Link> linksGoingTo = GetLinksGoingTo(destNode);
