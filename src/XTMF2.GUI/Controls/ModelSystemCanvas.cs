@@ -4416,6 +4416,30 @@ public sealed class ModelSystemCanvas : Control
             menu.Items.Add(copyItem);
         }
 
+        // ── Align (multi-selection only) ──────────────────────────────────────
+        if (_multiSelection.Count > 1)
+        {
+            menu.Items.Add(new Separator());
+            var alignMenu = new MenuItem { Header = "Align" };
+
+            void AddAlignItem(string header, AlignMode m)
+            {
+                var item = new MenuItem { Header = header };
+                item.Click += (_, _) => AlignSelectedElements(m);
+                alignMenu.Items.Add(item);
+            }
+
+            AddAlignItem("Align Left Edges",          AlignMode.Left);
+            AddAlignItem("Align Right Edges",         AlignMode.Right);
+            alignMenu.Items.Add(new Separator());
+            AddAlignItem("Align Top Edges",           AlignMode.Top);
+            AddAlignItem("Align Bottom Edges",        AlignMode.Bottom);
+            alignMenu.Items.Add(new Separator());
+            AddAlignItem("Center on Vertical Axis",   AlignMode.CenterVertical);
+            AddAlignItem("Center on Horizontal Axis", AlignMode.CenterHorizontal);
+            menu.Items.Add(alignMenu);
+        }
+
         menu.Items.Add(deleteItem);
 
         ContextMenu = menu;
@@ -5462,6 +5486,112 @@ public sealed class ModelSystemCanvas : Control
         }
 
         return testComments ? TestHitsElement(_vm.CommentBlocks, pos) : null;
+    }
+
+    // ── Alignment ─────────────────────────────────────────────────────────────
+
+    private enum AlignMode
+    {
+        Left, Right, Top, Bottom, CenterHorizontal, CenterVertical
+    }
+
+    /// <summary>
+    /// Moves all elements in <see cref="_multiSelection"/> so that their edges (or centres)
+    /// are aligned according to <paramref name="mode"/>.
+    /// The operation is committed as a single undoable batch via
+    /// <see cref="ModelSystemSession.MoveElements"/>.
+    /// </summary>
+    private void AlignSelectedElements(AlignMode mode)
+    {
+        if (_vm is null || _multiSelection.Count < 2) return;
+
+        // Compute the shared reference coordinate.
+        double refCoord = mode switch
+        {
+            AlignMode.Left             => _multiSelection.Min(e => e.X),
+            AlignMode.Right            => _multiSelection.Max(e => e.X + e.Width),
+            AlignMode.Top              => _multiSelection.Min(e => e.Y),
+            AlignMode.Bottom           => _multiSelection.Max(e => e.Y + e.Height),
+            AlignMode.CenterHorizontal => _multiSelection.Average(e => e.Y + e.Height / 2.0),
+            AlignMode.CenterVertical   => _multiSelection.Average(e => e.X + e.Width  / 2.0),
+            _                          => 0.0
+        };
+
+        var nodeMoves     = new List<(Node, Rectangle)>();
+        var commentMoves  = new List<(CommentBlock, Rectangle)>();
+        var templateMoves = new List<(FunctionTemplate, Rectangle)>();
+        var instanceMoves = new List<(FunctionInstance, Rectangle)>();
+
+        foreach (var el in _multiSelection)
+        {
+            float newX = (float)el.X;
+            float newY = (float)el.Y;
+
+            switch (mode)
+            {
+                case AlignMode.Left:             newX = (float)refCoord;                      break;
+                case AlignMode.Right:            newX = (float)(refCoord - el.Width);          break;
+                case AlignMode.Top:              newY = (float)refCoord;                      break;
+                case AlignMode.Bottom:           newY = (float)(refCoord - el.Height);        break;
+                case AlignMode.CenterHorizontal: newY = (float)(refCoord - el.Height / 2.0); break;
+                case AlignMode.CenterVertical:   newX = (float)(refCoord - el.Width  / 2.0); break;
+            }
+            newX = Math.Max(0f, newX);
+            newY = Math.Max(0f, newY);
+
+            switch (el)
+            {
+                case NodeViewModel nvm:
+                {
+                    var loc = nvm.UnderlyingNode.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((nvm.UnderlyingNode, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+                case StartViewModel svm:
+                    nodeMoves.Add((svm.UnderlyingStart,
+                        new Rectangle(newX, newY, (float)svm.Diameter, (float)svm.Diameter)));
+                    break;
+                case CommentBlockViewModel cvm:
+                    commentMoves.Add((cvm.UnderlyingBlock,
+                        new Rectangle(newX, newY, (float)cvm.Width, (float)cvm.Height)));
+                    break;
+                case GhostNodeViewModel gvm:
+                {
+                    var loc = gvm.UnderlyingGhostNode.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((gvm.UnderlyingGhostNode, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+                case FunctionTemplateViewModel ftvm:
+                    templateMoves.Add((ftvm.UnderlyingTemplate,
+                        new Rectangle(newX, newY, (float)ftvm.Width, (float)ftvm.Height)));
+                    break;
+                case FunctionInstanceViewModel fivm:
+                    instanceMoves.Add((fivm.UnderlyingInstance,
+                        new Rectangle(newX, newY, (float)fivm.Width, (float)fivm.Height)));
+                    break;
+                case FunctionParameterViewModel fpvm:
+                {
+                    var loc = fpvm.UnderlyingParameter.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((fpvm.UnderlyingParameter, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+            }
+        }
+
+        _vm.Session.MoveElements(
+            _vm.User,
+            nodeMoves.Count     > 0 ? nodeMoves     : null,
+            commentMoves.Count  > 0 ? commentMoves  : null,
+            templateMoves.Count > 0 ? templateMoves : null,
+            instanceMoves.Count > 0 ? instanceMoves : null,
+            out _);
+        InvalidateAndMeasure();
     }
 
     // ── Multi-selection helpers ────────────────────────────────────────────────
