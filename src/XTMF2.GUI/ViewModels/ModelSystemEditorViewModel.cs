@@ -39,6 +39,33 @@ using XTMF2.RuntimeModules;
 namespace XTMF2.GUI.ViewModels;
 
 /// <summary>
+/// Holds the data captured for a single node (and its inlined parameter children)
+/// at the moment it is copied, ready to be replicated by a paste operation.
+/// </summary>
+/// <param name="Name">The node's name at copy time.</param>
+/// <param name="Type">The CLR type of the node's module.</param>
+/// <param name="OriginalLocation">The canvas rectangle of the node at copy time.</param>
+/// <param name="ParameterValue">
+/// The string representation of the parameter value, or <c>null</c> when the node
+/// is not a parameter node.
+/// </param>
+/// <param name="IsScriptedParam">
+/// <c>true</c> when the parameter is a <c>ScriptedParameter</c>; <c>false</c>
+/// for a <c>BasicParameter</c>.  Ignored when <paramref name="ParameterValue"/> is <c>null</c>.
+/// </param>
+/// <param name="InlinedChildren">
+/// One entry per hidden (inlined) child node that was connected to this node's hook
+/// at copy time.  The tuple stores the hook name and the child's own copy data.
+/// </param>
+internal sealed record NodePasteEntry(
+    string Name,
+    Type Type,
+    Rectangle OriginalLocation,
+    string? ParameterValue,
+    bool IsScriptedParam,
+    IReadOnlyList<(string HookName, NodePasteEntry Child)> InlinedChildren);
+
+/// <summary>
 /// View model for editing a single model system. Owns the <see cref="ModelSystemSession"/>
 /// and disposes it when the tab is closed.
 /// </summary>
@@ -155,6 +182,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     public ObservableCollection<FunctionParameterViewModel> FunctionParameterVMs { get; } = new();
 
+    /// <summary>
+    /// Flat, searchable list of all visible canvas elements in the current boundary view:
+    /// non-inlined <see cref="NodeViewModel"/>s, <see cref="StartViewModel"/>s,
+    /// <see cref="FunctionTemplateViewModel"/>s, <see cref="FunctionInstanceViewModel"/>s,
+    /// and <see cref="FunctionParameterViewModel"/>s.
+    /// Rebuilt automatically whenever any constituent collection or a node's inline state changes.
+    /// </summary>
+    public ObservableCollection<ICanvasElement> SearchItems { get; } = new();
+
     /// <summary>Observable view-models for the model system's variable list.</summary>
     public ObservableCollection<ModelSystemVariableViewModel> ModelSystemVariables { get; } = new();
 
@@ -230,20 +266,73 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>True when neither an element nor a link is selected.</summary>
     public bool NothingSelected => SelectedElement is null && SelectedLink is null;
 
-    // ── Node search ───────────────────────────────────────────────────────
-    /// <summary>Fires when the user picks a node from the search box; the view should scroll to it.</summary>
-    public event Action<NodeViewModel>? ScrollToNodeRequested;
+    // ── Canvas element search ─────────────────────────────────────────────
+    /// <summary>Fires when the user picks an element from the search box; the view should scroll to it.</summary>
+    public event Action<ICanvasElement>? ScrollToElementRequested;
 
     /// <summary>Bound to the AutoCompleteBox SelectedItem; triggers navigation when set.</summary>
     [ObservableProperty]
-    private NodeViewModel? _nodeSearchSelection;
+    private ICanvasElement? _canvasSearchSelection;
 
-    partial void OnNodeSearchSelectionChanged(NodeViewModel? value)
+    partial void OnCanvasSearchSelectionChanged(ICanvasElement? value)
     {
         if (value is null) return;
         SelectElement(value);
-        ScrollToNodeRequested?.Invoke(value);
-        NodeSearchSelection = null; // reset so the box is ready for the next search
+        ScrollToElementRequested?.Invoke(value);
+        CanvasSearchSelection = null; // reset so the box is ready for the next search
+    }
+
+    // ── SearchItems tracking ──────────────────────────────────────────────
+    private readonly HashSet<NodeViewModel> _searchTrackedNodes = new();
+
+    /// <summary>
+    /// Rebuilds <see cref="SearchItems"/> from the current boundary's VM collections.
+    /// Non-inlined nodes and all Starts, FunctionTemplates, FunctionInstances,
+    /// and FunctionParameters are included.
+    /// </summary>
+    private void RebuildSearchItems()
+    {
+        SearchItems.Clear();
+        foreach (var nvm in Nodes)
+            if (!nvm.IsInlined)
+                SearchItems.Add(nvm);
+        foreach (var svm in Starts)
+            SearchItems.Add(svm);
+        foreach (var ftvm in FunctionTemplates)
+            SearchItems.Add(ftvm);
+        foreach (var fivm in FunctionInstances)
+            SearchItems.Add(fivm);
+        foreach (var fpvm in FunctionParameterVMs)
+            SearchItems.Add(fpvm);
+    }
+
+    private void OnNodesCollectionChangedForSearch(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Manage per-node IsInlined subscriptions so SearchItems stays in sync.
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            foreach (var nvm in _searchTrackedNodes)
+                nvm.PropertyChanged -= OnTrackedNodePropertyChanged;
+            _searchTrackedNodes.Clear();
+        }
+        else
+        {
+            if (e.NewItems is not null)
+                foreach (NodeViewModel nvm in e.NewItems)
+                    if (_searchTrackedNodes.Add(nvm))
+                        nvm.PropertyChanged += OnTrackedNodePropertyChanged;
+            if (e.OldItems is not null)
+                foreach (NodeViewModel nvm in e.OldItems)
+                    if (_searchTrackedNodes.Remove(nvm))
+                        nvm.PropertyChanged -= OnTrackedNodePropertyChanged;
+        }
+        RebuildSearchItems();
+    }
+
+    private void OnTrackedNodePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(NodeViewModel.IsInlined))
+            RebuildSearchItems();
     }
 
     // Subscription to the live MultiLink.Destinations collection.
@@ -468,6 +557,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         _canUndo = Session.CanUndo;
         _canRedo = Session.CanRedo;
         ((System.ComponentModel.INotifyPropertyChanged)Session).PropertyChanged += OnSessionPropertyChanged;
+
+        // Keep SearchItems in sync with the canvas collections.
+        // Nodes: also handles per-node IsInlined tracking.
+        Nodes.CollectionChanged            += OnNodesCollectionChangedForSearch;
+        Starts.CollectionChanged           += (_, _) => RebuildSearchItems();
+        FunctionTemplates.CollectionChanged += (_, _) => RebuildSearchItems();
+        FunctionInstances.CollectionChanged += (_, _) => RebuildSearchItems();
+        FunctionParameterVMs.CollectionChanged += (_, _) => RebuildSearchItems();
+        // Subscribe to nodes already populated by BuildFromBoundary.
+        foreach (var nvm in Nodes)
+            if (_searchTrackedNodes.Add(nvm))
+                nvm.PropertyChanged += OnTrackedNodePropertyChanged;
+        RebuildSearchItems();
     }
 
     private void OnSessionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -868,17 +970,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Step 1: choose the module type.
         var typePicker = new TypePickerDialog(
             Session.LoadedModuleTypes,
-            prompt: "Select the module type to add:");
+            prompt: "Select the module type to add:",
+            openGenericModuleTypes: Session.OpenGenericModuleTypes,
+            allAvailableTypes: Session.AllAvailableTypes);
         await typePicker.ShowDialog(ParentWindow);
 
         if (typePicker.WasCancelled || typePicker.SelectedType is null) return;
         var selectedType = typePicker.SelectedType;
 
-        // Step 2: choose a name (pre-filled from the type's short name).
+        // Step 2: choose a name (pre-filled from the type's friendly name).
         var nameDialog = new InputDialog(
             title: "Add Module",
             prompt: "Enter module name:",
-            defaultText: selectedType.Name);
+            defaultText: FriendlyTypeNameConverter.GetFriendlyName(selectedType));
         await nameDialog.ShowDialog(ParentWindow);
 
         var name = nameDialog.InputText?.Trim();
@@ -898,7 +1002,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var typePicker = new TypePickerDialog(
             Session.LoadedModuleTypes,
             prompt: "Select a new module type:",
-            initialType: nvm.UnderlyingNode.Type);
+            initialType: nvm.UnderlyingNode.Type,
+            openGenericModuleTypes: Session.OpenGenericModuleTypes,
+            allAvailableTypes: Session.AllAvailableTypes);
         await typePicker.ShowDialog(ParentWindow);
 
         if (typePicker.WasCancelled || typePicker.SelectedType is null) return;
@@ -1111,6 +1217,53 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (ReferenceEquals(dialog.SelectedBoundary, gvm.UnderlyingGhostNode.ContainedWithin)) return;
         if (!Session.MoveGhostNodeToBoundary(User, gvm.UnderlyingGhostNode, dialog.SelectedBoundary, out var error))
             ShowToast(error?.Message ?? "Failed to move ghost node.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>
+    /// Shows a boundary picker and moves the given function template to the chosen boundary.
+    /// </summary>
+    internal async Task MoveFunctionTemplateToBoundaryAsync(FunctionTemplateViewModel ftvm)
+    {
+        if (ParentWindow is null) return;
+        var dialog = new Views.BoundaryPickerDialog(GetAllBoundaries(GlobalBoundary), _currentBoundary);
+        await dialog.ShowDialog(ParentWindow);
+        if (dialog.Result != Views.BoundaryPickerResult.Navigate || dialog.SelectedBoundary is null) return;
+        var template = ftvm.UnderlyingTemplate;
+        if (ReferenceEquals(dialog.SelectedBoundary, template.Parent)) return;
+        if (!Session.MoveFunctionTemplate(User, template, template.Parent, dialog.SelectedBoundary, out var error))
+            ShowToast(error?.Message ?? "Failed to move function template.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>
+    /// Shows a boundary picker and moves the given function instance to the chosen boundary.
+    /// </summary>
+    internal async Task MoveFunctionInstanceToBoundaryAsync(FunctionInstanceViewModel fivm)
+    {
+        if (ParentWindow is null) return;
+        var dialog = new Views.BoundaryPickerDialog(GetAllBoundaries(GlobalBoundary), _currentBoundary);
+        await dialog.ShowDialog(ParentWindow);
+        if (dialog.Result != Views.BoundaryPickerResult.Navigate || dialog.SelectedBoundary is null) return;
+        var instance = fivm.UnderlyingInstance;
+        if (ReferenceEquals(dialog.SelectedBoundary, instance.ContainedWithin)) return;
+        if (!Session.MoveFunctionInstanceToBoundary(User, instance, dialog.SelectedBoundary, out var error))
+            ShowToast(error?.Message ?? "Failed to move function instance.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>
+    /// Navigates into the InternalModules of the <see cref="FunctionTemplate"/> associated with
+    /// <paramref name="fivm"/>, switching to the template's parent boundary first if necessary.
+    /// </summary>
+    internal void OpenFunctionTemplateOfInstance(FunctionInstanceViewModel fivm)
+    {
+        var template = fivm.UnderlyingInstance.Template;
+        // If the template lives in a different boundary than the one currently shown,
+        // navigate there so FunctionTemplates is rebuilt for that boundary.
+        if (!ReferenceEquals(template.Parent, _currentBoundary))
+            SwitchToBoundary(template.Parent);
+        // Locate the corresponding view-model (it must now be in FunctionTemplates).
+        var ftvm = FunctionTemplates.FirstOrDefault(ft => ReferenceEquals(ft.UnderlyingTemplate, template));
+        if (ftvm is null) return;
+        NavigateIntoFunctionTemplate(ftvm);
     }
 
     /// <summary>
@@ -1473,6 +1626,42 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Removes all links originating from the given <see cref="NodeHook"/> on the given node.
+    /// </summary>
+    public void ClearHookLinks(NodeViewModel node, NodeHook hook)
+    {
+        var linksToRemove = Links
+            .Where(lvm => lvm.UnderlyingLink.Origin == node.UnderlyingNode
+                       && lvm.UnderlyingLink.OriginHook == hook)
+            .Select(lvm => lvm.UnderlyingLink)
+            .ToList();
+
+        foreach (var link in linksToRemove)
+        {
+            if (!Session.RemoveLink(User, link, out var error))
+                ShowToast(error?.Message ?? "Could not remove link.", isError: true, durationMs: 5000);
+        }
+    }
+
+    /// <summary>
+    /// Removes all links originating from the given <see cref="FunctionParameterHook"/> on the given FunctionInstance.
+    /// </summary>
+    public void ClearFiHookLinks(FunctionInstanceViewModel fi, FunctionParameterHook hook)
+    {
+        var linksToRemove = Links
+            .Where(lvm => lvm.UnderlyingLink.Origin == fi.UnderlyingInstance
+                       && lvm.UnderlyingLink.OriginHook == hook)
+            .Select(lvm => lvm.UnderlyingLink)
+            .ToList();
+
+        foreach (var link in linksToRemove)
+        {
+            if (!Session.RemoveLink(User, link, out var error))
+                ShowToast(error?.Message ?? "Could not remove link.", isError: true, durationMs: 5000);
+        }
+    }
+
+    /// <summary>
     /// Apply the value in <see cref="SelectedElementParameterValue"/> to the
     /// selected BasicParameter / ScriptedParameter node.
     /// </summary>
@@ -1502,17 +1691,46 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var innerType = nodeType.GetGenericArguments().FirstOrDefault();
         if (innerType is null) return;
 
+        // Resolve the effective enum type for the dialog:
+        //   • BasicParameter<SomeEnum>                         → use SomeEnum directly
+        //   • BasicParameter<X> where X (or a base/interface) →
+        //       implements IFunction<SomeEnum>                 → use SomeEnum
+        Type? effectiveEnumType = null;
+        if (innerType.IsEnum)
+        {
+            effectiveEnumType = innerType;
+        }
+        else
+        {
+            // Check innerType itself and every interface it carries.
+            var candidates = innerType.IsInterface
+                ? new[] { innerType }.Concat(innerType.GetInterfaces())
+                : (IEnumerable<Type>)innerType.GetInterfaces();
+            foreach (var iface in candidates)
+            {
+                if (iface.IsGenericType
+                    && iface.GetGenericTypeDefinition() == typeof(IFunction<>))
+                {
+                    var arg = iface.GetGenericArguments()[0];
+                    if (arg.IsEnum) { effectiveEnumType = arg; break; }
+                }
+            }
+        }
+
+        // effectiveInnerType drives enum detection and basic validation.
+        var effectiveInnerType = effectiveEnumType ?? innerType;
+
         var innerTypeName      = FriendlyTypeNameConverter.GetFriendlyName(innerType);
         var currentValue       = node.ParameterValue?.Representation ?? string.Empty;
         var isCurrentlyScripted =
             nodeType.IsGenericType &&
             nodeType.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
 
-        // Basic validator: use ArbitraryParameterParser
+        // Basic validator: validate against the effective type (enum sub-type when applicable).
         string? BasicValidator(string v)
         {
             string? err = null;
-            return ArbitraryParameterParser.Check(innerType, v, ref err) ? null : (err ?? $"'{v}' is not valid for type {innerTypeName}.");
+            return ArbitraryParameterParser.Check(effectiveInnerType, v, ref err) ? null : (err ?? $"'{v}' is not valid for type {innerTypeName}.");
         }
 
         // Scripted validator: accept any non-empty text; the session will catch compile errors.
@@ -1524,7 +1742,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             currentValue:       currentValue,
             isCurrentlyScripted: isCurrentlyScripted,
             basicValidator:     BasicValidator,
-            scriptedValidator:  ScriptedValidator);
+            scriptedValidator:  ScriptedValidator,
+            innerType:          effectiveInnerType);
 
         await dialog.ShowDialog(ParentWindow);
 
@@ -1639,7 +1858,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (nvm is not null)
         {
             SelectElement(nvm);
-            ScrollToNodeRequested?.Invoke(nvm);
+            ScrollToElementRequested?.Invoke(nvm);
         }
     }
 
@@ -1858,10 +2077,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var offset = FunctionInstances.Count * 40;
         var location = new Rectangle(80f + offset % 800, 80f + (offset / 800) * 100f, 160f, 70f);
 
-        if (!Session.AddFunctionInstance(User, _currentBoundary, selectedTemplate, name, location,
-                out _, out var error))
+        if (!Session.AddFunctionInstanceGenerateParameters(User, _currentBoundary, selectedTemplate, name, location,
+                out _, out var children, out var error))
         {
             await ShowError("Add Function Instance Failed", error);
+        }
+        else
+        {
+            // TODO: We might need to deal with the children here.   
         }
     }
 
@@ -2038,6 +2261,34 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Shows the <see cref="FunctionParameterPickerDialog"/>, then adds the new
+    /// <see cref="FunctionParameter"/> at the given canvas position.
+    /// Only valid while inside a function template.
+    /// </summary>
+    public async Task AddFunctionParameterDirectAsync(double x, double y)
+    {
+        if (ParentWindow is null || _currentFunctionTemplate is null) return;
+
+        // Suggest a unique name: "Param", "Param2", "Param3", …
+        var baseName = "Param";
+        var suggestedName = baseName;
+        int idx = 2;
+        while (_currentFunctionTemplate.UnderlyingTemplate.FunctionParameters
+                   .Any(fp => string.Equals(fp.Name, suggestedName, StringComparison.OrdinalIgnoreCase)))
+            suggestedName = $"{baseName}{idx++}";
+
+        var dialog = new FunctionParameterPickerDialog(
+            defaultName: suggestedName,
+            allAvailableTypes: Session.AllAvailableTypes);
+        await dialog.ShowDialog(ParentWindow);
+
+        if (dialog.WasCancelled || dialog.SelectedType is null) return;
+
+        var location = new Rectangle((float)x, (float)y, 250f, 50f);
+        await AddFunctionParameterAsync(dialog.ParameterName, dialog.SelectedType, location);
+    }
+
+    /// <summary>
     /// Creates a <see cref="FunctionParameter"/> whose type matches <paramref name="hook"/>'s
     /// element type, places it at (<paramref name="x"/>, <paramref name="y"/>) on the canvas,
     /// and immediately creates a link from <paramref name="nodeVm"/> via <paramref name="hook"/>
@@ -2061,7 +2312,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                    .Any(fp => string.Equals(fp.Name, name, StringComparison.OrdinalIgnoreCase)))
             name = $"{baseName}{idx++}";
 
-        var location = new Rectangle((float)x, (float)y, 180f, 40f);
+        var location = new Rectangle((float)x, (float)y, 250f, 50f);
 
         if (!Session.AddFunctionParameter(
                 User, _currentFunctionTemplate.UnderlyingTemplate,
@@ -2453,7 +2704,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // After a possible boundary switch, Nodes has been rebuilt — look up the fresh VM.
         var nodeVm = Nodes.FirstOrDefault(n => n.UnderlyingNode == node);
         if (nodeVm is not null)
-            ScrollToNodeRequested?.Invoke(nodeVm);
+            ScrollToElementRequested?.Invoke(nodeVm);
     }
 
     /// <summary>Move a MultiLink destination from one index to another (called from code-behind).</summary>
@@ -2480,9 +2731,33 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         if (dlg.WasCancelled) return;
 
-        // Apply the permutation returned by the dialog.
-        // FinalOrderIndices[i] = which original index should be at position i.
-        ApplyLinkDestinationPermutation(ml, dlg.FinalOrderIndices);
+        var finalOrder    = dlg.FinalOrderIndices;
+        int originalCount = names.Count;
+
+        // 1. Remove destinations that were deleted in the dialog.
+        //    Iterate original indices from highest to lowest so that removals
+        //    do not shift the positions of items still to be removed.
+        var finalOrderSet = new HashSet<int>(finalOrder);
+        for (int origIdx = originalCount - 1; origIdx >= 0; origIdx--)
+        {
+            if (finalOrderSet.Contains(origIdx)) continue;
+            if (!Session.RemoveLinkDestination(User, ml, origIdx, out var removeError) && removeError is not null)
+            {
+                _ = ShowError("Remove Failed", removeError);
+                return;
+            }
+        }
+
+        // 2. Apply the permutation on the surviving items.
+        //    Remap each original index to its post-removal position
+        //    (surviving items retain their relative order).
+        var surviving     = finalOrderSet.OrderBy(x => x).ToList();
+        var origToRemapped = new Dictionary<int, int>(surviving.Count);
+        for (int i = 0; i < surviving.Count; i++)
+            origToRemapped[surviving[i]] = i;
+        var remappedOrder = finalOrder.Select(origIdx => origToRemapped[origIdx]).ToList();
+
+        ApplyLinkDestinationPermutation(ml, remappedOrder);
     }
 
     /// <summary>
@@ -2699,14 +2974,16 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         var typePicker = new TypePickerDialog(
             Session.LoadedModuleTypes,
-            prompt: "Select the module type to add:");
+            prompt: "Select the module type to add:",
+            openGenericModuleTypes: Session.OpenGenericModuleTypes,
+            allAvailableTypes: Session.AllAvailableTypes);
         await typePicker.ShowDialog(ParentWindow);
 
         if (typePicker.WasCancelled || typePicker.SelectedType is null) return;
         var selectedType = typePicker.SelectedType;
 
         var location = new Rectangle((float)x, (float)y);
-        Session.AddNodeGenerateParameters(User, _currentBoundary, selectedType.Name, selectedType, location, out var addedNode, out _, out _);
+        Session.AddNodeGenerateParameters(User, _currentBoundary, FriendlyTypeNameConverter.GetFriendlyName(selectedType), selectedType, location, out var addedNode, out _, out _);
 
         // AddNodeGenerateParameters also adds parameter child nodes, each of which triggers
         // OnModulesChanged → SelectElement. Re-select the root module node so it ends up selected.
@@ -2789,11 +3066,361 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         var location = new Rectangle((float)x, (float)y, 160f, 70f);
 
-        if (!Session.AddFunctionInstance(User, _currentBoundary, selectedTemplate, name, location,
-                out _, out var addError))
+        if (!Session.AddFunctionInstanceGenerateParameters(User, _currentBoundary, selectedTemplate, name, location,
+                out _, out var children, out var addError))
         {
             await ShowError("Add Function Instance Failed", addError);
         }
+        else
+        {
+            // TODO: We might need to do something with the children here.
+        }
+    }
+
+    // ── Copy / Paste ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Pastes a batch of previously copied nodes into <see cref="_currentBoundary"/>,
+    /// placing them relative to (<paramref name="anchorX"/>, <paramref name="anchorY"/>)
+    /// in canvas (model) coordinates.
+    /// <para>
+    /// For each entry the method:
+    /// <list type="number">
+    ///   <item>Creates the main node at the offset position.</item>
+    ///   <item>If the node is a parameter node, restores its value.</item>
+    ///   <item>Re-creates any hidden (inlined) child nodes that were attached to
+    ///         parameter hooks and links them back to their hooks.</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    internal async Task PasteNodesAsync(IReadOnlyList<NodePasteEntry> clipboard, double anchorX, double anchorY)
+    {
+        if (clipboard.Count == 0) return;
+
+        // Compute the translation that maps the top-left corner of the original bounding
+        // box onto (anchorX, anchorY) with a small additional offset so duplicate pastes
+        // do not stack exactly on top of each other.
+        const float StackOffset = 24f;
+        float minX = clipboard.Min(e => e.OriginalLocation.X >= 0 ? e.OriginalLocation.X : 0f);
+        float minY = clipboard.Min(e => e.OriginalLocation.Y >= 0 ? e.OriginalLocation.Y : 0f);
+        float dx = (float)anchorX - minX + StackOffset;
+        float dy = (float)anchorY - minY + StackOffset;
+
+        Node? firstPasted = null;
+
+        foreach (var entry in clipboard)
+        {
+            if (entry.Type is null) continue;
+
+            float w = entry.OriginalLocation.Width > 0 ? entry.OriginalLocation.Width : 120f;
+            float h = entry.OriginalLocation.Height > 0 ? entry.OriginalLocation.Height : 50f;
+            var newLoc = new Rectangle(
+                entry.OriginalLocation.X + dx,
+                entry.OriginalLocation.Y + dy,
+                w, h);
+
+            if (!Session.AddNode(User, _currentBoundary, entry.Name, entry.Type, newLoc,
+                    out var newNode, out var addError))
+            {
+                await ShowError("Paste Failed", addError);
+                return;
+            }
+
+            firstPasted ??= newNode;
+
+            // Restore parameter value.
+            if (entry.ParameterValue is not null && newNode is not null)
+            {
+                if (entry.IsScriptedParam)
+                    Session.SetParameterExpression(User, newNode, entry.ParameterValue, out _);
+                else
+                    Session.SetParameterValue(User, newNode, entry.ParameterValue, out _);
+            }
+
+            // Re-create each inlined (hidden) child node and link it to its hook.
+            foreach (var (hookName, child) in entry.InlinedChildren)
+            {
+                if (newNode is null || child.Type is null) continue;
+
+                // Find the hook by name on the newly created node.
+                var hook = newNode.Hooks?.FirstOrDefault(h => h.Name == hookName);
+                if (hook is null) continue;
+
+                if (!Session.AddNode(User, _currentBoundary, child.Name, child.Type,
+                        Rectangle.Hidden, out var childNode, out _))
+                    continue;
+
+                // Restore child parameter value.
+                if (child.ParameterValue is not null && childNode is not null)
+                {
+                    if (child.IsScriptedParam)
+                        Session.SetParameterExpression(User, childNode, child.ParameterValue, out _);
+                    else
+                        Session.SetParameterValue(User, childNode, child.ParameterValue, out _);
+                }
+
+                // Wire hook → child.
+                if (childNode is not null)
+                    Session.AddLink(User, newNode, hook, childNode, out _, out _);
+            }
+        }
+
+        // Select the first pasted node so the user can see where the paste landed.
+        if (firstPasted is not null)
+        {
+            var nvm = Nodes.FirstOrDefault(n => n.UnderlyingNode == firstPasted);
+            if (nvm is not null) SelectElement(nvm);
+        }
+    }
+
+    // ── Universal clipboard paste ─────────────────────────────────────────
+
+    /// <summary>
+    /// Pastes all elements contained in <paramref name="payload"/> into the current boundary,
+    /// translating each element so its top-left corner is placed at
+    /// (<paramref name="anchorX"/>, <paramref name="anchorY"/>) plus a small stack offset.
+    /// <para>Supported element kinds:</para>
+    /// <list type="bullet">
+    ///   <item><see cref="CanvasElementKind.Node"/> — creates a new module node and restores parameter values and inlined children.</item>
+    ///   <item><see cref="CanvasElementKind.CommentBlock"/> — creates a new comment block.</item>
+    ///   <item><see cref="CanvasElementKind.FunctionTemplate"/> — creates an empty function template shell with matching name and function parameters.</item>
+    ///   <item><see cref="CanvasElementKind.FunctionInstance"/> — creates an instance referencing a template with the same name; skipped when no matching template is found.</item>
+    ///   <item><see cref="CanvasElementKind.GhostNode"/> — creates a ghost referencing a node with the same name in the current boundary; skipped across model systems.</item>
+    /// </list>
+    /// </summary>
+    internal async Task PasteElementsAsync(CanvasClipboardPayload payload, double anchorX, double anchorY)
+    {
+        if (payload.Elements.Count == 0) return;
+
+        const float StackOffset = 24f;
+
+        // Compute the translation that maps the bounding-box top-left to (anchorX, anchorY).
+        float minX = payload.Elements.Min(e => e.X >= 0 ? e.X : 0f);
+        float minY = payload.Elements.Min(e => e.Y >= 0 ? e.Y : 0f);
+        float dx = (float)anchorX - minX + StackOffset;
+        float dy = (float)anchorY - minY + StackOffset;
+
+        // The entire paste is a single undoable operation.
+        Session.BeginBatch();
+        try
+        {
+            // Paste FunctionTemplates first so FunctionInstances that reference them can be resolved.
+            foreach (var element in payload.Elements)
+            {
+                if (element.Kind != CanvasElementKind.FunctionTemplate) continue;
+                PasteFunctionTemplate(element, dx, dy);
+            }
+
+            // Pass 1: create all nodes (without linking inlined children yet).
+            var createdNodes = new List<(CanvasElementDto Element, Node Node)>();
+            Node? firstNode = null;
+            foreach (var element in payload.Elements)
+            {
+                switch (element.Kind)
+                {
+                    case CanvasElementKind.Node:
+                        var pastedNode = await PasteNodeBodyAsync(element, dx, dy);
+                        if (pastedNode is not null)
+                        {
+                            firstNode ??= pastedNode;
+                            createdNodes.Add((element, pastedNode));
+                        }
+                        break;
+
+                    case CanvasElementKind.CommentBlock:
+                        PasteCommentBlockEntry(element, dx, dy);
+                        break;
+
+                    case CanvasElementKind.FunctionInstance:
+                        PasteFunctionInstance(element, dx, dy);
+                        break;
+
+                    case CanvasElementKind.GhostNode:
+                        PasteGhostNodeEntry(element, dx, dy);
+                        break;
+
+                    // FunctionTemplate was already handled above.
+                }
+            }
+
+            // Pass 2: now that all nodes exist, restore inlined children and their links.
+            foreach (var (element, node) in createdNodes)
+                PasteNodeInlinedChildren(element, node);
+
+            // Pass 3: restore links between pasted nodes (cross-node links).
+            if (createdNodes.Count > 1)
+            {
+                var nameToNode = createdNodes.ToDictionary(e => e.Element.Name, e => e.Node);
+                foreach (var (element, originNode) in createdNodes)
+                {
+                    foreach (var crossLink in element.CrossLinks ?? [])
+                    {
+                        if (!nameToNode.TryGetValue(crossLink.DestName, out var destNode)) continue;
+                        var hook = originNode.Hooks?.FirstOrDefault(h => h.Name == crossLink.HookName);
+                        if (hook is null) continue;
+                        Session.AddLink(User, originNode, hook, destNode, out _, out _);
+                    }
+                }
+            }
+
+            if (firstNode is not null)
+            {
+                var nvm = Nodes.FirstOrDefault(n => n.UnderlyingNode == firstNode);
+                if (nvm is not null) SelectElement(nvm);
+            }
+        }
+        finally
+        {
+            Session.CommitBatch();
+        }
+    }
+
+    // ── Per-element paste helpers ─────────────────────────────────────────
+
+    /// <summary>
+    /// Creates the node and restores its parameter value, but does NOT yet create
+    /// inlined children or links.  Call <see cref="PasteNodeInlinedChildren"/> in a
+    /// second pass once all top-level nodes have been constructed.
+    /// </summary>
+    private async Task<Node?> PasteNodeBodyAsync(
+        CanvasElementDto element, float dx, float dy)
+    {
+        if (element.TypeName is null) return null;
+        var type = Type.GetType(element.TypeName);
+        if (type is null) return null;
+
+        float w = element.W > 0 ? element.W : 120f;
+        float h = element.H > 0 ? element.H : 50f;
+        var newLoc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+
+        if (!Session.AddNode(User, _currentBoundary, element.Name, type, newLoc,
+                out var newNode, out var addError))
+        {
+            await ShowError("Paste Failed", addError);
+            return null;
+        }
+
+        // Restore parameter value.
+        if (element.ParameterValue is not null && newNode is not null)
+        {
+            if (element.IsScriptedParam)
+                Session.SetParameterExpression(User, newNode, element.ParameterValue, out _);
+            else
+                Session.SetParameterValue(User, newNode, element.ParameterValue, out _);
+        }
+
+        return newNode;
+    }
+
+    /// <summary>
+    /// Second-pass helper: re-creates inlined (hidden) child nodes for <paramref name="newNode"/>
+    /// and wires them to their hooks.  Must be called after all top-level nodes have been
+    /// created by <see cref="PasteNodeBodyAsync"/>.
+    /// </summary>
+    private void PasteNodeInlinedChildren(CanvasElementDto element, Node newNode)
+    {
+        // Re-create inlined (hidden) child nodes.
+        foreach (var inlined in element.InlinedChildren ?? [])
+        {
+            if (inlined.Child.TypeName is null) continue;
+            var childType = Type.GetType(inlined.Child.TypeName);
+            if (childType is null) continue;
+
+            var hook = newNode.Hooks?.FirstOrDefault(h => h.Name == inlined.HookName);
+            if (hook is null) continue;
+
+            if (!Session.AddNode(User, _currentBoundary, inlined.Child.Name, childType,
+                    Rectangle.Hidden, out var childNode, out _))
+                continue;
+
+            if (inlined.Child.ParameterValue is not null && childNode is not null)
+            {
+                if (inlined.Child.IsScriptedParam)
+                    Session.SetParameterExpression(User, childNode, inlined.Child.ParameterValue, out _);
+                else
+                    Session.SetParameterValue(User, childNode, inlined.Child.ParameterValue, out _);
+            }
+
+            if (childNode is not null)
+                Session.AddLink(User, newNode, hook, childNode, out _, out _);
+        }
+    }
+
+    private void PasteCommentBlockEntry(CanvasElementDto element, float dx, float dy)
+    {
+        float w = element.W > 0 ? element.W : (float)CommentBlockViewModel.DefaultWidth;
+        float h = element.H > 0 ? element.H : (float)CommentBlockViewModel.DefaultHeight;
+        var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+        // Name on CommentBlock stores the comment text.
+        Session.AddCommentBlock(User, _currentBoundary, element.Name, loc, out _, out _);
+    }
+
+    private void PasteFunctionTemplate(CanvasElementDto element, float dx, float dy)
+    {
+        // Generate a unique name to avoid collision in the target boundary.
+        string name = element.Name;
+        int suffix = 2;
+        while (FunctionTemplates.Any(ft => string.Equals(ft.Name, name, StringComparison.OrdinalIgnoreCase)))
+            name = $"{element.Name} ({suffix++})";
+
+        float w = element.W > 0 ? element.W : 220f;
+        float h = element.H > 0 ? element.H : 140f;
+        var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+
+        if (!Session.AddFunctionTemplate(User, _currentBoundary, name, out var ft, out _))
+            return;
+
+        Session.SetFunctionTemplateLocation(User, ft!, loc, out _);
+
+        // Re-create function parameters where the CLR type can be resolved.
+        foreach (var fp in element.FunctionParameters ?? [])
+        {
+            if (fp.TypeName is null) continue;
+            var fpType = Type.GetType(fp.TypeName);
+            if (fpType is null) continue;
+            Session.AddFunctionParameter(User, ft!, fp.Name, fpType, Rectangle.Hidden, out _, out _);
+        }
+    }
+
+    private void PasteFunctionInstance(CanvasElementDto element, float dx, float dy)
+    {
+        if (element.TemplateName is null) return;
+
+        // Find an accessible function template by that name.
+        var candidates = new System.Collections.Generic.List<XTMF2.ModelSystemConstruct.FunctionTemplate>();
+        _currentBoundary.CollectAccessibleFunctionTemplates(candidates);
+        var template = candidates.FirstOrDefault(ft =>
+            string.Equals(ft.Name, element.TemplateName, StringComparison.OrdinalIgnoreCase));
+        if (template is null) return;
+
+        // Generate a unique name if needed.
+        string name = element.Name;
+        int suffix = 2;
+        while (FunctionInstances.Any(fi => string.Equals(fi.Name, name, StringComparison.OrdinalIgnoreCase)))
+            name = $"{element.Name} ({suffix++})";
+
+        float w = element.W > 0 ? element.W : 160f;
+        float h = element.H > 0 ? element.H : 70f;
+        var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+
+        Session.AddFunctionInstance(User, _currentBoundary, template, name, loc, out _, out _);
+    }
+
+    private void PasteGhostNodeEntry(CanvasElementDto element, float dx, float dy)
+    {
+        if (element.ReferencedNodeName is null) return;
+
+        // Try to find the referenced real node by name in the current boundary's visible nodes.
+        var referencedNvm = Nodes.FirstOrDefault(n =>
+            string.Equals(n.Name, element.ReferencedNodeName, StringComparison.OrdinalIgnoreCase)
+            && !n.IsInlined);
+        if (referencedNvm is null) return;
+
+        float w = element.W > 0 ? element.W : 120f;
+        float h = element.H > 0 ? element.H : 50f;
+        var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+
+        Session.AddGhostNode(User, _currentBoundary, referencedNvm.UnderlyingNode, loc, out _, out _);
     }
 
     // ── IDisposable ───────────────────────────────────────────────────────

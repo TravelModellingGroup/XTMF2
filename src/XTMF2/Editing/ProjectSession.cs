@@ -138,6 +138,17 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Get a reference to the type repository available from the XTMF runtime.
+        /// This repository contains ALL exported types from all loaded assemblies,
+        /// not just those that implement IModule.
+        /// </summary>
+        /// <returns>The type repository</returns>
+        internal Repository.TypeRepository GetTypeRepository()
+        {
+            return _runtime.Types;
+        }
+
+        /// <summary>
         /// Create a project session allowing for the interaction with
         /// and editing of a project.
         /// </summary>

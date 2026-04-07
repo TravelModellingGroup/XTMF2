@@ -27,7 +27,7 @@ namespace XTMF2.RuntimeModules
 {
     [Module(Name = "Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
 Description = "Provides functionality for synchronizing the writing of events to a log and providing time stamps.")]
-    public sealed class Log : BaseAction<string>, IDisposable
+    public sealed class Log : BaseAction<string>, IFunction<Log>, IDisposable
     {
         [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.", Index = 0)]
         public IFunction<WriteStream>? LogStream;
@@ -63,6 +63,11 @@ Description = "Provides functionality for synchronizing the writing of events to
                     _writer.Flush();
                 }
             }
+        }
+
+        Log IFunction<Log>.Invoke()
+        {
+            return this;
         }
 
         private static string TimeStampMessage(string message)

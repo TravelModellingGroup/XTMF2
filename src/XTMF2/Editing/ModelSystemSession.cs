@@ -19,9 +19,11 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.ComponentModel;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.ModelSystemConstruct.Parameters;
 using XTMF2.Repository;
 
 namespace XTMF2.Editing
@@ -48,6 +50,20 @@ namespace XTMF2.Editing
         public Project Project => _session.Project;
 
         private readonly CommandBuffer Buffer = new CommandBuffer();
+
+        /// <summary>
+        /// Starts collecting all subsequent undoable operations into a single batch entry
+        /// so that the entire group can be undone with one Ctrl+Z.
+        /// Must always be paired with <see cref="CommitBatch"/>.
+        /// </summary>
+        public void BeginBatch() => Buffer.BeginAggregateBatch();
+
+        /// <summary>
+        /// Closes the active aggregate batch and pushes it as one undoable entry.
+        /// All operations recorded since the matching <see cref="BeginBatch"/> call
+        /// will be reversed together by a single undo.
+        /// </summary>
+        public void CommitBatch() => Buffer.CommitAggregateBatch();
 
         public ModelSystemSession(ProjectSession session, ModelSystem modelSystem)
         {
@@ -87,6 +103,15 @@ namespace XTMF2.Editing
         /// </summary>
         public System.Collections.Generic.IReadOnlyList<Type> OpenGenericModuleTypes
             => GetModuleRepository().OpenGenericModuleTypes;
+
+        /// <summary>
+        /// All types exported from every assembly loaded into this runtime, including
+        /// non-IModule types.  Use this as the candidate pool when the user needs to pick
+        /// a context type for <c>IAction&lt;Context&gt;</c> or
+        /// <c>IFunction&lt;Context, ReturnType&gt;</c>.
+        /// </summary>
+        public System.Collections.ObjectModel.ReadOnlyObservableCollection<Type> AllAvailableTypes
+            => _session.GetTypeRepository().Store;
 
         /// <summary>
         /// Returns every module type that is compatible with <paramref name="hookType"/>:
@@ -766,11 +791,22 @@ namespace XTMF2.Editing
                 var genericParameters = type.GetGenericArguments();
                 if (genericParameters.Length == 1)
                 {
-                    var functionType = typeof(RuntimeModules.BasicParameter<>).MakeGenericType(genericParameters[0]);
-                    if (type.IsAssignableFrom(functionType))
+                    var funcType     = typeof(RuntimeModules.BasicParameter<>).MakeGenericType(genericParameters[0]);
+                    var setableType  = typeof(RuntimeModules.SetableParameter<>).MakeGenericType(genericParameters[0]);
+
+                    // Use SetableParameter when BasicParameter cannot satisfy the hook
+                    // (e.g. the hook requires ISetableValue<T>) but SetableParameter can.
+                    // Otherwise fall back to BasicParameter for plain IFunction<T> hooks.
+                    Type? selectedType = null;
+                    if (!type.IsAssignableFrom(funcType) && type.IsAssignableFrom(setableType))
+                        selectedType = setableType;
+                    else if (type.IsAssignableFrom(funcType))
+                        selectedType = funcType;
+
+                    if (selectedType is not null)
                     {
-                        var child = Node.Create(this.GetModuleRepository(), hook.Name, functionType, boundary, Rectangle.Hidden);
-                        
+                        var child = Node.Create(this.GetModuleRepository(), hook.Name, selectedType, boundary, Rectangle.Hidden);
+
                         if (child?.SetParameterValue(ParameterExpression.CreateParameter(hook.DefaultValue!, genericParameters[0]), out var error) == true)
                         {
                             nodes.Add(child);
@@ -1282,7 +1318,9 @@ namespace XTMF2.Editing
                     {
                         var destNode = singleLink.Destination!;
                         var destType = destNode.Type;
-                        if (destType != null && destType.IsGenericType && destType.GetGenericTypeDefinition() == typeof(RuntimeModules.BasicParameter<>))
+                        if (destType != null && destType.IsGenericType &&
+                            (destType.GetGenericTypeDefinition() == typeof(RuntimeModules.BasicParameter<>) ||
+                             destType.GetGenericTypeDefinition() == typeof(RuntimeModules.SetableParameter<>)))
                         {
                             // check to see if this would be the only link referencing it.
                             List<Link> linksGoingTo = GetLinksGoingTo(destNode);
@@ -1380,19 +1418,173 @@ namespace XTMF2.Editing
                 }
 
                 var oldName = node.Name;
+                // Collect affected scripted parameters BEFORE the rename so we know the old name.
+                var affected = CollectScriptedParamsReferencingVariable(node, oldName);
+                var savedOldExprs = affected.Select(n => n.ParameterValue).ToList();
+
                 if (node.SetName(name, out error))
                 {
+                    // Recompile every affected scripted parameter with the updated expression text.
+                    var savedNewExprs = new List<ParameterExpression?>(affected.Count);
+                    foreach (var paramNode in affected)
+                    {
+                        var oldText = paramNode.ParameterValue!.Representation;
+                        var newText = ReplaceVariableNameInExpression(oldText, oldName, name);
+                        var localVars = paramNode.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+                        IList<Node> allVars = localVars is { Count: > 0 }
+                            ? localVars.Concat(ModelSystem.Variables).ToList()
+                            : (IList<Node>)ModelSystem.Variables;
+                        paramNode.SetParameterExpression(allVars, newText, out _);
+                        savedNewExprs.Add(paramNode.ParameterValue);
+                    }
+
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (node.SetName(oldName, out var e), e);
+                        node.SetName(oldName, out _);
+                        for (int i = 0; i < affected.Count; i++)
+                            affected[i].SetParameterValue(savedOldExprs[i], out _);
+                        return (true, null);
                     }, () =>
                     {
-                        return (node.SetName(name, out var e), e);
+                        node.SetName(name, out _);
+                        for (int i = 0; i < affected.Count; i++)
+                            affected[i].SetParameterValue(savedNewExprs[i], out _);
+                        return (true, null);
                     }));
                     return true;
                 }
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Returns all nodes whose <see cref="ParameterExpression"/> is a
+        /// <see cref="ScriptedParameter"/> that textually references <paramref name="oldName"/>
+        /// as a variable token, scoped to the visibility of <paramref name="variableNode"/>:
+        /// the entire model system for global model-system variables, or only the owning
+        /// <see cref="FunctionTemplate"/>'s internal boundary for local variables.
+        /// </summary>
+        private List<Node> CollectScriptedParamsReferencingVariable(Node variableNode, string oldName)
+        {
+            bool isGlobalVar = ModelSystem.Variables.Contains(variableNode);
+            FunctionTemplate? ownerTemplate = null;
+
+            if (!isGlobalVar)
+            {
+                // Check whether the node is a local variable of any FunctionTemplate.
+                var stack = new Stack<Boundary>();
+                stack.Push(ModelSystem.GlobalBoundary);
+                while (stack.Count > 0 && ownerTemplate is null)
+                {
+                    var current = stack.Pop();
+                    foreach (var child in current.Boundaries) stack.Push(child);
+                    foreach (var ft in current.FunctionTemplates)
+                    {
+                        if (ft.LocalVariables.Contains(variableNode))
+                        {
+                            ownerTemplate = ft;
+                            break;
+                        }
+                        stack.Push(ft.InternalModules);
+                    }
+                }
+            }
+
+            // If the node is neither a global variable nor a local variable, nothing to update.
+            if (!isGlobalVar && ownerTemplate is null)
+                return [];
+
+            var result = new List<Node>();
+            var searchRoot = ownerTemplate is null
+                ? ModelSystem.GlobalBoundary
+                : ownerTemplate.InternalModules;
+
+            // For global variable renaming we skip any FunctionTemplate whose LocalVariables
+            // already contain a node with the same old name (shadowing the global).
+            CollectScriptedParamsInBoundary(
+                searchRoot, oldName, variableNode, isGlobalVar, result);
+            return result;
+        }
+
+        /// <summary>
+        /// Recursively collects nodes with scripted parameters that reference
+        /// <paramref name="oldName"/> as a token inside <paramref name="boundary"/>.
+        /// When <paramref name="guardShadowing"/> is <see langword="true"/> (global-variable
+        /// rename), FunctionTemplate sub-trees whose LocalVariables shadow <paramref name="oldName"/>
+        /// are skipped.
+        /// </summary>
+        private static void CollectScriptedParamsInBoundary(
+            Boundary boundary,
+            string oldName,
+            Node variableNode,
+            bool guardShadowing,
+            List<Node> result)
+        {
+            foreach (var node in boundary.Modules)
+            {
+                if (node.ParameterValue is ScriptedParameter sp
+                    && ContainsVariableToken(sp.Representation, oldName))
+                {
+                    result.Add(node);
+                }
+            }
+
+            foreach (var child in boundary.Boundaries)
+                CollectScriptedParamsInBoundary(child, oldName, variableNode, guardShadowing, result);
+
+            foreach (var ft in boundary.FunctionTemplates)
+            {
+                // If this is a global-variable rename and the template already has a local
+                // variable named oldName (that is NOT the node being renamed), the local
+                // variable shadows the global one inside this template — skip it.
+                if (guardShadowing
+                    && ft.LocalVariables.Any(lv => lv.Name == oldName && !ReferenceEquals(lv, variableNode)))
+                {
+                    continue;
+                }
+                CollectScriptedParamsInBoundary(ft.InternalModules, oldName, variableNode, guardShadowing, result);
+            }
+        }
+
+        /// <summary>
+        /// Returns <see langword="true"/> when <paramref name="expression"/> contains
+        /// <paramref name="name"/> as a complete variable token (not a substring of a
+        /// larger token and not inside a quoted string literal).
+        /// </summary>
+        private static bool ContainsVariableToken(string expression, string name)
+            => !string.IsNullOrEmpty(name)
+            && Regex.IsMatch(expression,
+                BuildVariableTokenPattern(Regex.Escape(name.Trim())));
+
+        /// <summary>
+        /// Replaces all occurrences of <paramref name="oldName"/> as a complete variable
+        /// token in <paramref name="expression"/> with <paramref name="newName"/>,
+        /// preserving surrounding whitespace.
+        /// </summary>
+        internal static string ReplaceVariableNameInExpression(
+            string expression, string oldName, string newName)
+        {
+            if (string.IsNullOrEmpty(expression) || string.IsNullOrEmpty(oldName))
+                return expression;
+            var pattern = BuildVariableTokenPattern(Regex.Escape(oldName.Trim()));
+            return Regex.Replace(expression, pattern,
+                m => m.Groups[1].Value + newName + m.Groups[2].Value);
+        }
+
+        /// <summary>
+        /// Builds a regex pattern that matches the escaped variable name <paramref name="escapedName"/>
+        /// (capturing surrounding optional whitespace in groups 1 and 2) only when it
+        /// appears as a whole token — bounded by a special character, whitespace,
+        /// or a string boundary on each side.
+        /// Special characters are the same set as <c>ParameterCompiler.IsSpecialCharacter</c>:
+        /// <c>? : &amp; | + - * / ^ &lt; &gt; = ! ( ) "</c>.
+        /// </summary>
+        private static string BuildVariableTokenPattern(string escapedName)
+        {
+            const string delimiters = @"[\s?:&|+\-*/^<>=!()""]";
+            // Group 1: optional leading whitespace after a delimiter or string start.
+            // Group 2: optional trailing whitespace before a delimiter or string end.
+            return $@"(?<=\A|{delimiters})(\s*){escapedName}(\s*)(?=\z|{delimiters})";
         }
 
         public bool SetNodeLocation(User user, Node mss, Rectangle newLocation, [NotNullWhen(false)] out CommandError? error)
@@ -2282,6 +2474,110 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Moves <paramref name="template"/> from <paramref name="sourceBoundary"/> to
+        /// <paramref name="destinationBoundary"/> with full undo/redo support.
+        /// <para>
+        /// The operation fails if any <see cref="FunctionInstance"/> that references this
+        /// template would lose access to it after the move.  Access is lost when the template
+        /// is relocated to a different scope than the instance: specifically when one party is
+        /// inside a <see cref="FunctionTemplate.InternalModules"/> boundary that the other
+        /// cannot reach through the regular <see cref="Boundary.Boundaries"/> hierarchy.
+        /// </para>
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="template">The function template to move.</param>
+        /// <param name="sourceBoundary">The boundary that currently owns <paramref name="template"/>.</param>
+        /// <param name="destinationBoundary">The boundary to move <paramref name="template"/> into.</param>
+        /// <param name="error">An error description when the method returns <c>false</c>.</param>
+        /// <returns><c>true</c> on success; <c>false</c> with a populated <paramref name="error"/> on failure.</returns>
+        public bool MoveFunctionTemplate(User user, FunctionTemplate template,
+            Boundary sourceBoundary, Boundary destinationBoundary,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            ArgumentNullException.ThrowIfNull(sourceBoundary);
+            ArgumentNullException.ThrowIfNull(destinationBoundary);
+            error = null;
+
+            if (sourceBoundary == destinationBoundary)
+            {
+                error = new CommandError("The source and destination boundaries are the same.");
+                return false;
+            }
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                // The template must currently live in sourceBoundary.
+                if (!sourceBoundary.FunctionTemplates.Contains(template))
+                {
+                    error = new CommandError(
+                        $"FunctionTemplate '{template.Name}' does not belong to the specified source boundary.");
+                    return false;
+                }
+
+                // Determine the owning FunctionTemplate scope for the destination boundary.
+                var destScope = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, destinationBoundary);
+
+                // Check every existing FunctionInstance that references this template.
+                var instances = GetAllFunctionInstancesOf(template);
+                foreach (var fi in instances)
+                {
+                    var instScope = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, fi.ContainedWithin);
+                    if (instScope != destScope)
+                    {
+                        string instanceDescription = instScope is null
+                            ? "the global scope"
+                            : $"FunctionTemplate '{instScope.Name}'";
+                        string destDescription = destScope is null
+                            ? "the global scope"
+                            : $"FunctionTemplate '{destScope.Name}'";
+                        error = new CommandError(
+                            $"Cannot move FunctionTemplate '{template.Name}': " +
+                            $"FunctionInstance '{fi.Name}' is in {instanceDescription} and would " +
+                            $"no longer be able to reference the template after it is moved to {destDescription}.");
+                        return false;
+                    }
+                }
+
+                // Perform the move.
+                if (!sourceBoundary.RemoveFunctionTemplate(template, out error))
+                    return false;
+
+                if (!destinationBoundary.AddFunctionTemplate(template, out error))
+                {
+                    // Roll back the removal if the add fails (e.g. name clash).
+                    _ = sourceBoundary.AddFunctionTemplate(template, out _);
+                    return false;
+                }
+                template.SetParent(destinationBoundary);
+
+                Buffer.AddUndo(new Command(() =>
+                {
+                    // Undo: move back to sourceBoundary.
+                    _ = destinationBoundary.RemoveFunctionTemplate(template, out _);
+                    _ = sourceBoundary.AddFunctionTemplate(template, out _);
+                    template.SetParent(sourceBoundary);
+                    return (true, null);
+                }, () =>
+                {
+                    // Redo: move to destinationBoundary again.
+                    _ = sourceBoundary.RemoveFunctionTemplate(template, out _);
+                    _ = destinationBoundary.AddFunctionTemplate(template, out _);
+                    template.SetParent(destinationBoundary);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Designates <paramref name="entryNode"/> as the <see cref="FunctionTemplate.EntryNode"/>
         /// of <paramref name="template"/>, or clears it when <paramref name="entryNode"/> is <c>null</c>.
         /// <para>
@@ -2530,8 +2826,120 @@ namespace XTMF2.Editing
             }
         }
 
+        private static readonly HashSet<Type> _simpleFunctionParamTypes = new()
+        {
+            typeof(int), typeof(bool), typeof(string), typeof(float)
+        };
+
+        private static string GetDefaultValueString(Type primitiveType)
+        {
+            if (primitiveType == typeof(bool))   return "false";
+            if (primitiveType == typeof(string)) return "";
+            return "0";
+        }
+
         /// <summary>
-        /// Removes <paramref name="instance"/> from its containing boundary.
+        /// Creates a new <see cref="FunctionInstance"/> and automatically generates a hidden
+        /// <see cref="RuntimeModules.BasicParameter{T}"/> node for each
+        /// <see cref="NodeHook.FunctionParameterHook"/> whose type is <c>IFunction&lt;T&gt;</c>
+        /// where <c>T</c> is one of <see cref="int"/>, <see cref="bool"/>,
+        /// <see cref="string"/>, or <see cref="float"/>.
+        /// </summary>
+        public bool AddFunctionInstanceGenerateParameters(
+            User user, Boundary boundary, FunctionTemplate template,
+            string name, Rectangle location,
+            out FunctionInstance? instance, out List<Node>? children,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+            ArgumentNullException.ThrowIfNull(template);
+
+            children = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    instance = null;
+                    return false;
+                }
+
+                if (!boundary.AddFunctionInstance(name, template, location, out instance, out error))
+                    return false;
+
+                var fi = instance!;
+                var nodes = new List<Node>();
+                var links = new List<Link>();
+
+                foreach (var hook in fi.Hooks.OfType<FunctionParameterHook>())
+                {
+                    var hookType = hook.Type;
+                    if (!hookType.IsGenericType) continue;
+
+                    var args = hookType.GetGenericArguments();
+                    if (args.Length != 1) continue;
+
+                    var argType = args[0];
+                    if (!_simpleFunctionParamTypes.Contains(argType)) continue;
+
+                    var basicParamType = typeof(RuntimeModules.BasicParameter<>).MakeGenericType(argType);
+                    if (!hookType.IsAssignableFrom(basicParamType)) continue;
+
+                    var defaultStr = GetDefaultValueString(argType);
+                    var child = Node.Create(GetModuleRepository(), hook.Name, basicParamType, boundary, Rectangle.Hidden);
+                    if (child?.SetParameterValue(ParameterExpression.CreateParameter(defaultStr, argType), out var _) == true)
+                    {
+                        nodes.Add(child);
+                        links.Add(new SingleLink(fi, hook, child, false));
+                    }
+                }
+
+                children = nodes;
+
+                void Add()
+                {
+                    CommandError? e = null;
+                    foreach (var child in nodes)
+                        boundary.AddNode(child, out e);
+                    foreach (var link in links)
+                        boundary.AddLink(link, out e);
+                }
+
+                void Remove()
+                {
+                    CommandError? e = null;
+                    foreach (var link in links)
+                        boundary.RemoveLink(link, out e);
+                    foreach (var child in nodes)
+                        boundary.RemoveNode(child, out e);
+                }
+
+                Add();
+
+                Buffer.AddUndo(new Command(() =>
+                {
+                    Remove();
+                    return (boundary.RemoveFunctionInstance(fi, out var e), e);
+                }, () =>
+                {
+                    if (boundary.AddFunctionInstance(fi, out var e))
+                    {
+                        Add();
+                        return (true, null);
+                    }
+                    return (false, e);
+                }));
+
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Removes <paramref name="instance"/> from its containing boundary, and cleans up
+        /// all links that reference it (both as origin and as destination) as well as any
+        /// hidden/inlined embedded parameter nodes that were destinations of its outgoing links.
+        /// The operation is fully undo/redo-able.
         /// </summary>
         public bool RemoveFunctionInstance(User user, FunctionInstance instance,
             [NotNullWhen(false)] out CommandError? error)
@@ -2545,16 +2953,255 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
-                var boundary = instance.ContainedWithin;
-                if (!boundary.RemoveFunctionInstance(instance, out error))
+                var boundary = instance.ContainedWithin!;
+
+                // Outgoing links: this FI is the origin (FunctionParameterHook connections to external nodes).
+                var outgoingLinks = boundary.Links.Where(l => l.Origin == instance).ToList();
+
+                // Incoming links: other nodes/starts/FIs have this FI as a destination.
+                var incomingLinks = GetLinksGoingTo(instance);
+                var multiLinkRestoreInfo = BuildMultiLinkRestoreInfo(incomingLinks, instance);
+
+                // Hidden/inlined embedded parameter nodes: destinations of outgoing links whose
+                // location is Rectangle.Hidden and that live in the same boundary.
+                var hiddenNodes = outgoingLinks
+                    .SelectMany<Link, Node>(l =>
+                        l is SingleLink sl && sl.Destination is not null ? new[] { sl.Destination }
+                        : l is MultiLink ml ? ml.Destinations.ToArray()
+                        : Array.Empty<Node>())
+                    .Where(n => n.Location.Equals(Rectangle.Hidden) && ReferenceEquals(n.ContainedWithin, boundary))
+                    .Distinct()
+                    .ToList();
+
+                // For each hidden node, capture any OTHER incoming links plus its ghost cascade.
+                var hiddenCascadeData = hiddenNodes
+                    .Select(hn =>
+                    {
+                        var hnLinks     = GetLinksGoingTo(hn).Where(l => !outgoingLinks.Contains(l)).ToList();
+                        var hnMulti     = BuildMultiLinkRestoreInfo(hnLinks, hn);
+                        var hnGhosts    = GetAllGhostNodesOf(hn);
+                        var hnGhostData = hnGhosts.Select(g =>
+                        {
+                            var gLinks = GetLinksGoingTo(g);
+                            return (Ghost: g, Links: gLinks, MultiInfo: BuildMultiLinkRestoreInfo(gLinks, g));
+                        }).ToList();
+                        return (Node: hn, OtherIncoming: hnLinks, MultiInfo: hnMulti, GhostData: hnGhostData);
+                    })
+                    .ToList();
+
+                void RemoveIncoming()
+                    => RemoveIncomingLinks(incomingLinks, instance, multiLinkRestoreInfo);
+
+                void RestoreIncoming()
+                    => RestoreIncomingLinks(incomingLinks, instance, multiLinkRestoreInfo);
+
+                void RemoveHiddenCascade()
+                {
+                    foreach (var (hn, hnLinks, hnMulti, hnGhostData) in hiddenCascadeData)
+                    {
+                        foreach (var (ghost, gLinks, gMulti) in hnGhostData)
+                        {
+                            RemoveIncomingLinks(gLinks, ghost, gMulti);
+                            ghost.ContainedWithin!.RemoveGhostNode(ghost, out _);
+                        }
+                        RemoveIncomingLinks(hnLinks, hn, hnMulti);
+                        boundary.RemoveNode(hn, out _);
+                    }
+                }
+
+                void RestoreHiddenCascade()
+                {
+                    foreach (var (hn, hnLinks, hnMulti, hnGhostData) in hiddenCascadeData)
+                    {
+                        boundary.AddNode(hn, out _);
+                        RestoreIncomingLinks(hnLinks, hn, hnMulti);
+                        foreach (var (ghost, gLinks, gMulti) in hnGhostData)
+                        {
+                            ghost.ContainedWithin!.AddGhostNode(ghost, out _);
+                            RestoreIncomingLinks(gLinks, ghost, gMulti);
+                        }
+                    }
+                }
+
+                // Remove incoming links, then outgoing links, then hidden embedded nodes.
+                RemoveIncoming();
+                foreach (var link in outgoingLinks)
+                    boundary.RemoveLink(link, out _);
+                RemoveHiddenCascade();
+
+                if (boundary.RemoveFunctionInstance(instance, out error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        // Undo: restore the FI first, then hidden nodes, then outgoing links, then incoming.
+                        if (boundary.AddFunctionInstance(instance, out var e))
+                        {
+                            RestoreHiddenCascade();
+                            foreach (var link in outgoingLinks)
+                                boundary.AddLink(link, out _);
+                            RestoreIncoming();
+                            return (true, null);
+                        }
+                        return (false, e);
+                    }, () =>
+                    {
+                        // Redo: repeat the original removal sequence.
+                        RemoveIncoming();
+                        foreach (var link in outgoingLinks)
+                            boundary.RemoveLink(link, out _);
+                        RemoveHiddenCascade();
+                        return (boundary.RemoveFunctionInstance(instance, out var e), e);
+                    }));
+                    return true;
+                }
+                else
+                {
+                    // FI removal failed; roll back all link removals.
+                    RestoreHiddenCascade();
+                    foreach (var link in outgoingLinks)
+                        boundary.AddLink(link, out _);
+                    RestoreIncoming();
                     return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Moves <paramref name="instance"/> from its current boundary to
+        /// <paramref name="targetBoundary"/> with full undo/redo support.
+        /// Outgoing <see cref="FunctionParameterHook"/> links and any inlined hidden
+        /// parameter nodes travel with the instance.
+        /// The operation fails when the destination boundary is in a different
+        /// <see cref="FunctionTemplate"/> scope from the template's parent boundary.
+        /// </summary>
+        public bool MoveFunctionInstanceToBoundary(User user, FunctionInstance instance,
+            Boundary targetBoundary, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(instance);
+            ArgumentNullException.ThrowIfNull(targetBoundary);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var oldBoundary = instance.ContainedWithin!;
+                if (ReferenceEquals(oldBoundary, targetBoundary)) { error = null; return true; }
+
+                // The destination must be in the same scope as the template.
+                var destScope = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, targetBoundary);
+                var tmplScope = FindOwningFunctionTemplate(ModelSystem.GlobalBoundary, instance.Template.Parent);
+                if (!ReferenceEquals(destScope, tmplScope))
+                {
+                    string destDescription = destScope is null
+                        ? "the global scope"
+                        : $"FunctionTemplate '{destScope.Name}'";
+                    string tmplDescription = tmplScope is null
+                        ? "the global scope"
+                        : $"FunctionTemplate '{tmplScope.Name}'";
+                    error = new CommandError(
+                        $"Cannot move FunctionInstance '{instance.Name}': " +
+                        $"the destination is in {destDescription} but the template " +
+                        $"'{instance.Template.Name}' lives in {tmplDescription}.");
+                    return false;
+                }
+
+                // Outgoing links: the FI is the origin (FunctionParameterHook connections).
+                // These are stored in the FI's boundary and must travel with it.
+                var outgoingLinks = oldBoundary.Links.Where(l => l.Origin == instance).ToList();
+
+                // Hidden inlined parameter nodes that are destinations of outgoing links.
+                var hiddenNodes = outgoingLinks
+                    .SelectMany<Link, Node>(l =>
+                        l is SingleLink sl && sl.Destination is not null ? new[] { sl.Destination }
+                        : l is MultiLink ml ? ml.Destinations.ToArray()
+                        : Array.Empty<Node>())
+                    .Where(n => n.Location.Equals(Rectangle.Hidden)
+                             && ReferenceEquals(n.ContainedWithin, oldBoundary))
+                    .Distinct()
+                    .ToList();
+
+                // Remove from old boundary.
+                foreach (var link in outgoingLinks)
+                    oldBoundary.RemoveLink(link, out _);
+                foreach (var hidden in hiddenNodes)
+                    oldBoundary.RemoveNode(hidden, out _);
+
+                if (!oldBoundary.RemoveFunctionInstance(instance, out error))
+                {
+                    // Roll back.
+                    foreach (var hidden in hiddenNodes)
+                        oldBoundary.AddNode(hidden, out _);
+                    foreach (var link in outgoingLinks)
+                        oldBoundary.AddLink(link, out _);
+                    return false;
+                }
+
+                // Update ContainedWithin and add to new boundary.
+                instance.UpdateContainedWithin(targetBoundary);
+                foreach (var hidden in hiddenNodes)
+                    hidden.UpdateContainedWithin(targetBoundary);
+
+                if (!targetBoundary.AddFunctionInstance(instance, out error))
+                {
+                    // Roll back.
+                    instance.UpdateContainedWithin(oldBoundary);
+                    foreach (var hidden in hiddenNodes)
+                        hidden.UpdateContainedWithin(oldBoundary);
+                    oldBoundary.AddFunctionInstance(instance, out _);
+                    foreach (var hidden in hiddenNodes)
+                        oldBoundary.AddNode(hidden, out _);
+                    foreach (var link in outgoingLinks)
+                        oldBoundary.AddLink(link, out _);
+                    return false;
+                }
+
+                foreach (var hidden in hiddenNodes)
+                    targetBoundary.AddNode(hidden, out _);
+                foreach (var link in outgoingLinks)
+                    targetBoundary.AddLink(link, out _);
+
                 Buffer.AddUndo(new Command(() =>
                 {
-                    return (boundary.AddFunctionInstance(instance, out var e), e);
+                    // Undo: move back to oldBoundary.
+                    foreach (var link in outgoingLinks) targetBoundary.RemoveLink(link, out _);
+                    foreach (var hidden in hiddenNodes)
+                    {
+                        targetBoundary.RemoveNode(hidden, out _);
+                        hidden.UpdateContainedWithin(oldBoundary);
+                    }
+                    targetBoundary.RemoveFunctionInstance(instance, out _);
+                    instance.UpdateContainedWithin(oldBoundary);
+                    oldBoundary.AddFunctionInstance(instance, out _);
+                    foreach (var hidden in hiddenNodes)
+                        oldBoundary.AddNode(hidden, out _);
+                    foreach (var link in outgoingLinks)
+                        oldBoundary.AddLink(link, out _);
+                    return (true, null);
                 }, () =>
                 {
-                    return (boundary.RemoveFunctionInstance(instance, out var e), e);
+                    // Redo: move to targetBoundary again.
+                    foreach (var link in outgoingLinks) oldBoundary.RemoveLink(link, out _);
+                    foreach (var hidden in hiddenNodes)
+                    {
+                        oldBoundary.RemoveNode(hidden, out _);
+                        hidden.UpdateContainedWithin(targetBoundary);
+                    }
+                    oldBoundary.RemoveFunctionInstance(instance, out _);
+                    instance.UpdateContainedWithin(targetBoundary);
+                    targetBoundary.AddFunctionInstance(instance, out _);
+                    foreach (var hidden in hiddenNodes)
+                        targetBoundary.AddNode(hidden, out _);
+                    foreach (var link in outgoingLinks)
+                        targetBoundary.AddLink(link, out _);
+                    return (true, null);
                 }));
+
+                error = null;
                 return true;
             }
         }

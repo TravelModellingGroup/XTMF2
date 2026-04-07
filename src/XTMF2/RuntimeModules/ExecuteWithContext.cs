@@ -38,3 +38,19 @@ public sealed class ExecuteWithContext<Context> : BaseAction
         }
     }
 }
+
+[Module(Name = "Execute With Forwarded Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    Description = "Provides a way to execute a series of actions using a context provided to it.")]
+public sealed class ExecuteWithForwardedContext<Context> : BaseAction<Context>
+{
+    [SubModule(Required = true, Name = "To Execute", Description = "The actions to execute with the context.", Index = 0)]
+    public IAction<Context>[] ToInvoke = null!;
+
+    override public void Invoke(Context context)
+    {
+        foreach (var action in ToInvoke!)
+        {
+            action.Invoke(context);
+        }
+    }
+}

@@ -231,8 +231,21 @@ namespace XTMF2.ModelSystemConstruct
 
         /// <summary>
         /// The boundary that this function template belongs to.
+        /// Updated by <see cref="Editing.ModelSystemSession.MoveFunctionTemplate"/> when the
+        /// template is relocated to a different boundary.
         /// </summary>
-        public Boundary Parent { get; }
+        public Boundary Parent { get; private set; }
+
+        /// <summary>
+        /// Updates <see cref="Parent"/> when the template is moved between boundaries.
+        /// Called only by <see cref="Editing.ModelSystemSession"/> so that the change
+        /// participates in undo/redo.
+        /// </summary>
+        internal void SetParent(Boundary newParent)
+        {
+            Parent = newParent;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Parent)));
+        }
 
         /// <summary>
         /// Construct a new function template

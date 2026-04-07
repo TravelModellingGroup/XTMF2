@@ -69,7 +69,7 @@
                 </ListBox>
             </Border>
 
-            <!-- Move buttons -->
+            <!-- Move / Remove buttons -->
             <StackPanel Grid.Column="1"
                         Spacing="8"
                         Margin="10,0,0,0"
@@ -84,6 +84,13 @@
                         MinWidth="84"
                         Padding="10,6"
                         IsEnabled="{Binding CanMoveDown}"/>
+                <Separator Margin="0,4"/>
+                <Button Content="✕  Remove"
+                        Classes="dlg-danger"
+                        Click="Remove_Click"
+                        MinWidth="84"
+                        Padding="10,6"
+                        IsEnabled="{Binding CanRemove}"/>
             </StackPanel>
 
         </Grid>

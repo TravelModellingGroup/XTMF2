@@ -114,7 +114,7 @@ public partial class ModelSystemEditorView : UserControl
         if (_vm is not null)
         {
             _vm.PropertyChanged -= OnVmPropertyChanged;
-            _vm.ScrollToNodeRequested -= OnScrollToNodeRequested;
+            _vm.ScrollToElementRequested -= OnScrollToElementRequested;
         }
 
         _vm = DataContext as ModelSystemEditorViewModel;
@@ -123,15 +123,15 @@ public partial class ModelSystemEditorView : UserControl
         {
             _vm.ParentWindow = TopLevel.GetTopLevel(this) as Window;
             _vm.PropertyChanged += OnVmPropertyChanged;
-            _vm.ScrollToNodeRequested += OnScrollToNodeRequested;
+            _vm.ScrollToElementRequested += OnScrollToElementRequested;
         }
     }
 
-    private void OnScrollToNodeRequested(NodeViewModel node)
+    private void OnScrollToElementRequested(ICanvasElement element)
     {
         var viewport = CanvasScrollViewer.Viewport;
-        var offsetX = node.X + node.Width / 2.0 - viewport.Width / 2.0;
-        var offsetY = node.Y + node.Height / 2.0 - viewport.Height / 2.0;
+        var offsetX = element.X + element.Width / 2.0 - viewport.Width / 2.0;
+        var offsetY = element.Y + element.Height / 2.0 - viewport.Height / 2.0;
         CanvasScrollViewer.Offset = new Vector(
             Math.Max(0, offsetX),
             Math.Max(0, offsetY));
@@ -147,23 +147,23 @@ public partial class ModelSystemEditorView : UserControl
     private void OnNodeSearchBoxDropDownClosed(object? sender, EventArgs e)
     {
         if (_suppressNextDropDownClose) { _suppressNextDropDownClose = false; return; }
-        if (NodeSearchBox.SelectedItem is NodeViewModel nvm && _vm is not null)
-            _vm.NodeSearchSelection = nvm;
+        if (NodeSearchBox.SelectedItem is ICanvasElement element && _vm is not null)
+            _vm.CanvasSearchSelection = element;
     }
 
     private void OnNodeSearchBoxKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter || _vm is null) return;
 
-        var nodeVm = NodeSearchBox.SelectedItem as NodeViewModel
-                     ?? _vm.Nodes.FirstOrDefault(n =>
-                            n.Name.Contains(NodeSearchBox.Text ?? string.Empty,
-                                            StringComparison.OrdinalIgnoreCase));
+        var element = NodeSearchBox.SelectedItem as ICanvasElement
+                      ?? _vm.SearchItems.FirstOrDefault(n =>
+                             n.Name.Contains(NodeSearchBox.Text ?? string.Empty,
+                                             StringComparison.OrdinalIgnoreCase));
 
         _suppressNextDropDownClose = true;
 
-        if (nodeVm is not null)
-            _vm.NodeSearchSelection = nodeVm;
+        if (element is not null)
+            _vm.CanvasSearchSelection = element;
         else
             TheCanvas.Focus();
 

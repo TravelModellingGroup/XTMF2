@@ -101,7 +101,7 @@
 
             <AutoCompleteBox x:Name="NodeSearchBox"
                              Grid.Column="2"
-                             ItemsSource="{Binding Nodes}"
+                             ItemsSource="{Binding SearchItems}"
                              MinimumPrefixLength="0"
                              FilterMode="ContainsOrdinal"
                              ValueMemberBinding="{Binding Name}"

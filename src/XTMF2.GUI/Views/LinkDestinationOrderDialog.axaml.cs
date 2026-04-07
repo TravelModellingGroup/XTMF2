@@ -90,6 +90,7 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
             Notify(nameof(SelectedItem));
             Notify(nameof(CanMoveUp));
             Notify(nameof(CanMoveDown));
+            Notify(nameof(CanRemove));
         }
     }
 
@@ -98,6 +99,9 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
 
     /// <summary>True when the selected item can be moved down (i.e., it is not last).</summary>
     public bool CanMoveDown => _selectedItem is not null && Items.IndexOf(_selectedItem) < Items.Count - 1;
+
+    /// <summary>True when the selected item can be removed (at least two destinations must survive).</summary>
+    public bool CanRemove   => _selectedItem is not null && Items.Count > 1;
 
     /// <summary>True if the user cancelled without confirming.</summary>
     public bool WasCancelled { get; private set; } = true;
@@ -172,6 +176,22 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
         DestListBox.SelectedItem = item;
         Notify(nameof(CanMoveUp));
         Notify(nameof(CanMoveDown));
+    }
+
+    private void Remove_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_selectedItem is null || Items.Count <= 1) return;
+        int idx = Items.IndexOf(_selectedItem);
+        if (idx < 0) return;
+        Items.RemoveAt(idx);
+        UpdateDisplayIndices();
+        // Select the item that slid into this position, or the new last item.
+        SelectedItem = Items.Count > 0
+            ? Items[Math.Min(idx, Items.Count - 1)]
+            : null;
+        Notify(nameof(CanMoveUp));
+        Notify(nameof(CanMoveDown));
+        Notify(nameof(CanRemove));
     }
 
     private void OK_Click(object? sender, RoutedEventArgs e)

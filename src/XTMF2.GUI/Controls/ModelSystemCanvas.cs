@@ -22,9 +22,11 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
@@ -300,6 +302,12 @@ public sealed class ModelSystemCanvas : Control
     // ── Inline parameter editor ───────────────────────────────────────────
     /// <summary>Overlay TextBox used for in-canvas parameter value editing.</summary>
     private readonly TextBox _inlineEditor;
+    /// <summary>Overlay ComboBox used for in-canvas enum parameter editing.</summary>
+    private readonly ComboBox _inlineEnumEditor;
+    /// <summary><c>true</c> when the node currently being edited has an enum inner type.</summary>
+    private bool _editingParamIsEnum;
+    /// <summary><c>true</c> while <see cref="_inlineEnumEditor"/> is being initialised (prevents premature commit).</summary>
+    private bool _enumEditorLoading;
     /// <summary>The node whose parameter value row is currently being edited, or <c>null</c> when idle.</summary>
     private NodeViewModel? _editingParamNode;
     /// <summary>Screen position and width of the inline editor overlay (set in <see cref="BeginParamEdit"/>).</summary>
@@ -362,8 +370,14 @@ public sealed class ModelSystemCanvas : Control
     private readonly Dictionary<(NodeViewModel, NodeHook), NodeViewModel>
         _hookInlinedParam = new();
     /// <summary>
-    /// BasicParameter nodes that are visible on the canvas AND connected via a Single hook,
-    /// so they can offer a "minimize to inline" button.
+    /// Maps (origin FunctionInstance, FunctionParameterHook) → the BasicParameter/ScriptedParameter
+    /// node that is currently inlined into that FI hook row.
+    /// </summary>
+    private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), NodeViewModel>
+        _fiHookInlinedParam = new();
+    /// <summary>
+    /// BasicParameter nodes that are visible on the canvas AND connected via a Single (or
+    /// FunctionParameterHook) hook, so they can offer a "minimize to inline" button.
     /// </summary>
     private readonly HashSet<NodeViewModel> _canInlineNodes = new();
 
@@ -399,6 +413,25 @@ public sealed class ModelSystemCanvas : Control
 
         LogicalChildren.Add(_inlineEditor);
         VisualChildren.Add(_inlineEditor);
+
+        // Build the enum ComboBox overlay (shown instead of _inlineEditor for enum parameters).
+        _inlineEnumEditor = new ComboBox
+        {
+            FontFamily = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize = HookFontSize,
+            Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38)),
+            BorderThickness = new Thickness(1),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x88, 0xCC)),
+            Padding = new Thickness(2, 0, 2, 0),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+            IsVisible = false,
+        };
+        _inlineEnumEditor.DropDownClosed += OnInlineEnumEditorDropDownClosed;
+        _inlineEnumEditor.LostFocus      += OnInlineEnumEditorLostFocus;
+        _inlineEnumEditor.AddHandler(InputElement.KeyDownEvent, OnInlineEnumEditorKeyDown,
+            Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        LogicalChildren.Add(_inlineEnumEditor);
+        VisualChildren.Add(_inlineEnumEditor);
 
         // Syntax-highlight overlay – must be added AFTER _inlineEditor so it
         // renders on top of the TextBox, not underneath it.
@@ -527,6 +560,12 @@ public sealed class ModelSystemCanvas : Control
             TimeSpan.FromMilliseconds(16),
             DispatcherPriority.Input,
             OnAutoScrollTick);
+
+        // Tunneling PointerPressed fires before any child TextBox overlay can
+        // consume the event, giving resize-handle hits higher priority than
+        // the inline editors.
+        this.AddHandler(InputElement.PointerPressedEvent, OnPointerPressedTunnel,
+                        Avalonia.Interactivity.RoutingStrategies.Tunnel);
     }
 
     // ── Drag state ────────────────────────────────────────────────────────
@@ -600,6 +639,9 @@ public sealed class ModelSystemCanvas : Control
     private readonly HashSet<ICanvasElement> _multiSelection = new();
     /// <summary>Cursor model-coordinate recorded at the start of each group-drag frame, used to compute per-frame deltas.</summary>
     private Point _groupDragLastPos;
+
+    // ── Copy / Paste clipboard ────────────────────────────────────────────
+    // System clipboard is used — no in-memory clipboard field needed.
 
     // ── Rubber-band (Ctrl+drag) selection rectangle ───────────────────────
     /// <summary>Model-coord anchor of the in-progress Ctrl+drag selection rect, or <c>null</c> when idle.</summary>
@@ -776,9 +818,12 @@ public sealed class ModelSystemCanvas : Control
         // Measure the inline editor so Avalonia knows its desired size.
         if (_editingParamNode is not null)
         {
-            _inlineEditor.Measure(new Size(_editingParamEditorW > 0 ? _editingParamEditorW * _scale
-                                                                     : NodeRenderWidth(_editingParamNode) * _scale,
-                                           HookRowHeight * _scale));
+            double editorW = (_editingParamEditorW > 0 ? _editingParamEditorW : NodeRenderWidth(_editingParamNode)) * _scale;
+            double editorH = HookRowHeight * _scale;
+            if (_editingParamIsEnum)
+                _inlineEnumEditor.Measure(new Size(editorW, editorH));
+            else
+                _inlineEditor.Measure(new Size(editorW, editorH));
         }
         // Measure the syntax-highlight overlay (same footprint as the TextBox).
         if (_editingParamNode is { IsScriptedParameter: true })
@@ -809,12 +854,21 @@ public sealed class ModelSystemCanvas : Control
         // Position the inline editor at the stored row location (scaled to screen coords).
         if (_editingParamNode is not null && _editingParamEditorW > 0)
         {
-            _inlineEditor.FontSize = HookFontSize * _scale;
-            _inlineEditor.Arrange(new Rect(
+            var editorRect = new Rect(
                 _editingParamEditorX * _scale,
                 _editingParamEditorY * _scale,
                 _editingParamEditorW * _scale,
-                HookRowHeight * _scale));
+                HookRowHeight * _scale);
+            if (_editingParamIsEnum)
+            {
+                _inlineEnumEditor.FontSize = HookFontSize * _scale;
+                _inlineEnumEditor.Arrange(editorRect);
+            }
+            else
+            {
+                _inlineEditor.FontSize = HookFontSize * _scale;
+                _inlineEditor.Arrange(editorRect);
+            }
         }
         // Position the syntax-highlight overlay exactly over the TextBox.
         if (_editingParamNode is { IsScriptedParameter: true })
@@ -1219,26 +1273,35 @@ public sealed class ModelSystemCanvas : Control
                 var fp = fi.FunctionParameters[fi_i];
                 var fpHook = fi_i < fiHooks.Count ? fiHooks[fi_i] as FunctionParameterHook : null;
                 bool fpConn = fiConnected is not null && fpHook is not null && fiConnected.Contains(fpHook);
+                NodeViewModel? inlinedFiParam = null;
+                bool hasInlinedFi = fpHook is not null
+                    && _fiHookInlinedParam.TryGetValue((fi, fpHook), out inlinedFiParam);
 
-                // Tinted background matching unsatisfied hook style (FP hooks are always required).
-                if (!fpConn)
+                // Tinted background: skip for connected or inlined rows.
+                if (!fpConn && !hasInlinedFi)
                     ctx.DrawRectangle(InlineParamRowBg, null,
                         new Rect(fi.X, rowY, rw, FtHookRowHeight));
 
                 ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
                     new Point(fi.X, rowY), new Point(fi.X + rw, rowY));
 
-                // Dot on the RIGHT edge — green if connected, red if not (FP hooks are required).
+                // Dot on the RIGHT edge — green if connected or inlined, red if not.
                 double dotCy = rowY + FtHookRowHeight / 2.0;
-                var dotBrush = fpConn ? (_isLight ? HookConnectedBrushL : HookConnectedBrush)
-                                      : (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush);
+                var dotBrush = (fpConn || hasInlinedFi)
+                    ? (_isLight ? HookConnectedBrushL : HookConnectedBrush)
+                    : (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush);
                 ctx.DrawEllipse(dotBrush, null,
                     new Point(fi.X + rw, dotCy), HookDotRadius, HookDotRadius);
 
                 const double textPad = 6.0;
-                var hookNameFt = MakeText(fp.Name ?? string.Empty, HookFontSize,
-                    fpConn ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
-                           : (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush));
+                // Show «hook: value» label when a parameter is inlined into this FI hook row.
+                string hookLabel = hasInlinedFi && inlinedFiParam is not null
+                    ? $"{fp.Name}: {(string.IsNullOrEmpty(inlinedFiParam.ParameterValueRepresentation) ? "(no value)" : inlinedFiParam.ParameterValueRepresentation)}"
+                    : fp.Name ?? string.Empty;
+                var hookNameFt = MakeText(hookLabel, HookFontSize,
+                    (fpConn || hasInlinedFi)
+                        ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
+                        : (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush));
                 double maxW = rw - textPad * 2 - HookDotRadius * 2;
                 double hookTy = dotCy - hookNameFt.Height / 2.0;
                 using (ctx.PushClip(new Rect(fi.X + textPad, hookTy, Math.Max(0, maxW), hookNameFt.Height + 1)))
@@ -2173,6 +2236,7 @@ public sealed class ModelSystemCanvas : Control
         _nodeVisibleHooks.Clear();
         _nodeConnectedHooks.Clear();
         _hookInlinedParam.Clear();
+        _fiHookInlinedParam.Clear();
         _canInlineNodes.Clear();
         _fiHookAnchors.Clear();
         _fiConnectedHooks.Clear();
@@ -2199,21 +2263,41 @@ public sealed class ModelSystemCanvas : Control
 
         // Identify inlined BasicParameter nodes and which hook rows they occupy.
         // Also identify canvas-visible BasicParameter nodes eligible for the minimize button.
+        // First pass: count qualifying links per destination to enforce the single-destination rule
+        // (a parameter node wired to more than one hook cannot be collapsed inline).
+        var paramDestCount = new Dictionary<NodeViewModel, int>(ReferenceEqualityComparer.Instance);
         foreach (var link in _vm.Links)
         {
+            if (link.Destination is not NodeViewModel dstCount || !dstCount.IsParameterNode) continue;
+            var originHookCount = link.UnderlyingLink.OriginHook;
+            bool eligible = (link.Origin is NodeViewModel && originHookCount.Cardinality == HookCardinality.Single)
+                         || (link.Origin is FunctionInstanceViewModel && originHookCount is FunctionParameterHook);
+            if (!eligible) continue;
+            paramDestCount.TryGetValue(dstCount, out var c);
+            paramDestCount[dstCount] = c + 1;
+        }
+
+        foreach (var link in _vm.Links)
+        {
+            if (link.Destination is not NodeViewModel destVm || !destVm.IsParameterNode) continue;
+            // Nodes reached by more than one qualifying link cannot be inlined.
+            if (paramDestCount.TryGetValue(destVm, out var destCnt) && destCnt > 1) continue;
+
             if (link.Origin is NodeViewModel originVm2
-                && link.Destination is NodeViewModel destVm
-                && destVm.IsParameterNode
                 && link.UnderlyingLink.OriginHook.Cardinality == HookCardinality.Single)
             {
                 if (destVm.IsInlined)
-                {
                     _hookInlinedParam[(originVm2, link.UnderlyingLink.OriginHook)] = destVm;
-                }
                 else
-                {
                     _canInlineNodes.Add(destVm);
-                }
+            }
+            else if (link.Origin is FunctionInstanceViewModel originFiVm
+                     && link.UnderlyingLink.OriginHook is FunctionParameterHook fpHookInline)
+            {
+                if (destVm.IsInlined)
+                    _fiHookInlinedParam[(originFiVm, fpHookInline)] = destVm;
+                else
+                    _canInlineNodes.Add(destVm);
             }
         }
 
@@ -2709,6 +2793,191 @@ public sealed class ModelSystemCanvas : Control
             _vm?.NavigateUpCommand.Execute(null);
             e.Handled = true;
         }
+        else if (e.Key == Key.C && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            _ = CopySelectedElementsAsync();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.V && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            // Paste at the centre of the current viewport.
+            var sv = GetScrollViewer();
+            double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width  ?? Bounds.Width)  / 2.0) / _scale;
+            double vy = ((sv?.Offset.Y ?? 0) + (sv?.Viewport.Height ?? Bounds.Height) / 2.0) / _scale;
+            _ = PasteElementsAsync(vx, vy);
+            e.Handled = true;
+        }
+    }
+
+    // ── Copy / Paste helpers ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a <see cref="CanvasElementDto"/> for a <see cref="NodeViewModel"/>,
+    /// including any inlined child parameter nodes.
+    /// </summary>
+    private CanvasElementDto BuildNodeDto(NodeViewModel nvm)
+    {
+        var node = nvm.UnderlyingNode;
+        string? paramValue = null;
+        bool isScriptedParam = false;
+        if (nvm.IsParameterNode && node.ParameterValue is { } pv)
+        {
+            paramValue = pv.Representation;
+            isScriptedParam = nvm.IsScriptedParameter;
+        }
+
+        // Collect inlined (hidden) child parameter nodes.
+        List<InlinedChildDto>? inlined = null;
+        foreach (var kvp in _hookInlinedParam)
+        {
+            if (!ReferenceEquals(kvp.Key.Item1, nvm)) continue;
+            inlined ??= [];
+            var childDto = BuildNodeDto(kvp.Value) with
+            {
+                X = kvp.Value.UnderlyingNode.Location.X,
+                Y = kvp.Value.UnderlyingNode.Location.Y,
+                W = (float)NodeRenderWidth(kvp.Value),
+                H = (float)NodeRenderHeight(kvp.Value),
+            };
+            inlined.Add(new InlinedChildDto(kvp.Key.Item2.Name, childDto));
+        }
+
+        return new CanvasElementDto(
+            CanvasElementKind.Node,
+            node.Name,
+            node.Location.X,
+            node.Location.Y,
+            (float)NodeRenderWidth(nvm),
+            (float)NodeRenderHeight(nvm),
+            TypeName:        node.Type?.AssemblyQualifiedName,
+            ParameterValue:  paramValue,
+            IsScriptedParam: isScriptedParam,
+            InlinedChildren: inlined);
+    }
+
+    /// <summary>
+    /// Captures all selected canvas elements (nodes, comment blocks, function templates,
+    /// function instances, ghost nodes) and writes them to the system clipboard as JSON.
+    /// </summary>
+    private async Task CopySelectedElementsAsync()
+    {
+        if (_vm is null) return;
+
+        // Build the set of top-level elements to copy.
+        IEnumerable<ICanvasElement> source = _multiSelection.Count > 0
+            ? _multiSelection
+            : (_vm.SelectedElement is { } sel ? [sel] : []);
+
+        var dtos = new List<CanvasElementDto>();
+        // Tracks which selected real node maps to which index in dtos, so we can add cross-links.
+        var nodeToDtoIndex = new Dictionary<Node, int>();
+
+        foreach (var el in source)
+        {
+            CanvasElementDto dto;
+            switch (el)
+            {
+                case NodeViewModel nvm when !nvm.IsInlined:
+                    nodeToDtoIndex[nvm.UnderlyingNode] = dtos.Count;
+                    dto = BuildNodeDto(nvm);
+                    break;
+
+                case CommentBlockViewModel cb:
+                    dto = new CanvasElementDto(
+                        CanvasElementKind.CommentBlock,
+                        cb.Name,
+                        (float)cb.X, (float)cb.Y,
+                        (float)cb.Width, (float)cb.Height);
+                    break;
+
+                case FunctionTemplateViewModel ft:
+                    var fpDtos = ft.FunctionParameters
+                        .Select(fp => new FunctionParameterDto(
+                            fp.Name,
+                            fp.Type?.AssemblyQualifiedName))
+                        .ToList();
+                    dto = new CanvasElementDto(
+                        CanvasElementKind.FunctionTemplate,
+                        ft.Name,
+                        (float)ft.X, (float)ft.Y,
+                        (float)ft.Width, (float)ft.Height,
+                        FunctionParameters: fpDtos.Count > 0 ? fpDtos : null);
+                    break;
+
+                case FunctionInstanceViewModel fi:
+                    dto = new CanvasElementDto(
+                        CanvasElementKind.FunctionInstance,
+                        fi.Name,
+                        (float)fi.X, (float)fi.Y,
+                        (float)fi.Width, (float)fi.Height,
+                        TemplateName: fi.TemplateName);
+                    break;
+
+                case GhostNodeViewModel ghost:
+                    dto = new CanvasElementDto(
+                        CanvasElementKind.GhostNode,
+                        ghost.Name,
+                        (float)ghost.X, (float)ghost.Y,
+                        (float)ghost.Width, (float)ghost.Height,
+                        ReferencedNodeName: ghost.UnderlyingGhostNode.ReferencedNode.Name);
+                    break;
+
+                default:
+                    continue; // StartViewModel and others are not copyable.
+            }
+            dtos.Add(dto);
+        }
+
+        // Second pass: detect links where both origin and destination are in the copied set
+        // and record them as cross-node links on the origin's DTO.
+        if (nodeToDtoIndex.Count > 1 && _vm is not null)
+        {
+            foreach (var lvm in _vm.Links)
+            {
+                if (lvm.Origin is not NodeViewModel originNvm) continue;
+                if (!nodeToDtoIndex.TryGetValue(originNvm.UnderlyingNode, out var originIdx)) continue;
+
+                if (lvm.Destination is not NodeViewModel destNvm) continue;
+                if (destNvm.IsInlined) continue;
+                if (!nodeToDtoIndex.ContainsKey(destNvm.UnderlyingNode)) continue;
+
+                // Both ends are in the selection — record a cross-link.
+                var hookName = lvm.UnderlyingLink.OriginHook.Name;
+                var destName = destNvm.UnderlyingNode.Name;
+                var origDto  = dtos[originIdx];
+                var crossLinks = origDto.CrossLinks ?? new System.Collections.Generic.List<CrossNodeLinkDto>();
+                if (origDto.CrossLinks is null)
+                {
+                    origDto = origDto with { CrossLinks = crossLinks };
+                    dtos[originIdx] = origDto;
+                }
+                crossLinks.Add(new CrossNodeLinkDto(hookName, destName));
+            }
+        }
+
+        if (dtos.Count == 0) return;
+
+        var payload = CanvasClipboardSerializer.CreatePayload(dtos);
+        var json    = CanvasClipboardSerializer.Serialize(payload);
+
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard is not null)
+            await clipboard.SetTextAsync(json);
+    }
+
+    /// <summary>
+    /// Reads XTMF2 canvas JSON from the system clipboard and pastes the elements
+    /// into the current boundary, anchored at the given model coordinates.
+    /// </summary>
+    private async Task PasteElementsAsync(double anchorX, double anchorY)
+    {
+        if (_vm is null) return;
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard is null) return;
+        var text    = await ClipboardExtensions.TryGetTextAsync(clipboard);
+        var payload = CanvasClipboardSerializer.TryDeserialize(text);
+        if (payload is null) return;
+        await _vm.PasteElementsAsync(payload, anchorX, anchorY);
     }
 
     // ── Scaling helpers ───────────────────────────────────────────────────
@@ -2860,6 +3129,42 @@ public sealed class ModelSystemCanvas : Control
         base.OnPointerWheelChanged(e);
     }
 
+    /// <summary>
+    /// Tunneling pointer-press handler — runs before any child TextBox overlay
+    /// can consume the event. If the press lands on a resize handle, the active
+    /// inline editor is committed and resizing begins immediately, regardless of
+    /// which overlay control is visually on top.
+    /// </summary>
+    private void OnPointerPressedTunnel(object? sender, PointerPressedEventArgs e)
+    {
+        if (_vm is null) return;
+        var point = e.GetCurrentPoint(this);
+        // Only intercept plain left-button presses (not right-button link-drags,
+        // not Ctrl+left multi-selection).
+        if (!point.Properties.IsLeftButtonPressed) return;
+        if ((e.KeyModifiers & KeyModifiers.Control) != 0) return;
+
+        var mpos = ToCanvasPos(point.Position);
+        var resizeHit = HitTestResizeHandle(mpos);
+        if (resizeHit is null) return;
+
+        // Commit any open editor so its LostFocus handler doesn't fire after
+        // we capture the pointer, which would interfere with the resize drag.
+        if (_editingParamNode is not null) CommitParamEdit();
+        if (_editingCommentBlock is not null) CommitCommentEdit();
+        if (_editingNameElement is not null) CommitNameEdit();
+
+        ClearMultiSelection();
+        _resizing = resizeHit;
+        _resizeStartPos = mpos;
+        _resizeStartW = ElementRenderWidth(resizeHit);
+        _resizeStartH = ElementRenderHeight(resizeHit);
+        _vm.SelectElementCommand.Execute(resizeHit);
+        e.Pointer.Capture(this);
+        Focus();
+        e.Handled = true;
+    }
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
@@ -2934,12 +3239,13 @@ public sealed class ModelSystemCanvas : Control
                 e.Handled = true;
                 return;
             }
-            // Inlined BasicParameter hook row inside the origin node.
+            // Inlined BasicParameter hook row inside the origin node or FunctionInstance.
             var inlinedRowHit = HitTestInlinedParamRow(mpos);
             if (inlinedRowHit is not null)
             {
-                var (originNode, _, inlinedParam, rx, ry, rw2) = inlinedRowHit.Value;
-                _vm.SelectElementCommand.Execute(originNode);
+                var (originEl, _, inlinedParam, rx, ry, rw2) = inlinedRowHit.Value;
+                if (originEl is not null)
+                    _vm.SelectElementCommand.Execute(originEl);
                 BeginParamEdit(inlinedParam, rx, ry, rw2);
                 e.Handled = true;
                 return;
@@ -3624,6 +3930,20 @@ public sealed class ModelSystemCanvas : Control
             addFiItem.Click += (_, _) => _ = _vm.AddFunctionInstanceAtAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addFiItem);
 
+            if (_vm.IsInsideFunctionTemplate)
+            {
+                bgMenu.Items.Add(new Separator());
+                var addFpItem = new MenuItem { Header = "Add Function Parameter…" };
+                addFpItem.Click += (_, _) => _ = _vm.AddFunctionParameterDirectAsync(spawnPt.X, spawnPt.Y);
+                bgMenu.Items.Add(addFpItem);
+            }
+
+            // ── Paste (always available; reads system clipboard at click-time) ────
+            bgMenu.Items.Add(new Separator());
+            var pasteItem = new MenuItem { Header = "Paste\tCtrl+V" };
+            pasteItem.Click += (_, _) => _ = PasteElementsAsync(spawnPt.X, spawnPt.Y);
+            bgMenu.Items.Add(pasteItem);
+
             ContextMenu = bgMenu;
             ContextMenu.Open(this);
             return;
@@ -3700,6 +4020,18 @@ public sealed class ModelSystemCanvas : Control
                 menu.Items.Add(addFpItem);
             }
 
+            // Clear all links from this hook if any exist.
+            var hookLinks = _vm.Links
+                .Where(lvm => lvm.UnderlyingLink.Origin == capturedNode.UnderlyingNode
+                           && lvm.UnderlyingLink.OriginHook == capturedHook)
+                .ToList();
+            if (hookLinks.Count > 0)
+            {
+                var clearHookItem = new MenuItem { Header = "Clear Hook" };
+                clearHookItem.Click += (_, _) => vm.ClearHookLinks(capturedNode, capturedHook);
+                menu.Items.Add(clearHookItem);
+            }
+
             menu.Items.Add(new Separator());
         }
 
@@ -3709,10 +4041,52 @@ public sealed class ModelSystemCanvas : Control
             var capturedFiOrigin = fiHookEntry.Fi;
             var capturedFpHook = fiHookEntry.Hook;
 
+            // "Expand parameter to its own module" when the FI hook has an inlined param.
+            if (_fiHookInlinedParam.TryGetValue((capturedFiOrigin, capturedFpHook), out var inlinedFiParamNode))
+            {
+                var capturedFiParam = inlinedFiParamNode;
+                var expandFiItem = new MenuItem { Header = "Expand parameter to its own module" };
+                expandFiItem.Click += (_, _) =>
+                {
+                    double rw2 = capturedFiOrigin.Width;
+                    capturedFiParam.ExpandToCanvas(capturedFiOrigin.X + rw2 + 30.0, capturedFiOrigin.Y);
+                };
+                menu.Items.Add(expandFiItem);
+
+                // Offer switching between BasicParameter and ScriptedParameter.
+                if (capturedFiParam.IsBasicParameter || capturedFiParam.IsScriptedParameter)
+                {
+                    var switchFiHeader = capturedFiParam.IsBasicParameter
+                        ? "Switch to Scripted Parameter"
+                        : "Switch to Basic Parameter";
+                    var switchFiItem = new MenuItem { Header = switchFiHeader };
+                    switchFiItem.Click += (_, _) =>
+                    {
+                        if (!capturedFiParam.SwitchParameterType(out var err))
+                            vm.ShowToast(err?.Message ?? "Could not switch parameter type.",
+                                         isError: true, durationMs: 6000);
+                    };
+                    menu.Items.Add(switchFiItem);
+                }
+            }
+
             var allBoundariesItem = new MenuItem { Header = "Link to node in another boundary…" };
             allBoundariesItem.Click += (_, _) =>
                 _ = vm.CreateInterBoundaryLinkAsync(capturedFiOrigin, capturedFpHook);
             menu.Items.Add(allBoundariesItem);
+
+            // Clear all links from this FI hook if any exist.
+            var fiHookLinks = _vm.Links
+                .Where(lvm => lvm.UnderlyingLink.Origin == capturedFiOrigin.UnderlyingInstance
+                           && lvm.UnderlyingLink.OriginHook == capturedFpHook)
+                .ToList();
+            if (fiHookLinks.Count > 0)
+            {
+                var clearFiHookItem = new MenuItem { Header = "Clear Hook" };
+                clearFiHookItem.Click += (_, _) => vm.ClearFiHookLinks(capturedFiOrigin, capturedFpHook);
+                menu.Items.Add(clearFiHookItem);
+            }
+
             menu.Items.Add(new Separator());
         }
 
@@ -3921,14 +4295,30 @@ public sealed class ModelSystemCanvas : Control
                 InvalidateAndMeasure();
             };
 
+            // Move to Boundary
+            var moveFtItem = new MenuItem { Header = "Move to Boundary…" };
+            moveFtItem.Click += async (_, _) =>
+            {
+                await vm.MoveFunctionTemplateToBoundaryAsync(capturedFt);
+                InvalidateAndMeasure();
+            };
+
             menu.Items.Add(new Separator());
             menu.Items.Add(enterItem);
             menu.Items.Add(renameItem);
+            menu.Items.Add(moveFtItem);
         }
 
         // ── Function instance – specific items ─────────────────────────────
         if (element is FunctionInstanceViewModel capturedFi)
         {
+            var openTemplateItem = new MenuItem { Header = "Open Template" };
+            openTemplateItem.Click += (_, _) =>
+            {
+                vm.OpenFunctionTemplateOfInstance(capturedFi);
+                InvalidateAndMeasure();
+            };
+
             var renameItem = new MenuItem { Header = "Rename…" };
             renameItem.Click += async (_, _) =>
             {
@@ -3936,8 +4326,17 @@ public sealed class ModelSystemCanvas : Control
                 InvalidateAndMeasure();
             };
 
+            var moveFiItem = new MenuItem { Header = "Move to Boundary…" };
+            moveFiItem.Click += async (_, _) =>
+            {
+                await vm.MoveFunctionInstanceToBoundaryAsync(capturedFi);
+                InvalidateAndMeasure();
+            };
+
             menu.Items.Add(new Separator());
+            menu.Items.Add(openTemplateItem);
             menu.Items.Add(renameItem);
+            menu.Items.Add(moveFiItem);
         }
 
         // ── "Add Function Parameter" — when we're inside a function template ─────
@@ -3999,6 +4398,89 @@ public sealed class ModelSystemCanvas : Control
             menu.Items.Add(entryItem);
         }
 
+        // ── Copy ──────────────────────────────────────────────────────────────
+        bool isCopyable = element switch
+        {
+            NodeViewModel nvm            => !nvm.IsInlined,
+            CommentBlockViewModel        => true,
+            FunctionTemplateViewModel    => true,
+            FunctionInstanceViewModel    => true,
+            GhostNodeViewModel           => true,
+            _                            => false,
+        };
+        if (isCopyable)
+        {
+            var capturedElement = element;
+            menu.Items.Add(new Separator());
+
+            // Count copyable elements in the active selection.
+            int copyCount = _multiSelection.Count > 0 && _multiSelection.Contains(capturedElement!)
+                ? _multiSelection.Count(el => el switch
+                  {
+                      NodeViewModel nvm2   => !nvm2.IsInlined,
+                      CommentBlockViewModel    => true,
+                      FunctionTemplateViewModel => true,
+                      FunctionInstanceViewModel => true,
+                      GhostNodeViewModel       => true,
+                      _                        => false,
+                  })
+                : 1;
+            string copyHeader = copyCount > 1 ? $"Copy {copyCount} Elements\tCtrl+C" : "Copy\tCtrl+C";
+
+            var copyItem = new MenuItem { Header = copyHeader };
+            copyItem.Click += (_, _) =>
+            {
+                // Narrow selection to just this element when it isn't already multi-selected.
+                if (_multiSelection.Count == 0 || !_multiSelection.Contains(capturedElement!))
+                {
+                    ClearMultiSelection();
+                    if (_vm is not null) _vm.SelectElementCommand.Execute(capturedElement);
+                }
+                _ = CopySelectedElementsAsync();
+            };
+            menu.Items.Add(copyItem);
+        }
+
+        // ── Align (multi-selection only) ──────────────────────────────────────
+        if (_multiSelection.Count > 1)
+        {
+            menu.Items.Add(new Separator());
+            var alignMenu = new MenuItem { Header = "Align" };
+
+            void AddAlignItem(string header, AlignMode m)
+            {
+                var item = new MenuItem { Header = header };
+                item.Click += (_, _) => AlignSelectedElements(m);
+                alignMenu.Items.Add(item);
+            }
+
+            AddAlignItem("Align Left Edges",          AlignMode.Left);
+            AddAlignItem("Align Right Edges",         AlignMode.Right);
+            alignMenu.Items.Add(new Separator());
+            AddAlignItem("Align Top Edges",           AlignMode.Top);
+            AddAlignItem("Align Bottom Edges",        AlignMode.Bottom);
+            alignMenu.Items.Add(new Separator());
+            AddAlignItem("Center on Vertical Axis",   AlignMode.CenterVertical);
+            AddAlignItem("Center on Horizontal Axis", AlignMode.CenterHorizontal);
+            menu.Items.Add(alignMenu);
+
+            // Distribute requires at least 3 elements to have visible effect.
+            if (_multiSelection.Count >= 3)
+            {
+                var distributeMenu = new MenuItem { Header = "Distribute" };
+
+                var distH = new MenuItem { Header = "Distribute Horizontally" };
+                distH.Click += (_, _) => DistributeSelectedElements(horizontal: true);
+                distributeMenu.Items.Add(distH);
+
+                var distV = new MenuItem { Header = "Distribute Vertically" };
+                distV.Click += (_, _) => DistributeSelectedElements(horizontal: false);
+                distributeMenu.Items.Add(distV);
+
+                menu.Items.Add(distributeMenu);
+            }
+        }
+
         menu.Items.Add(deleteItem);
 
         ContextMenu = menu;
@@ -4045,6 +4527,32 @@ public sealed class ModelSystemCanvas : Control
         _scriptOverlay.HorizontalScrollOffset = 0;
     }
 
+    /// <summary>
+    /// Returns the effective enum <see cref="Type"/> for a parameter node, or <c>null</c> if the
+    /// node's inner type is not (or does not implement) an enum-returning function.
+    /// </summary>
+    private static Type? GetEffectiveEnumType(NodeViewModel node)
+    {
+        var nodeType = node.UnderlyingNode.Type;
+        if (nodeType is null || !nodeType.IsGenericType) return null;
+        var innerType = nodeType.GetGenericArguments().FirstOrDefault();
+        if (innerType is null) return null;
+        if (innerType.IsEnum) return innerType;
+        // Walk interfaces: look for IFunction<EnumT>.
+        var candidates = innerType.IsInterface
+            ? new[] { innerType }.Concat(innerType.GetInterfaces())
+            : (IEnumerable<Type>)innerType.GetInterfaces();
+        foreach (var iface in candidates)
+        {
+            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IFunction<>))
+            {
+                var arg = iface.GetGenericArguments()[0];
+                if (arg.IsEnum) return arg;
+            }
+        }
+        return null;
+    }
+
     private void BeginParamEdit(NodeViewModel node, double rowX = -1, double rowY = -1, double rowW = -1)
     {
         HideVarDropdown();
@@ -4052,6 +4560,35 @@ public sealed class ModelSystemCanvas : Control
         _editingParamEditorX = rowX >= 0 ? rowX : node.X;
         _editingParamEditorY = rowY >= 0 ? rowY : node.Y + NodeHeaderHeight;
         _editingParamEditorW = rowW >= 0 ? rowW : NodeRenderWidth(node);
+
+        var enumType = GetEffectiveEnumType(node);
+        _editingParamIsEnum = enumType is not null && !node.IsScriptedParameter;
+
+        if (_editingParamIsEnum)
+        {
+            // Populate the ComboBox with enum member names and pre-select the current value.
+            // Guard with _enumEditorLoading so SelectionChanged / DropDownClosed don't fire
+            // prematurely while we're setting ItemsSource and SelectedItem.
+            _enumEditorLoading = true;
+            var names = Enum.GetNames(enumType!);
+            _inlineEnumEditor.ItemsSource = names;
+            var current = node.ParameterValueRepresentation;
+            _inlineEnumEditor.SelectedItem = names.Contains(current) ? current
+                : (names.Length > 0 ? names[0] : null);
+            _enumEditorLoading = false;
+
+            _inlineEditor.IsVisible = false;
+            _inlineEnumEditor.IsVisible = true;
+            InvalidateMeasure();
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                _inlineEnumEditor.Focus();
+                _inlineEnumEditor.IsDropDownOpen = true;
+            }, Avalonia.Threading.DispatcherPriority.Render);
+            return;
+        }
+
+        _inlineEnumEditor.IsVisible = false;
         _inlineEditor.Text = node.ParameterValueRepresentation;
 
         // For scripted parameters the text is rendered by Render() with syntax colours;
@@ -4128,7 +4665,9 @@ public sealed class ModelSystemCanvas : Control
             HideVarDropdown();
             if (_editingParamNode is null) return;
             var node = _editingParamNode;
-            var value = _inlineEditor.Text ?? string.Empty;
+            var value = _editingParamIsEnum
+                ? (_inlineEnumEditor.SelectedItem as string ?? string.Empty)
+                : (_inlineEditor.Text ?? string.Empty);
 
             // Attempt to save. For ScriptedParameter this validates the expression first.
             if (!node.SetParameterValue(value, out var error))
@@ -4144,8 +4683,11 @@ public sealed class ModelSystemCanvas : Control
 
             // Save succeeded – close the editor.
             UnsubscribeInlineEditorScroll();
-            _editingParamNode = null;
-            _inlineEditor.IsVisible = false;
+            _editingParamNode   = null;
+            _editingParamIsEnum = false;
+            _enumEditorLoading  = false;
+            _inlineEditor.IsVisible     = false;
+            _inlineEnumEditor.IsVisible = false;
             _inlineEditor.Foreground = ParamValueTextBrush;
             _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
             _inlineEditor.CaretBrush = null;
@@ -4165,8 +4707,11 @@ public sealed class ModelSystemCanvas : Control
     {
         HideVarDropdown();
         UnsubscribeInlineEditorScroll();
-        _editingParamNode = null;
-        _inlineEditor.IsVisible = false;
+        _editingParamNode   = null;
+        _editingParamIsEnum = false;
+        _enumEditorLoading  = false;
+        _inlineEditor.IsVisible     = false;
+        _inlineEnumEditor.IsVisible = false;
         _inlineEditor.Foreground = ParamValueTextBrush;
         _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
         _inlineEditor.CaretBrush = null;
@@ -4175,6 +4720,43 @@ public sealed class ModelSystemCanvas : Control
         _scriptOverlay.IsVisible = false;
         InvalidateAndMeasure();
         Focus();
+    }
+
+    // ── Inline enum editor handlers ───────────────────────────────────────
+
+    private void OnInlineEnumEditorDropDownClosed(object? sender, EventArgs e)
+    {
+        // Fires when the user picks an item or presses Escape to dismiss.
+        // Escape is handled by OnInlineEnumEditorKeyDown first (which sets _enumEditorLoading
+        // before closing the dropdown), so the guard below prevents a commit on cancel.
+        if (_enumEditorLoading || _commitParamEditInProgress) return;
+        if (_editingParamNode is not null && _editingParamIsEnum
+            && _inlineEnumEditor.SelectedItem is not null)
+        {
+            CommitParamEdit();
+        }
+    }
+
+    private void OnInlineEnumEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // Don't commit if loading, committing, or if the dropdown popup just took focus.
+        if (_enumEditorLoading || _commitParamEditInProgress) return;
+        if (_editingParamNode is not null && _editingParamIsEnum && !_inlineEnumEditor.IsDropDownOpen)
+            CommitParamEdit();
+    }
+
+    private void OnInlineEnumEditorKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            // Set loading flag so the DropDownClosed event that fires when we close
+            // the dropdown programmatically does not trigger a commit.
+            _enumEditorLoading = true;
+            _inlineEnumEditor.IsDropDownOpen = false;
+            _enumEditorLoading = false;
+            CancelParamEdit();
+            e.Handled = true;
+        }
     }
 
     private void OnInlineEditorKeyDown(object? sender, KeyEventArgs e)
@@ -4275,12 +4857,14 @@ public sealed class ModelSystemCanvas : Control
                 continue;
             }
 
-            // ── Whitespace ────────────────────────────────────────────────
-            if (char.IsWhiteSpace(c))
+            // ── Whitespace ─────────────────────────────────────────────────
+            // Emit whitespace as its own invisible token so it does not bleed
+            // into the operator brush and the overlay advances correctly.
+            if (c == ' ' || c == '\t')
             {
                 int start = i;
-                while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
-                tokens.Add((text[start..i], _isLight ? ParamValueTextBrushL : ParamValueTextBrush));
+                while (i < text.Length && (text[i] == ' ' || text[i] == '\t')) i++;
+                tokens.Add((text[start..i], Brushes.Transparent));
                 continue;
             }
 
@@ -4289,6 +4873,33 @@ public sealed class ModelSystemCanvas : Control
             {
                 int start = i;
                 while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_')) i++;
+
+                // Greedily extend the token by consuming "<spaces><word>" segments
+                // when the resulting substring matches a known variable name that
+                // contains spaces (e.g. "Home Based Work").
+                int extended = i;
+                while (extended < text.Length && text[extended] == ' ')
+                {
+                    int spaceEnd = extended;
+                    while (spaceEnd < text.Length && text[spaceEnd] == ' ') spaceEnd++;
+                    if (spaceEnd >= text.Length ||
+                        (!char.IsLetterOrDigit(text[spaceEnd]) && text[spaceEnd] != '_'))
+                        break;
+                    int wordEnd = spaceEnd;
+                    while (wordEnd < text.Length &&
+                           (char.IsLetterOrDigit(text[wordEnd]) || text[wordEnd] == '_'))
+                        wordEnd++;
+                    if (knownNames.Contains(text[start..wordEnd]))
+                    {
+                        i = wordEnd;
+                        extended = wordEnd;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
                 var word = text[start..i];
                 IBrush brush = word switch
                 {
@@ -4375,7 +4986,7 @@ public sealed class ModelSystemCanvas : Control
         while (tokenStart > 0)
         {
             char ch = text[tokenStart - 1];
-            if (char.IsWhiteSpace(ch) || IsExpressionSpecialChar(ch))
+            if (IsExpressionSpecialChar(ch))
             {
                 break;
             }
@@ -4383,6 +4994,17 @@ public sealed class ModelSystemCanvas : Control
         }
 
         var token = text[tokenStart..caret];
+
+        // Strip any leading whitespace that the backward walk included (e.g. a
+        // space immediately after an operator).  Adjust _varTokenStart so that
+        // CompleteVariable() replaces only the real identifier text.
+        int leadingSpaces = token.Length - token.TrimStart().Length;
+        tokenStart += leadingSpaces;
+        token = token.TrimStart();
+
+        // Also strip trailing whitespace (caret resting just after a space).
+        token = token.TrimEnd();
+
         _varTokenStart = tokenStart;
 
         if (token.Length == 0)
@@ -4772,8 +5394,12 @@ public sealed class ModelSystemCanvas : Control
         {
             foreach(var element in collection)
             {
-                double w = element.Width;
-                double h = element.Height;
+                // Use the same rendered dimensions used when drawing the resize handle,
+                // so that the hit-test rectangle matches the visual even when a node's
+                // stored Height is smaller than its actual rendered height (e.g. when
+                // the node has hook rows that push the bottom edge down).
+                double w = ElementRenderWidth(element);
+                double h = ElementRenderHeight(element);
                 double x = element.X;
                 double y = element.Y;
                 var handle = new Rect(x + w - ResizeHandleSize, y + h - ResizeHandleSize,
@@ -4867,8 +5493,11 @@ public sealed class ModelSystemCanvas : Control
     /// <summary>
     /// Returns information about an inlined-param hook row that contains
     /// <paramref name="pos"/>, or <c>null</c> when no such row is hit.
+    /// The first element of the returned tuple is the canvas origin (either a
+    /// <see cref="NodeViewModel"/> or a <see cref="FunctionInstanceViewModel"/>),
+    /// or <c>null</c> when the origin could not be determined.
     /// </summary>
-    private (NodeViewModel originNode, NodeHook hook, NodeViewModel paramNode,double rowX, double rowY, double rowW)? HitTestInlinedParamRow(Point pos)        
+    private (ICanvasElement? originEl, NodeHook hook, NodeViewModel paramNode, double rowX, double rowY, double rowW)? HitTestInlinedParamRow(Point pos)
     {
         foreach (var ((originNode, hook), paramNode) in _hookInlinedParam)
         {
@@ -4887,6 +5516,24 @@ public sealed class ModelSystemCanvas : Control
             if (rowRect.Contains(pos))
                 return (originNode, hook, paramNode, originNode.X, rowTop, rw);
         }
+
+        // Also check FunctionInstance-originated inlined params.
+        foreach (var ((fi, fpHook), paramNode) in _fiHookInlinedParam)
+        {
+            var fiHooks = fi.UnderlyingInstance.Hooks;
+            int hookIdx = -1;
+            for (int j = 0; j < fiHooks.Count; j++)
+                if (ReferenceEquals(fiHooks[j], fpHook)) { hookIdx = j; break; }
+            if (hookIdx < 0) continue;
+
+            double rw = fi.Width;
+            double rowTop = fi.Y + FtHeaderHeight + hookIdx * FtHookRowHeight;
+            var rowRect = new Rect(fi.X, rowTop, rw, FtHookRowHeight);
+
+            if (rowRect.Contains(pos))
+                return (fi, fpHook, paramNode, fi.X, rowTop, rw);
+        }
+
         return null;
     }
 
@@ -4922,7 +5569,210 @@ public sealed class ModelSystemCanvas : Control
         return testComments ? TestHitsElement(_vm.CommentBlocks, pos) : null;
     }
 
-    // ── Multi-selection helpers ────────────────────────────────────────────────
+    // ── Alignment ─────────────────────────────────────────────────────────────
+
+    private enum AlignMode
+    {
+        Left, Right, Top, Bottom, CenterHorizontal, CenterVertical
+    }
+
+    /// <summary>
+    /// Moves all elements in <see cref="_multiSelection"/> so that their edges (or centres)
+    /// are aligned according to <paramref name="mode"/>.
+    /// The operation is committed as a single undoable batch via
+    /// <see cref="ModelSystemSession.MoveElements"/>.
+    /// </summary>
+    private void AlignSelectedElements(AlignMode mode)
+    {
+        if (_vm is null || _multiSelection.Count < 2) return;
+
+        // Compute the shared reference coordinate.
+        double refCoord = mode switch
+        {
+            AlignMode.Left             => _multiSelection.Min(e => e.X),
+            AlignMode.Right            => _multiSelection.Max(e => e.X + e.Width),
+            AlignMode.Top              => _multiSelection.Min(e => e.Y),
+            AlignMode.Bottom           => _multiSelection.Max(e => e.Y + e.Height),
+            AlignMode.CenterHorizontal => _multiSelection.Average(e => e.Y + e.Height / 2.0),
+            AlignMode.CenterVertical   => _multiSelection.Average(e => e.X + e.Width  / 2.0),
+            _                          => 0.0
+        };
+
+        var nodeMoves     = new List<(Node, Rectangle)>();
+        var commentMoves  = new List<(CommentBlock, Rectangle)>();
+        var templateMoves = new List<(FunctionTemplate, Rectangle)>();
+        var instanceMoves = new List<(FunctionInstance, Rectangle)>();
+
+        foreach (var el in _multiSelection)
+        {
+            float newX = (float)el.X;
+            float newY = (float)el.Y;
+
+            switch (mode)
+            {
+                case AlignMode.Left:             newX = (float)refCoord;                      break;
+                case AlignMode.Right:            newX = (float)(refCoord - el.Width);          break;
+                case AlignMode.Top:              newY = (float)refCoord;                      break;
+                case AlignMode.Bottom:           newY = (float)(refCoord - el.Height);        break;
+                case AlignMode.CenterHorizontal: newY = (float)(refCoord - el.Height / 2.0); break;
+                case AlignMode.CenterVertical:   newX = (float)(refCoord - el.Width  / 2.0); break;
+            }
+            newX = Math.Max(0f, newX);
+            newY = Math.Max(0f, newY);
+
+            switch (el)
+            {
+                case NodeViewModel nvm:
+                {
+                    var loc = nvm.UnderlyingNode.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((nvm.UnderlyingNode, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+                case StartViewModel svm:
+                    nodeMoves.Add((svm.UnderlyingStart,
+                        new Rectangle(newX, newY, (float)svm.Diameter, (float)svm.Diameter)));
+                    break;
+                case CommentBlockViewModel cvm:
+                    commentMoves.Add((cvm.UnderlyingBlock,
+                        new Rectangle(newX, newY, (float)cvm.Width, (float)cvm.Height)));
+                    break;
+                case GhostNodeViewModel gvm:
+                {
+                    var loc = gvm.UnderlyingGhostNode.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((gvm.UnderlyingGhostNode, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+                case FunctionTemplateViewModel ftvm:
+                    templateMoves.Add((ftvm.UnderlyingTemplate,
+                        new Rectangle(newX, newY, (float)ftvm.Width, (float)ftvm.Height)));
+                    break;
+                case FunctionInstanceViewModel fivm:
+                    instanceMoves.Add((fivm.UnderlyingInstance,
+                        new Rectangle(newX, newY, (float)fivm.Width, (float)fivm.Height)));
+                    break;
+                case FunctionParameterViewModel fpvm:
+                {
+                    var loc = fpvm.UnderlyingParameter.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((fpvm.UnderlyingParameter, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+            }
+        }
+
+        _vm.Session.MoveElements(
+            _vm.User,
+            nodeMoves.Count     > 0 ? nodeMoves     : null,
+            commentMoves.Count  > 0 ? commentMoves  : null,
+            templateMoves.Count > 0 ? templateMoves : null,
+            instanceMoves.Count > 0 ? instanceMoves : null,
+            out _);
+        InvalidateAndMeasure();
+    }
+
+    /// <summary>
+    /// Spaces all elements in <see cref="_multiSelection"/> evenly along the horizontal
+    /// (when <paramref name="horizontal"/> is <c>true</c>) or vertical axis, preserving the
+    /// positions of the outermost elements and distributing the gap equally between the rest.
+    /// The operation is committed as a single undoable batch via
+    /// <see cref="ModelSystemSession.MoveElements"/>.
+    /// Requires at least 3 selected elements to have any visible effect.
+    /// </summary>
+    private void DistributeSelectedElements(bool horizontal)
+    {
+        if (_vm is null || _multiSelection.Count < 3) return;
+
+        // Helper that returns the element's dimension used for this axis.
+        double Lead(ICanvasElement e)  => horizontal ? e.X        : e.Y;
+        double Trail(ICanvasElement e) => horizontal ? e.X + e.Width : e.Y + e.Height;
+        double Size(ICanvasElement e)  => horizontal ? e.Width    : e.Height;
+
+        // Sort by leading edge along the chosen axis.
+        var sorted = _multiSelection.OrderBy(Lead).ToList();
+
+        // The outermost elements stay fixed; we distribute the inner ones.
+        double totalSpan   = Trail(sorted[^1]) - Lead(sorted[0]);
+        double totalSizes  = sorted.Sum(Size);
+        double totalGaps   = totalSpan - totalSizes;
+        double gapBetween  = totalGaps / (sorted.Count - 1);
+
+        // Build new positions: first element unchanged, each subsequent one
+        // placed directly after the previous with the uniform gap.
+        var positions = new double[sorted.Count];
+        positions[0] = Lead(sorted[0]);
+        for (int i = 1; i < sorted.Count; i++)
+            positions[i] = positions[i - 1] + Size(sorted[i - 1]) + gapBetween;
+
+        var nodeMoves     = new List<(Node, Rectangle)>();
+        var commentMoves  = new List<(CommentBlock, Rectangle)>();
+        var templateMoves = new List<(FunctionTemplate, Rectangle)>();
+        var instanceMoves = new List<(FunctionInstance, Rectangle)>();
+
+        for (int i = 0; i < sorted.Count; i++)
+        {
+            var el     = sorted[i];
+            float newX = horizontal ? (float)Math.Max(0, positions[i]) : (float)el.X;
+            float newY = horizontal ? (float)el.Y : (float)Math.Max(0, positions[i]);
+
+            switch (el)
+            {
+                case NodeViewModel nvm:
+                {
+                    var loc = nvm.UnderlyingNode.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((nvm.UnderlyingNode, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+                case StartViewModel svm:
+                    nodeMoves.Add((svm.UnderlyingStart,
+                        new Rectangle(newX, newY, (float)svm.Diameter, (float)svm.Diameter)));
+                    break;
+                case CommentBlockViewModel cvm:
+                    commentMoves.Add((cvm.UnderlyingBlock,
+                        new Rectangle(newX, newY, (float)cvm.Width, (float)cvm.Height)));
+                    break;
+                case GhostNodeViewModel gvm:
+                {
+                    var loc = gvm.UnderlyingGhostNode.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((gvm.UnderlyingGhostNode, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+                case FunctionTemplateViewModel ftvm:
+                    templateMoves.Add((ftvm.UnderlyingTemplate,
+                        new Rectangle(newX, newY, (float)ftvm.Width, (float)ftvm.Height)));
+                    break;
+                case FunctionInstanceViewModel fivm:
+                    instanceMoves.Add((fivm.UnderlyingInstance,
+                        new Rectangle(newX, newY, (float)fivm.Width, (float)fivm.Height)));
+                    break;
+                case FunctionParameterViewModel fpvm:
+                {
+                    var loc = fpvm.UnderlyingParameter.Location;
+                    float w = loc.Width  is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f  : loc.Height;
+                    nodeMoves.Add((fpvm.UnderlyingParameter, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+            }
+        }
+
+        _vm.Session.MoveElements(
+            _vm.User,
+            nodeMoves.Count     > 0 ? nodeMoves     : null,
+            commentMoves.Count  > 0 ? commentMoves  : null,
+            templateMoves.Count > 0 ? templateMoves : null,
+            instanceMoves.Count > 0 ? instanceMoves : null,
+            out _);
+        InvalidateAndMeasure();
+    }
     /// <summary>
     /// Clears the multi-selection set, restoring <see cref="ICanvasElement.IsSelected"/> to
     /// <c>false</c> on every element that was in the set.
