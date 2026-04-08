@@ -25,6 +25,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using XTMF2.GUI.ViewModels;
 
 namespace XTMF2.GUI.Views;
@@ -56,6 +57,7 @@ public partial class ModelSystemEditorView : UserControl
     private void OnActualThemeVariantChanged(object? sender, EventArgs e)
     {
         UpdateThemeClass();
+        TheCanvas.InvalidateVisual();
     }
 
     private void UpdateThemeClass()

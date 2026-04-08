@@ -15,9 +15,9 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.1-build.4" />
-    <PackageReference Include="Dock.Avalonia" Version="11.3.11.13" />
-    <PackageReference Include="Dock.Model.Avalonia" Version="11.3.11.13" />
-    <PackageReference Include="Dock.Avalonia.Themes.Fluent" Version="11.3.11.13" />
+    <PackageReference Include="Dock.Avalonia" Version="11.3.11.22" />
+    <PackageReference Include="Dock.Model.Avalonia" Version="11.3.11.22" />
+    <PackageReference Include="Dock.Avalonia.Themes.Fluent" Version="11.3.11.22" />
   </ItemGroup>
 
   <ItemGroup>
