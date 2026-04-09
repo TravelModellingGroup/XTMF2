@@ -19,6 +19,7 @@
 using System;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -205,7 +206,7 @@ public partial class ModelSystemEditorView : UserControl
 
             var owner = TopLevel.GetTopLevel(this) as Window;
             if (owner is not null)
-                _variablesDialog.Show(owner);
+                 _variablesDialog.ShowDialog(owner);
             else
                 _variablesDialog.Show();
 
