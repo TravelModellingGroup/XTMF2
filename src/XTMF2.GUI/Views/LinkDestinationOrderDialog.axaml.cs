@@ -145,7 +145,7 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
         {
             if (Items.Count > 0)
                 SelectedItem = Items[0];
-            DestListBox.Focus();
+            DestListBox.Focus(NavigationMethod.Unspecified, KeyModifiers.None);
         };
     }
 

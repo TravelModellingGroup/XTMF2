@@ -2727,6 +2727,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         var names = ml.Destinations.Select(d => d.Name).ToList();
         var dlg   = new LinkDestinationOrderDialog(names);
+        
         await dlg.ShowDialog(ParentWindow);
 
         if (dlg.WasCancelled) return;

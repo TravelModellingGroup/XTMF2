@@ -265,7 +265,7 @@ public sealed class ModelSystemCanvas : Control
     // Minimize-to-inline button on BasicParameter node header top-left
     private const double InlineMinimizeButtonSize = NodeHeaderHeight - 8.0;
     // Multi-link destination index label
-    private const double LinkIndexFontSize = 9.0;
+    private const double LinkIndexFontSize = 10.0;
     private const double LinkHitTolerance = 6.0;
     // Canvas scaling
     private const double ScaleStep = 0.10;
