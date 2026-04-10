@@ -50,9 +50,9 @@ public class TestExtractToFunctionTemplate
         Node caller, NodeHook callerHook,
         Node entryNode,
         Node externalDest, NodeHook entryHook,
-        out FunctionTemplate? ft,
-        out FunctionInstance? fi,
-        out CommandError? error)
+        out FunctionTemplate ft,
+        out FunctionInstance fi,
+        out CommandError error)
     {
         var boundary = ms.ModelSystem.GlobalBoundary;
         // Wire caller → entryNode.
@@ -212,7 +212,7 @@ public class TestExtractToFunctionTemplate
                 Assert.AreSame(fi, boundary.FunctionInstances[0]);
 
                 // entryNode must have left the boundary.
-                Assert.IsFalse(boundary.Modules.Contains(entryNode),
+                Assert.DoesNotContain(entryNode, boundary.Modules,
                     "entryNode must no longer be in the parent boundary.");
 
                 // The incoming link (start → fi) must be in place.
@@ -275,11 +275,11 @@ public class TestExtractToFunctionTemplate
 
                 // ── Verify parent boundary ─────────────────────────────────
                 // entryNode gone from parent.
-                Assert.IsFalse(boundary.Modules.Contains(entryNode),
+                Assert.DoesNotContain(entryNode, boundary.Modules,
                     "entryNode must be in InternalModules, not the parent boundary.");
 
                 // externalDest stays in parent.
-                Assert.IsTrue(boundary.Modules.Contains(externalDest!),
+                Assert.Contains(externalDest!, boundary.Modules,
                     "externalDest must remain in the parent boundary.");
 
                 // start → fi link.
@@ -437,7 +437,7 @@ public class TestExtractToFunctionTemplate
                 // State after extraction.
                 Assert.HasCount(1, boundary.FunctionTemplates);
                 Assert.HasCount(1, boundary.FunctionInstances);
-                Assert.IsFalse(boundary.Modules.Contains(entryNode));
+                Assert.DoesNotContain(entryNode, boundary.Modules);
 
                 // Undo.
                 Assert.IsTrue(ms.Undo(user, out error), error?.Message);
@@ -449,7 +449,7 @@ public class TestExtractToFunctionTemplate
                     "Undo must remove the FunctionInstance.");
 
                 // entryNode is back in the boundary.
-                Assert.IsTrue(boundary.Modules.Contains(entryNode),
+                Assert.Contains(entryNode, boundary.Modules,
                     "entryNode must be back in the parent boundary.");
                 Assert.AreSame(boundary, entryNode.ContainedWithin,
                     "entryNode.ContainedWithin must point to the parent boundary again.");
@@ -512,7 +512,7 @@ public class TestExtractToFunctionTemplate
 
                 // entryNode back in InternalModules.
                 var ft = boundary.FunctionTemplates[0];
-                Assert.IsTrue(ft.InternalModules.Modules.Contains(entryNode),
+                Assert.Contains(entryNode, ft.InternalModules.Modules,
                     "entryNode must be back in InternalModules after redo.");
 
                 // start → fi link.
