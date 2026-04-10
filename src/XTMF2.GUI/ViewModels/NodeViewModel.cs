@@ -364,7 +364,22 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
         if (toBasic)
             return _session.SetParameterValue(_user, UnderlyingNode, currentValue, out error);
         else
-            return _session.SetParameterExpression(_user, UnderlyingNode, currentValue, out error);
+        {
+            // BasicParameter<string> stores the raw text (e.g. "hello world"), but
+            // ScriptedParameter expects a quoted string literal (e.g. "\"hello world\"").
+            // If the type argument is string and the current value is not already wrapped
+            // in double quotes, escape backslashes/inner quotes and add the surrounding quotes.
+            string scriptValue = currentValue;
+            if (typeArg == typeof(string))
+            {
+                bool alreadyQuoted = scriptValue.Length >= 2
+                                     && scriptValue[0] == '"'
+                                     && scriptValue[^1] == '"';
+                if (!alreadyQuoted)
+                    scriptValue = "\"" + scriptValue.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+            }
+            return _session.SetParameterExpression(_user, UnderlyingNode, scriptValue, out error);
+        }
     }
 
     /// <summary>
