@@ -115,6 +115,10 @@ public sealed class ModelSystemCanvas : Control
     private static readonly IBrush ResizeHandleBrush = new SolidColorBrush(Color.FromArgb(0x80, 0xAA, 0xBB, 0xCC));
     // Inline parameter hook row tint
     private static readonly IBrush InlineParamRowBg = new SolidColorBrush(Color.FromArgb(0x28, 0xFF, 0xE0, 0x80));
+    // ScriptedParameter accent — used to visually distinguish ScriptedParameter from BasicParameter
+    // in inline hook-row labels (dark mode: lavender-purple; light mode: deep violet).
+    private static readonly IBrush ScriptParamAccentBrush  = new SolidColorBrush(Color.FromRgb(0xAA, 0x88, 0xFF));
+    private static readonly IBrush ScriptParamAccentBrushL = new SolidColorBrush(Color.FromRgb(0x66, 0x00, 0xCC));
     // Minimize-to-inline button on BasicParameter nodes
     private static readonly IBrush MinimizeBtnBg = new SolidColorBrush(Color.FromArgb(0x60, 0x88, 0xCC, 0x55));
     private static readonly IBrush MinimizeBtnText = new SolidColorBrush(Color.FromRgb(0xCC, 0xFF, 0xAA));
@@ -1230,6 +1234,10 @@ public sealed class ModelSystemCanvas : Control
     /// Draws function-instance boxes. Each box is styled in teal, shows the instance name
     /// in the header and the template name as a subtitle, then lists exposed hooks below.
     /// </summary>
+    /// <summary>
+    /// Draws function-instance boxes in the teal FI palette. Hook rows use the same
+    /// layout and type-glyph logic as regular Node hook rows.
+    /// </summary>
     private void RenderFunctionInstances(DrawingContext ctx)
     {
         foreach (var fi in _vm!.FunctionInstances)
@@ -1238,6 +1246,7 @@ public sealed class ModelSystemCanvas : Control
             double rh = fi.Height;
             var rect = new Rect(fi.X, fi.Y, rw, rh);
 
+            // ── Border / fill — original teal FI palette ────────────────
             var borderBrush = fi.IsSelected ? (_isLight ? FiSelBorderBrushL : FiSelBorderBrush) : (_isLight ? FiBorderBrushL : FiBorderBrush);
             var border = new Pen(borderBrush, NodeBorderThickness);
             DrawRectGlow(ctx, rect, FiCornerRadius, fi.IsSelected ? SelectionGlowColor : (_isLight ? FiGlowColorL : FiGlowColor));
@@ -1252,65 +1261,21 @@ public sealed class ModelSystemCanvas : Control
             // "⊡ InstanceName" in header
             var labelText = "\u22A1 " + fi.Name;
             var labelFtText = MakeText(labelText, FtNameFontSize, _isLight ? FiTextBrushL : FiTextBrush);
-            var lx = fi.X + 8.0;
-            var ly = fi.Y + (FtHeaderHeight - labelFtText.Height) / 2.0;
+            double lx = fi.X + 8.0;
+            double ly = fi.Y + (FtHeaderHeight - labelFtText.Height) / 2.0;
             using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
                 ctx.DrawText(labelFtText, new Point(lx, ly));
 
             // Template subtitle (small, muted) at the bottom of the header
-            var subText = MakeText("[" + fi.TemplateName + "]" + (fi.EntryNodeTypeName.Length > 0 ? " : " + fi.EntryNodeTypeName : ""), HookFontSize, _isLight ? FiSubTextBrushL : FiSubTextBrush);
-            var subX = fi.X + rw - subText.Width - 8.0;
-            var subY = fi.Y + (FtHeaderHeight - subText.Height) / 2.0;
+            var subText = MakeText(
+                "[" + fi.TemplateName + "]" + (fi.EntryNodeTypeName.Length > 0 ? " : " + fi.EntryNodeTypeName : ""),
+                HookFontSize, _isLight ? FiSubTextBrushL : FiSubTextBrush);
+            double subX = fi.X + rw - subText.Width - 8.0;
+            double subY = fi.Y + (FtHeaderHeight - subText.Height) / 2.0;
             using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
                 ctx.DrawText(subText, new Point(Math.Max(lx + labelFtText.Width + 4, subX), subY));
 
-            // ── FunctionParameter hook rows ────────────────────────────────
-            double rowY = fi.Y + FtHeaderHeight;
-            var fiHooks = fi.UnderlyingInstance.Hooks;
-            _fiConnectedHooks.TryGetValue(fi, out var fiConnected);
-            for (int fi_i = 0; fi_i < fi.FunctionParameters.Count; fi_i++)
-            {
-                var fp = fi.FunctionParameters[fi_i];
-                var fpHook = fi_i < fiHooks.Count ? fiHooks[fi_i] as FunctionParameterHook : null;
-                bool fpConn = fiConnected is not null && fpHook is not null && fiConnected.Contains(fpHook);
-                NodeViewModel? inlinedFiParam = null;
-                bool hasInlinedFi = fpHook is not null
-                    && _fiHookInlinedParam.TryGetValue((fi, fpHook), out inlinedFiParam);
-
-                // Tinted background: skip for connected or inlined rows.
-                if (!fpConn && !hasInlinedFi)
-                    ctx.DrawRectangle(InlineParamRowBg, null,
-                        new Rect(fi.X, rowY, rw, FtHookRowHeight));
-
-                ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
-                    new Point(fi.X, rowY), new Point(fi.X + rw, rowY));
-
-                // Dot on the RIGHT edge — green if connected or inlined, red if not.
-                double dotCy = rowY + FtHookRowHeight / 2.0;
-                var dotBrush = (fpConn || hasInlinedFi)
-                    ? (_isLight ? HookConnectedBrushL : HookConnectedBrush)
-                    : (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush);
-                ctx.DrawEllipse(dotBrush, null,
-                    new Point(fi.X + rw, dotCy), HookDotRadius, HookDotRadius);
-
-                const double textPad = 6.0;
-                // Show «hook: value» label when a parameter is inlined into this FI hook row.
-                string hookLabel = hasInlinedFi && inlinedFiParam is not null
-                    ? $"{fp.Name}: {(string.IsNullOrEmpty(inlinedFiParam.ParameterValueRepresentation) ? "(no value)" : inlinedFiParam.ParameterValueRepresentation)}"
-                    : fp.Name ?? string.Empty;
-                var hookNameFt = MakeText(hookLabel, HookFontSize,
-                    (fpConn || hasInlinedFi)
-                        ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
-                        : (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush));
-                double maxW = rw - textPad * 2 - HookDotRadius * 2;
-                double hookTy = dotCy - hookNameFt.Height / 2.0;
-                using (ctx.PushClip(new Rect(fi.X + textPad, hookTy, Math.Max(0, maxW), hookNameFt.Height + 1)))
-                    ctx.DrawText(hookNameFt, new Point(fi.X + textPad, hookTy));
-
-                rowY += FtHookRowHeight;
-            }
-
-            // ── Resize grip ───────────────────────────────────────────────
+            // ── Resize grip (bottom-right corner) ─────────────────────────
             {
                 double dotR = 2.0;
                 double gx = fi.X + rw;
@@ -1323,6 +1288,69 @@ public sealed class ModelSystemCanvas : Control
                     ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
                         new Point(gx - dotR, gy - off + dotR), dotR, dotR);
                 }
+            }
+
+            if (fi.FunctionParameters.Count == 0)
+                continue;
+
+            // ── FunctionParameter hook rows — same layout logic as Node hook rows ───
+            ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 1.0),
+                new Point(fi.X + 1, fi.Y + FtHeaderHeight),
+                new Point(fi.X + rw - 1, fi.Y + FtHeaderHeight));
+
+            double rowY = fi.Y + FtHeaderHeight;
+            var fiHooks = fi.UnderlyingInstance.Hooks;
+            _fiConnectedHooks.TryGetValue(fi, out var fiConnected);
+            for (int fi_i = 0; fi_i < fi.FunctionParameters.Count; fi_i++)
+            {
+                var fp = fi.FunctionParameters[fi_i];
+                var fpHook = fi_i < fiHooks.Count ? fiHooks[fi_i] as FunctionParameterHook : null;
+                bool fpConn = fiConnected is not null && fpHook is not null && fiConnected.Contains(fpHook);
+                NodeViewModel? inlinedFiParam = null;
+                bool hasInlinedFi = fpHook is not null
+                    && _fiHookInlinedParam.TryGetValue((fi, fpHook), out inlinedFiParam);
+                bool fpUnsatisfied = !fpConn && !hasInlinedFi;
+
+                double rowTopY = rowY;
+                double dotCy   = rowY + HookRowHeight / 2.0;
+
+                // Row tint: amber for inlined param, red wash for unsatisfied (all FP hooks required).
+                if (hasInlinedFi)
+                    ctx.DrawRectangle(InlineParamRowBg, null,
+                        new Rect(fi.X + 1, rowTopY, rw - 2, HookRowHeight));
+                else if (fpUnsatisfied)
+                    ctx.DrawRectangle(HookUnsatisfiedRowBg, null,
+                        new Rect(fi.X + 1, rowTopY, rw - 2, HookRowHeight));
+
+                ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
+                    new Point(fi.X, rowY), new Point(fi.X + rw, rowY));
+
+                // Dot on the RIGHT edge — green if satisfied, red if unsatisfied.
+                var dotBrush = fpUnsatisfied
+                    ? (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush)
+                    : (_isLight ? HookConnectedBrushL   : HookConnectedBrush);
+                ctx.DrawEllipse(dotBrush, null,
+                    new Point(fi.X + rw, dotCy), HookDotRadius, HookDotRadius);
+
+                // Label: prefix with ≡ (BasicParameter) or ƒ (ScriptedParameter) when inlined.
+                const double textPad = 6.0;
+                string hookLabel = hasInlinedFi && inlinedFiParam is not null
+                    ? $"{(inlinedFiParam.IsBasicParameter ? "\u2261" : "\u0192")} {fp.Name}: {(string.IsNullOrEmpty(inlinedFiParam.ParameterValueRepresentation) ? "(no value)" : inlinedFiParam.ParameterValueRepresentation)}"
+                    : fp.Name ?? string.Empty;
+                IBrush hookTextBrush = fpUnsatisfied
+                    ? (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush)
+                    : fpConn
+                        ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
+                    : hasInlinedFi && inlinedFiParam is { IsScriptedParameter: true }
+                        ? (_isLight ? ScriptParamAccentBrushL : ScriptParamAccentBrush)
+                    : (_isLight ? ParamValueTextBrushL : ParamValueTextBrush);
+                var hookNameFt = MakeText(hookLabel, HookFontSize, hookTextBrush);
+                double maxW  = rw - textPad * 2 - HookDotRadius * 2;
+                double hookTy = dotCy - hookNameFt.Height / 2.0;
+                using (ctx.PushClip(new Rect(fi.X + textPad, hookTy, Math.Max(0, maxW), hookNameFt.Height + 1)))
+                    ctx.DrawText(hookNameFt, new Point(fi.X + textPad, hookTy));
+
+                rowY += HookRowHeight;
             }
         }
     }
@@ -2426,8 +2454,14 @@ public sealed class ModelSystemCanvas : Control
             }
 
             // ── Header: node name centred in the header band ──────────────
+            // For parameter nodes prefix the name with a type glyph:
+            //   ≡ (U+2261) → BasicParameter  (literal / constant value)
+            //   ƒ (U+0192) → ScriptedParameter (formula / expression)
             double headerBottom = node.Y + NodeHeaderHeight;
-            var ft = MakeText(node.Name, NodeFontSize, _isLight ? NodeTextBrushL : NodeTextBrush);
+            string nodeDisplayName = node.IsParameterNode
+                ? (node.IsBasicParameter ? "≡ " : "ƒ ") + node.Name
+                : node.Name;
+            var ft = MakeText(nodeDisplayName, NodeFontSize, _isLight ? NodeTextBrushL : NodeTextBrush);
             double tx = node.X + (rw - ft.Width) / 2;
             double ty = node.Y + (NodeHeaderHeight - ft.Height) / 2;
             ctx.DrawText(ft, new Point(tx, ty));
@@ -2580,13 +2614,18 @@ public sealed class ModelSystemCanvas : Control
                     new Point(node.X + rw, rowMidY),
                     HookDotRadius, HookDotRadius);
 
-                // Hook name + optional inlined value
+                // Hook name + optional inlined value.
+                // When a param is inlined, prefix with ≡ (BasicParameter) or ƒ (ScriptedParameter).
+                // Inlined values use the same green as connected hooks; ScriptedParameter gets the
+                // extra lavender accent on top so users can tell the two param kinds apart.
                 const double textPad = 6.0;
                 string hookLabel = hasInlined && inlinedParam is not null
-                    ? $"{hook.Name}: {(string.IsNullOrEmpty(inlinedParam.ParameterValueRepresentation) ? "(no value)" : inlinedParam.ParameterValueRepresentation)}"
+                    ? $"{(inlinedParam.IsBasicParameter ? "≡" : "ƒ")} {hook.Name}: {(string.IsNullOrEmpty(inlinedParam.ParameterValueRepresentation) ? "(no value)" : inlinedParam.ParameterValueRepresentation)}"
                     : hook.Name;
                 IBrush hookTextBrush = unsatisfied ? (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush)
-                                     : hasInlined ? (_isLight ? ParamValueTextBrushL : ParamValueTextBrush)
+                                     : hasInlined && inlinedParam is { IsScriptedParameter: true }
+                                         ? (_isLight ? ScriptParamAccentBrushL : ScriptParamAccentBrush)
+                                     : hasInlined ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
                                      : conn ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
                                      : (_isLight ? HookTextDimBrushL : HookTextDimBrush);
                 var hookFt = MakeText(hookLabel, HookFontSize, hookTextBrush);
