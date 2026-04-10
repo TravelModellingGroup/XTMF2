@@ -163,6 +163,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>Observable wrappers around <see cref="Boundary.Links"/>.</summary>
     public ObservableCollection<LinkViewModel> Links { get; } = new();
 
+    /// <summary>
+    /// Tracks the <see cref="INotifyPropertyChanged.PropertyChanged"/> handlers registered
+    /// on <see cref="SingleLink"/> objects so they can be properly unsubscribed when the
+    /// link is removed from the boundary or the boundary switches.
+    /// </summary>
+    private readonly Dictionary<SingleLink, System.ComponentModel.PropertyChangedEventHandler> _singleLinkDestHandlers = new();
+
     /// <summary>Observable wrappers around <see cref="Boundary.CommentBlocks"/>.</summary>
     public ObservableCollection<CommentBlockViewModel> CommentBlocks { get; } = new();
 
@@ -649,6 +656,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         UnsubscribeFromBoundary(_currentBoundary);
         foreach (var lvm in Links) lvm.Detach();
+        // Unsubscribe all SingleLink destination-change handlers tracked for the old boundary.
+        foreach (var (sl, h) in _singleLinkDestHandlers)
+            sl.PropertyChanged -= h;
+        _singleLinkDestHandlers.Clear();
         Nodes.Clear();
         Starts.Clear();
         Links.Clear();
@@ -769,6 +780,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                     vm.Detach();
                     Links.Remove(vm);
                 }
+
+                // Unsubscribe the destination-change handler registered in TryAddLinkViewModel.
+                if (link is SingleLink removedSl
+                    && _singleLinkDestHandlers.TryGetValue(removedSl, out var h))
+                {
+                    removedSl.PropertyChanged -= h;
+                    _singleLinkDestHandlers.Remove(removedSl);
+                }
             }
     }
 
@@ -888,7 +907,35 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         else if (link is SingleLink sl)
         {
             Links.Add(new LinkViewModel(link, originElement, ResolveElement(sl.Destination)));
+
+            // When SetDestination() is called on the underlying model link (e.g. by
+            // ExtractToFunctionTemplate), rebuild the LinkViewModel so it points at the
+            // new destination canvas element rather than continuing to float.
+            System.ComponentModel.PropertyChangedEventHandler destHandler = (_, args) =>
+            {
+                if (args.PropertyName is nameof(SingleLink.Destination))
+                    ReplaceSingleLinkViewModel(sl, originElement);
+            };
+            _singleLinkDestHandlers[sl] = destHandler;
+            sl.PropertyChanged += destHandler;
         }
+    }
+
+    /// <summary>
+    /// Replaces the <see cref="LinkViewModel"/> for a <see cref="SingleLink"/> whose
+    /// <see cref="SingleLink.Destination"/> has just changed (e.g. via
+    /// <c>ExtractToFunctionTemplate</c>). The stale VM is detached and removed; a fresh
+    /// one is created and added so the canvas arrow binds to the correct target element.
+    /// </summary>
+    private void ReplaceSingleLinkViewModel(SingleLink sl, ICanvasElement originElement)
+    {
+        var old = Links.FirstOrDefault(lvm => lvm.UnderlyingLink == sl);
+        if (old is not null)
+        {
+            old.Detach();
+            Links.Remove(old);
+        }
+        Links.Add(new LinkViewModel(sl, originElement, ResolveElement(sl.Destination)));
     }
 
     private void OnMultiLinkDestinationsChanged(
@@ -3023,6 +3070,89 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         Session.SetFunctionTemplateLocation(User, ft!, ftLocation, out _);
+    }
+
+    /// <summary>
+    /// Prompts for template and instance names then extracts the specified canvas elements
+    /// into an in-place <see cref="FunctionTemplate"/> + <see cref="FunctionInstance"/>.
+    /// Shows a toast on failure.
+    /// </summary>
+    public async Task ExtractSelectionToFunctionTemplateAsync(IReadOnlyList<ICanvasElement> elements)
+    {
+        if (ParentWindow is null) return;
+
+        // Collect the underlying Node objects (regular nodes + function instances).
+        var nodes = elements
+            .Select(el => el switch
+            {
+                NodeViewModel             nvm  => (Node?)nvm.UnderlyingNode,
+                FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+                _                             => null,
+            })
+            .Where(n => n is not null)
+            .Select(n => n!)
+            .ToList();
+
+        if (nodes.Count == 0)
+        {
+            ShowToast("No extractable nodes in the selection.", isError: true, durationMs: 4000);
+            return;
+        }
+
+        // Default template name: first name not already taken.
+        int idx = FunctionTemplates.Count + 1;
+        string defaultFtName;
+        do { defaultFtName = $"FunctionTemplate{idx++}"; }
+        while (FunctionTemplates.Any(ft => string.Equals(ft.Name, defaultFtName, StringComparison.OrdinalIgnoreCase)));
+
+        var ftNameDialog = new InputDialog(
+            title: "Extract to Function Template",
+            prompt: "Enter function template name:",
+            defaultText: defaultFtName);
+        await ftNameDialog.ShowDialog(ParentWindow);
+        if (ftNameDialog.WasCancelled) return;
+        var ftName = ftNameDialog.InputText?.Trim() ?? string.Empty;
+
+        var fiNameDialog = new InputDialog(
+            title: "Extract to Function Template",
+            prompt: "Enter function instance name:",
+            defaultText: ftName);
+        await fiNameDialog.ShowDialog(ParentWindow);
+        if (fiNameDialog.WasCancelled) return;
+        var fiName = fiNameDialog.InputText?.Trim() ?? string.Empty;
+
+        // Compute bounding box of selected nodes to derive placement.
+        float minX = nodes.Min(n => n.Location.X);
+        float minY = nodes.Min(n => n.Location.Y);
+        float maxX = nodes.Max(n => n.Location.X + n.Location.Width);
+        float maxY = nodes.Max(n => n.Location.Y + n.Location.Height);
+
+        // FunctionInstance inherits the centroid of the bounding box.
+        const float FiWidth  = 160f;
+        const float FiHeight =  60f;
+        var fiLocation = new Rectangle(
+            (minX + maxX - FiWidth)  / 2f,
+            (minY + maxY - FiHeight) / 2f,
+            FiWidth, FiHeight);
+
+        // FunctionTemplate placed below the selection.
+        const float FtGap    =  40f;
+        const float FtWidth  = 320f;
+        const float FtHeight = 220f;
+        var ftLocation = new Rectangle(
+            (minX + maxX - FtWidth) / 2f,
+            maxY + FtGap,
+            FtWidth, FtHeight);
+
+        if (!Session.ExtractToFunctionTemplate(
+                User, _currentBoundary, nodes,
+                ftName, fiName,
+                ftLocation, fiLocation,
+                out _, out _, out var error))
+        {
+            ShowToast(error?.Message ?? "Could not extract to function template.",
+                      isError: true, durationMs: 6000);
+        }
     }
 
     /// <summary>Pick a template (when more than one exists) then place a new function instance at the specified canvas position with an auto-generated name.</summary>
