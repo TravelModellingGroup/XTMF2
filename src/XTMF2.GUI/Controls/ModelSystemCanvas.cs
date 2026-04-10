@@ -2846,6 +2846,22 @@ public sealed class ModelSystemCanvas : Control
             _ = PasteElementsAsync(vx, vy);
             e.Handled = true;
         }
+        else if (e.Key == Key.M
+                 && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift))
+                    == (KeyModifiers.Control | KeyModifiers.Shift))
+        {
+            // Ctrl+Shift+M: extract selected nodes to a Function Template.
+            IReadOnlyList<ICanvasElement> toExtract = _multiSelection.Count > 1
+                ? _multiSelection.ToList()
+                : _vm?.SelectedElement is { } sel
+                    ? new[] { sel }
+                    : System.Array.Empty<ICanvasElement>();
+            if (toExtract.Count > 0 && _vm is not null)
+            {
+                _ = _vm.ExtractSelectionToFunctionTemplateAsync(toExtract);
+                e.Handled = true;
+            }
+        }
     }
 
     // ── Copy / Paste helpers ──────────────────────────────────────────────
@@ -4300,6 +4316,35 @@ public sealed class ModelSystemCanvas : Control
             menu.Items.Add(new Separator());
             menu.Items.Add(ghostItem);
             menu.Items.Add(moveNodeItem);
+        }
+
+        // ── Extract to Function Template ───────────────────────────────────────
+        // Available for regular nodes and function instances when NOT already inside
+        // a function template's InternalModules view.
+        if ((element is NodeViewModel extractSourceNode && !extractSourceNode.IsParameterNode
+             || element is FunctionInstanceViewModel)
+            && !vm.IsInsideFunctionTemplate)
+        {
+            // If the right-clicked element is part of a multi-selection, operate on all
+            // selected extractable elements; otherwise operate on just this one.
+            IReadOnlyList<ICanvasElement> selElements =
+                _multiSelection.Count > 1 && _multiSelection.Contains(element)
+                ? _multiSelection.ToList()
+                : new[] { element! };
+
+            int extractCount = selElements.Count(el =>
+                el is NodeViewModel envm && !envm.IsParameterNode
+                || el is FunctionInstanceViewModel);
+
+            string extractHeader = extractCount > 1
+                ? $"Extract {extractCount} Elements to Function Template…\tCtrl+Shift+M"
+                : "Extract to Function Template…\tCtrl+Shift+M";
+
+            var capturedExtractElements = selElements;
+            var extractItem = new MenuItem { Header = extractHeader };
+            extractItem.Click += (_, _) => _ = vm.ExtractSelectionToFunctionTemplateAsync(capturedExtractElements);
+            menu.Items.Add(new Separator());
+            menu.Items.Add(extractItem);
         }
 
         // ── Move to Boundary (ghost nodes) ────────────────────────────────────

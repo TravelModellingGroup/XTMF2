@@ -3497,6 +3497,445 @@ namespace XTMF2.Editing
             }
         }
 
+        // ── ExtractToFunctionTemplate ─────────────────────────────────────
+
+        /// <summary>
+        /// Extracts a set of nodes from <paramref name="boundary"/> into a newly created
+        /// <see cref="FunctionTemplate"/> and places a <see cref="FunctionInstance"/> of that
+        /// template in the same boundary in-place.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// All nodes in <paramref name="selectedNodes"/> must reside in
+        /// <paramref name="boundary"/>.  Exactly one link must come <em>from outside</em> the
+        /// selection into the selection; that link's destination node becomes the template's
+        /// <see cref="FunctionTemplate.EntryNode"/>.
+        /// </para>
+        /// <para>
+        /// Every SingleLink whose origin is inside the selection and whose destination is
+        /// <em>outside</em> the selection (and not a Rectangle.Hidden inline-parameter node)
+        /// is converted into a <see cref="FunctionParameter"/> on the new template.
+        /// The corresponding <see cref="FunctionInstance"/> hook is then wired to the original
+        /// external destination.
+        /// </para>
+        /// <para>The entire operation is registered as a single undoable command.</para>
+        /// </remarks>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="boundary">The boundary that contains the selected nodes.</param>
+        /// <param name="selectedNodes">The nodes to extract. Must all reside in <paramref name="boundary"/>.</param>
+        /// <param name="functionTemplateName">Name for the new <see cref="FunctionTemplate"/>. Must be unique in the model system.</param>
+        /// <param name="functionInstanceName">Name for the new <see cref="FunctionInstance"/>.</param>
+        /// <param name="functionTemplateLocation">Canvas location for the function template box.</param>
+        /// <param name="functionInstanceLocation">Canvas location for the function instance.</param>
+        /// <param name="functionTemplate">The newly created template on success.</param>
+        /// <param name="functionInstance">The newly created instance on success.</param>
+        /// <param name="error">Error description when the method returns <c>false</c>.</param>
+        /// <returns><c>true</c> on success; <c>false</c> with a populated <paramref name="error"/> on failure.</returns>
+        public bool ExtractToFunctionTemplate(
+            User user,
+            Boundary boundary,
+            IReadOnlyList<Node> selectedNodes,
+            string functionTemplateName,
+            string functionInstanceName,
+            Rectangle functionTemplateLocation,
+            Rectangle functionInstanceLocation,
+            out FunctionTemplate? functionTemplate,
+            out FunctionInstance? functionInstance,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(boundary);
+            ArgumentNullException.ThrowIfNull(selectedNodes);
+            functionTemplate = null;
+            functionInstance = null;
+
+            if (selectedNodes.Count == 0)
+            {
+                error = new CommandError("At least one node must be selected for extraction.");
+                return false;
+            }
+            if (string.IsNullOrWhiteSpace(functionTemplateName))
+            {
+                error = new CommandError("A function template name must not be empty.");
+                return false;
+            }
+            if (string.IsNullOrWhiteSpace(functionInstanceName))
+            {
+                error = new CommandError("A function instance name must not be empty.");
+                return false;
+            }
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var selectedSet = new HashSet<Node>();
+                foreach (var n in selectedNodes)
+                    selectedSet.Add(n);
+
+                // ── Validate all selected nodes live in the specified boundary ──
+                foreach (var n in selectedNodes)
+                {
+                    if (!ReferenceEquals(n.ContainedWithin, boundary))
+                    {
+                        error = new CommandError(
+                            $"Node '{n.Name}' does not reside in boundary '{boundary.Name}'.");
+                        return false;
+                    }
+                    if (n is FunctionParameter)
+                    {
+                        error = new CommandError(
+                            $"Node '{n.Name}' is a FunctionParameter and cannot be extracted.");
+                        return false;
+                    }
+                }
+
+                // ── Classify links ─────────────────────────────────────────────
+                // External incoming: origin outside selection, destination (single) inside selection.
+                var externalIncomingLinks = boundary.Links
+                    .Where(l => l is SingleLink sl
+                                && !selectedSet.Contains(l.Origin)
+                                && selectedSet.Contains(sl.Destination))
+                    .Cast<SingleLink>()
+                    .ToList();
+
+                if (externalIncomingLinks.Count != 1)
+                {
+                    error = new CommandError(
+                        $"Extraction requires exactly one external incoming link, " +
+                        $"but {externalIncomingLinks.Count} were found.");
+                    return false;
+                }
+
+                var externalIncoming = externalIncomingLinks[0];
+                var entryNode        = externalIncoming.Destination;
+
+                // Reject mixed MultiLinks that cross the selection boundary (some dests in, some out).
+                var ambiguousMulti = boundary.Links
+                    .Where(l => l is MultiLink ml
+                                && selectedSet.Contains(l.Origin)
+                                && ml.Destinations.Any(d => selectedSet.Contains(d))
+                                && ml.Destinations.Any(d => !selectedSet.Contains(d)))
+                    .ToList();
+                if (ambiguousMulti.Count > 0)
+                {
+                    error = new CommandError(
+                        "Extraction is not supported when a MultiLink has destinations both " +
+                        "inside and outside the selection.");
+                    return false;
+                }
+
+                // Reject fully-external MultiLinks (all dests outside): they are ambiguous as FPs.
+                var externalMultiLinks = boundary.Links
+                    .Where(l => l is MultiLink ml2
+                                && selectedSet.Contains(l.Origin)
+                                && ml2.Destinations.All(d => !selectedSet.Contains(d)))
+                    .ToList();
+                if (externalMultiLinks.Count > 0)
+                {
+                    error = new CommandError(
+                        "Extraction is not supported when a MultiLink exits the selection entirely. " +
+                        "Replace it with individual SingleLinks before extracting.");
+                    return false;
+                }
+
+                // External outgoing SingleLinks: origin inside, destination outside, not a hidden child.
+                var externalOutgoing = boundary.Links
+                    .Where(l => l is SingleLink sl2
+                                && selectedSet.Contains(l.Origin)
+                                && !selectedSet.Contains(sl2.Destination)
+                                && !sl2.Destination.Location.Equals(Rectangle.Hidden))
+                    .Cast<SingleLink>()
+                    .ToList();
+
+                // ── Validate FunctionTemplate name uniqueness ──────────────────
+                if (ModelSystem.GlobalBoundary.ContainsFunctionTemplateName(functionTemplateName))
+                {
+                    error = new CommandError(
+                        $"A FunctionTemplate named '{functionTemplateName}' already exists in the model system.");
+                    return false;
+                }
+
+                // ══════════════════════════════════════════════════════════════
+                // Perform the extraction (no more early returns with error after
+                // this point -- all validation is done above).
+                // ══════════════════════════════════════════════════════════════
+
+                // Step 1 – Create FunctionTemplate.
+                if (!boundary.AddFunctionTemplate(functionTemplateName, out var ft, out error))
+                    return false;
+                ft!.SetLocation(functionTemplateLocation);
+                var internalBoundary = ft.InternalModules;
+
+                // Step 2 – Remove external outgoing links from boundary so they don't follow
+                //          their origin nodes into InternalModules during the move.
+                foreach (var link in externalOutgoing)
+                    boundary.RemoveLink(link, out _);
+
+                // Step 3 – Move each selected node (and its hidden inline children) to
+                //          InternalModules.  Their remaining outgoing links (internal ones
+                //          plus links to hidden children) also move.
+                var moveInfo = new List<(Node Node, List<Node> HiddenChildren, List<Link> MovedLinks)>();
+                foreach (var node in selectedNodes)
+                {
+                    // Collect outgoing links still present in boundary (external ones were removed above).
+                    var nodeOutgoing = boundary.Links.Where(l => l.Origin == node).ToList();
+
+                    // Collect hidden inline-parameter children.
+                    var hiddenChildrenSet = new HashSet<Node>();
+                    foreach (var lk in nodeOutgoing)
+                    {
+                        IEnumerable<Node> dests = lk is SingleLink slH && slH.Destination is not null
+                            ? new[] { slH.Destination }
+                            : lk is MultiLink mlH
+                                ? (IEnumerable<Node>)mlH.Destinations
+                                : Array.Empty<Node>();
+                        foreach (var dn in dests)
+                        {
+                            if (dn.Location.Equals(Rectangle.Hidden)
+                                && ReferenceEquals(dn.ContainedWithin, boundary))
+                                hiddenChildrenSet.Add(dn);
+                        }
+                    }
+                    var hiddenChildren = hiddenChildrenSet.ToList();
+
+                    // Remove links from boundary.
+                    foreach (var lk in nodeOutgoing)
+                        boundary.RemoveLink(lk, out _);
+
+                    // Move node and hidden children.
+                    boundary.RemoveNode(node, out _);
+                    node.UpdateContainedWithin(internalBoundary);
+                    internalBoundary.AddNode(node, out _);
+
+                    foreach (var hc in hiddenChildren)
+                    {
+                        boundary.RemoveNode(hc, out _);
+                        hc.UpdateContainedWithin(internalBoundary);
+                        internalBoundary.AddNode(hc, out _);
+                    }
+
+                    // Re-add outgoing links to InternalModules.
+                    foreach (var lk in nodeOutgoing)
+                        internalBoundary.AddLink(lk, out _);
+
+                    moveInfo.Add((node, hiddenChildren, nodeOutgoing));
+                }
+
+                // Compute the bounding box of the selected nodes so we can place
+                // FunctionParameters visibly above them, centred horizontally.
+                const float FpWidth  = 120f;
+                const float FpHeight =  50f;
+                const float FpGap    =  20f;
+                float bboxMinX = float.MaxValue, bboxMaxX = float.MinValue, bboxMinY = float.MaxValue;
+                foreach (var node in selectedNodes)
+                {
+                    var loc = node.Location;
+                    if (loc.Equals(Rectangle.Hidden)) continue;
+                    if (loc.X         < bboxMinX) bboxMinX = loc.X;
+                    if (loc.X + loc.Width  > bboxMaxX) bboxMaxX = loc.X + loc.Width;
+                    if (loc.Y         < bboxMinY) bboxMinY = loc.Y;
+                }
+                // Fallback when every selected node is hidden / has no location.
+                if (bboxMinX == float.MaxValue) { bboxMinX = 0f; bboxMaxX = 120f; bboxMinY = 100f; }
+                int fpCount = externalOutgoing.Count;
+                float totalFpWidth = fpCount * FpWidth + MathF.Max(0, fpCount - 1) * FpGap;
+                float fpStartX     = (bboxMinX + bboxMaxX) / 2f - totalFpWidth / 2f;
+                float fpY          = MathF.Max(0f, bboxMinY - FpHeight - 40f);
+
+                // Step 4 – Create FunctionParameters and internal FP-destination links.
+                var usedFpNames = new HashSet<string>(StringComparer.Ordinal);
+                var fpData = new List<(FunctionParameter Fp, SingleLink ExternalLink, SingleLink InternalFpLink)>();
+                int fpIndex = 0;
+                foreach (var extLink in externalOutgoing)
+                {
+                    var hookType = extLink.OriginHook.Type;
+                    var fpName   = extLink.OriginHook.Name;
+
+                    // Ensure name uniqueness within the template.
+                    if (usedFpNames.Contains(fpName))
+                    {
+                        int suffix = 1;
+                        while (usedFpNames.Contains($"{fpName}_{suffix}")) suffix++;
+                        fpName = $"{fpName}_{suffix}";
+                    }
+                    usedFpNames.Add(fpName);
+
+                    var fpRect = new Rectangle(fpStartX + fpIndex * (FpWidth + FpGap), fpY, FpWidth, FpHeight);
+                    ft.AddFunctionParameter(fpName, hookType, fpRect, out var fp, out _);
+                    fpIndex++;
+                    var internalFpLink = new SingleLink(extLink.Origin, extLink.OriginHook, fp!, false);
+                    internalBoundary.AddLink(internalFpLink, out _);
+                    fpData.Add((fp!, extLink, internalFpLink));
+                }
+
+                // Step 5 – Create FunctionInstance.
+                boundary.AddFunctionInstance(functionInstanceName, ft, functionInstanceLocation,
+                    out var fi, out _);
+
+                // Step 6 – Set the entry node on the template.
+                ft.SetEntryNode(entryNode);
+
+                // Step 7 – Redirect the external incoming link to the new FunctionInstance.
+                externalIncoming.SetDestination(fi!, out _);
+
+                // Step 8 – Create links from the FunctionInstance's hooks to the external destinations.
+                var fiOutgoingLinks = new List<SingleLink>();
+                foreach (var (fp, extLink, _) in fpData)
+                {
+                    var fiHook = fi!.Hooks
+                        .OfType<FunctionParameterHook>()
+                        .FirstOrDefault(h => ReferenceEquals(h.Parameter, fp));
+                    if (fiHook is not null)
+                    {
+                        var fiLink = new SingleLink(fi, fiHook, extLink.Destination, false);
+                        boundary.AddLink(fiLink, out _);
+                        fiOutgoingLinks.Add(fiLink);
+                    }
+                }
+
+                functionTemplate = ft;
+                functionInstance = fi!;
+                error = null;
+
+                // ── Register a single undo/redo command ────────────────────────
+                var capturedFt              = ft;
+                var capturedFi              = fi!;
+                var capturedEntryNode       = entryNode;
+                var capturedExternalIn      = externalIncoming;
+                var capturedFpData          = fpData;
+                var capturedMoveInfo        = moveInfo;
+                var capturedExternalOut     = externalOutgoing;
+                var capturedFiOutgoing      = fiOutgoingLinks;
+
+                Buffer.AddUndo(new Command(
+                    // ── Undo ──
+                    () =>
+                    {
+                        // 1. Remove fi→external links.
+                        foreach (var lk in capturedFiOutgoing)
+                            boundary.RemoveLink(lk, out _);
+
+                        // 2. Move nodes back from InternalModules to boundary FIRST so that
+                        //    when SetDestination fires PropertyChanged below, the destination
+                        //    node VM already exists in the boundary and the link can bind correctly.
+                        //    Pass 1: move all nodes (and their hidden children) back first so that
+                        //    every NodeViewModel exists before any link tries to resolve its destination.
+                        foreach (var (node, hiddenChildren, movedLinks) in capturedMoveInfo)
+                        {
+                            // Remove outgoing links from InternalModules.
+                            foreach (var lk in movedLinks)
+                                internalBoundary.RemoveLink(lk, out _);
+
+                            // Move node and hidden children back.
+                            internalBoundary.RemoveNode(node, out _);
+                            node.UpdateContainedWithin(boundary);
+                            boundary.AddNode(node, out _);
+
+                            foreach (var hc in hiddenChildren)
+                            {
+                                internalBoundary.RemoveNode(hc, out _);
+                                hc.UpdateContainedWithin(boundary);
+                                boundary.AddNode(hc, out _);
+                            }
+                        }
+
+                        //    Pass 2: now that all destination NodeViewModels exist in the boundary,
+                        //    re-add the links so TryAddLinkViewModel can resolve both endpoints.
+                        foreach (var (_, _, movedLinks) in capturedMoveInfo)
+                            foreach (var lk in movedLinks)
+                                boundary.AddLink(lk, out _);
+
+                        // 3. Re-add the original external outgoing links to boundary.
+                        foreach (var lk in capturedExternalOut)
+                            boundary.AddLink(lk, out _);
+
+                        // 4. Restore external incoming link destination (fires PropertyChanged;
+                        //    capturedEntryNode is now in the boundary so the VM resolves correctly).
+                        capturedExternalIn.SetDestination(capturedEntryNode, out _);
+
+                        // 5. Clear the entry node.
+                        capturedFt.SetEntryNode(null);
+
+                        // 6. Remove FunctionInstance.
+                        boundary.RemoveFunctionInstance(capturedFi, out _);
+
+                        // 7. Remove internal FP-destination links and FunctionParameters.
+                        foreach (var (fp, _, internalFpLink) in capturedFpData)
+                        {
+                            internalBoundary.RemoveLink(internalFpLink, out _);
+                            capturedFt.RemoveFunctionParameter(fp, out _);
+                        }
+
+                        // 8. Remove the FunctionTemplate.
+                        boundary.RemoveFunctionTemplate(capturedFt, out _);
+
+                        return (true, null);
+                    },
+                    // ── Redo ──
+                    () =>
+                    {
+                        // Re-add FunctionTemplate.
+                        boundary.AddFunctionTemplate(capturedFt, out _);
+                        capturedFt.SetLocation(functionTemplateLocation);
+
+                        // Remove external outgoing links.
+                        foreach (var lk in capturedExternalOut)
+                            boundary.RemoveLink(lk, out _);
+
+                        // Move nodes to InternalModules.
+                        foreach (var (node, hiddenChildren, movedLinks) in capturedMoveInfo)
+                        {
+                            foreach (var lk in movedLinks)
+                                boundary.RemoveLink(lk, out _);
+
+                            boundary.RemoveNode(node, out _);
+                            node.UpdateContainedWithin(internalBoundary);
+                            internalBoundary.AddNode(node, out _);
+
+                            foreach (var hc in hiddenChildren)
+                            {
+                                boundary.RemoveNode(hc, out _);
+                                hc.UpdateContainedWithin(internalBoundary);
+                                internalBoundary.AddNode(hc, out _);
+                            }
+
+                            foreach (var lk in movedLinks)
+                                internalBoundary.AddLink(lk, out _);
+                        }
+
+                        // Re-add FPs and internal FP links.
+                        foreach (var (fp, _, internalFpLink) in capturedFpData)
+                        {
+                            capturedFt.RestoreFunctionParameter(fp, capturedFt.FunctionParameters.Count);
+                            internalBoundary.AddLink(internalFpLink, out _);
+                        }
+
+                        // Re-add FunctionInstance.
+                        boundary.AddFunctionInstance(capturedFi, out _);
+
+                        // Set entry node.
+                        capturedFt.SetEntryNode(capturedEntryNode);
+
+                        // Redirect external incoming link.
+                        capturedExternalIn.SetDestination(capturedFi, out _);
+
+                        // Re-add fi→external links.
+                        foreach (var lk in capturedFiOutgoing)
+                            boundary.AddLink(lk, out _);
+
+                        return (true, null);
+                    }
+                ));
+
+                return true;
+            }
+        }
+
         /// <summary>
         /// Export the model system to a file at the given path.
         /// </summary>
