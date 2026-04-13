@@ -18,25 +18,13 @@
 */
 using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.ComponentModel;
-using System.Globalization;
 using System.Linq;
-using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Input.Platform;
-using Avalonia.Threading;
-using Avalonia.Media;
-using Avalonia.Media.TextFormatting;
-using Avalonia.Layout;
 using Avalonia.Styling;
-using Avalonia.VisualTree;
-using XTMF2.Editing;
 using XTMF2.GUI.ViewModels;
 using XTMF2.ModelSystemConstruct;
-using System.Collections.ObjectModel;
 
 namespace XTMF2.GUI.Controls;
 
@@ -907,9 +895,4 @@ partial class ModelSystemCanvas
         e.Handled = true;
     }
 
-    /// <summary>
-    /// Opens a context menu for the given canvas element or link.
-    /// The element/link is selected on the VM before the menu opens so that
-    /// the Delete command operates on the correct target.
-    /// </summary>
 }

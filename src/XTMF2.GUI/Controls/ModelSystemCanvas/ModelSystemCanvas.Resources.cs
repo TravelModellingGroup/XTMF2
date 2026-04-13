@@ -16,27 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
-using System;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.ComponentModel;
-using System.Globalization;
-using System.Linq;
-using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Input.Platform;
-using Avalonia.Threading;
 using Avalonia.Media;
-using Avalonia.Media.TextFormatting;
-using Avalonia.Layout;
-using Avalonia.Styling;
-using Avalonia.VisualTree;
-using XTMF2.Editing;
-using XTMF2.GUI.ViewModels;
-using XTMF2.ModelSystemConstruct;
-using System.Collections.ObjectModel;
 
 namespace XTMF2.GUI.Controls;
 
@@ -273,5 +253,5 @@ partial class ModelSystemCanvas
     private const double AutoScrollSpeed = 14.0 / 2.0;
 
     private static readonly Typeface DefaultTypeface = new Typeface("Segoe UI, Arial, sans-serif");
-    
+
 }
