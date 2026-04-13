@@ -324,10 +324,7 @@ partial class ModelSystemCanvas
     /// <summary>
     /// Draws function-instance boxes. Each box is styled in teal, shows the instance name
     /// in the header and the template name as a subtitle, then lists exposed hooks below.
-    /// </summary>
-    /// <summary>
-    /// Draws function-instance boxes in the teal FI palette. Hook rows use the same
-    /// layout and type-glyph logic as regular Node hook rows.
+    /// Hook rows use the same layout and type-glyph logic as regular Node hook rows.
     /// </summary>
     private void RenderFunctionInstances(DrawingContext ctx)
     {
@@ -727,16 +724,11 @@ partial class ModelSystemCanvas
     }
 
     /// <summary>
-    /// Computes cubic Bézier control points for a direction-aware link curve.
-    /// <para>
-    /// c1 is placed along the <em>exit</em> tangent at p1 (rightward for hook anchors,
-    /// radially outward for Start nodes). c2 is placed along the <em>entry</em> tangent
-    /// at p2, derived from the inward normal of the destination border face, so the
-    /// curve arrives smoothly perpendicular to that face. Tension is proportional to
-    /// the Euclidean distance between p1 and p2 so the curve scales naturally at any
-    /// zoom and in any direction.
-    /// </para>
+    /// Draws a filled arrowhead triangle at <paramref name="to"/> pointing from
+    /// <paramref name="from"/> toward <paramref name="to"/>, using <paramref name="brush"/>.
     /// </summary>
+    /// <returns>The shaft end point (base of the arrowhead triangle), so the caller
+    /// can shorten the preceding line segment to avoid overlap with the filled head.</returns>
     private static Point DrawArrow(DrawingContext ctx, IBrush brush, Point from, Point to)
     {
         var dx = to.X - from.X;
@@ -1048,8 +1040,9 @@ partial class ModelSystemCanvas
     }
 
     /// <summary>
-    /// Updates <see cref="_hoveredParameterNode"/> based on which node (if any) the
-    /// pointer currently sits over, and invalidates the visual when the value changes.
+    /// Draws ghost nodes — placeholder representations of nodes that live in another
+    /// boundary. Rendered as semi-transparent dashed rectangles in the steel-blue
+    /// ghost palette, with the remote node's name in the header.
     /// </summary>
     private void RenderGhostNodes(DrawingContext ctx)
     {
@@ -1116,7 +1109,10 @@ partial class ModelSystemCanvas
     }
 
     /// <summary>
-    /// <summary>Updates the zoom bar's colours to match the current light/dark theme.</summary>
+    /// Draws a neon glow halo around a rounded rectangle using 5 outward-expanding
+    /// semi-transparent layers of <paramref name="glowColor"/>, fading from fully
+    /// transparent at the outer edge to relatively vivid just inside the object border.
+    /// </summary>
     private static void DrawRectGlow(DrawingContext ctx, Rect rect, double cornerRadius, Color glowColor)
     {
         ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x08, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(14), cornerRadius + 14, cornerRadius + 14);

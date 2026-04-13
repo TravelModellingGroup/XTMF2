@@ -25,6 +25,17 @@ namespace XTMF2.GUI.Controls;
 
 partial class ModelSystemCanvas
 {
+    /// <summary>
+    /// Computes cubic Bézier control points for a direction-aware S-curve link.
+    /// <para>
+    /// <c>c1</c> is placed along the <em>exit</em> tangent at <c>p1</c> (rightward for hook
+    /// anchors, radially outward for Start nodes). <c>c2</c> is placed along the
+    /// <em>entry</em> tangent at <c>p2</c>, derived from the inward normal of the destination
+    /// border face, so the curve arrives smoothly perpendicular to that face. Tension is
+    /// proportional to the Euclidean distance between <c>p1</c> and <c>p2</c> so the curve
+    /// scales naturally at any zoom and in any direction.
+    /// </para>
+    /// </summary>
     private (Point p1, Point c1, Point c2, Point p2) ComputeSCurve(LinkViewModel link)
     {
         var destCenter = new Point(link.X2, link.Y2);

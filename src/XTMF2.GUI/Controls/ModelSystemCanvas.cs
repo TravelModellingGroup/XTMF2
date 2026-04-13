@@ -43,7 +43,7 @@ namespace XTMF2.GUI.Controls;
 /// <summary>
 /// A custom Avalonia <see cref="Control"/> that renders the model system canvas
 /// using a <see cref="DrawingContext"/>.
-/// <para>f
+/// <para>
 /// Nodes are drawn as rounded rectangles, Starts as circles, and Links as lines.
 /// Click a node or start to select it; click empty space to deselect.
 /// </para>
@@ -376,7 +376,7 @@ public sealed partial class ModelSystemCanvas : Control
     }
 
     // ── Resize drag state ─────────────────────────────────────────────────
-    /// <summary>The node being resized, or <c>null</c> when not resizing.</summary>
+    /// <summary>The canvas element being resized, or <c>null</c> when not resizing.</summary>
     private ICanvasElement? _resizing;
     /// <summary>Pointer position at the start of the resize drag.</summary>
     private Point _resizeStartPos;

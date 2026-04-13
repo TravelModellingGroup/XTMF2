@@ -346,15 +346,12 @@ partial class ModelSystemCanvas
         return null;
     }
 
-    /// <summary>Shows the inline editor over the parameter row of <paramref name="node"/>.</summary>
-    /// <param name="node">The BasicParameter node whose value is being edited.</param>
-    /// <param name="rowX">Override X position of the editor overlay (use -1 to auto-derive).</param>
-    /// <param name="rowY">Override Y position of the editor overlay (use -1 to auto-derive).</param>
-    /// <param name="rowW">Override width of the editor overlay (use -1 to auto-derive).</param>
     /// <summary>
-    /// Unsubscribes from the inline editor's internal ScrollViewer PropertyChanged event
-    /// and clears the cached references. Safe to call when not subscribed.
+    /// Returns the <see cref="ICanvasElement"/> whose resize handle (bottom-right corner square)
+    /// contains <paramref name="pos"/>, or <c>null</c> if none.
     /// </summary>
+    /// <param name="pos">The position to test.</param>
+    /// <returns>The <see cref="ICanvasElement"/> whose resize handle contains <paramref name="pos"/>, or <c>null</c> if none.</returns>
     private ICanvasElement? HitTestResizeHandle(Point pos)
     {
         if (_vm is null) return null;
@@ -415,6 +412,9 @@ partial class ModelSystemCanvas
     /// Returns the bounding rectangle of the hook-toggle icon button for
     /// <paramref name="node"/> given its rendered width <paramref name="rw"/>.
     /// </summary>
+    /// <param name="node">The node whose hook-toggle icon button rectangle is being calculated.</param>
+    /// <param name="rw">The rendered width of the node, used to position the icon at the right edge.</param>
+    /// <returns>The bounding rectangle of the hook-toggle icon button.</returns>
     private static Rect HookToggleIconRect(NodeViewModel node, double rw)
     {
         const double margin = 4.0;
@@ -430,6 +430,8 @@ partial class ModelSystemCanvas
     /// Returns the bounding rectangle of the "minimize to inline" button that appears
     /// in the top-left header of a <see cref="_canInlineNodes"/> BasicParameter node.
     /// </summary>
+    /// <param name="node">The node whose minimize-to-inline button rectangle is being calculated.</param>
+    /// <returns>The bounding rectangle of the minimize-to-inline button.</returns>
     private static Rect InlineMinimizeButtonRect(NodeViewModel node)
     {
         const double margin = 4.0;
