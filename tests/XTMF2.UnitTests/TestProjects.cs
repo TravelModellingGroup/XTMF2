@@ -1,4 +1,4 @@
-﻿/*
+/*
     Copyright 2017-2020 University of Toronto
 
     This file is part of XTMF2.
@@ -31,10 +31,10 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void CreateNewProject()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
+            var localUser = TestHelper.GetTestUser(runtime, "CreateNewProject");
             // delete the project in case it has survived.
             controller.DeleteProject(localUser, "Test", out error);
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, out error).UsingIf(session, () =>
@@ -48,12 +48,12 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
-        public void CreateNewOrGet()
+        public void CreateNewOrGetProject()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
+            var localUser = TestHelper.GetTestUser(runtime, "CreateNewOrGetProject");
             // delete the project in case it has survived.
             controller.DeleteProject(localUser, "Test", out error);
             Assert.IsTrue(controller.CreateNewOrGet(localUser, "Test", out var session, out error).UsingIf(session, () =>
@@ -74,10 +74,10 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void RenameProject()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
+            var localUser = TestHelper.GetTestUser(runtime, "RenameProject");
             // delete the project in case it has survived.
             controller.DeleteProject(localUser, "Test", out error);
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, out error).UsingIf(session, () =>
@@ -94,13 +94,13 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
-        public void ProjectPersistance()
+        public void ProjectPersistence()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime("ProjectPersistence");
             var controller = runtime.ProjectController;
             const string projectName = "Test";
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
+            var localUser = TestHelper.GetTestUser(runtime, "ProjectPersistence");
             // delete the project just in case it survived
             controller.DeleteProject(localUser, projectName, out error);
             // now create it
@@ -114,9 +114,9 @@ namespace XTMF2.UnitTests
             // Simulate a shutdown of XTMF
             runtime.Shutdown();
             //Startup XTMF again
-            runtime = XTMFRuntime.CreateRuntime();
+            runtime = TestHelper.CreateRuntime("ProjectPersistence");
             controller = runtime.ProjectController;
-            localUser = TestHelper.GetTestUser(runtime);
+            localUser = TestHelper.GetTestUser(runtime, "ProjectPersistence", false);
             Assert.HasCount(numberOfProjects, localUser.AvailableProjects);
             var regainedProject = localUser.AvailableProjects.FirstOrDefault(p => p.Name == projectName);
             Assert.IsNotNull(regainedProject, $"Project '{projectName}' not found after restart");
@@ -126,10 +126,10 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void EnsureSameProjectSession()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
+            var localUser = TestHelper.GetTestUser(runtime, "EnsureSameProjectSession");
             runtime.UserController.Delete("NewUser");
             Assert.IsTrue(runtime.UserController.CreateNew("NewUser", false, out var newUser, out error), error?.Message);
             // delete the project in case it has survived.
@@ -155,12 +155,12 @@ namespace XTMF2.UnitTests
              * A subsequent request for a project session to the same project should
              * be a new object.
              */
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
-            runtime.UserController.Delete("NewUser");
-            Assert.IsTrue(runtime.UserController.CreateNew("NewUser", false, out var newUser, out error), error?.Message);
+            var localUser = TestHelper.GetTestUser(runtime, "EnsureDifferentProjectSession");
+            runtime.UserController.Delete("EnsureDifferentProjectSession2");
+            Assert.IsTrue(runtime.UserController.CreateNew("EnsureDifferentProjectSession2", false, out var newUser, out error), error?.Message);
             // delete the project in case it has survived.
             controller.DeleteProject(localUser, "Test", out error);
             Project project = null;
@@ -376,7 +376,7 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void ImportProjectFileMultipleModelSystem()
         {
-            TestHelper.RunInProjectContext("ImportProjectFileSingleModelSystem", (XTMFRuntime runtime, User user, ProjectSession project) =>
+            TestHelper.RunInProjectContext("ImportProjectFileMultipleModelSystem", (XTMFRuntime runtime, User user, ProjectSession project) =>
             {
                 CommandError error = null;
                 var tempFile = new FileInfo(Path.GetTempFileName());
@@ -579,7 +579,7 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void RemoveAdditionalPastRunDirectory()
         {
-            TestHelper.RunInProjectContext("AddAdditionalPastRunDirectory", (User user, ProjectSession project) =>
+            TestHelper.RunInProjectContext("RemoveAdditionalPastRunDirectory", (User user, ProjectSession project) =>
             {
                 string path = Path.GetTempPath();
                 CommandError error = null;

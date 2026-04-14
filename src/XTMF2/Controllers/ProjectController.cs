@@ -248,6 +248,7 @@ namespace XTMF2.Controllers
                                 }
                             }
                         }
+                        catch (UnauthorizedAccessException) { }
                         catch (IOException)
                         {
                             // This throws sometimes if a project gets deleted by another instance of XTMF as we are running
@@ -255,6 +256,7 @@ namespace XTMF2.Controllers
                         }
                     }
                 }
+                catch (UnauthorizedAccessException) { }
                 catch (IOException)
                 {
                     // This throws sometimes if a user gets deleted by another instance of XTMF as we are running

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Configuration;
 using XTMF2.Editing;
@@ -16,11 +17,19 @@ internal static class TestGuiHelper
     private const string ProjectName = "TestProject";
     private const string ModelSystemName = "ModelSystem1";
 
+    /// <summary>
+    /// Isolated user directory for the XTMF2.GUI.Tests assembly.
+    /// Keeping this separate from the unit-test directory prevents cross-process
+    /// file-handle collisions when <c>dotnet test</c> runs both assemblies concurrently.
+    /// </summary>
+    private static readonly string s_testUserDirectory =
+        Path.Combine(Path.GetTempPath(), "XTMF2", "GUITests", "Users");
+
     internal static void RunInModelSystemContext(
         string name,
         Action<User, ProjectSession, ModelSystemSession> action)
     {
-        var runtime = XTMFRuntime.CreateRuntime();
+        var runtime = XTMFRuntime.CreateRuntime(s_testUserDirectory);
         var userController = runtime.UserController;
         var projectController = runtime.ProjectController;
         string userName = name + "GUITempUser";
@@ -56,7 +65,7 @@ internal static class TestGuiHelper
         string name,
         Action<XTMFRuntime, User, ProjectSession> action)
     {
-        var runtime = XTMFRuntime.CreateRuntime();
+        var runtime = XTMFRuntime.CreateRuntime(s_testUserDirectory);
         var userController = runtime.UserController;
         var projectController = runtime.ProjectController;
         string userName = name + "GUITempUser";

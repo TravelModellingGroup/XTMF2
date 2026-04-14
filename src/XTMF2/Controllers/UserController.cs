@@ -23,6 +23,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using XTMF2.Configuration;
 using XTMF2.Editing;
 
@@ -36,7 +37,7 @@ namespace XTMF2.Controllers
         private SystemConfiguration SystemConfiguration => Runtime.SystemConfiguration;
         private ProjectController ProjectController => Runtime.ProjectController;
 
-        private object UserLock = new object();
+        private Lock UserLock = new();
 
         /// <summary>
         /// The users in the system.  Ensure you dereference the
@@ -153,11 +154,12 @@ namespace XTMF2.Controllers
                 }
                 _users.Remove(user);
                 // now remove all of the users files from the system.
-                var userDir = new DirectoryInfo(user.UserPath);
-                if (userDir.Exists)
+                try
                 {
+                    var userDir = new DirectoryInfo(user.UserPath);
                     userDir.Delete(true);
                 }
+                catch { }
                 return true;
             }
         }
@@ -224,6 +226,7 @@ namespace XTMF2.Controllers
                                 }
                             }
                         }
+                        catch (UnauthorizedAccessException) { }
                         catch (IOException)
                         {
                             // This throws sometimes if a user gets deleted by another instance of XTMF as we are running

@@ -45,7 +45,7 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void SendModelSystem()
         {
-            RunInModelSystemContext("CreatingClient", (user, pSession, msSession) =>
+            RunInModelSystemContext("SendModelSystem", (user, pSession, msSession) =>
             {
                 CreateRunClient(true, (runBus) =>
                 {
@@ -94,9 +94,9 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
-        public void ParameterModules()
+        public void RunWithParameterModules()
         {
-            RunInModelSystemContext("ParameterModules", (user, pSession, msSession) =>
+            RunInModelSystemContext("RunWithParameterModules", (user, pSession, msSession) =>
             {
                 CommandError error2 = null;
                 var ms = msSession.ModelSystem;
@@ -138,7 +138,7 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void RunWithMultiLink()
         {
-            RunInModelSystemContext("ParameterModules", (user, pSession, msSession) =>
+            RunInModelSystemContext("RunWithMultiLink", (user, pSession, msSession) =>
             {
                 CommandError error = null;
                 var ms = msSession.ModelSystem;

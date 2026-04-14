@@ -1,4 +1,4 @@
-﻿/*
+/*
     Copyright 2017 University of Toronto
 
     This file is part of XTMF2.
@@ -35,13 +35,13 @@ namespace XTMF2.UnitTests
     public class TestModelSystem
     {
         [TestMethod]
-        public void ModelSystemPersistance()
+        public void ModelSystemPersistence()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime("ModelSystemPersistence");
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            const string userName = "NewUser";
+            const string userName = "ModelSystemPersistence";
             const string projectName = "TestProject";
             const string modelSystemName = "ModelSystem1";
             // clear out the user if possible
@@ -53,7 +53,7 @@ namespace XTMF2.UnitTests
                 Assert.IsTrue(session.Save(out error));
             }), error?.Message);
             runtime.Shutdown();
-            runtime = XTMFRuntime.CreateRuntime();
+            runtime = TestHelper.CreateRuntime("ModelSystemPersistence");
             userController = runtime.UserController;
             projectController = runtime.ProjectController;
             user = userController.GetUserByName(userName);
@@ -70,11 +70,11 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void CreateModelSystemOrGet()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            const string userName = "NewUser";
+            const string userName = "CreateModelSystemOrGet";
             const string projectName = "TestProject";
             const string modelSystemName = "ModelSystem1";
             // clear out the user if possible
@@ -106,12 +106,12 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void EnsureSameModelSystemSession()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            const string userName = "NewUser";
-            const string userName2 = "NewUser2";
+            const string userName = "EnsureSameModelSystemSession";
+            const string userName2 = "EnsureSameModelSystemSession2";
             const string projectName = "TestProject";
             const string modelSystemName = "ModelSystem1";
             // clear out the user if possible
@@ -143,12 +143,12 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void EnsureDifferentModelSystemSession()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            const string userName = "NewUser";
-            const string userName2 = "NewUser2";
+            const string userName = "EnsureDifferentModelSystemSession";
+            const string userName2 = "EnsureDifferentModelSystemSession2";
             const string projectName = "TestProject";
             const string modelSystemName = "ModelSystem1";
             // clear out the user if possible
@@ -267,7 +267,7 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void ModelSystemWithMultiLink()
         {
-            RunInModelSystemContext("ModelSystemWithLink", (user, pSession, mSession) =>
+            RunInModelSystemContext("ModelSystemWithMultiLink", (user, pSession, mSession) =>
             {
                 // initialization
                 var ms = mSession.ModelSystem;
@@ -362,7 +362,7 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void ExportModelSystemMetaData()
         {
-            RunInProjectContext("ExportModelSystem", (user, project) =>
+            RunInProjectContext("ExportModelSystemMetaData", (user, project) =>
             {
                 CommandError error = null;
                 var msName = "MSToExport";
@@ -537,7 +537,7 @@ namespace XTMF2.UnitTests
         {
             var modelSystemString = @"{""Types"":[{""Index"":0,""Type"":""XTMF2.UnitTests.Modules.SimpleTestModule, XTMF2.UnitTests, Version = 1.0.0.0, Culture = neutral, PublicKeyToken = null""}],""Boundaries"":[{""Name"":""global"",""Description"":"""",""Starts"":[{""Name"":""TestStart"",""Description"":"""",""Index"":0,""X"":10,""Y"":10}],""Nodes"":[{""Name"":""TestNode1"",""Description"":"""",""Type"":0,""X"":10,""Y"":10,""Width"":100,""Height"":100,""Index"":1}],""Boundaries"":[{""Name"":""TestBoundary1"",""Description"":"""",""Starts"":[],""Nodes"":[{""Name"":""TestNode2"",""Description"":"""",""Type"":0,""X"":10,""Y"":10,""Width"":100,""Height"":100,""Index"":2}],""Boundaries"":[],""Links"":[],""CommentBlocks"":[]}],""Links"":[{""Origin"":0,""Hook"":""ToExecute"",""Destination"":1}],""CommentBlocks"":[]}]}";
             var metadata = @"{""Name"":""MyMS""}";
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             void Write(string fileName, string text)
             {
@@ -644,7 +644,7 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void ImportModelSystemValidZipFileInvalidModelSystemFile()
         {
-            RunInProjectContext("ImportModelSystemBadFilePath", (user, project) =>
+            RunInProjectContext("ImportModelSystemValidZipFileInvalidModelSystemFile", (user, project) =>
             {
                 CommandError error = null;
                 var msName = "MSToExport";

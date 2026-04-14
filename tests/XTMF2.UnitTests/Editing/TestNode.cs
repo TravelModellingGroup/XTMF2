@@ -79,7 +79,7 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void RemoveStart()
         {
-            TestHelper.RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("RemoveStart", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
@@ -125,7 +125,7 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void UndoRemoveStart()
         {
-            TestHelper.RunInModelSystemContext("UndoAddStart", (user, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("UndoRemoveStart", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
@@ -448,7 +448,7 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void RemoveNodeWithParameterGenerationNotRemovingIfMultiple()
         {
-            TestHelper.RunInModelSystemContext("RemoveNodeWithParameterGenerationWithBadUser", (user, unauthorizedUser, pSession, msSession) =>
+            TestHelper.RunInModelSystemContext("RemoveNodeWithParameterGenerationNotRemovingIfMultiple", (user, unauthorizedUser, pSession, msSession) =>
             {
                 CommandError error = null;
                 var ms = msSession.ModelSystem;

@@ -1,4 +1,4 @@
-ï»¿/*
+/*
     Copyright 2017 University of Toronto
 
     This file is part of XTMF2.
@@ -34,6 +34,33 @@ namespace XTMF2.UnitTests
 {
     static class TestHelper
     {
+        /// <summary>
+        /// Isolated user directory for the XTMF2.UnitTests assembly.
+        /// Using a temp path that differs from both the production directory and the GUI-tests
+        /// directory ensures no cross-process file-handle collisions when <c>dotnet test</c>
+        /// runs both test assemblies concurrently.
+        /// </summary>
+        private static readonly string s_testUserDirectory =
+            Path.Combine(Path.GetTempPath(), "XTMF2", "UnitTests", "Users");
+
+        private static readonly XTMFRuntime s_sharedRuntime = XTMFRuntime.CreateRuntime(s_testUserDirectory);
+
+        /// <summary>
+        /// Creates an <see cref="XTMFRuntime"/> rooted at the unit-test–specific storage
+        /// directory instead of the shared production directory.
+        /// </summary>
+        internal static XTMFRuntime CreateRuntime() => s_sharedRuntime;
+
+        /// <summary>
+        /// Call this if you need persistence across Runtimes while running unit tests.
+        /// </summary>
+        /// <param name="uniqueSubdirectory">A unique subdirectory name to isolate the runtime's storage.</param>
+        /// <returns>An instance of <see cref="XTMFRuntime"/> rooted at the specified subdirectory.</returns>
+        internal static XTMFRuntime CreateRuntime(string uniqueSubdirectory)
+        {
+            var path = Path.Combine(Path.GetTempPath(), "XTMF2", uniqueSubdirectory, "Users");
+            return XTMFRuntime.CreateRuntime(path);
+        }
 
         /// <summary>
         /// Create a context to edit a model system for testing
@@ -42,7 +69,7 @@ namespace XTMF2.UnitTests
         /// <param name="toExecute">The logic to execute inside of a model system context</param>
         internal static void RunInProjectContext(string name, Action<User, ProjectSession> toExecute)
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
@@ -73,7 +100,7 @@ namespace XTMF2.UnitTests
         /// <param name="toExecuteSecond">The logic to execute inside of a model system context</param>
         internal static void RunInProjectContext(string name, Action<User, ProjectSession> toExecuteFirst, Action<User, ProjectSession> toExecuteSecond)
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
@@ -109,7 +136,7 @@ namespace XTMF2.UnitTests
         /// <param name="toExecute">The logic to execute inside of a model system context</param>
         internal static void RunInProjectContext(string name, Action<XTMFRuntime, User, ProjectSession> toExecute)
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
@@ -139,7 +166,7 @@ namespace XTMF2.UnitTests
         /// <param name="toExecute">The logic to execute inside of a model system context</param>
         internal static void RunInProjectContext(string name, Action<User, User, ProjectSession> toExecute)
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
@@ -172,7 +199,7 @@ namespace XTMF2.UnitTests
         /// <param name="toExecute">The logic to execute inside of a model system context</param>
         internal static void RunInModelSystemContext(string name, Action<User, ProjectSession, ModelSystemSession> toExecute)
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
@@ -207,7 +234,7 @@ namespace XTMF2.UnitTests
         /// <param name="toExecute">The logic to execute inside of a model system context</param>
         internal static void RunInModelSystemContext(string name, Action<User, User, ProjectSession, ModelSystemSession> toExecute)
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
@@ -243,13 +270,18 @@ namespace XTMF2.UnitTests
         /// </summary>
         /// <param name="runtime">The XTMF instance to user.</param>
         /// <returns>The local admin for testing.</returns>
-        internal static User GetTestUser(XTMFRuntime runtime)
+        internal static User GetTestUser(XTMFRuntime runtime, string userName, bool delete = true)
         {
             if (runtime is null)
             {
                 throw new ArgumentNullException(nameof(runtime));
             }
-            if (!runtime.UserController.CreateOrGet("testUser", false, out User user, out var error)
+            if (delete)
+            {
+                // Make sure the user is fresh.
+                _ = runtime.UserController.Delete(userName);
+            }
+            if (!runtime.UserController.CreateOrGet(userName, false, out User user, out var error)
                 || user is null)
             {
                 Assert.Fail(error?.Message ?? "Failed to create or get test user!");
@@ -262,19 +294,19 @@ namespace XTMF2.UnitTests
         /// </summary>
         /// <param name="runtime">The XTMF instance to use.</param>
         /// <returns>The local administrator and a user that does not have authorization to any projects.</returns>
-        internal static (User localUser, User hacker) GetTestUsers(XTMFRuntime runtime)
+        internal static (User localUser, User hacker) GetTestUsers(XTMFRuntime runtime, string testName)
         {
             if (runtime is null)
             {
                 throw new ArgumentNullException(nameof(runtime));
             }
             CommandError error = null;
-            var localUser = GetTestUser(runtime);
+            var localUser = GetTestUser(runtime, testName);
             var userController = runtime.UserController;
-            var unauthroizedUser = userController.GetUserByName("Hacker");
+            var unauthroizedUser = userController.GetUserByName(testName+"Hacker");
             if (unauthroizedUser is null)
             {
-                Assert.IsTrue(userController.CreateNew("Hacker", false, out unauthroizedUser, out error), error?.Message);
+                Assert.IsTrue(userController.CreateNew(testName + "Hacker", false, out unauthroizedUser, out error), error?.Message);
             }
             else
             {
@@ -307,7 +339,7 @@ namespace XTMF2.UnitTests
         /// <param name="toExecuteSecond">The logic to execute after XTMF has been restarted</param>
         internal static void RunInModelSystemContext(string name, Action<User, ProjectSession, ModelSystemSession> toExecuteFirst, Action<User, ProjectSession, ModelSystemSession> toExecuteSecond)
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = CreateRuntime(name + "RunInModelSystemContext");
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
@@ -333,7 +365,7 @@ namespace XTMF2.UnitTests
 
                 runtime.Shutdown();
 
-                runtime = XTMFRuntime.CreateRuntime();
+                runtime = CreateRuntime(name + "RunInModelSystemContext");
                 userController = runtime.UserController;
                 projectController = runtime.ProjectController;
                 user = userController.GetUserByName(userName);
