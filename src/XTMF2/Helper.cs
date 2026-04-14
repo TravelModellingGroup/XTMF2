@@ -35,7 +35,7 @@ namespace XTMF2
         /// <param name="disposableToExecuteOnSuccess"></param>
         /// <returns></returns>
         public static bool UsingIf<T>(this bool callResult, T disposable, Action disposableToExecuteOnSuccess)
-            where T : IDisposable
+            where T : IDisposable?
         {
             if (callResult)
             {
@@ -48,7 +48,7 @@ namespace XTMF2
         }
 
         public static void UsingIf<T>(this bool callResult, T disposable, Action disposableToExecuteOnSuccess, Action onFailure)
-            where T : IDisposable
+            where T : IDisposable?
         {
             if (callResult)
             {

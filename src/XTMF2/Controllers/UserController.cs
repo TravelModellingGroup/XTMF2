@@ -212,14 +212,22 @@ namespace XTMF2.Controllers
                 {
                     foreach (var potentialDir in usersDir.GetDirectories())
                     {
-                        var userFile = potentialDir.GetFiles("User.xusr").FirstOrDefault();
-                        if (userFile != null)
+                        try
                         {
-                            string? error = null;
-                            if (User.Load(userFile.FullName, out var loadedUser, ref error))
+                            var userFile = potentialDir.GetFiles("User.xusr").FirstOrDefault();
+                            if (userFile != null)
                             {
-                                _users.Add(loadedUser!);
+                                string? error = null;
+                                if (User.Load(userFile.FullName, out var loadedUser, ref error))
+                                {
+                                    _users.Add(loadedUser!);
+                                }
                             }
+                        }
+                        catch (IOException)
+                        {
+                            // This throws sometimes if a user gets deleted by another instance of XTMF as we are running
+                            // Normally this open happens when running unit tests.
                         }
                     }
                 }

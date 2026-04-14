@@ -279,12 +279,7 @@ partial class ModelSystemCanvas
 
     /// <summary>Evaluates a cubic Bézier curve at parameter <paramref name="t"/> ∈ [0, 1].</summary>
     private static Point SampleCubicBezier(Point p1, Point c1, Point c2, Point p2, double t)
-    {
-        double u = 1 - t;
-        return new Point(
-            u * u * u * p1.X + 3 * u * u * t * c1.X + 3 * u * t * t * c2.X + t * t * t * p2.X,
-            u * u * u * p1.Y + 3 * u * u * t * c1.Y + 3 * u * t * t * c2.Y + t * t * t * p2.Y);
-    }
+        => CanvasGeometryMath.SampleCubicBezier(p1, c1, c2, p2, t);
 
     /// <summary>
     /// Returns the unit vector pointing <em>into</em> <paramref name="dest"/> through
@@ -386,36 +381,6 @@ partial class ModelSystemCanvas
     /// Falls back to the rect centre when no intersection is found.
     /// </summary>
     private static Point ClipLineToRect(Point outside, Rect rect)
-    {
-        var center = new Point(rect.X + rect.Width / 2.0, rect.Y + rect.Height / 2.0);
-        double dx = center.X - outside.X;
-        double dy = center.Y - outside.Y;
-
-        double tBest = double.MaxValue;
-
-        void TryT(double t, bool horizontal, double coord)
-        {
-            if (t <= 0 || t >= tBest) return;
-            double other = horizontal
-                ? outside.X + t * dx   // x coordinate when checking horizontal side
-                : outside.Y + t * dy;  // y coordinate when checking vertical side
-            if (horizontal && other >= rect.X && other <= rect.Right) tBest = t;
-            if (!horizontal && other >= rect.Y && other <= rect.Bottom) tBest = t;
-        }
-
-        if (Math.Abs(dx) > 1e-10)
-        {
-            TryT((rect.X - outside.X) / dx, horizontal: false, 0);
-            TryT((rect.Right - outside.X) / dx, horizontal: false, 0);
-        }
-        if (Math.Abs(dy) > 1e-10)
-        {
-            TryT((rect.Y - outside.Y) / dy, horizontal: true, 0);
-            TryT((rect.Bottom - outside.Y) / dy, horizontal: true, 0);
-        }
-
-        if (tBest == double.MaxValue) return center;
-        return new Point(outside.X + tBest * dx, outside.Y + tBest * dy);
-    }
+        => CanvasGeometryMath.ClipLineToRect(outside, rect);
 
 }

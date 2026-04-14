@@ -144,24 +144,7 @@ partial class ModelSystemCanvas
 
     /// <summary>Minimum distance from point <paramref name="p"/> to segment AB.</summary>
     private static double DistToSeg(Point p, Point a, Point b)
-    {
-        var dx = b.X - a.X;
-        var dy = b.Y - a.Y;
-        var lenSq = dx * dx + dy * dy;
-        double nx, ny;
-        if (lenSq < 1e-10)
-        {
-            nx = p.X - a.X;
-            ny = p.Y - a.Y;
-        }
-        else
-        {
-            var t = Math.Max(0, Math.Min(1, ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lenSq));
-            nx = a.X + t * dx - p.X;
-            ny = a.Y + t * dy - p.Y;
-        }
-        return Math.Sqrt(nx * nx + ny * ny);
-    }
+        => CanvasGeometryMath.DistToSeg(p, a, b);
 
     // ── Hook anchor cache ──────────────────────────────────────────────────
 
