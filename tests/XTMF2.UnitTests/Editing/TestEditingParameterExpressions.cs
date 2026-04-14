@@ -33,7 +33,7 @@ public class TestEditingParameterExpressions
     [TestMethod]
     public void ParameterExpression()
     {
-        TestHelper.RunInModelSystemContext("SetModuleToUseParameterExpression", (user, pSession, mSession) =>
+        TestHelper.RunInModelSystemContext("ParameterExpression", (user, pSession, mSession) =>
         {
             CommandError error = null;
             string errorStr = null;
@@ -55,7 +55,7 @@ public class TestEditingParameterExpressions
     [TestMethod]
     public void ParameterExpressionUndo()
     {
-        TestHelper.RunInModelSystemContext("SetModuleToUseParameterExpression", (user, pSession, mSession) =>
+        TestHelper.RunInModelSystemContext("ParameterExpressionUndo", (user, pSession, mSession) =>
         {
             CommandError error = null;
             string errorStr = null;
@@ -80,7 +80,7 @@ public class TestEditingParameterExpressions
     [TestMethod]
     public void ParameterExpressionRedo()
     {
-        TestHelper.RunInModelSystemContext("SetModuleToUseParameterExpression", (user, pSession, mSession) =>
+        TestHelper.RunInModelSystemContext("ParameterExpressionRedo", (user, pSession, mSession) =>
         {
             CommandError error = null;
             string errorStr = null;
@@ -107,7 +107,7 @@ public class TestEditingParameterExpressions
     [TestMethod]
     public void ParameterExpressionSaved()
     {
-        TestHelper.RunInModelSystemContext("SetModuleToUseParameterExpression", (user, pSession, mSession) =>
+        TestHelper.RunInModelSystemContext("ParameterExpressionSaved", (user, pSession, mSession) =>
         {
             CommandError error = null;
             string errorStr = null;

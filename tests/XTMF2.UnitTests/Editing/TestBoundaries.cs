@@ -1,4 +1,4 @@
-﻿/*
+/*
     Copyright 2019 University of Toronto
 
     This file is part of XTMF2.
@@ -116,7 +116,7 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void RemoveBoundaryWithBadUser()
         {
-            TestHelper.RunInModelSystemContext("RemoveBoundary", (user, unauthorizedUser, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("RemoveBoundaryWithBadUser", (user, unauthorizedUser, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
@@ -141,7 +141,7 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void RemoveBoundaryNullBoundary()
         {
-            TestHelper.RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("RemoveBoundaryNullBoundary", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
@@ -159,7 +159,7 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void RemoveBoundaryNullParent()
         {
-            TestHelper.RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("RemoveBoundaryNullParent", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 Assert.IsEmpty(ms.GlobalBoundary.Boundaries);
@@ -177,7 +177,7 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void RemoveBoundaryNullUser()
         {
-            TestHelper.RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("RemoveBoundaryNullUser", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
@@ -196,7 +196,7 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void RemoveBoundaryNotInBoundary()
         {
-            TestHelper.RunInModelSystemContext("RemoveBoundary", (user, pSession, mSession) =>
+            TestHelper.RunInModelSystemContext("RemoveBoundaryNotInBoundary", (user, pSession, mSession) =>
             {
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
@@ -213,10 +213,10 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void TestSettingBoundaryName()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
+            var localUser = TestHelper.GetTestUser(runtime, "TestSettingBoundaryName");
             controller.DeleteProject(localUser, "Test", out error);
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, out error).UsingIf(session, () =>
             {
@@ -240,10 +240,10 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void TestSettingBoundaryNameWithBadUser()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            (var localUser, var hacker) = TestHelper.GetTestUsers(runtime);
+            (var localUser, var hacker) = TestHelper.GetTestUsers(runtime, "TestSettingBoundaryNameWithBadUser");
             controller.DeleteProject(localUser, "Test", out error);
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, out error).UsingIf(session, () =>
             {
@@ -261,10 +261,10 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void TestSettingBoundaryDescription()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
+            var localUser = TestHelper.GetTestUser(runtime, "TestSettingBoundaryDescription");
             controller.DeleteProject(localUser, "Test", out error);
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, out error).UsingIf(session, () =>
             {
@@ -288,10 +288,10 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void TestSettingBoundaryDescriptionWithBadUser()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            (var localUser, var unauthorizedUser) = TestHelper.GetTestUsers(runtime);
+            (var localUser, var unauthorizedUser) = TestHelper.GetTestUsers(runtime, "TestSettingBoundaryDescriptionWithBadUser");
             controller.DeleteProject(localUser, "Test", out error);
             Assert.IsTrue(controller.CreateNewProject(localUser, "Test", out ProjectSession session, out error).UsingIf(session, () =>
             {
@@ -310,10 +310,10 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void TestSettingBoundaryPersistence()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
+            var localUser = TestHelper.GetTestUser(runtime, "TestSettingBoundaryPersistence");
             const string projectName = "Test";
             const string modelSystemName = "TestMS";
             controller.DeleteProject(localUser, projectName, out error);
@@ -355,10 +355,10 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void TestSettingBoundaryPersistenceNoDescription()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
+            var localUser = TestHelper.GetTestUser(runtime, "TestSettingBoundaryPersistenceNoDescription");
             const string projectName = "Test";
             const string modelSystemName = "TestMS";
             controller.DeleteProject(localUser, projectName, out error);
@@ -400,10 +400,10 @@ namespace XTMF2.UnitTests.Editing
         [TestMethod]
         public void TestSettingBoundaryPersistenceInnerChild()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var controller = runtime.ProjectController;
             CommandError error = null;
-            var localUser = TestHelper.GetTestUser(runtime);
+            var localUser = TestHelper.GetTestUser(runtime, "TestSettingBoundaryPersistenceInnerChild");
             const string projectName = "Test";
             const string modelSystemName = "TestMS";
             controller.DeleteProject(localUser, projectName, out error);

@@ -56,8 +56,8 @@ public class SystemConfiguration
     /// <param name="fullPath">Optional, the path to the system configuration.</param>
     public SystemConfiguration(XTMFRuntime runtime, string? fullPath = null)
     {
-        CreateDirectory(DefaultUserDirectory =
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "XTMF2", "Users"));
+        CreateDirectory(DefaultUserDirectory = fullPath
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "XTMF2", "Users"));
         Modules = new ModuleRepository();
         Types = new TypeRepository();
         // Seed the type repository with common BCL types so that the GUI type-picker

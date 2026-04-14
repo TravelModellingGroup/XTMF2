@@ -75,6 +75,17 @@ namespace XTMF2
         }
 
         /// <summary>
+        /// Create a new XTMF Runtime rooted at the given user directory.
+        /// Useful for tests that need isolated on-disk state.
+        /// </summary>
+        /// <param name="userDirectory">The directory to use for user storage instead of the default.</param>
+        /// <returns>A new XTMF Runtime</returns>
+        public static XTMFRuntime CreateRuntime(string userDirectory)
+        {
+            return new XTMFRuntime(userDirectory);
+        }
+
+        /// <summary>
         /// Create a new instance of XTMF
         /// </summary>
         /// <param name="config">An alternative configuration to load</param>
@@ -84,6 +95,17 @@ namespace XTMF2
             SystemConfiguration = config ?? new SystemConfiguration(this);
             UserController = new UserController(this);
             // Projects need to be loaded after users are available.
+            ProjectController = new ProjectController(this);
+        }
+
+        /// <summary>
+        /// Create a new instance of XTMF rooted at a specific user directory.
+        /// </summary>
+        /// <param name="userDirectory">The directory to use for user storage.</param>
+        private XTMFRuntime(string userDirectory)
+        {
+            SystemConfiguration = new SystemConfiguration(this, userDirectory);
+            UserController = new UserController(this);
             ProjectController = new ProjectController(this);
         }
 

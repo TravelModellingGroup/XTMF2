@@ -1,4 +1,4 @@
-﻿/*
+/*
     Copyright 2017 University of Toronto
 
     This file is part of XTMF2.
@@ -31,10 +31,10 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void CreateUser()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var userController = runtime.UserController;
             CommandError error = null;
-            const string userName = "NewUser";
+            const string userName = "CreateUserUser";
             // ensure the user doesn't exist before we start
             userController.Delete(userName);
             Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error));
@@ -48,10 +48,10 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void CreateUserOrGet()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var userController = runtime.UserController;
             CommandError error = null;
-            const string userName = "NewUser";
+            const string userName = "CreateUserOrGetUser";
             // ensure the user doesn't exist before we start
             userController.Delete(userName);
             Assert.IsTrue(userController.CreateOrGet(userName, false, out var user, out error));
@@ -63,20 +63,20 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
-        public void UserPersistance()
+        public void UserPersistence()
         {
             //ensure that a user can survive between different XTMF sessions
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime("UserPersistence");
             var userController = runtime.UserController;
             CommandError error = null;
-            const string userName = "NewUser";
+            const string userName = "UserPersistenceUser";
             // ensure the user doesn't exist before we start
             userController.Delete(userName);
             Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error));
             // unload XTMF to simulate it shutting down
             runtime.Shutdown();
             // rebuild XTMF
-            runtime = XTMFRuntime.CreateRuntime();
+            runtime = TestHelper.CreateRuntime("UserPersistence");
             userController = runtime.UserController;
             Assert.IsNotNull(userController.Users.FirstOrDefault(u => u.UserName == user.UserName));
             // cleanup
@@ -86,12 +86,12 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void AddUserToProject()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            const string userName1 = "FirstUser";
-            const string userName2 = "SecondtUser";
+            const string userName1 = "AddUserToProjectUser1";
+            const string userName2 = "AddUserToProjectUser2";
             const string projectName1 = "TestShareBetweenUsers1";
             const string projectName2 = "TestShareBetweenUsers2";
             // ensure the user doesn't exist before we start and then create our users
@@ -127,12 +127,12 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void AddUserToProjectTwice()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            const string userName1 = "FirstUser";
-            const string userName2 = "SecondtUser";
+            const string userName1 = "AddUserToProjectTwiceUser1";
+            const string userName2 = "AddUserToProjectTwiceUser2";
             const string projectName1 = "TestShareBetweenUsers1";
             // ensure the user doesn't exist before we start and then create our users
             userController.Delete(userName1);
@@ -165,12 +165,12 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void RemoveUserFromProject()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            const string userName1 = "FirstUser";
-            const string userName2 = "SecondtUser";
+            const string userName1 = "RemoveUserFromProjectUser1";
+            const string userName2 = "RemoveUserFromProjectUser2";
             const string projectName1 = "TestShareBetweenUsers1";
             const string projectName2 = "TestShareBetweenUsers2";
             // ensure the user doesn't exist before we start and then create our users
@@ -213,12 +213,12 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void RemoveUserFromProjectTwice()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            const string userName1 = "FirstUser";
-            const string userName2 = "SecondtUser";
+            const string userName1 = "RemoveUserFromProjectTwiceUser1";
+            const string userName2 = "RemoveUserFromProjectTwiceUser2";
             const string projectName1 = "TestShareBetweenUsers1";
             const string projectName2 = "TestShareBetweenUsers2";
             // ensure the user doesn't exist before we start and then create our users
@@ -263,12 +263,12 @@ namespace XTMF2.UnitTests
         [TestMethod]
         public void SwitchOwner()
         {
-            var runtime = XTMFRuntime.CreateRuntime();
+            var runtime = TestHelper.CreateRuntime();
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            const string userName1 = "FirstUser";
-            const string userName2 = "SecondtUser";
+            const string userName1 = "SwitchOwnerUser1";
+            const string userName2 = "SwitchOwnerUser2";
             const string projectName1 = "TestShareBetweenUsers1";
             // ensure the user doesn't exist before we start and then create our users
             userController.Delete(userName1);

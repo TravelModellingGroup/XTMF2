@@ -147,7 +147,7 @@ namespace XTMF2.Controllers
         public bool ImportProjectFile(User owner, string name, string filePath, [NotNullWhen(true)] out ProjectSession? session, [NotNullWhen(false)] out CommandError? error)
         {
             session = null;
-            ArgumentNullException.ThrowIfNull(owner);            
+            ArgumentNullException.ThrowIfNull(owner);
 
             if (string.IsNullOrWhiteSpace(name))
             {
@@ -165,17 +165,17 @@ namespace XTMF2.Controllers
             }
             lock (_controllerLock)
             {
-                if(owner.OwnsProjectWithName(name))
+                if (owner.OwnsProjectWithName(name))
                 {
                     error = new CommandError("The user already has project with that name!");
                     return false;
                 }
-                if(!ProjectFile.ImportProject(owner, name, filePath, out var project, out error))
+                if (!ProjectFile.ImportProject(owner, name, filePath, out var project, out error))
                 {
                     return false;
                 }
                 string? errorString = null;
-                if(!_projects.Add(project!, ref errorString))
+                if (!_projects.Add(project!, ref errorString))
                 {
                     project!.Delete(out var _);
                     error = new CommandError(errorString!);
@@ -200,9 +200,9 @@ namespace XTMF2.Controllers
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(project);
 
-            lock(_controllerLock)
+            lock (_controllerLock)
             {
-                if(!project.CanAccess(user))
+                if (!project.CanAccess(user))
                 {
                     error = new CommandError("The user does not have access to this project!", true);
                     session = null;
@@ -227,23 +227,42 @@ namespace XTMF2.Controllers
             foreach (var user in allUsers)
             {
                 string dir = user.UserPath;
-                DirectoryInfo userDir = new DirectoryInfo(dir);
-                foreach (var subDir in userDir.GetDirectories())
+                try
                 {
-                    var projectFile = subDir.GetFiles().FirstOrDefault(f => f.Name == "Project.xpjt");
-                    if (projectFile != null)
+                    DirectoryInfo userDir = new DirectoryInfo(dir);
+                    foreach (var subDir in userDir.GetDirectories())
                     {
-                        string? error = null;
-                        if (Project.Load(runtime.UserController, projectFile.FullName, out Project? project, ref error))
+                        try
                         {
-                            _projects.Add(project, ref error);
+                            var projectFile = subDir.GetFiles().FirstOrDefault(f => f.Name == "Project.xpjt");
+                            if (projectFile != null)
+                            {
+                                string? error = null;
+                                if (Project.Load(runtime.UserController, projectFile.FullName, out Project? project, ref error))
+                                {
+                                    _projects.Add(project, ref error);
+                                }
+                                else
+                                {
+                                    errors.Add((projectFile.FullName, error));
+                                }
+                            }
                         }
-                        else
+                        catch (UnauthorizedAccessException) { }
+                        catch (IOException)
                         {
-                            errors.Add((projectFile.FullName, error));
+                            // This throws sometimes if a project gets deleted by another instance of XTMF as we are running
+                            // Normally this open happens when running unit tests.
                         }
                     }
                 }
+                catch (UnauthorizedAccessException) { }
+                catch (IOException)
+                {
+                    // This throws sometimes if a user gets deleted by another instance of XTMF as we are running
+                    // Normally this open happens when running unit tests.
+                }
+
             }
             return errors;
         }
@@ -262,9 +281,9 @@ namespace XTMF2.Controllers
         {
             Helper.ThrowIfNullOrWhitespace(userName);
             Helper.ThrowIfNullOrWhitespace(projectName);
-            
+
             var user = _runtime.UserController.GetUserByName(userName);
-            if(user == null)
+            if (user == null)
             {
                 project = null;
                 error = new CommandError($"Unable to find a user with the name {userName}!");
@@ -287,7 +306,7 @@ namespace XTMF2.Controllers
         {
             ArgumentNullException.ThrowIfNull(user);
             Helper.ThrowIfNullOrWhitespace(projectName);
-            
+
             lock (_controllerLock)
             {
                 return _projects.GetProject(user, projectName, out project, out error);
@@ -306,7 +325,7 @@ namespace XTMF2.Controllers
         {
             ArgumentNullException.ThrowIfNull(user);
             Helper.ThrowIfNullOrWhitespace(projectName);
-            
+
             lock (_controllerLock)
             {
                 var project = GetProjects(user).FirstOrDefault(p => p.Name!.Equals(projectName, StringComparison.OrdinalIgnoreCase));
@@ -437,9 +456,9 @@ namespace XTMF2.Controllers
             {
                 return false;
             }
-            lock(_controllerLock)
+            lock (_controllerLock)
             {
-                if(!project.CanAccess(user))
+                if (!project.CanAccess(user))
                 {
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;

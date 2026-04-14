@@ -1,5 +1,5 @@
 /*
-    Copyright 2025 University of Toronto
+    Copyright 2026 University of Toronto
 
     This file is part of XTMF2.
 
@@ -16,6 +16,13 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-[assembly: Parallelize(Workers = 0, Scope = ExecutionScope.MethodLevel)]
+namespace XTMF2.GUI.Tests.Modules;
+
+[Module(Name = "Simple GUI Test Module",
+    DocumentationLink = "http://example.com",
+    Description = "A minimal module used in GUI unit tests.")]
+public sealed class SimpleGuiTestModule : BaseFunction<string>
+{
+    public override string Invoke() => "GUI Test";
+}
