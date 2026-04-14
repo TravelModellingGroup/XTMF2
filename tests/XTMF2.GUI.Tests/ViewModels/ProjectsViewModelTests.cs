@@ -32,7 +32,7 @@ public class ProjectsViewModelTests
     {
         TestGuiHelper.RunInProjectContext("PVM_NoFilter", (runtime, user, pSession) =>
         {
-            var vm = new ProjectsViewModel(runtime);
+            var vm = new ProjectsViewModel(runtime, user);
 
             vm.SearchText = "";
 
@@ -46,7 +46,7 @@ public class ProjectsViewModelTests
     {
         TestGuiHelper.RunInProjectContext("PVM_MatchingFilter", (runtime, user, pSession) =>
         {
-            var vm = new ProjectsViewModel(runtime);
+            var vm = new ProjectsViewModel(runtime, user);
 
             vm.SearchText = "Test";
 
@@ -65,7 +65,7 @@ public class ProjectsViewModelTests
     {
         TestGuiHelper.RunInProjectContext("PVM_NonMatchingFilter", (runtime, user, pSession) =>
         {
-            var vm = new ProjectsViewModel(runtime);
+            var vm = new ProjectsViewModel(runtime, user);
 
             vm.SearchText = "ZZZNOMATCH999";
 
@@ -78,7 +78,7 @@ public class ProjectsViewModelTests
     {
         TestGuiHelper.RunInProjectContext("PVM_CaseInsensitive", (runtime, user, pSession) =>
         {
-            var vm = new ProjectsViewModel(runtime);
+            var vm = new ProjectsViewModel(runtime, user);
 
             // Pick the first project the VM sees for this user and search for its
             // name in all-lowercase — case-insensitive matching must still find it.
@@ -101,7 +101,7 @@ public class ProjectsViewModelTests
     {
         TestGuiHelper.RunInProjectContext("PVM_PropertyChanged", (runtime, user, pSession) =>
         {
-            var vm = new ProjectsViewModel(runtime);
+            var vm = new ProjectsViewModel(runtime, user);
 
             bool propertyChangedFired = false;
             ((INotifyPropertyChanged)vm).PropertyChanged += (_, e) =>
@@ -122,7 +122,7 @@ public class ProjectsViewModelTests
     {
         TestGuiHelper.RunInProjectContext("PVM_CurrentUser", (runtime, user, pSession) =>
         {
-            var vm = new ProjectsViewModel(runtime);
+            var vm = new ProjectsViewModel(runtime, user);
 
             Assert.IsNotNull(vm.CurrentUser);
         });

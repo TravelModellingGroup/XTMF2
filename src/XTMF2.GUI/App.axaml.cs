@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
+using System.Linq;
 using System.Threading.Tasks;
 using XTMF2;
 using XTMF2.GUI.Resources;
@@ -81,6 +82,15 @@ public partial class App : Application
                 
                 // Get or create the default user
                 var users = Runtime.UserController.Users;
+                User? currentUser = users.FirstOrDefault(user => user.UserName == "local");
+                if (currentUser is null && users.Count > 0)
+                {
+                    currentUser = users[0];
+                }
+                else if (currentUser is null)
+                {
+                    Runtime.UserController.CreateOrGet("local", true, out currentUser, out _);
+                }
 
                 // Initialise the RunController on the background thread (I/O: creates a named pipe
                 // and spawns the client process).  If it fails we pass null and the GUI continues
@@ -93,7 +103,7 @@ public partial class App : Application
                 // Initialize the main window with the runtime on the UI thread
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    mainWindow.InitializeWithRuntime(Runtime, _runController);
+                    mainWindow.InitializeWithRuntime(Runtime, _runController, currentUser!);
                 });
             });
             

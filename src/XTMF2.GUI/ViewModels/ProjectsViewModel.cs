@@ -26,7 +26,7 @@ namespace XTMF2.GUI.ViewModels;
 public partial class ProjectsViewModel : ObservableObject
 {
     private readonly XTMFRuntime _runtime;
-    private readonly User? _currentUser;
+    private readonly User _currentUser;
 
     // Used by Dock ItemsSource for the tab title and close behaviour
     public string Title => "⊞  Projects";
@@ -40,26 +40,10 @@ public partial class ProjectsViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<Project> FilteredProjects { get; } = new();
 
-    public ProjectsViewModel(XTMFRuntime runtime)
+    public ProjectsViewModel(XTMFRuntime runtime, User user)
     {
         _runtime = runtime;
-        // TODO: If we get to the point of having multiple users,
-        // we would need to implement user switching and update the projects
-        // list accordingly.
-        // Get the first user or create a default user
-        var users = _runtime.UserController.Users;
-        if (users.Count > 0)
-        {
-            _currentUser = users[0];
-        }
-        else
-        {
-            // Create a default user if none exists
-            if (_runtime.UserController.CreateOrGet("DefaultUser", false, out var user, out var error))
-            {
-                _currentUser = user;
-            }
-        }
+        _currentUser = user;
 
         // Keep FilteredProjects in sync with the underlying collection
         if (Projects is INotifyCollectionChanged notifiable)
@@ -94,10 +78,6 @@ public partial class ProjectsViewModel : ObservableObject
     {
         get
         {
-            if (_currentUser == null)
-            {
-                return null;
-            }
             return ProjectController.GetProjects(_currentUser);
         }
     }
@@ -105,7 +85,7 @@ public partial class ProjectsViewModel : ObservableObject
     /// <summary>
     /// Gets the current user
     /// </summary>
-    public User? CurrentUser => _currentUser;
+    public User CurrentUser => _currentUser;
 
     /// <summary>
     /// Gets the runtime instance

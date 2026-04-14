@@ -45,6 +45,7 @@ namespace XTMF2.GUI;
 public partial class MainWindow : Window
 {
     private XTMFRuntime? _runtime;
+    private User? _currentUser;
     private bool _isLoading = true;
     private SettingsWindow? _settingsWindow;
 
@@ -186,10 +187,12 @@ public partial class MainWindow : Window
     /// Pass <c>null</c> when the controller could not be created; the Run button
     /// will be disabled but all other functionality remains available.
     /// </param>
-    public void InitializeWithRuntime(XTMFRuntime runtime, RunController? runController)
+    /// <param name="user">The currently logged-in user.</param>
+    public void InitializeWithRuntime(XTMFRuntime runtime, RunController? runController, User user)
     {
         _runtime = runtime;
         _runController = runController;
+        _currentUser = user;
         _isLoading = false;
         UpdateLoadingState();
 
@@ -198,7 +201,7 @@ public partial class MainWindow : Window
             Documents.Add(_runController.RunsViewModel);
 
         // Add the Projects tab as the permanent first document
-        Documents.Add(new ProjectsViewModel(runtime));
+        Documents.Add(new ProjectsViewModel(runtime, user));
     }
 
     private void UpdateLoadingState()
@@ -232,8 +235,7 @@ public partial class MainWindow : Window
             return;
         }
         // No existing tab, create a new one
-        var user = _runtime.UserController.Users[0];
-        Documents.Add(new ModelSystemsViewModel(_runtime, user, project, this));
+        Documents.Add(new ModelSystemsViewModel(_runtime, _currentUser!, project, this));
     }
 
     /// <summary>
