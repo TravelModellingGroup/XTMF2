@@ -162,6 +162,8 @@ partial class ModelSystemCanvas
         _canInlineNodes.Clear();
         _fiHookAnchors.Clear();
         _fiConnectedHooks.Clear();
+        _leftGoingHooks.Clear();
+        _leftGoingFiHooks.Clear();
         if (_vm is null) return;
 
         // Which hooks on each node have a live link?
@@ -172,6 +174,11 @@ partial class ModelSystemCanvas
                 if (!_nodeConnectedHooks.TryGetValue(originVm, out var set))
                     _nodeConnectedHooks[originVm] = set = new HashSet<NodeHook>();
                 set.Add(link.UnderlyingLink.OriginHook);
+
+                // Track hooks whose link destination lies to the left of the origin node.
+                // Such links will exit from the node's left face rather than the right.
+                if (link.Destination is not null && link.X2 < originVm.X)
+                    _leftGoingHooks.Add((originVm, link.UnderlyingLink.OriginHook));
             }
             // Which FunctionParameterHooks on each FI have a live link?
             if (link.Origin is FunctionInstanceViewModel fiOriginVm
@@ -180,6 +187,10 @@ partial class ModelSystemCanvas
                 if (!_fiConnectedHooks.TryGetValue(fiOriginVm, out var fiSet))
                     _fiConnectedHooks[fiOriginVm] = fiSet = new HashSet<FunctionParameterHook>();
                 fiSet.Add(fphConnected);
+
+                // Same leftward check for FunctionInstance hooks.
+                if (link.Destination is not null && link.X2 < fiOriginVm.X)
+                    _leftGoingFiHooks.Add((fiOriginVm, fphConnected));
             }
         }
 

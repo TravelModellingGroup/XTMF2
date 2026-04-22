@@ -46,15 +46,18 @@ partial class ModelSystemCanvas
         if (link.Origin is NodeViewModel originNvm
             && _hookAnchors.TryGetValue((originNvm, link.UnderlyingLink.OriginHook), out var hookPt))
         {
-            p1 = hookPt;
-            exitDir = new Vector(1, 0); // hooks always face right
+            // Exit from the left face when the destination centre is to the left of the node.
+            bool goLeft = destCenter.X < originNvm.X;
+            p1 = goLeft ? new Point(originNvm.X, hookPt.Y) : hookPt;
+            exitDir = goLeft ? new Vector(-1, 0) : new Vector(1, 0);
         }
         else if (link.Origin is FunctionInstanceViewModel fiOriginSC
             && link.UnderlyingLink.OriginHook is FunctionParameterHook fphSC
             && _fiHookAnchors.TryGetValue((fiOriginSC, fphSC), out var fiHookPtSC))
         {
-            p1 = fiHookPtSC;
-            exitDir = new Vector(1, 0); // FP hook dots always face right
+            bool goLeft = destCenter.X < fiOriginSC.X;
+            p1 = goLeft ? new Point(fiOriginSC.X, fiHookPtSC.Y) : fiHookPtSC;
+            exitDir = goLeft ? new Vector(-1, 0) : new Vector(1, 0);
         }
         else if (link.Origin is StartViewModel startOrigin)
         {
@@ -94,14 +97,22 @@ partial class ModelSystemCanvas
     {
         var destCenter = new Point(link.X2, link.Y2);
 
+        var destCenterO = new Point(link.X2, link.Y2);
+
         if (link.Origin is NodeViewModel originNvm
             && _hookAnchors.TryGetValue((originNvm, link.UnderlyingLink.OriginHook), out var hookPt))
-            return hookPt;
+        {
+            bool goLeft = destCenterO.X < originNvm.X;
+            return goLeft ? new Point(originNvm.X, hookPt.Y) : hookPt;
+        }
 
         if (link.Origin is FunctionInstanceViewModel fiOriginO
             && link.UnderlyingLink.OriginHook is FunctionParameterHook fphO
             && _fiHookAnchors.TryGetValue((fiOriginO, fphO), out var fiHookPtO))
-            return fiHookPtO;
+        {
+            bool goLeft = destCenterO.X < fiOriginO.X;
+            return goLeft ? new Point(fiOriginO.X, fiHookPtO.Y) : fiHookPtO;
+        }
 
         if (link.Origin is StartViewModel startOriginO)
         {

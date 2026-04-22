@@ -72,6 +72,20 @@ public sealed partial class ModelSystemCanvas : Control
     /// <summary>Tracks which FunctionParameterHooks on each FunctionInstance have live links.</summary>
     private readonly Dictionary<FunctionInstanceViewModel, HashSet<FunctionParameterHook>> _fiConnectedHooks = new();
 
+    /// <summary>
+    /// Per-frame set of (node, hook) pairs where at least one link departs leftward
+    /// (destination centre X is to the left of the origin node's left edge).
+    /// Used to render a dot on the left face and to choose the correct exit anchor.
+    /// Rebuilt each frame by <see cref="BuildHookAnchorCache"/>.
+    /// </summary>
+    private readonly HashSet<(NodeViewModel, NodeHook)> _leftGoingHooks = new();
+
+    /// <summary>
+    /// Per-frame set of (fi, hook) pairs for FunctionInstance hooks where at least one
+    /// link departs leftward.  Rebuilt each frame by <see cref="BuildHookAnchorCache"/>.
+    /// </summary>
+    private readonly HashSet<(FunctionInstanceViewModel, FunctionParameterHook)> _leftGoingFiHooks = new();
+
     // ── Inline parameter editor ───────────────────────────────────────────
     /// <summary>Overlay TextBox used for in-canvas parameter value editing.</summary>
     private readonly TextBox _inlineEditor;
