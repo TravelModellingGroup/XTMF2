@@ -420,6 +420,14 @@ partial class ModelSystemCanvas
                 ctx.DrawEllipse(dotBrush, null,
                     new Point(fi.X + rw, dotCy), HookDotRadius, HookDotRadius);
 
+                // When at least one link from this FI hook departs leftward, also draw a dot
+                // on the left edge so the visual anchor matches the link exit point.
+                if (fpHook is not null && _leftGoingFiHooks.Contains((fi, fpHook)))
+                {
+                    ctx.DrawEllipse(dotBrush, null,
+                        new Point(fi.X, dotCy), HookDotRadius, HookDotRadius);
+                }
+
                 // Label: prefix with ≡ (BasicParameter) or ƒ (ScriptedParameter) when inlined.
                 const double textPad = 6.0;
                 string hookLabel = hasInlinedFi && inlinedFiParam is not null
@@ -1006,6 +1014,15 @@ partial class ModelSystemCanvas
                 ctx.DrawEllipse(dotBrush, null,
                     new Point(node.X + rw, rowMidY),
                     HookDotRadius, HookDotRadius);
+
+                // When at least one link from this hook departs leftward, also draw a dot
+                // on the left edge so the visual anchor matches the link exit point.
+                if (_leftGoingHooks.Contains((node, hook)))
+                {
+                    ctx.DrawEllipse(dotBrush, null,
+                        new Point(node.X, rowMidY),
+                        HookDotRadius, HookDotRadius);
+                }
 
                 // Hook name + optional inlined value.
                 // When a param is inlined, prefix with ≡ (BasicParameter) or ƒ (ScriptedParameter).
