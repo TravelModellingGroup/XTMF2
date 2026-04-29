@@ -108,9 +108,8 @@ partial class ModelSystemCanvas
             double fold = CommentFoldSize;
 
             var fill = sel ? CommentSelFill : CommentFill;
-            var borderBrush = sel ? (IBrush)CommentSelBorder : CommentBorderBrush;
-            var borderPen = new Pen(borderBrush, NodeBorderThickness);
-            var foldPen = new Pen(borderBrush, 1.0);
+            var borderPen = sel ? CommentSelBorderPen : CommentBorderPen;
+            var foldPen   = sel ? CommentSelFoldPen   : CommentFoldPen;
 
             // ── 1. Drop shadow ────────────────────────────────────────────
             // Build a shadow polygon offset by (4, 5) to the bottom-right.
@@ -131,7 +130,7 @@ partial class ModelSystemCanvas
 
             // ── 2. Glow (selection / ambient) ─────────────────────────────
             DrawRectGlow(ctx, new Rect(x, y, w, h), NodeCornerRadius,
-                         sel ? SelectionGlowColor : CommentGlowColor);
+                         sel ? SelectionGlowBrushes : CommentGlowBrushes);
 
             // ── 3. Main note body (dog-ear polygon) ───────────────────────
             var bodyGeo = new StreamGeometry();
@@ -237,9 +236,8 @@ partial class ModelSystemCanvas
             var rect = new Rect(ft.X, ft.Y, rw, rh);
 
             // Neon glow + outer border (dashed to distinguish from a regular node or boundary)
-            var borderBrush = ft.IsSelected ? FtSelBorderBrush : (_isLight ? FtBorderBrushL : FtBorderBrush);
-            var border = new Pen(borderBrush, NodeBorderThickness + 0.5, dashStyle: FtBorderDash);
-            DrawRectGlow(ctx, rect, FtCornerRadius, ft.IsSelected ? SelectionGlowColor : (_isLight ? FtGlowColorL : FtGlowColor));
+            var border = ft.IsSelected ? FtSelBorderPen : (_isLight ? FtBorderPenL : FtBorderPen);
+            DrawRectGlow(ctx, rect, FtCornerRadius, ft.IsSelected ? SelectionGlowBrushes : (_isLight ? FtGlowBrushesL : FtGlowBrushes));
             ctx.DrawRectangle(_isLight ? FtFillL : FtFill, border, rect, FtCornerRadius, FtCornerRadius);
 
             // ── Header band ────────────────────────────────────────────────
@@ -268,7 +266,7 @@ partial class ModelSystemCanvas
             {
                 ctx.DrawRectangle(InlineParamRowBg, null,
                     new Rect(ft.X, rowY, rw, FtHookRowHeight));
-                ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
+                ctx.DrawLine(_isLight ? HookDividerPenThinL : HookDividerPenThin,
                     new Point(ft.X, rowY),
                     new Point(ft.X + rw, rowY));
 
@@ -335,9 +333,8 @@ partial class ModelSystemCanvas
             var rect = new Rect(fi.X, fi.Y, rw, rh);
 
             // ── Border / fill — original teal FI palette ────────────────
-            var borderBrush = fi.IsSelected ? (_isLight ? FiSelBorderBrushL : FiSelBorderBrush) : (_isLight ? FiBorderBrushL : FiBorderBrush);
-            var border = new Pen(borderBrush, NodeBorderThickness);
-            DrawRectGlow(ctx, rect, FiCornerRadius, fi.IsSelected ? SelectionGlowColor : (_isLight ? FiGlowColorL : FiGlowColor));
+            var border = fi.IsSelected ? (_isLight ? FiSelBorderPenL : FiSelBorderPen) : (_isLight ? FiBorderPenL : FiBorderPen);
+            DrawRectGlow(ctx, rect, FiCornerRadius, fi.IsSelected ? SelectionGlowBrushes : (_isLight ? FiGlowBrushesL : FiGlowBrushes));
             ctx.DrawRectangle(_isLight ? FiFillL : FiFill, border, rect, FiCornerRadius, FiCornerRadius);
 
             // ── Header band ────────────────────────────────────────────────
@@ -382,7 +379,7 @@ partial class ModelSystemCanvas
                 continue;
 
             // ── FunctionParameter hook rows — same layout logic as Node hook rows ───
-            ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 1.0),
+            ctx.DrawLine(_isLight ? HookDividerPenL : HookDividerPen,
                 new Point(fi.X + 1, fi.Y + FtHeaderHeight),
                 new Point(fi.X + rw - 1, fi.Y + FtHeaderHeight));
 
@@ -410,7 +407,7 @@ partial class ModelSystemCanvas
                     ctx.DrawRectangle(HookUnsatisfiedRowBg, null,
                         new Rect(fi.X + 1, rowTopY, rw - 2, HookRowHeight));
 
-                ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
+                ctx.DrawLine(_isLight ? HookDividerPenThinL : HookDividerPenThin,
                     new Point(fi.X, rowY), new Point(fi.X + rw, rowY));
 
                 // Dot on the RIGHT edge — green if satisfied, red if unsatisfied.
@@ -462,25 +459,25 @@ partial class ModelSystemCanvas
             // Amber/orange fill — switches between dark and light palettes.
             IBrush bodyFill, headerFill, textBrush;
             Pen border;
-            Color glowColor;
+            IBrush[] fpGlowBrushes;
             if (_isLight)
             {
-                bodyFill = fp.IsSelected ? new SolidColorBrush(Colors.PeachPuff) : FpFillL;
-                headerFill = FpHeaderFillL;
-                border = new Pen(fp.IsSelected ? NodeSelBrush : FpBorderBrushL, NodeBorderThickness);
-                textBrush = FpTextBrushL;
-                glowColor = fp.IsSelected ? SelectionGlowColor : FpGlowColorL;
+                bodyFill      = fp.IsSelected ? FpBodyFillSel : FpFillL;
+                headerFill    = FpHeaderFillL;
+                border        = fp.IsSelected ? FpSelBorderPenL : FpBorderPenL;
+                textBrush     = FpTextBrushL;
+                fpGlowBrushes = fp.IsSelected ? SelectionGlowBrushes : FpGlowBrushesL;
             }
             else
             {
-                bodyFill = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x8C, 0x00));
-                headerFill = new SolidColorBrush(Color.FromArgb(0xFF, 0xC0, 0x50, 0x00));
-                border = new Pen(new SolidColorBrush(fp.IsSelected ? Colors.OrangeRed : Colors.DarkOrange), NodeBorderThickness);
-                textBrush = Brushes.White;
-                glowColor = fp.IsSelected ? SelectionGlowColor : Colors.OrangeRed;
+                bodyFill      = FpBodyFill;
+                headerFill    = FpHeaderFill;
+                border        = fp.IsSelected ? FpSelBorderPen : FpBorderPen;
+                textBrush     = Brushes.White;
+                fpGlowBrushes = fp.IsSelected ? SelectionGlowBrushes : FpGlowBrushes;
             }
 
-            DrawRectGlow(ctx, rect, FiCornerRadius, glowColor);
+            DrawRectGlow(ctx, rect, FiCornerRadius, fpGlowBrushes);
 
             // Header band: draw header fill over entire rect (preserving rounded corners),
             // then overdraw the body area below the header — same pattern as FunctionTemplates.
@@ -600,12 +597,13 @@ partial class ModelSystemCanvas
             if (link.Destination is NodeViewModel destNvm && destNvm.IsInlined) continue;
 
             var brush = link.IsSelected ? LinkSelBrush : (_isLight ? LinkBrushL : LinkBrush);
-            var pen = new Pen(brush, LinkThickness);
+            var pen = link.IsSelected ? LinkSelStrokePen : (_isLight ? LinkStrokePenL : LinkStrokePen);
 
             // Neon glow: two wider transparent halos drawn beneath the main link line.
-            var glowColor = link.IsSelected ? LinkSelGlowColor : (_isLight ? LinkGlowColorL : LinkGlowColor);
-            var glowOuter = new Pen(new SolidColorBrush(Color.FromArgb(0x10, glowColor.R, glowColor.G, glowColor.B)), LinkThickness + 8);
-            var glowInner = new Pen(new SolidColorBrush(Color.FromArgb(0x26, glowColor.R, glowColor.G, glowColor.B)), LinkThickness + 3);
+            Pen glowOuter, glowInner;
+            if (link.IsSelected) { glowOuter = LinkSelGlowOuterPen; glowInner = LinkSelGlowInnerPen; }
+            else if (_isLight)   { glowOuter = LinkGlowOuterPenL;   glowInner = LinkGlowInnerPenL; }
+            else                 { glowOuter = LinkGlowOuterPen;     glowInner = LinkGlowInnerPen; }
 
             Point bp2, arrowFrom;
             Point shaftEnd;
@@ -772,7 +770,7 @@ partial class ModelSystemCanvas
     private void RenderPendingLink(DrawingContext ctx)
     {
         if (_linkOrigin is null) return;
-        var pen = new Pen(PendingLinkBrush, LinkThickness, dashStyle: PendingLinkDash);
+        var pen = PendingLinkStrokePen;
 
         // p1 and exit direction follow the same rules as ComputeSCurve.
         Point p1;
@@ -814,9 +812,8 @@ partial class ModelSystemCanvas
             gc.CubicBezierTo(c1, c2, shaftEnd);
             gc.EndFigure(isClosed: false);
         }
-        var pgColor = Color.FromRgb(0x2E, 0xCC, 0x71);
-        ctx.DrawGeometry(null, new Pen(new SolidColorBrush(Color.FromArgb(0x10, pgColor.R, pgColor.G, pgColor.B)), LinkThickness + 8), geo);
-        ctx.DrawGeometry(null, new Pen(new SolidColorBrush(Color.FromArgb(0x26, pgColor.R, pgColor.G, pgColor.B)), LinkThickness + 3), geo);
+        ctx.DrawGeometry(null, PendingLinkGlowOuterPen, geo);
+        ctx.DrawGeometry(null, PendingLinkGlowInnerPen, geo);
         ctx.DrawGeometry(null, pen, geo);
     }
 
@@ -835,10 +832,10 @@ partial class ModelSystemCanvas
             bool isEntryNode = _vm.IsInsideFunctionTemplate
                 && _vm.CurrentFunctionTemplate?.UnderlyingTemplate.EntryNode == node.UnderlyingNode;
 
-            var border = new Pen(node.IsSelected ? NodeSelBrush : (_isLight ? NodeBorderBrushL : NodeBorderBrush), NodeBorderThickness);
+            var border = node.IsSelected ? NodeSelPen : (_isLight ? NodeBorderPenL : NodeBorderPen);
 
             // Node background + border
-            DrawRectGlow(ctx, rect, NodeCornerRadius, node.IsSelected ? SelectionGlowColor : (_isLight ? NodeGlowColorL : NodeGlowColor));
+            DrawRectGlow(ctx, rect, NodeCornerRadius, node.IsSelected ? SelectionGlowBrushes : (_isLight ? NodeGlowBrushesL : NodeGlowBrushes));
             ctx.DrawRectangle(_isLight ? NodeFillL : NodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // ── Entry-node gold ring (drawn over the normal border) ───────────
@@ -848,7 +845,7 @@ partial class ModelSystemCanvas
                     node.X - EntryNodeRingExtra, node.Y - EntryNodeRingExtra,
                     rw + EntryNodeRingExtra * 2, rh + EntryNodeRingExtra * 2);
                 ctx.DrawRectangle(null,
-                    new Pen(EntryNodeRingBrush, EntryNodeRingThick),
+                    EntryNodeRingPen,
                     outerRect,
                     NodeCornerRadius + EntryNodeRingExtra,
                     NodeCornerRadius + EntryNodeRingExtra);
@@ -932,7 +929,7 @@ partial class ModelSystemCanvas
                 continue;
 
             // Divider line separating header from content rows
-            var dividerPen = new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 1.0);
+            var dividerPen = _isLight ? HookDividerPenL : HookDividerPen;
             ctx.DrawLine(dividerPen,
                 new Point(node.X + 1, headerBottom),
                 new Point(node.X + rw - 1, headerBottom));
@@ -1048,7 +1045,7 @@ partial class ModelSystemCanvas
                 if (i < hooks.Count - 1)
                 {
                     double sepY = node.Y + NodeHeaderHeight + (rowOffset + i + 1) * HookRowHeight;
-                    ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
+                    ctx.DrawLine(_isLight ? HookDividerPenThinL : HookDividerPenThin,
                         new Point(node.X + 1, sepY),
                         new Point(node.X + rw - 1, sepY));
                 }
@@ -1070,10 +1067,9 @@ partial class ModelSystemCanvas
             var rect = new Rect(ghost.X, ghost.Y, rw, rh);
 
             // Fill is semi-transparent; border is dashed.
-            var borderBrush = ghost.IsSelected ? GhostNodeSelBrush : (_isLight ? GhostNodeBorderBrushL : GhostNodeBorderBrush);
-            var border = new Pen(borderBrush, NodeBorderThickness, dashStyle: GhostNodeDash);
+            var border = ghost.IsSelected ? GhostSelPen : (_isLight ? GhostBorderPenL : GhostBorderPen);
 
-            DrawRectGlow(ctx, rect, NodeCornerRadius, ghost.IsSelected ? SelectionGlowColor : (_isLight ? GhostGlowColorL : GhostGlowColor));
+            DrawRectGlow(ctx, rect, NodeCornerRadius, ghost.IsSelected ? SelectionGlowBrushes : (_isLight ? GhostGlowBrushesL : GhostGlowBrushes));
             ctx.DrawRectangle(_isLight ? GhostNodeFillL : GhostNodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // Ghost icon prefix ("⊙ ") to distinguish from real nodes at a glance.
@@ -1111,9 +1107,9 @@ partial class ModelSystemCanvas
             var fill = start.IsSelected ? StartSelFill : (_isLight ? StartFillL : StartFill);
             var center = new Point(start.CenterX, start.CenterY);
             var r = StartViewModel.Radius;
-            var border = new Pen(start.IsSelected ? NodeSelBrush : (_isLight ? StartBorderBrushL : NodeBorderBrush), NodeBorderThickness);
+            var border = start.IsSelected ? NodeSelPen : (_isLight ? StartBorderPenL : NodeBorderPen);
 
-            DrawEllipseGlow(ctx, center, r, r, start.IsSelected ? SelectionGlowColor : (_isLight ? StartGlowColorL : StartGlowColor));
+            DrawEllipseGlow(ctx, center, r, r, start.IsSelected ? SelectionGlowBrushes : (_isLight ? StartGlowBrushesL : StartGlowBrushes));
             ctx.DrawEllipse(fill, border, center, r, r);
 
             // Label below the circle
@@ -1127,38 +1123,62 @@ partial class ModelSystemCanvas
 
     /// <summary>
     /// Draws a neon glow halo around a rounded rectangle using 5 outward-expanding
-    /// semi-transparent layers of <paramref name="glowColor"/>, fading from fully
-    /// transparent at the outer edge to relatively vivid just inside the object border.
+    /// semi-transparent layers. <paramref name="glow"/> must be a 5-element array
+    /// produced by <see cref="MakeGlowBrushes"/>; the expansions are [14, 9, 5, 2.5, 1].
     /// </summary>
-    private static void DrawRectGlow(DrawingContext ctx, Rect rect, double cornerRadius, Color glowColor)
+    private static void DrawRectGlow(DrawingContext ctx, Rect rect, double cornerRadius, IBrush[] glow)
     {
-        ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x08, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(14), cornerRadius + 14, cornerRadius + 14);
-        ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x10, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(9), cornerRadius + 9, cornerRadius + 9);
-        ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x1E, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(5), cornerRadius + 5, cornerRadius + 5);
-        ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x34, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(2.5), cornerRadius + 2.5, cornerRadius + 2.5);
-        ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x50, glowColor.R, glowColor.G, glowColor.B)), null, rect.Inflate(1), cornerRadius + 1, cornerRadius + 1);
+        ctx.DrawRectangle(glow[0], null, rect.Inflate(14),  cornerRadius + 14,  cornerRadius + 14);
+        ctx.DrawRectangle(glow[1], null, rect.Inflate(9),   cornerRadius + 9,   cornerRadius + 9);
+        ctx.DrawRectangle(glow[2], null, rect.Inflate(5),   cornerRadius + 5,   cornerRadius + 5);
+        ctx.DrawRectangle(glow[3], null, rect.Inflate(2.5), cornerRadius + 2.5, cornerRadius + 2.5);
+        ctx.DrawRectangle(glow[4], null, rect.Inflate(1),   cornerRadius + 1,   cornerRadius + 1);
     }
 
     /// <summary>
-    /// Draws a neon glow halo around an ellipse using 5 outward-expanding semi-transparent layers of
-    /// <paramref name="glowColor"/>, fading from fully transparent at the outer edge inward.
+    /// Draws a neon glow halo around an ellipse using 5 outward-expanding semi-transparent layers.
+    /// <paramref name="glow"/> must be a 5-element array produced by <see cref="MakeGlowBrushes"/>;
+    /// the expansions are [14, 9, 5, 2.5, 1].
     /// </summary>
-    private static void DrawEllipseGlow(DrawingContext ctx, Point center, double rx, double ry, Color glowColor)
+    private static void DrawEllipseGlow(DrawingContext ctx, Point center, double rx, double ry, IBrush[] glow)
     {
-        ctx.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x08, glowColor.R, glowColor.G, glowColor.B)), null, center, rx + 14, ry + 14);
-        ctx.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x10, glowColor.R, glowColor.G, glowColor.B)), null, center, rx + 9, ry + 9);
-        ctx.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x1E, glowColor.R, glowColor.G, glowColor.B)), null, center, rx + 5, ry + 5);
-        ctx.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x34, glowColor.R, glowColor.G, glowColor.B)), null, center, rx + 2.5, ry + 2.5);
-        ctx.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x50, glowColor.R, glowColor.G, glowColor.B)), null, center, rx + 1, ry + 1);
+        ctx.DrawEllipse(glow[0], null, center, rx + 14,  ry + 14);
+        ctx.DrawEllipse(glow[1], null, center, rx + 9,   ry + 9);
+        ctx.DrawEllipse(glow[2], null, center, rx + 5,   ry + 5);
+        ctx.DrawEllipse(glow[3], null, center, rx + 2.5, ry + 2.5);
+        ctx.DrawEllipse(glow[4], null, center, rx + 1,   ry + 1);
     }
 
-    private static FormattedText MakeText(string text, double size, IBrush foreground) =>
-        new(
-            text,
-            CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight,
-            DefaultTypeface,
-            size,
-            foreground);
+    // ── FormattedText cache ────────────────────────────────────────────────
+    // Keyed by (text, emSize, brush-reference). IBrush is a reference type and all
+    // brushes in this codebase are static readonly fields, so reference equality
+    // is a reliable proxy for visual identity across both theme variants.
+    //
+    // Growth risk: user-typed parameter values are arbitrary strings and would
+    // accumulate indefinitely without a bound. We evict the entire cache once it
+    // reaches TextCacheMaxEntries. A full eviction is O(1) and the common stable
+    // labels (hook names, glyphs, link indices) will be re-warmed within one frame.
+    // If we end up with over 1024 text elements being rendered we will lose the benifit of the cahce
+    // so we will need to measure what a "normal" number of text elements is in a complex graph and adjust the cache size accordingly.
+    private const int TextCacheMaxEntries = 1024;
+    private static readonly Dictionary<(string, double, IBrush), FormattedText> _textCache = new(TextCacheMaxEntries + 1);
+
+    private static FormattedText MakeText(string text, double size, IBrush foreground)
+    {
+        var key = (text, size, foreground);
+        if (!_textCache.TryGetValue(key, out var ft))
+        {
+            if (_textCache.Count >= TextCacheMaxEntries)
+                _textCache.Clear();
+            _textCache[key] = ft = new FormattedText(
+                text,
+                CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                DefaultTypeface,
+                size,
+                foreground);
+        }
+        return ft;
+    }
 
 }
