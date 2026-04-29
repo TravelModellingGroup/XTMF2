@@ -254,4 +254,93 @@ partial class ModelSystemCanvas
 
     private static readonly Typeface DefaultTypeface = new Typeface("Segoe UI, Arial, sans-serif");
 
+    // ── Dark-mode FunctionParameter brushes (promoted from per-frame allocations) ──
+    private static readonly IBrush FpBodyFill    = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x8C, 0x00));
+    private static readonly IBrush FpHeaderFill  = new SolidColorBrush(Color.FromArgb(0xFF, 0xC0, 0x50, 0x00));
+    private static readonly IBrush FpBorderBrush = new SolidColorBrush(Colors.DarkOrange);
+    private static readonly IBrush FpSelBorderBrush = new SolidColorBrush(Colors.OrangeRed);
+    private static readonly IBrush FpBodyFillSel = new SolidColorBrush(Colors.PeachPuff);   // light-mode selected fill
+    private static readonly Color  FpGlowColor   = Colors.OrangeRed;
+
+    // ── Pre-computed Pen instances (replaces per-frame `new Pen(...)`) ────
+    // Node
+    private static readonly Pen NodeBorderPen    = new(NodeBorderBrush,  NodeBorderThickness);
+    private static readonly Pen NodeBorderPenL   = new(NodeBorderBrushL, NodeBorderThickness);
+    private static readonly Pen NodeSelPen        = new(NodeSelBrush,     NodeBorderThickness);
+    // Ghost node (dashed)
+    private static readonly Pen GhostBorderPen   = new(GhostNodeBorderBrush,  NodeBorderThickness, dashStyle: GhostNodeDash);
+    private static readonly Pen GhostBorderPenL  = new(GhostNodeBorderBrushL, NodeBorderThickness, dashStyle: GhostNodeDash);
+    private static readonly Pen GhostSelPen      = new(GhostNodeSelBrush,     NodeBorderThickness, dashStyle: GhostNodeDash);
+    // Start
+    private static readonly Pen StartBorderPenL  = new(StartBorderBrushL, NodeBorderThickness);
+    // Hook divider (1.0 thickness)
+    private static readonly Pen HookDividerPen   = new(HookDividerBrush,  1.0);
+    private static readonly Pen HookDividerPenL  = new(HookDividerBrushL, 1.0);
+    // Hook divider (0.5 thickness — row separators)
+    private static readonly Pen HookDividerPenThin  = new(HookDividerBrush,  0.5);
+    private static readonly Pen HookDividerPenThinL = new(HookDividerBrushL, 0.5);
+    // Link stroke
+    private static readonly Pen LinkStrokePen    = new(LinkBrush,    LinkThickness);
+    private static readonly Pen LinkStrokePenL   = new(LinkBrushL,   LinkThickness);
+    private static readonly Pen LinkSelStrokePen = new(LinkSelBrush, LinkThickness);
+    // Link glow (outer α=0x10, inner α=0x26 — three colour variants)
+    private static readonly Pen LinkGlowOuterPen    = new(new SolidColorBrush(Color.FromArgb(0x10, LinkGlowColor.R,    LinkGlowColor.G,    LinkGlowColor.B)),    LinkThickness + 8);
+    private static readonly Pen LinkGlowInnerPen    = new(new SolidColorBrush(Color.FromArgb(0x26, LinkGlowColor.R,    LinkGlowColor.G,    LinkGlowColor.B)),    LinkThickness + 3);
+    private static readonly Pen LinkGlowOuterPenL   = new(new SolidColorBrush(Color.FromArgb(0x10, LinkGlowColorL.R,   LinkGlowColorL.G,   LinkGlowColorL.B)),   LinkThickness + 8);
+    private static readonly Pen LinkGlowInnerPenL   = new(new SolidColorBrush(Color.FromArgb(0x26, LinkGlowColorL.R,   LinkGlowColorL.G,   LinkGlowColorL.B)),   LinkThickness + 3);
+    private static readonly Pen LinkSelGlowOuterPen = new(new SolidColorBrush(Color.FromArgb(0x10, LinkSelGlowColor.R, LinkSelGlowColor.G, LinkSelGlowColor.B)), LinkThickness + 8);
+    private static readonly Pen LinkSelGlowInnerPen = new(new SolidColorBrush(Color.FromArgb(0x26, LinkSelGlowColor.R, LinkSelGlowColor.G, LinkSelGlowColor.B)), LinkThickness + 3);
+    // Pending link
+    private static readonly Pen PendingLinkStrokePen    = new(PendingLinkBrush, LinkThickness, dashStyle: PendingLinkDash);
+    private static readonly Pen PendingLinkGlowOuterPen = new(new SolidColorBrush(Color.FromArgb(0x10, 0x2E, 0xCC, 0x71)), LinkThickness + 8);
+    private static readonly Pen PendingLinkGlowInnerPen = new(new SolidColorBrush(Color.FromArgb(0x26, 0x2E, 0xCC, 0x71)), LinkThickness + 3);
+    // Function-template border (dashed)
+    private static readonly Pen FtBorderPen    = new(FtBorderBrush,    NodeBorderThickness + 0.5, dashStyle: FtBorderDash);
+    private static readonly Pen FtBorderPenL   = new(FtBorderBrushL,   NodeBorderThickness + 0.5, dashStyle: FtBorderDash);
+    private static readonly Pen FtSelBorderPen = new(FtSelBorderBrush, NodeBorderThickness + 0.5, dashStyle: FtBorderDash);
+    // Function-instance border
+    private static readonly Pen FiBorderPen     = new(FiBorderBrush,     NodeBorderThickness);
+    private static readonly Pen FiBorderPenL    = new(FiBorderBrushL,    NodeBorderThickness);
+    private static readonly Pen FiSelBorderPen  = new(FiSelBorderBrush,  NodeBorderThickness);
+    private static readonly Pen FiSelBorderPenL = new(FiSelBorderBrushL, NodeBorderThickness);
+    // FunctionParameter border
+    private static readonly Pen FpBorderPen     = new(FpBorderBrush,    NodeBorderThickness);
+    private static readonly Pen FpSelBorderPen  = new(FpSelBorderBrush, NodeBorderThickness);
+    private static readonly Pen FpBorderPenL    = new(FpBorderBrushL,   NodeBorderThickness);
+    private static readonly Pen FpSelBorderPenL = new(NodeSelBrush,     NodeBorderThickness);
+    // Comment border
+    private static readonly Pen CommentBorderPen    = new(CommentBorderBrush, NodeBorderThickness);
+    private static readonly Pen CommentSelBorderPen = new(CommentSelBorder,   NodeBorderThickness);
+    private static readonly Pen CommentFoldPen      = new(CommentBorderBrush, 1.0);
+    private static readonly Pen CommentSelFoldPen   = new(CommentSelBorder,   1.0);
+    // Entry-node gold ring
+    private static readonly Pen EntryNodeRingPen = new(EntryNodeRingBrush, EntryNodeRingThick);
+
+    // ── Pre-built glow brush arrays (5 layers per colour) ─────────────────
+    // Layer order matches DrawRectGlow/DrawEllipseGlow expansion offsets [14, 9, 5, 2.5, 1]
+    // and alpha values [0x08, 0x10, 0x1E, 0x34, 0x50] respectively.
+    private static IBrush[] MakeGlowBrushes(Color c) => new IBrush[]
+    {
+        new SolidColorBrush(Color.FromArgb(0x08, c.R, c.G, c.B)),
+        new SolidColorBrush(Color.FromArgb(0x10, c.R, c.G, c.B)),
+        new SolidColorBrush(Color.FromArgb(0x1E, c.R, c.G, c.B)),
+        new SolidColorBrush(Color.FromArgb(0x34, c.R, c.G, c.B)),
+        new SolidColorBrush(Color.FromArgb(0x50, c.R, c.G, c.B)),
+    };
+
+    private static readonly IBrush[] NodeGlowBrushes      = MakeGlowBrushes(NodeGlowColor);
+    private static readonly IBrush[] NodeGlowBrushesL     = MakeGlowBrushes(NodeGlowColorL);
+    private static readonly IBrush[] SelectionGlowBrushes = MakeGlowBrushes(SelectionGlowColor);
+    private static readonly IBrush[] StartGlowBrushes     = MakeGlowBrushes(StartGlowColor);
+    private static readonly IBrush[] StartGlowBrushesL    = MakeGlowBrushes(StartGlowColorL);
+    private static readonly IBrush[] FtGlowBrushes        = MakeGlowBrushes(FtGlowColor);
+    private static readonly IBrush[] FtGlowBrushesL       = MakeGlowBrushes(FtGlowColorL);
+    private static readonly IBrush[] FiGlowBrushes        = MakeGlowBrushes(FiGlowColor);
+    private static readonly IBrush[] FiGlowBrushesL       = MakeGlowBrushes(FiGlowColorL);
+    private static readonly IBrush[] CommentGlowBrushes   = MakeGlowBrushes(CommentGlowColor);
+    private static readonly IBrush[] GhostGlowBrushes     = MakeGlowBrushes(GhostGlowColor);
+    private static readonly IBrush[] GhostGlowBrushesL    = MakeGlowBrushes(GhostGlowColorL);
+    private static readonly IBrush[] FpGlowBrushes        = MakeGlowBrushes(FpGlowColor);
+    private static readonly IBrush[] FpGlowBrushesL       = MakeGlowBrushes(FpGlowColorL);
+
 }
