@@ -24,6 +24,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -276,6 +277,32 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     // ── Canvas element search ─────────────────────────────────────────────
     /// <summary>Fires when the user picks an element from the search box; the view should scroll to it.</summary>
     public event Action<ICanvasElement>? ScrollToElementRequested;
+
+    /// <summary>
+    /// Holds an element that <see cref="NavigateToElementById"/> wanted to scroll to but could
+    /// not because no view was subscribed yet (e.g. the tab was just opened).
+    /// The view drains this after it attaches and completes its layout pass.
+    /// </summary>
+    private ICanvasElement? _pendingScrollTarget;
+
+    /// <summary>
+    /// The last scroll offset the user was at in the canvas.  Persists across tab switches so
+    /// the view can restore the position when the tab is re-activated (the view may be recreated
+    /// by Dock.Avalonia on each activation).
+    /// </summary>
+    public Vector SavedScrollOffset { get; set; }
+
+    /// <summary>
+    /// Invokes <see cref="ScrollToElementRequested"/> for any element that was stored while
+    /// the view was not yet attached. Called by <see cref="Views.ModelSystemEditorView"/> after
+    /// it subscribes and layout has completed.
+    /// </summary>
+    public void FlushPendingScrollTarget()
+    {
+        var target = System.Threading.Interlocked.Exchange(ref _pendingScrollTarget, null);
+        if (target is not null)
+            ScrollToElementRequested?.Invoke(target);
+    }
 
     /// <summary>Bound to the AutoCompleteBox SelectedItem; triggers navigation when set.</summary>
     [ObservableProperty]
@@ -1907,6 +1934,98 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             SelectElement(nvm);
             ScrollToElementRequested?.Invoke(nvm);
         }
+    }
+
+    /// <summary>
+    /// Navigates the canvas to the element with the given <paramref name="id"/>, switching
+    /// boundaries (and entering a function template if necessary) as required.
+    /// </summary>
+    public void NavigateToElementById(Guid id)
+    {
+        if (!TryFindElementById(id, GlobalBoundary, out var containingBoundary,
+                out var ftToEnter, out var element))
+            return;
+
+        if (ftToEnter is not null)
+        {
+            if (!ReferenceEquals(_currentBoundary, ftToEnter.Parent))
+                SwitchToBoundary(ftToEnter.Parent!);
+            var ftvm = FunctionTemplates.FirstOrDefault(f =>
+                ReferenceEquals(f.UnderlyingTemplate, ftToEnter));
+            if (ftvm is not null)
+                NavigateIntoFunctionTemplate(ftvm);
+        }
+        else if (containingBoundary is not null &&
+                 !ReferenceEquals(_currentBoundary, containingBoundary))
+        {
+            SwitchToBoundary(containingBoundary);
+        }
+
+        ICanvasElement? canvasEl = element switch
+        {
+            // More-derived Node subtypes must come before the base Node arm.
+            Start s              => Starts.FirstOrDefault(svm => ReferenceEquals(svm.UnderlyingStart, s)),
+            FunctionInstance  fi => FunctionInstances.FirstOrDefault(f => ReferenceEquals(f.UnderlyingInstance, fi)),
+            FunctionParameter fp => FunctionParameterVMs.FirstOrDefault(f => ReferenceEquals(f.UnderlyingParameter, fp)),
+            Node n               => Nodes.FirstOrDefault(nvm => ReferenceEquals(nvm.UnderlyingNode, n)),
+            FunctionTemplate  ft => FunctionTemplates.FirstOrDefault(f => ReferenceEquals(f.UnderlyingTemplate, ft)),
+            CommentBlock      cb => CommentBlocks.FirstOrDefault(c => ReferenceEquals(c.UnderlyingBlock, cb)),
+            _                    => null
+        };
+        if (canvasEl is not null)
+        {
+            // If the resolved element is inlined (hidden inside a host node's hook row),
+            // redirect navigation to the host node so we scroll to something visible.
+            if (canvasEl is NodeViewModel inlinedNvm && inlinedNvm.IsInlined)
+            {
+                var hostLink = Links.FirstOrDefault(lvm => ReferenceEquals(lvm.Destination, inlinedNvm));
+                if (hostLink?.Origin is ICanvasElement hostEl)
+                    canvasEl = hostEl;
+            }
+
+            SelectElement(canvasEl);
+            // If the view is already subscribed, scroll immediately.
+            // Otherwise park the target so the view can scroll once it attaches and lays out.
+            if (ScrollToElementRequested is not null)
+                ScrollToElementRequested.Invoke(canvasEl);
+            else
+                _pendingScrollTarget = canvasEl;
+        }
+    }
+
+    /// <summary>
+    /// Depth-first search for an element by <paramref name="id"/> across all boundaries.
+    /// Returns the containing boundary, the function template to enter (if any), and the
+    /// raw model object.
+    /// </summary>
+    private static bool TryFindElementById(Guid id, Boundary root,
+        out Boundary? containingBoundary, out FunctionTemplate? ftToEnter, out object? element)
+    {
+        var queue = new Queue<(Boundary Boundary, FunctionTemplate? SourceFt)>();
+        queue.Enqueue((root, null));
+        while (queue.Count > 0)
+        {
+            var (b, sourceFt) = queue.Dequeue();
+            foreach (var n in b.Modules)
+                if (n.Id == id) { containingBoundary = b; ftToEnter = sourceFt; element = n; return true; }
+            foreach (var s in b.Starts)
+                if (s.Id == id) { containingBoundary = b; ftToEnter = sourceFt; element = s; return true; }
+            foreach (var fi in b.FunctionInstances)
+                if (fi.Id == id) { containingBoundary = b; ftToEnter = sourceFt; element = fi; return true; }
+            foreach (var cb in b.CommentBlocks)
+                if (cb.Id == id) { containingBoundary = b; ftToEnter = sourceFt; element = cb; return true; }
+            foreach (var ft in b.FunctionTemplates)
+            {
+                if (ft.Id == id) { containingBoundary = b; ftToEnter = sourceFt; element = ft; return true; }
+                foreach (var fp in ft.FunctionParameters)
+                    if (fp.Id == id) { containingBoundary = ft.InternalModules; ftToEnter = ft; element = fp; return true; }
+                queue.Enqueue((ft.InternalModules, ft));
+            }
+            foreach (var sub in b.Boundaries)
+                queue.Enqueue((sub, null));
+        }
+        containingBoundary = null; ftToEnter = null; element = null;
+        return false;
     }
 
     /// <summary>Rebuilds <see cref="ModelSystemVariables"/> from the current Variables list.</summary>

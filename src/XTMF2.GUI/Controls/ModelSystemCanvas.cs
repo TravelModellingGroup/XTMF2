@@ -170,6 +170,8 @@ public sealed partial class ModelSystemCanvas : Control
 
     // ── Canvas scale ───────────────────────────────────────────────────────
     private double _scale = 1.0;
+    /// <summary>Current zoom scale factor (1.0 = 100%).</summary>
+    public double Scale => _scale;
     // ── Zoom control overlay ───────────────────────────────────────────────
     private readonly Border _zoomBar;
     private readonly TextBox _zoomTextBox;

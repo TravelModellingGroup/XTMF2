@@ -324,7 +324,7 @@ namespace XTMF2
             }
         }
 
-        private static ModelSystem? Load(Stream rawStream, ModuleRepository modules, ModelSystemHeader modelSystemHeader,
+        internal static ModelSystem? Load(Stream rawStream, ModuleRepository modules, ModelSystemHeader modelSystemHeader,
             [NotNullWhen(false)] ref string? error)
         {
             try
@@ -338,7 +338,7 @@ namespace XTMF2
                 var typeLookup = new Dictionary<int, Type>();
                 var nodes = new Dictionary<int, Node>();
                 List<(Node toAssignTo, string parameterExpression)> scriptedParameters = new();
-                List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes = new();
+                List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes = new();
                 while (reader.Read())
                 {
                     if (reader.TokenType == JsonTokenType.PropertyName)
@@ -368,9 +368,9 @@ namespace XTMF2
                     }
                 }
                 // Resolve deferred ghost nodes now that all boundaries and nodes are loaded.
-                foreach (var (containedIn, refIndex, selfIndex, location) in deferredGhostNodes)
+                foreach (var (containedIn, refIndex, selfIndex, location, id) in deferredGhostNodes)
                 {
-                    if (!GhostNode.Resolve(nodes, containedIn, refIndex, selfIndex, location, out var ghost, ref error))
+                    if (!GhostNode.Resolve(nodes, containedIn, refIndex, selfIndex, location, id, out var ghost, ref error))
                     {
                         // Non-fatal: skip ghost nodes that can't be resolved (e.g. referenced node was removed).
                         continue;
@@ -483,7 +483,7 @@ namespace XTMF2
 
         private static bool LoadBoundaries(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
             List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
-            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes,
+            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
             ref Utf8JsonReader reader, Boundary global, [NotNullWhen(false)] ref string? error)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)

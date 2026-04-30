@@ -29,8 +29,8 @@ namespace XTMF2.ModelSystemConstruct
     {
         public Node Destination { get; private set; }
 
-        public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled, bool orthogonal = false)
-            : base(origin, hook, disabled, orthogonal)
+        public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled, bool orthogonal = false, Guid id = default)
+            : base(origin, hook, disabled, orthogonal, id)
         {
             Destination = destination;
         }
@@ -46,6 +46,7 @@ namespace XTMF2.ModelSystemConstruct
         internal override void Save(Dictionary<Node, int> moduleDictionary, Utf8JsonWriter writer)
         {
             writer.WriteStartObject();
+            writer.WriteString(IdProperty, Id);
             writer.WriteNumber(OriginProperty, moduleDictionary[Origin!]);
             writer.WriteString(HookProperty, OriginHook.Name);
             writer.WriteNumber(DestinationProperty, moduleDictionary[Destination!]);

@@ -35,6 +35,12 @@ namespace XTMF2.ModelSystemConstruct
     public sealed class Boundary : INotifyPropertyChanged
     {
         /// <summary>
+        /// A stable identifier for this boundary that is preserved across save/load cycles.
+        /// Used to match boundaries for diff comparison.
+        /// </summary>
+        public Guid Id { get; private set; } = Guid.NewGuid();
+
+        /// <summary>
         /// The name of the boundary
         /// </summary>
         public string Name { get; private set; }
@@ -44,6 +50,7 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         public string Description { get; private set; }
 
+        private const string IdProperty = "Id";
         private const string NameProperty = "Name";
         private const string DescriptionProperty = "Description";
         private const string StartsProperty = "Starts";
@@ -753,6 +760,7 @@ namespace XTMF2.ModelSystemConstruct
             lock (_writeLock)
             {
                 writer.WriteStartObject();
+                writer.WriteString(IdProperty, Id);
                 writer.WriteString(NameProperty, Name);
                 writer.WriteString(DescriptionProperty, Description);
                 writer.WritePropertyName(StartsProperty);
@@ -918,7 +926,7 @@ namespace XTMF2.ModelSystemConstruct
         
 
         internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
-            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes,
+            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
             ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
@@ -931,7 +939,19 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     return Helper.FailWith(out error, "Unexpected token when reading boundary!");
                 }
-                if (reader.ValueTextEquals(NameProperty))
+                if (reader.ValueTextEquals(IdProperty))
+                {
+                    reader.Read();
+                    if(reader.TryGetGuid(out var parsedId))
+                    {
+                        Id = parsedId;
+                    }
+                    else
+                    {
+                        return Helper.FailWith(out error, "Unable to read the Id property for a boundary!");
+                    }
+                }
+                else if (reader.ValueTextEquals(NameProperty))
                 {
                     reader.Read();
                     var temp = reader.GetString();

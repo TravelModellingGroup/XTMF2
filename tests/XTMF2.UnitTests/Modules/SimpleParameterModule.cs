@@ -34,4 +34,19 @@ namespace XTMF2.UnitTests.Modules
             return RealValue.Invoke();
         }
     }
+
+    /// <summary>
+    /// A test module that wires a sub-module connection (not a parameter) to a SimpleTestModule.
+    /// Used in diff tests to create a link whose hook has IsParameter=false,
+    /// so that link-destination ids (including FunctionParameter ids) are included in comparison.
+    /// </summary>
+    [Module(Name = "Simple SubModule Module", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+        Description = "A test module with a SubModule hook (IsParameter=false).")]
+    public class SimpleSubModuleModule : BaseFunction<string>
+    {
+        [SubModule(Name = "Inner Module", Description = "A sub-module wired structurally", Required = false, Index = 0)]
+        public SimpleTestModule Inner;
+
+        public override string Invoke() => Inner?.Invoke() ?? string.Empty;
+    }
 }

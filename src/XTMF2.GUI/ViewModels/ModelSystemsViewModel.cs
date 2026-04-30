@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
@@ -48,6 +49,9 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
 
     /// <summary>Gets the project this view model is for.</summary>
     public Project Project => _project;
+
+    /// <summary>The currently logged-in user.</summary>
+    public User CurrentUser => _user;
 
     [ObservableProperty]
     private ModelSystemHeader? _selectedModelSystem;
@@ -104,11 +108,6 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
     /// Gets the project name
     /// </summary>
     public string ProjectName => _project.Name ?? Strings.ModelSystems_UnknownProject;
-
-    /// <summary>
-    /// Gets the current user
-    /// </summary>
-    public User CurrentUser => _user;
 
     [RelayCommand]
     private async Task CreateNewModelSystem()
@@ -262,6 +261,38 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
         out ModelSystemSession? session,
         out CommandError? error)
         => _session.EditModelSystem(_user, header, out session, out error);
+
+    /// <summary>
+    /// Loads a read-only snapshot of a model system for diff comparison.
+    /// </summary>
+    public bool TryLoadModelSystemSnapshot(ModelSystemHeader header,
+        out ModelSystem? ms,
+        out CommandError? error)
+        => _session.LoadModelSystemForDiff(_user, header, out ms, out error);
+
+    /// <summary>
+    /// Loads a read-only snapshot of an exported model system file for diff comparison.
+    /// </summary>
+    public bool TryLoadModelSystemFromFile(string filePath,
+        out ModelSystem? ms,
+        out CommandError? error)
+        {
+            return _session.LoadModelSystemFromExportedFile(_user, filePath, out ms, out error);
+        }
+
+    /// <summary>
+    /// Returns all model systems in this project except <paramref name="exclude"/>.
+    /// </summary>
+    public IReadOnlyList<ModelSystemHeader> GetOtherModelSystems(ModelSystemHeader exclude)
+    {
+        var result = new List<ModelSystemHeader>(_project.ModelSystems.Count);
+        foreach (var ms in _project.ModelSystems)
+        {
+            if (!ReferenceEquals(ms, exclude))
+                result.Add(ms);
+        }
+        return result;
+    }
 
     partial void OnSelectedModelSystemChanged(ModelSystemHeader? value)
     {

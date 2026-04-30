@@ -47,8 +47,8 @@ public sealed class GhostNode : Node
     /// Creates a ghost node that mirrors <paramref name="referencedNode"/>,
     /// placed at <paramref name="location"/> inside <paramref name="containedWithin"/>.
     /// </summary>
-    internal GhostNode(Node referencedNode, Boundary containedWithin, Rectangle location)
-        : base(referencedNode.Name, null!, containedWithin, Array.Empty<NodeHook>(), location)
+    internal GhostNode(Node referencedNode, Boundary containedWithin, Rectangle location, Guid id = default)
+        : base(referencedNode.Name, null!, containedWithin, Array.Empty<NodeHook>(), location, id)
     {
         ReferencedNode = referencedNode;
         // Track name changes on the referenced node.
@@ -90,6 +90,7 @@ public sealed class GhostNode : Node
         if (!nodeDictionary.TryGetValue(ReferencedNode, out int refIdx))
             return;
         writer.WriteStartObject();
+        writer.WriteString(IdProperty, Id);
         writer.WriteNumber(ReferencedNodeProperty, refIdx);
         writer.WriteNumber(XProperty, Location.X);
         writer.WriteNumber(YProperty, Location.Y);
@@ -107,7 +108,7 @@ public sealed class GhostNode : Node
     internal static bool LoadDeferred(
         ref Utf8JsonReader reader,
         Boundary boundary,
-        List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferreds,
+        List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferreds,
         [NotNullWhen(false)] ref string? error)
     {
         if (reader.TokenType != JsonTokenType.StartObject)
@@ -117,6 +118,7 @@ public sealed class GhostNode : Node
         }
 
         int refIndex = -1, selfIndex = -1;
+        Guid id = Guid.Empty;
         Rectangle location = new Rectangle();
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -128,7 +130,12 @@ public sealed class GhostNode : Node
                 return false;
             }
 
-            if (reader.ValueTextEquals(ReferencedNodeProperty))
+            if (reader.ValueTextEquals(IdProperty))
+            {
+                reader.Read();
+                reader.TryGetGuid(out id);
+            }
+            else if (reader.ValueTextEquals(ReferencedNodeProperty))
             {
                 reader.Read();
                 refIndex = reader.GetInt32();
@@ -176,7 +183,7 @@ public sealed class GhostNode : Node
             return false;
         }
 
-        deferreds.Add((boundary, refIndex, selfIndex, location));
+        deferreds.Add((boundary, refIndex, selfIndex, location, id));
         return true;
     }
 
@@ -190,6 +197,7 @@ public sealed class GhostNode : Node
         int refIndex,
         int selfIndex,
         Rectangle location,
+        Guid id,
         [NotNullWhen(true)] out GhostNode? ghost,
         [NotNullWhen(false)] ref string? error)
     {
@@ -200,7 +208,7 @@ public sealed class GhostNode : Node
             return false;
         }
 
-        ghost = new GhostNode(refNode, containedIn, location);
+        ghost = new GhostNode(refNode, containedIn, location, id);
         nodes[selfIndex] = ghost;
         return true;
     }

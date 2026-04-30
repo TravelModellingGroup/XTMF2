@@ -272,6 +272,85 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Loads a read-only snapshot of a model system for diff comparison.
+        /// Does not create a live editing session and does not affect the active sessions list.
+        /// </summary>
+        /// <param name="user">The user requesting access.</param>
+        /// <param name="modelSystemHeader">The model system to load a snapshot of.</param>
+        /// <param name="ms">The loaded model system, or null on failure.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the snapshot was loaded successfully.</returns>
+        public bool LoadModelSystemForDiff(User user, ModelSystemHeader modelSystemHeader,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ModelSystem? ms,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(modelSystemHeader);
+
+            ms = null;
+            if (!Project.CanAccess(user))
+            {
+                error = new CommandError("The given user does not have access to this project!", true);
+                return false;
+            }
+            if (!Project.ContainsModelSystem(modelSystemHeader))
+            {
+                error = new CommandError("The model system header provided does not belong to this project!");
+                return false;
+            }
+            try
+            {
+                string? errorStr = null;
+                var path = modelSystemHeader.ModelSystemPath;
+                if (System.IO.File.Exists(path))
+                {
+                    using var stream = System.IO.File.OpenRead(path);
+                    ms = ModelSystem.Load(stream, GetModuleRepository(), modelSystemHeader, ref errorStr);
+                }
+                else
+                {
+                    ms = new ModelSystem(modelSystemHeader);
+                }
+                if (ms is null)
+                {
+                    error = new CommandError(errorStr ?? "Failed to load model system snapshot.");
+                    return false;
+                }
+                error = null;
+                return true;
+            }
+            catch (Exception e)
+            {
+                error = new CommandError(e.Message);
+                ms = null;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Loads a read-only snapshot of a model system from an exported <c>.xmsf</c> file,
+        /// for diff comparison. Does not import the model system into the project.
+        /// </summary>
+        /// <param name="user">The user requesting access.</param>
+        /// <param name="exportedFilePath">Path to the exported <c>.xmsf</c> file.</param>
+        /// <param name="ms">The loaded model system, or null on failure.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the snapshot was loaded successfully.</returns>
+        public bool LoadModelSystemFromExportedFile(User user, string exportedFilePath,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ModelSystem? ms,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            if (string.IsNullOrWhiteSpace(exportedFilePath))
+            {
+                ms = null;
+                error = new CommandError("The exported file path is null or empty.");
+                return false;
+            }
+            return ModelSystemFile.LoadModelSystemSnapshot(exportedFilePath, GetModuleRepository(), out ms, out error);
+        }
+
+        /// <summary>
         /// Create a model system session allowing for the editing of a model system.
         /// </summary>
         /// <param name="user">The user that is requesting access.</param>

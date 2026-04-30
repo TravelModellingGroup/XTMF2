@@ -98,6 +98,12 @@
                                                     <TextBlock Text="↓" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>
                                             </MenuItem>
+                                            <MenuItem Header="{res:Localize ModelSystems_Compare}"
+                                                      Click="CompareModelSystem_ContextMenu_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="⟷" FontSize="11" VerticalAlignment="Center"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
                                             <MenuItem Header="{res:Localize ModelSystems_Delete}"
                                                       Click="DeleteModelSystem_ContextMenu_Click">
                                                 <MenuItem.Icon>

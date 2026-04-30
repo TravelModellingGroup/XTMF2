@@ -44,6 +44,7 @@ namespace XTMF2.ModelSystemConstruct
     public sealed class FunctionTemplate : INotifyPropertyChanged
     {
         // ── JSON property names ───────────────────────────────────────────
+        private const string IdProperty               = "Id";
         private const string NameProperty               = "Name";
         private const string LocationProperty           = "Location";
         private const string FunctionParametersProperty = "FunctionParameters";
@@ -55,6 +56,11 @@ namespace XTMF2.ModelSystemConstruct
         private const string LocationHProperty          = "Height";
 
         private string _name = String.Empty;
+
+        /// <summary>
+        /// A stable identifier for this function template, preserved across save/load cycles.
+        /// </summary>
+        public Guid Id { get; private set; }
 
         /// <summary>
         /// The unique name of the function template within containing boundary
@@ -253,8 +259,9 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="name">The name of the function template.</param>
         /// <param name="parent">The boundary that owns this function template.</param>
         /// <param name="internalModules">An optional boundary to use as the InternalModules of this template; if null, an empty boundary will be created.</param>
-        public FunctionTemplate(string name, Boundary parent, Boundary? internalModules = null)
+        public FunctionTemplate(string name, Boundary parent, Boundary? internalModules = null, Guid id = default)
         {
+            Id = id == default ? Guid.NewGuid() : id;
             _name = name;
             Parent = parent;
             InternalModules = internalModules ?? new Boundary("InternalModules", parent);
@@ -380,7 +387,7 @@ namespace XTMF2.ModelSystemConstruct
         {
             writer.WriteStartObject();
             writer.WriteString(NameProperty, Name);
-
+            writer.WriteString(IdProperty, Id);
             // Location
             writer.WritePropertyName(LocationProperty);
             writer.WriteStartObject();
@@ -441,18 +448,19 @@ namespace XTMF2.ModelSystemConstruct
         internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             ref Utf8JsonReader reader, Boundary parent, [NotNullWhen(true)] out FunctionTemplate? template, [NotNullWhen(false)] ref string? error)
         {
-            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes = new();
+            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes = new();
             return Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, parent, out template, ref error);
         }
 
         internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
             List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
-            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location)> deferredGhostNodes,
+            List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
             ref Utf8JsonReader reader, Boundary parent,
             [NotNullWhen(true)] out FunctionTemplate? template,
             [NotNullWhen(false)] ref string? error)
         {
             template = null;
+            Guid? id = null;
             string? name = null;
             Rectangle location = new Rectangle(40, 40, 200, 120);
             var innerModules = new Boundary(parent);
@@ -470,8 +478,13 @@ namespace XTMF2.ModelSystemConstruct
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType != JsonTokenType.PropertyName) continue;
-
-                if (reader.ValueTextEquals(NameProperty))
+                if (reader.ValueTextEquals(IdProperty))
+                {
+                    reader.Read();
+                    if (reader.TryGetGuid(out var guid))
+                        id = guid;
+                }
+                else if (reader.ValueTextEquals(NameProperty))
                 {
                     reader.Read();
                     name = reader.GetString();
@@ -541,8 +554,15 @@ namespace XTMF2.ModelSystemConstruct
 
             if (name is null)
                 return Helper.FailWith(out error, "Function template did not include a name!");
-
-            template = partialTemplate ?? new FunctionTemplate(name, parent, innerModules);
+            if (partialTemplate is null)
+            {
+                template = new FunctionTemplate(name, parent, innerModules, id ?? Guid.NewGuid());
+            }
+            else
+            {
+                template = partialTemplate;
+                template.Id = id ?? Guid.NewGuid();
+            }
             template.SetLocation(location);
 
             // Resolve the entry node index.
