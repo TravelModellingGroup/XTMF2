@@ -31,6 +31,7 @@ namespace XTMF2.ModelSystemConstruct
     /// </summary>
     public sealed class CommentBlock : INotifyPropertyChanged
     {
+        private const string IdProperty = "Id";
         private const string XProperty = "X";
         private const string YProperty = "Y";
         private const string WidthProperty = "Width";
@@ -40,12 +41,18 @@ namespace XTMF2.ModelSystemConstruct
         public event PropertyChangedEventHandler? PropertyChanged;
 
         /// <summary>
+        /// A stable identifier for this comment block, preserved across save/load cycles.
+        /// </summary>
+        public Guid Id { get; }
+
+        /// <summary>
         /// Construct a new comments block
         /// </summary>
         /// <param name="comment"></param>
         /// <param name="location"></param>
-        public CommentBlock(string comment, Rectangle location)
+        public CommentBlock(string comment, Rectangle location, Guid id = default)
         {
+            Id = id == default ? Guid.NewGuid() : id;
             _comment = comment;
             _location = location;
         }
@@ -91,6 +98,7 @@ namespace XTMF2.ModelSystemConstruct
         internal void Save(Utf8JsonWriter writer)
         {
             writer.WriteStartObject();
+            writer.WriteString(IdProperty, Id);
             writer.WriteNumber(XProperty, Location.X);
             writer.WriteNumber(YProperty, Location.Y);
             writer.WriteNumber(WidthProperty, Location.Width);
@@ -103,6 +111,7 @@ namespace XTMF2.ModelSystemConstruct
         {
             float x = 0, y = 0, width = 0, height = 0;
             string comment = "No comment";
+            Guid id = Guid.Empty;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType == JsonTokenType.Comment)
@@ -111,7 +120,13 @@ namespace XTMF2.ModelSystemConstruct
                 }
                 if (reader.TokenType == JsonTokenType.PropertyName)
                 {
-                    if (reader.ValueTextEquals(XProperty))
+                    if (reader.ValueTextEquals(IdProperty))
+                    {
+                        if (!reader.Read()) { return FailWith(out block, out error, "The id of the comment block was not readable!"); }
+                        var s = reader.GetString();
+                        if (s is not null) Guid.TryParse(s, out id);
+                    }
+                    else if (reader.ValueTextEquals(XProperty))
                     {
                         if (!reader.Read() || reader.TokenType != JsonTokenType.Number)
                         {
@@ -158,7 +173,7 @@ namespace XTMF2.ModelSystemConstruct
                     }
                 }
             }
-            block = new CommentBlock(comment, new Rectangle(x, y, width, height));
+            block = new CommentBlock(comment, new Rectangle(x, y, width, height), id);
             return true;
         }
 

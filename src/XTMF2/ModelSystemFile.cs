@@ -488,6 +488,55 @@ namespace XTMF2
         }
 
         /// <summary>
+        /// Opens an exported <c>.xmsf</c> file and loads its model system as a read-only snapshot
+        /// suitable for diff comparison. The snapshot is not linked to any project.
+        /// </summary>
+        /// <param name="exportedFilePath">The path to the exported <c>.xmsf</c> file.</param>
+        /// <param name="modules">The module repository for type resolution.</param>
+        /// <param name="ms">The loaded model system snapshot, or null on failure.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the snapshot was loaded successfully.</returns>
+        internal static bool LoadModelSystemSnapshot(string exportedFilePath, Repository.ModuleRepository modules,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ModelSystem? ms,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ms = null;
+            try
+            {
+                using var archive = ZipFile.OpenRead(exportedFilePath);
+
+                // Use the file name as the model system's name
+                string displayName = System.IO.Path.GetFileName(exportedFilePath);
+
+                var msEntry = archive.GetEntry(ModelSystemFilePath);
+                if (msEntry is null)
+                {
+                    error = new CommandError($"The exported file '{exportedFilePath}' does not contain a model system.");
+                    return false;
+                }
+
+                // Use a run-style header (no project reference) so ModelSystemPath is never accessed.
+                var header = new ModelSystemHeader(null, displayName);
+                string? errorStr = null;
+                using var msStream = msEntry.Open();
+                ms = ModelSystem.Load(msStream, modules, header, ref errorStr);
+                  if (ms is null)
+                {
+                    error = new CommandError(errorStr ?? "Failed to load model system from exported file.");
+                    return false;
+                }
+                error = null;
+                return true;
+            }
+            catch (Exception e)
+            {
+                error = new CommandError(e.Message);
+                ms = null;
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Extract the model system contained within the model system file
         /// to the given path.
         /// </summary>

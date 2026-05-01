@@ -78,21 +78,28 @@ partial class ModelSystemCanvas
         // Scale the 1 cm spacing by the current zoom level so lines stay 1 cm apart in model space.
         double step = GridSpacingDip * _scale;
 
-        // Phase offset: shift lines so they stay aligned to model-space origin as the user pans.
-        double phaseX = scrollX % step;
-        double phaseY = scrollY % step;
+        // Grid lines live at canvas positions that are exact multiples of step (anchored to model
+        // origin). No phase offset from scrollX/Y is needed — the ScrollViewer already translates
+        // the whole canvas, so adding a scroll-derived phase would make lines move at 2× speed.
+        // Only draw lines visible in the current viewport for performance.
+        double vpWidth  = sv?.Viewport.Width  ?? bounds.Width;
+        double vpHeight = sv?.Viewport.Height ?? bounds.Height;
+        double startX = Math.Floor(scrollX / step) * step;
+        double startY = Math.Floor(scrollY / step) * step;
+        double endX = Math.Min(scrollX + vpWidth,  bounds.Width);
+        double endY = Math.Min(scrollY + vpHeight, bounds.Height);
 
         var pen = isLight ? GridPenLight : GridPen;
 
         // Vertical lines
-        for (double x = -phaseX; x < bounds.Width; x += step)
+        for (double x = startX; x <= endX; x += step)
         {
-            ctx.DrawLine(pen, new Point(x, 0), new Point(x, bounds.Height));
+            ctx.DrawLine(pen, new Point(x, scrollY), new Point(x, endY));
         }
         // Horizontal lines
-        for (double y = -phaseY; y < bounds.Height; y += step)
+        for (double y = startY; y <= endY; y += step)
         {
-            ctx.DrawLine(pen, new Point(0, y), new Point(bounds.Width, y));
+            ctx.DrawLine(pen, new Point(scrollX, y), new Point(endX, y));
         }
     }
 

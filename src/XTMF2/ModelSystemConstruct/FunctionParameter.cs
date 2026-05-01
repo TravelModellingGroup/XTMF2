@@ -43,6 +43,7 @@ namespace XTMF2.ModelSystemConstruct
     public sealed class FunctionParameter : Node
     {
         // ── JSON property names ───────────────────────────────────────────
+        internal const string FpIdProperty    = "Id";
         internal const string FpNameProperty  = "Name";
         internal const string FpTypeProperty  = "Type";
         internal const string FpIndexProperty = "Index";
@@ -63,8 +64,8 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="type">The required module type for this parameter slot.</param>
         /// <param name="template">The owning <see cref="FunctionTemplate"/>.</param>
         /// <param name="location">Canvas position inside <c>InternalModules</c>.</param>
-        public FunctionParameter(string name, Type type, FunctionTemplate template, Rectangle location)
-            : base(name, type, template.InternalModules, Array.Empty<NodeHook>(), location)
+        public FunctionParameter(string name, Type type, FunctionTemplate template, Rectangle location, Guid id = default)
+            : base(name, type, template.InternalModules, Array.Empty<NodeHook>(), location, id)
         {
             Template = template;
         }
@@ -84,6 +85,7 @@ namespace XTMF2.ModelSystemConstruct
                 nodeDictionary[this] = myIndex;
             }
             writer.WriteStartObject();
+            writer.WriteString(FpIdProperty, Id);
             writer.WriteString(FpNameProperty, Name);
             writer.WriteNumber(FpTypeProperty, typeDictionary[Type!]);
             writer.WriteNumber(FpIndexProperty, myIndex);
@@ -117,13 +119,19 @@ namespace XTMF2.ModelSystemConstruct
             string? name     = null;
             Type?   type     = null;
             int     fpIndex  = -1;
+            Guid    id       = Guid.Empty;
             float   x = 80f, y = 80f, w = 140f, h = 40f;
 
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType != JsonTokenType.PropertyName) continue;
 
-                if (reader.ValueTextEquals(FpNameProperty))
+                if (reader.ValueTextEquals(FpIdProperty))
+                {
+                    reader.Read();
+                    reader.TryGetGuid(out id);
+                }
+                else if (reader.ValueTextEquals(FpNameProperty))
                 {
                     reader.Read();
                     name = reader.GetString();
@@ -166,7 +174,7 @@ namespace XTMF2.ModelSystemConstruct
                 return false;
             }
 
-            parameter = new FunctionParameter(name, type, owningTemplate, new Rectangle(x, y, w, h));
+            parameter = new FunctionParameter(name, type, owningTemplate, new Rectangle(x, y, w, h), id);
             nodeDictionary[fpIndex] = parameter;
             error = null;
             return true;

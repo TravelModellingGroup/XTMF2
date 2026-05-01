@@ -55,9 +55,16 @@ namespace XTMF2.ModelSystemConstruct
         protected const string WidthProperty = "Width";
         protected const string HeightProperty = "Height";
         protected const string IndexProperty = "Index";
+        protected const string IdProperty = "Id";
         protected const string ParameterProperty = "Parameter";
         protected const string ParameterExpressionProperty = "ParameterExpression";
         protected const string DisabledProperty = "Disabled";
+
+        /// <summary>
+        /// A stable identifier for this node that is preserved across save/load cycles.
+        /// Used to match elements for diff comparison and future cross-session references.
+        /// </summary>
+        public Guid Id { get; }
 
         /// <summary>
         /// Don't use this field as the setter
@@ -360,8 +367,9 @@ namespace XTMF2.ModelSystemConstruct
         /// Only invoke this if you are going to set the type explicitly right after.
         /// </summary>
         /// <param name="name">The name of the node</param>
-        protected Node(string name, Type type, Boundary containedWithin, IReadOnlyList<NodeHook> hooks, Rectangle location)
+        protected Node(string name, Type type, Boundary containedWithin, IReadOnlyList<NodeHook> hooks, Rectangle location, Guid id = default)
         {
+            Id = id == default ? Guid.NewGuid() : id;
             Name = name;
             _type = type;
             ContainedWithin = containedWithin;
@@ -417,6 +425,7 @@ namespace XTMF2.ModelSystemConstruct
                 moduleDictionary[this] = myIndex;
             }
             writer.WriteStartObject();
+            writer.WriteString(IdProperty, Id);
             writer.WriteString(NameProperty, Name);
             writer.WriteString(DescriptionProperty, Description);
             writer.WriteNumber(TypeProperty, typeDictionary[_type!]);
@@ -447,6 +456,7 @@ namespace XTMF2.ModelSystemConstruct
             string? name = null;
             int index = -1;
             bool disabled = false;
+            Guid id = Guid.Empty;
             Rectangle point = new Rectangle();
             string description = string.Empty;
             string? basicParameterValue = null;
@@ -458,7 +468,13 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     return FailWith(out mss, out error, "Invalid token when loading start");
                 }
-                if (reader.ValueTextEquals(NameProperty))
+                if (reader.ValueTextEquals(IdProperty))
+                {
+                    reader.Read();
+                    var idStr = reader.GetString();
+                    if (idStr is not null) Guid.TryParse(idStr, out id);
+                }
+                else if (reader.ValueTextEquals(NameProperty))
                 {
                     reader.Read();
                     name = reader.GetString();
@@ -546,7 +562,7 @@ namespace XTMF2.ModelSystemConstruct
             var basicParameter = basicParameterValue is not null ?
                 ParameterExpression.CreateParameter(basicParameterValue, type.GenericTypeArguments[0]) 
                 : null;
-            mss = new Node(name, type, boundary, hooks, point)
+            mss = new Node(name, type, boundary, hooks, point, id)
             {
                 Location = point,
                 Description = description,

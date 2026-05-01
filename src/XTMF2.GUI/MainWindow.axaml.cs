@@ -167,7 +167,7 @@ public partial class MainWindow : Window
         var title = (viewModel as dynamic)?.Title as string ?? viewModel.ToString() ?? "Document";
         var canClose = (viewModel as dynamic)?.CanClose is bool b ? b : true;
 
-        return new Document
+        var doc = new Document
         {
             Id = Guid.NewGuid().ToString(),
             Title = title,
@@ -176,6 +176,18 @@ public partial class MainWindow : Window
             Content = new Func<IServiceProvider, object>(_ =>
                 new ContentControl { Content = viewModel })
         };
+
+        // Keep the tab header in sync when the VM's Title property changes.
+        if (viewModel is System.ComponentModel.INotifyPropertyChanged inpc)
+        {
+            inpc.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(doc.Title))
+                    doc.Title = (viewModel as dynamic)?.Title as string ?? doc.Title;
+            };
+        }
+
+        return doc;
     }
 
     /// <summary>
@@ -294,6 +306,40 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Opens a new (or focuses an existing) model-system editor tab and returns its VM.
+    /// If a tab for the same model system already exists, the caller's
+    /// <paramref name="session"/> is disposed and the existing tab is focused.
+    /// </summary>
+    public ModelSystemEditorViewModel OpenModelSystemTabAndGet(ModelSystemSession session, User user)
+    {
+        var existing = Documents
+            .OfType<ModelSystemEditorViewModel>()
+            .FirstOrDefault(vm => vm.ModelSystemHeader == session.ModelSystemHeader);
+
+        if (existing is not null)
+        {
+            session.Dispose();
+            FocusEditorTab(existing);
+            return existing;
+        }
+
+        var editor = new ModelSystemEditorViewModel(session, user, _runController);
+        editor.RunStarted = SwitchToRunsDocument;
+        Documents.Add(editor);
+        return editor;
+    }
+
+    /// <summary>
+    /// Brings the tab for the given editor VM to the front.
+    /// </summary>
+    public void FocusEditorTab(ModelSystemEditorViewModel editorVm)
+    {
+        var (dock, doc) = GetViewAndDocFromModel(DockControl.Layout!, editorVm);
+        if (doc is not null)
+            dock!.ActiveDockable = doc;
+    }
+
+    /// <summary>
     /// Switches the active document to the Runs tab.
     /// </summary>
     private void SwitchToRunsDocument()
@@ -302,6 +348,26 @@ public partial class MainWindow : Window
         var (dock, doc) = GetViewAndDocFromModel(DockControl.Layout!, _runController.RunsViewModel);
         if (doc is not null)
             dock!.ActiveDockable = doc;
+    }
+
+    /// <summary>
+    /// Opens a new tab that computes and displays the diff between two model systems.
+    /// The <paramref name="diffFactory"/> is invoked on a background thread so the UI
+    /// remains responsive while the diff is being computed.
+    /// </summary>
+    /// <param name="diffFactory">A synchronous factory that loads the snapshots and runs the comparison.
+    /// Receives <c>true</c> when the sides are swapped (the user clicked ⟷).</param>
+    /// <param name="leftHeader">Header for the base model system. Null when loaded from a file.</param>
+    /// <param name="rightHeader">Header for the compare model system. Null when loaded from a file.</param>
+    /// <param name="openOrFocusEditor">Callback to open or focus an editor tab for a given header.</param>
+    public void OpenDiffTab(Func<bool, XTMF2.Diff.ModelSystemDiff> diffFactory,
+        XTMF2.ModelSystemHeader? leftHeader = null,
+        XTMF2.ModelSystemHeader? rightHeader = null,
+        Func<XTMF2.ModelSystemHeader, System.Threading.Tasks.Task<ModelSystemEditorViewModel?>>? openOrFocusEditor = null)
+    {
+        var vm = new ModelSystemDiffViewModel(diffFactory, leftHeader, rightHeader);
+        vm.OpenOrFocusEditorCallback = openOrFocusEditor;
+        Documents.Add(vm);
     }
 
     /// <summary>

@@ -21,6 +21,10 @@
         <DataTemplate DataType="vm:RunsViewModel">
             <views:RunsView />
         </DataTemplate>
+        <!-- ItemsSource dock template: ModelSystemDiffViewModel -> ModelSystemDiffView -->
+        <DataTemplate DataType="vm:ModelSystemDiffViewModel">
+            <views:ModelSystemDiffView />
+        </DataTemplate>
     </Application.DataTemplates>
 
     <Application.Resources>

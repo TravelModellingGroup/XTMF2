@@ -54,8 +54,8 @@ namespace XTMF2.ModelSystemConstruct
         /// <see cref="object"/>; the actual <see cref="Type"/> is computed from
         /// <see cref="FunctionTemplate.EntryNode"/> at access time.
         /// </summary>
-        public FunctionInstance(string name, FunctionTemplate template, Boundary containedWithin, Rectangle location)
-            : base(name, typeof(object), containedWithin, Array.Empty<NodeHook>(), location)
+        public FunctionInstance(string name, FunctionTemplate template, Boundary containedWithin, Rectangle location, Guid id = default)
+            : base(name, typeof(object), containedWithin, Array.Empty<NodeHook>(), location, id)
         {
             Template = template;
             // Re-fire our Type property when the template's designated entry node changes.
@@ -146,6 +146,7 @@ namespace XTMF2.ModelSystemConstruct
                 nodeDictionary[this] = myIndex;
             }
             writer.WriteStartObject();
+            writer.WriteString(IdProperty, Id);
             writer.WriteString(NameProperty, Name);
             var qualifiedName = Boundary.GetQualifiedTemplateName(ContainedWithin, Template) ?? Template.Name;
             writer.WriteString(TemplateNameProperty, qualifiedName);
@@ -177,13 +178,15 @@ namespace XTMF2.ModelSystemConstruct
             string? name         = null;
             string? templateName = null;
             int     fiIndex      = -1;
+            Guid    id           = Guid.Empty;
             float   x = 40, y = 40, w = 120, h = 50;
 
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType != JsonTokenType.PropertyName) continue;
 
-                if      (reader.ValueTextEquals(NameProperty))         { reader.Read(); name         = reader.GetString(); }
+                if      (reader.ValueTextEquals(IdProperty))            { reader.Read(); var s = reader.GetString(); if (s is not null) Guid.TryParse(s, out id); }
+                else if (reader.ValueTextEquals(NameProperty))         { reader.Read(); name         = reader.GetString(); }
                 else if (reader.ValueTextEquals(TemplateNameProperty)) { reader.Read(); templateName = reader.GetString(); }
                 else if (reader.ValueTextEquals(IndexProperty))        { reader.Read(); fiIndex      = reader.GetInt32();  }
                 else if (reader.ValueTextEquals(XProperty))            { reader.Read(); x            = reader.GetSingle(); }
@@ -211,7 +214,7 @@ namespace XTMF2.ModelSystemConstruct
                 return false;
             }
 
-            instance = new FunctionInstance(name, template, parentBoundary, new Rectangle(x, y, w, h));
+            instance = new FunctionInstance(name, template, parentBoundary, new Rectangle(x, y, w, h), id);
 
             // Register in the node dictionary so links can resolve this FI as a destination.
             if (fiIndex >= 0)

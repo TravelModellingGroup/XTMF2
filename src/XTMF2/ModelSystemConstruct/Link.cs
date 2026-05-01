@@ -38,11 +38,17 @@ namespace XTMF2
         protected const string HookProperty = "Hook";
         protected const string DestinationProperty = "Destination";
         protected const string IndexProperty = "Index";
+        protected const string IdProperty = "Id";
         protected const string DisabledProperty = "Disabled";
         protected const string OrthogonalProperty = "Orthogonal";
 
         public Node Origin { get; }
         public NodeHook OriginHook { get; }
+
+        /// <summary>
+        /// A stable identifier for this link, preserved across save/load cycles.
+        /// </summary>
+        public Guid Id { get; }
 
         public bool IsDisabled { get; private set; }
 
@@ -54,8 +60,9 @@ namespace XTMF2
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        protected Link(Node origin, NodeHook hook, bool disabled, bool orthogonal = false)
+        protected Link(Node origin, NodeHook hook, bool disabled, bool orthogonal = false, Guid id = default)
         {
+            Id = id == default ? Guid.NewGuid() : id;
             Origin = origin;
             OriginHook = hook;
             IsDisabled = disabled;
@@ -91,6 +98,7 @@ namespace XTMF2
             string? hookName = null;
             bool disabled = false;
             bool orthogonal = false;
+            Guid linkId = Guid.Empty;
             int listIndex = 0;
             // read in the values
             while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -103,7 +111,12 @@ namespace XTMF2
                 {
                     return FailWith(out link, out error, "Invalid token when loading a link.");
                 }
-                if(reader.ValueTextEquals(OriginProperty))
+                if(reader.ValueTextEquals(IdProperty))
+                {
+                    reader.Read();
+                    reader.TryGetGuid(out linkId);
+                }
+                else if(reader.ValueTextEquals(OriginProperty))
                 {
                     reader.Read();
                     var index = reader.GetInt32();
@@ -182,12 +195,12 @@ namespace XTMF2
             }
             if (destination != null)
             {
-                link = new SingleLink(origin, hook, destination, disabled, orthogonal);
+                link = new SingleLink(origin, hook, destination, disabled, orthogonal, linkId);
             }
             else
             {
                 // destinations can not be null if destination was.
-                link = new MultiLink(origin, hook, destinations!, disabled, orthogonal);
+                link = new MultiLink(origin, hook, destinations!, disabled, orthogonal, linkId);
             }
             return true;
         }

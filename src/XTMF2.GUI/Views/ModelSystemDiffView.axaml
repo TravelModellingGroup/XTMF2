@@ -1,0 +1,329 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
+             xmlns:converters="clr-namespace:XTMF2.GUI.Controls"
+             xmlns:us="clr-namespace:XTMF2.GUI.Controls"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
+             x:Class="XTMF2.GUI.Views.ModelSystemDiffView"
+             x:CompileBindings="False"
+             Classes="neon-view">
+
+    <UserControl.Resources>
+        <converters:DiffKindToBrushConverter    x:Key="KindToBrush"/>
+        <converters:DiffKindToIconConverter     x:Key="KindToIcon"/>
+        <converters:DiffKindToForegroundConverter x:Key="KindToFg"/>
+    </UserControl.Resources>
+
+    <UserControl.DataTemplates>
+        <!-- ── Boundary row template (hierarchical) ───────────────────── -->
+        <TreeDataTemplate DataType="vm:DiffBoundaryItem"
+                          ItemsSource="{Binding Children}">
+            <Border Background="{Binding Kind, Converter={StaticResource KindToBrush}}"
+                    CornerRadius="3"
+                    Padding="4,3"
+                    Margin="0,1"
+                    ToolTip.Tip="{Binding Tooltip}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="{Binding Kind, Converter={StaticResource KindToIcon}}"
+                               Foreground="{Binding Kind, Converter={StaticResource KindToFg}}"
+                               FontFamily="Monospace"
+                               FontWeight="Bold"
+                               FontSize="13"
+                               VerticalAlignment="Center"
+                               MinWidth="14"/>
+                    <TextBlock Text="⊟"
+                               FontSize="12"
+                               Opacity="0.7"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding DisplayName}"
+                               FontWeight="SemiBold"
+                               FontSize="13"
+                               VerticalAlignment="Center"/>
+                    <Border IsVisible="{Binding HasChanges}"
+                            Background="#33FF8800"
+                            CornerRadius="8"
+                            Padding="5,1"
+                            Margin="4,0,0,0">
+                        <TextBlock Text="{Binding ChangeCount}"
+                                   FontSize="11"
+                                   Foreground="#FFFFAA44"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </TreeDataTemplate>
+
+                <!-- ── Function template row template (hierarchical) ───────────────────── -->
+        <TreeDataTemplate DataType="vm:DiffFunctionTemplateItem"
+                          ItemsSource="{Binding Children}">
+            <Border Background="{Binding Kind, Converter={StaticResource KindToBrush}}"
+                    CornerRadius="3"
+                    Padding="4,3"
+                    Margin="0,1"
+                    ToolTip.Tip="{Binding Tooltip}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="{Binding Kind, Converter={StaticResource KindToIcon}}"
+                               Foreground="{Binding Kind, Converter={StaticResource KindToFg}}"
+                               FontFamily="Monospace"
+                               FontWeight="Bold"
+                               FontSize="13"
+                               VerticalAlignment="Center"
+                               MinWidth="14"/>
+                    <!-- type tag badge -->
+                    <Border Background="#1AFFFFFF"
+                            CornerRadius="3"
+                            Padding="4,1"
+                            Margin="0,0,2,0">
+                        <TextBlock Text="{Binding TypeTag}"
+                                   FontSize="10"
+                                   Opacity="0.75"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="{Binding DisplayName}"
+                               FontWeight="SemiBold"
+                               FontSize="13"
+                               VerticalAlignment="Center"/>
+                    <Border IsVisible="{Binding HasChanges}"
+                            Background="#33FF8800"
+                            CornerRadius="8"
+                            Padding="5,1"
+                            Margin="4,0,0,0">
+                        <TextBlock Text="{Binding ChangeCount}"
+                                   FontSize="11"
+                                   Foreground="#FFFFAA44"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </TreeDataTemplate>
+
+        <!-- ── Element row template (leaf) ────────────────────────────── -->
+        <DataTemplate DataType="vm:DiffElementItem">
+            <Border Background="{Binding Kind, Converter={StaticResource KindToBrush}}"
+                    CornerRadius="2"
+                    Padding="4,2"
+                    Margin="0,1"
+                    ToolTip.Tip="{Binding Tooltip}">
+                <Grid ColumnDefinitions="16,Auto,*,Auto">
+                    <!-- kind icon -->
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding Kind, Converter={StaticResource KindToIcon}}"
+                               Foreground="{Binding Kind, Converter={StaticResource KindToFg}}"
+                               FontFamily="Monospace"
+                               FontWeight="Bold"
+                               FontSize="13"
+                               VerticalAlignment="Center"/>
+                    <!-- type tag badge -->
+                    <Border Grid.Column="1"
+                            Background="#1AFFFFFF"
+                            CornerRadius="3"
+                            Padding="4,1"
+                            Margin="4,0,6,0">
+                        <TextBlock Text="{Binding TypeTag}"
+                                   FontSize="10"
+                                   Opacity="0.75"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+                    <!-- label -->
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Label}"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{Binding Kind, Converter={StaticResource KindToFg}}"/>
+                    <!-- change description (Modified only) -->
+                    <TextBlock Grid.Column="3"
+                               Text="{Binding ChangeDescription}"
+                               IsVisible="{Binding ChangeDescription, Converter={x:Static converters:NotNullConverter.Instance}}"
+                               FontSize="11"
+                               Opacity="0.65"
+                               Margin="10,0,0,0"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="350"/>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- ── Header ─────────────────────────────────────────────────── -->
+        <Border Grid.Row="0"
+                Background="#0D0D1A"
+                BorderBrush="{DynamicResource DlgBorder}"
+                BorderThickness="0,0,0,1"
+                Padding="16,12">
+            <Grid ColumnDefinitions="*,Auto,*">
+                <!-- Left name -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="BASE"
+                               FontSize="10"
+                               Opacity="0.5"
+                               Margin="0,0,0,2"/>
+                    <TextBlock Text="{Binding LeftName}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="#AAE8F8"/>
+                </StackPanel>
+                <!-- Swap arrow button -->
+                <Button Grid.Column="1"
+                        Command="{Binding SwapCommand}"
+                        ToolTip.Tip="Swap base and comparison"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="8,4"
+                        Margin="20,0"
+                        Cursor="Hand">
+                    <TextBlock Text="⟷"
+                               FontSize="22"
+                               Foreground="{DynamicResource DlgAccent}"/>
+                </Button>
+                <!-- Right name -->
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                    <TextBlock Text="COMPARE"
+                               FontSize="10"
+                               Opacity="0.5"
+                               HorizontalAlignment="Right"
+                               Margin="0,0,0,2"/>
+                    <TextBlock Text="{Binding RightName}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="#AAE8F8"
+                               HorizontalAlignment="Right"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ── Toolbar ────────────────────────────────────────────────── -->
+        <Border Grid.Row="1"
+                Background="{DynamicResource DlgInputBg}"
+                BorderBrush="{DynamicResource DlgSep}"
+                BorderThickness="0,0,0,1"
+                Padding="12,6">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- Legend -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="+" Foreground="#44EE88" FontWeight="Bold" FontFamily="Monospace" FontSize="13"/>
+                        <TextBlock Text="Added" FontSize="12" Opacity="0.8"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="−" Foreground="#FF5566" FontWeight="Bold" FontFamily="Monospace" FontSize="13"/>
+                        <TextBlock Text="Removed" FontSize="12" Opacity="0.8"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="~" Foreground="#FFBB33" FontWeight="Bold" FontFamily="Monospace" FontSize="13"/>
+                        <TextBlock Text="Modified" FontSize="12" Opacity="0.8"/>
+                    </StackPanel>
+                </StackPanel>
+                <!-- Search box -->
+                <us:SearchBox Grid.Column="1"
+                         x:Name="FilterTextBox"
+                         Text="{Binding FilterText, Mode=TwoWay}"
+                         Watermark="Filter changes…"
+                         FontSize="12"
+                         Padding="8,4"
+                         Margin="16,0"
+                         VerticalAlignment="Center"
+                         VerticalContentAlignment="Center"/>
+                <!-- Show unchanged toggle + refresh button -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="Show unchanged"
+                               FontSize="12"
+                               Opacity="0.75"
+                               VerticalAlignment="Center"/>
+                    <CheckBox x:Name="ShowUnchangedCheckBox"
+                              IsChecked="{Binding ShowUnchanged, Mode=TwoWay}"
+                              VerticalAlignment="Center"/>
+                    <Button Content="⟳  Refresh"
+                            Command="{Binding RefreshCommand}"
+                            ToolTip.Tip="Refresh (F5)"
+                            FontSize="12"
+                            Padding="8,4"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ── Diff tree / empty state ────────────────────────────────── -->
+        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- Error state -->
+                <Border IsVisible="{Binding HasError}"
+                        Padding="40"
+                        HorizontalAlignment="Center">
+                    <StackPanel Spacing="12" HorizontalAlignment="Center">
+                        <TextBlock Text="⚠  Failed to load diff."
+                                   FontSize="16"
+                                   Foreground="#FF5566"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="{Binding ErrorMessage}"
+                                   FontSize="13"
+                                   Opacity="0.7"
+                                   HorizontalAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="600"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Empty state when identical -->
+                <Border IsVisible="{Binding IsIdentical}"
+                        Padding="40"
+                        HorizontalAlignment="Center">
+                    <StackPanel Spacing="12" HorizontalAlignment="Center">
+                        <TextBlock Text="✓  The two model systems are identical."
+                                   FontSize="16"
+                                   Foreground="#44EE88"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="No differences were found between the selected model systems."
+                                   FontSize="13"
+                                   Opacity="0.6"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Diff tree (shown when there are changes, or when ShowUnchanged=true) -->
+                <TreeView x:Name="DiffTree"
+                          ItemsSource="{Binding RootItems}"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          Margin="8,4"
+                          ContextRequested="OnDiffTreeContextRequested">
+                    <TreeView.Styles>
+                        <Style Selector="TreeViewItem">
+                            <Setter Property="IsExpanded" Value="True"/>
+                        </Style>
+                    </TreeView.Styles>
+                </TreeView>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ── Loading overlay (spans all rows) ──────────────────────── -->
+        <Panel Grid.RowSpan="3"
+               IsVisible="{Binding IsLoading}"
+               Background="#CC0D0D1A"
+               ZIndex="100">
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Spacing="16">
+                <ProgressBar Classes="circular"
+                             IsIndeterminate="True"
+                             Width="48"
+                             Height="48"
+                             HorizontalAlignment="Center"/>
+                <TextBlock Text="Computing differences…"
+                           FontSize="14"
+                           Opacity="0.75"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Panel>
+
+    </Grid>
+
+</UserControl>

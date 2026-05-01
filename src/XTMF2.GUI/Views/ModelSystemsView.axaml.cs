@@ -19,8 +19,11 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using System;
 using System.Linq;
 using XTMF2;
+using XTMF2.Diff;
+using XTMF2.Editing;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Resources;
 
@@ -154,6 +157,83 @@ public partial class ModelSystemsView : UserControl
         if (sender is MenuItem menuItem && menuItem.DataContext is ModelSystemHeader header)
             _viewModel.SelectedModelSystem = header;
         _viewModel.ExportModelSystemCommand.Execute(null);
+    }
+
+    private void CompareModelSystem_ContextMenu_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is null) return;
+        ModelSystemHeader? header = null;
+        if (sender is MenuItem menuItem && menuItem.DataContext is ModelSystemHeader h)
+            header = h;
+        header ??= _viewModel.SelectedModelSystem;
+        if (header is null) return;
+
+        Dispatcher.UIThread.Post(async () =>
+        {
+            var mainWindow = TopLevel.GetTopLevel(this) as MainWindow;
+            if (mainWindow is null) return;
+
+            // Build the list of other model systems in this project.
+            var others = _viewModel.GetOtherModelSystems(header);
+
+            var picker = new ComparePickerDialog(others);
+            await picker.ShowDialog(mainWindow);
+
+            if (picker.WasCancelled) return;
+
+            // Capture values needed by the factory (picker is disposed after this method returns).
+            var capturedViewModel = _viewModel;
+            var capturedHeader = header;
+            var capturedRightHeader = picker.SelectedModelSystem;
+            var capturedRightFilePath = picker.SelectedFilePath;
+
+            // Open the tab immediately; the diff is computed on a background thread.
+            // Errors from loading are displayed inside the diff tab itself.
+            mainWindow.OpenDiffTab(
+                diffFactory: isSwapped =>
+                {
+                    if (!capturedViewModel.TryLoadModelSystemSnapshot(capturedHeader, out var leftMs, out var leftError))
+                        throw new InvalidOperationException(leftError?.Message ?? "Failed to load base model system.");
+
+                    ModelSystem? rightMs;
+                    if (capturedRightHeader is not null)
+                    {
+                        if (!capturedViewModel.TryLoadModelSystemSnapshot(capturedRightHeader, out rightMs, out var rightError))
+                            throw new InvalidOperationException(rightError?.Message ?? "Failed to load comparison model system.");
+                    }
+                    else
+                    {
+                        if (!capturedViewModel.TryLoadModelSystemFromFile(capturedRightFilePath!, out rightMs, out var rightError))
+                            throw new InvalidOperationException(rightError?.Message ?? "Failed to load comparison model system from file.");
+                    }
+
+                    return isSwapped
+                        ? ModelSystemComparer.Compare(rightMs!, leftMs!)
+                        : ModelSystemComparer.Compare(leftMs!, rightMs!);
+                },
+                leftHeader: capturedHeader,
+                rightHeader: capturedRightHeader,   // null when loaded from file
+                openOrFocusEditor: async header =>
+                {
+                    // If the editor is already open, focus it.
+                    var existing = mainWindow.Documents
+                        .OfType<ViewModels.ModelSystemEditorViewModel>()
+                        .FirstOrDefault(vm => vm.ModelSystemHeader == header);
+                    if (existing is not null)
+                    {
+                        mainWindow.FocusEditorTab(existing);
+                        // Yield to the dispatcher so any layout triggered by the tab
+                        // switch completes before the caller calls NavigateToElementById.
+                        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                            () => { }, Avalonia.Threading.DispatcherPriority.Loaded);
+                        return existing;
+                    }
+                    // Otherwise open a new editing session.
+                    if (!capturedViewModel.TryEditModelSystem(header, out var session, out _))
+                        return null;
+                    return mainWindow.OpenModelSystemTabAndGet(session!, capturedViewModel.CurrentUser);
+                });
+        });
     }
 
     private void OnLanguageChanged(object? sender, System.EventArgs e)

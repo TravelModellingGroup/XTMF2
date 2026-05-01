@@ -32,8 +32,8 @@ namespace XTMF2.ModelSystemConstruct
         private readonly ObservableCollection<Node> _Destinations;
         private readonly ReadOnlyObservableCollection<Node> _destinationsView;
 
-        public MultiLink(Node origin, NodeHook hook, List<Node> destinations, bool disabled, bool orthogonal = false)
-            : base(origin, hook, disabled, orthogonal)
+        public MultiLink(Node origin, NodeHook hook, List<Node> destinations, bool disabled, bool orthogonal = false, Guid id = default)
+            : base(origin, hook, disabled, orthogonal, id)
         {
             _Destinations     = new ObservableCollection<Node>(destinations);
             _destinationsView = new ReadOnlyObservableCollection<Node>(_Destinations);
@@ -63,6 +63,7 @@ namespace XTMF2.ModelSystemConstruct
         internal override void Save(Dictionary<Node, int> moduleDictionary, Utf8JsonWriter writer)
         {
             writer.WriteStartObject();
+            writer.WriteString(IdProperty, Id);
             writer.WriteNumber(OriginProperty, moduleDictionary[Origin!]);
             writer.WriteString(HookProperty, OriginHook!.Name);
             writer.WritePropertyName(DestinationProperty);

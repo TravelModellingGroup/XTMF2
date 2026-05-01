@@ -35,6 +35,16 @@ public partial class ModelSystemEditorView : UserControl
 {
     private ModelSystemEditorViewModel? _vm;
 
+    // ── Scroll-position memory ───────────────────────────────────────────
+    // Scroll offset is saved on the ViewModel so it survives even when
+    // Dock.Avalonia recreates this view on each tab activation.  We restore
+    // it after the initial layout pass (at Loaded priority) so the new offset
+    // is applied after the ScrollViewer has measured its extent.
+    // _scrollSavingEnabled is false while the restore is in flight so the
+    // layout-triggered ScrollChanged (offset reset to 0) cannot clobber the
+    // saved value before we write it back.
+    private bool _scrollSavingEnabled = true;
+
     public ModelSystemEditorView()
     {
         InitializeComponent();
@@ -53,12 +63,43 @@ public partial class ModelSystemEditorView : UserControl
 
         // Track theme changes so the BoxShadow style class stays in sync.
         ActualThemeVariantChanged += OnActualThemeVariantChanged;
+
+        // Save scroll position and restore it whenever the tab is re-activated.
+        // The ViewModel holds the saved offset so it persists even when Dock
+        // recreates this view on each tab switch.
+        CanvasScrollViewer.ScrollChanged += OnCanvasScrollChanged;
     }
 
     private void OnActualThemeVariantChanged(object? sender, EventArgs e)
     {
         UpdateThemeClass();
         TheCanvas.InvalidateVisual();
+    }
+
+    // -- Scroll-position memory -------------------------------------------------
+
+    private void OnCanvasScrollChanged(object? sender, EventArgs e)
+    {
+        if (_scrollSavingEnabled && _vm is not null)
+            _vm.SavedScrollOffset = CanvasScrollViewer.Offset;
+    }
+
+    /// <summary>
+    /// Disables scroll saving and posts a dispatcher item at <see cref="DispatcherPriority.Loaded"/>
+    /// that restores the scroll offset saved on the VM.  The save guard ensures the layout-triggered
+    /// reset (Offset → 0 at Render priority) does not overwrite the saved value before the restore
+    /// fires.
+    /// </summary>
+    private void ScheduleScrollRestore()
+    {
+        var savedOffset = _vm?.SavedScrollOffset ?? default;
+        if (savedOffset == default) return;
+        _scrollSavingEnabled = false;
+        Dispatcher.UIThread.Post(() =>
+        {
+            CanvasScrollViewer.Offset = savedOffset;
+            _scrollSavingEnabled = true;
+        }, DispatcherPriority.Loaded);
     }
 
     private void UpdateThemeClass()
@@ -110,6 +151,9 @@ public partial class ModelSystemEditorView : UserControl
         if (_vm is not null)
             _vm.ParentWindow = TopLevel.GetTopLevel(this) as Window;
         UpdateThemeClass();
+        // Restore the saved scroll offset (handles the case where Dock.Avalonia
+        // detaches and re-attaches this view when switching back to the tab).
+        ScheduleScrollRestore();
     }
 
     private void OnDataContextChanged(object? sender, System.EventArgs e)
@@ -127,18 +171,38 @@ public partial class ModelSystemEditorView : UserControl
             _vm.ParentWindow = TopLevel.GetTopLevel(this) as Window;
             _vm.PropertyChanged += OnVmPropertyChanged;
             _vm.ScrollToElementRequested += OnScrollToElementRequested;
+            // Drain any scroll that was requested before this view was attached.
+            // Post at Loaded priority so layout has completed and the viewport
+            // dimensions are valid before we compute the scroll offset.
+            var vmCapture = _vm;
+            Dispatcher.UIThread.Post(
+                () => vmCapture.FlushPendingScrollTarget(),
+                DispatcherPriority.Loaded);
+            // Restore the saved scroll offset (handles the non-cached case where
+            // Dock.Avalonia recreates this view on each tab activation).
+            // Navigation from FlushPendingScrollTarget runs at ApplicationIdle
+            // (lower priority, fires after Loaded) so it will override this
+            // restore when a Go-To navigation was pending.
+            ScheduleScrollRestore();
         }
     }
 
     private void OnScrollToElementRequested(ICanvasElement element)
     {
-        var viewport = CanvasScrollViewer.Viewport;
-        var offsetX = element.X + element.Width / 2.0 - viewport.Width / 2.0;
-        var offsetY = element.Y + element.Height / 2.0 - viewport.Height / 2.0;
-        CanvasScrollViewer.Offset = new Vector(
-            Math.Max(0, offsetX),
-            Math.Max(0, offsetY));
-        TheCanvas.Focus();
+        // Post at ApplicationIdle priority so the canvas has completed its layout pass
+        // (which may have just been triggered by a boundary switch) before we
+        // compute the scroll offset from the viewport dimensions.
+        Dispatcher.UIThread.Post(() =>
+        {
+            var scale    = TheCanvas.Scale;
+            var viewport = CanvasScrollViewer.Viewport;
+            var offsetX  = (element.X + element.Width  / 2.0) * scale - viewport.Width  / 2.0;
+            var offsetY  = (element.Y + element.Height / 2.0) * scale - viewport.Height / 2.0;
+            CanvasScrollViewer.Offset = new Vector(
+                Math.Max(0, offsetX),
+                Math.Max(0, offsetY));
+            TheCanvas.Focus();
+        }, DispatcherPriority.ApplicationIdle);
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e) { }

@@ -34,8 +34,8 @@ namespace XTMF2.ModelSystemConstruct
     /// </summary>
     public sealed class Start : Node
     {
-        public Start(ModuleRepository modules, string startName, Boundary boundary, string description, Rectangle point) 
-            : base(startName, typeof(StartModule), boundary, modules[typeof(StartModule)].Hooks!, point)
+        public Start(ModuleRepository modules, string startName, Boundary boundary, string description, Rectangle point, Guid id = default) 
+            : base(startName, typeof(StartModule), boundary, modules[typeof(StartModule)].Hooks!, point, id)
         {
             ContainedWithin = boundary;
             Description = description;
@@ -50,6 +50,7 @@ namespace XTMF2.ModelSystemConstruct
                 moduleDictionary[this] = myIndex;
             }
             writer.WriteStartObject();
+            writer.WriteString(IdProperty, Id);
             writer.WriteString(NameProperty, Name);
             writer.WriteString(DescriptionProperty, Description);
             writer.WriteNumber(IndexProperty, myIndex);
@@ -74,6 +75,7 @@ namespace XTMF2.ModelSystemConstruct
             }
             string? name = null;
             int index = -1;
+            Guid id = Guid.Empty;
             Rectangle point = new Rectangle();
             string? description = null;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -83,7 +85,12 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     return FailWith(out start, out error, "Invalid token when loading start");
                 }
-                if(reader.ValueTextEquals(NameProperty))
+                if (reader.ValueTextEquals(IdProperty))
+                {
+                    reader.Read();
+                    reader.TryGetGuid(out id);
+                }
+                else if(reader.ValueTextEquals(NameProperty))
                 {
                     reader.Read();
                     name = reader.GetString();
@@ -121,7 +128,7 @@ namespace XTMF2.ModelSystemConstruct
             {
                 return FailWith(out start, out error, $"Index {index} already exists!");
             }
-            start = new Start(modules, name, boundary, description ?? string.Empty, point)
+            start = new Start(modules, name, boundary, description ?? string.Empty, point, id)
             {
                 ContainedWithin = boundary
             };
