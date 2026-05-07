@@ -2519,13 +2519,17 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             await ShowError("Rename Function Parameter Failed", error);
     }
 
-    public async Task RemoveFunctionParameterAsync(FunctionParameter parameter)
+    public bool RemoveFunctionParameterAsync(FunctionParameter parameter)
     {
-        if (_currentFunctionTemplate is null) return;
+        if (_currentFunctionTemplate is null) return false;
 
         if (!Session.RemoveFunctionParameter(
                 User, _currentFunctionTemplate.UnderlyingTemplate, parameter, out var error))
-            await ShowError("Remove Function Parameter Failed", error);
+        {
+            ShowToast(error?.Message ?? "Failed to remove function parameter.", isError: true, durationMs: 4000);
+            return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -3039,18 +3043,20 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             CommandError? err = null;
             bool ok = el switch
             {
-                NodeViewModel         nvm => Session.RemoveNode(User, nvm.UnderlyingNode, out err),
-                StartViewModel        svm => Session.RemoveStart(User, svm.UnderlyingStart, out err),
-                CommentBlockViewModel cvm => Session.RemoveCommentBlock(User, _currentBoundary, cvm.UnderlyingBlock, out err),
+                NodeViewModel         nvm  => Session.RemoveNode(User, nvm.UnderlyingNode, out err),
+                StartViewModel        svm  => Session.RemoveStart(User, svm.UnderlyingStart, out err),
+                CommentBlockViewModel cvm  => Session.RemoveCommentBlock(User, _currentBoundary, cvm.UnderlyingBlock, out err),
                 FunctionTemplateViewModel ftvm => Session.RemoveFunctionTemplate(User, _currentBoundary, ftvm.UnderlyingTemplate, out err),
-                _                        => true,
+                FunctionParameterViewModel fpvm when _currentFunctionTemplate is not null
+                    => Session.RemoveFunctionParameter(User, _currentFunctionTemplate.UnderlyingTemplate, fpvm.UnderlyingParameter, out err),
+                _  => true,
             };
             if (!ok && err is not null)
                 firstError ??= err;
         }
 
         if (firstError is not null)
-            await ShowError("Delete Failed", firstError);
+            ShowToast(firstError.Message ?? "Delete failed.", isError: true, durationMs: 4000);
     }
 
     /// <summary>Delete whichever element or link is currently selected.</summary>
@@ -3087,6 +3093,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             await DeleteFunctionInstanceAsync(fivm);
             return;
         }
+        else if (SelectedElement is FunctionParameterViewModel fpvm
+                 && _currentFunctionTemplate is not null)
+        {
+            SelectElement(null);
+            success = Session.RemoveFunctionParameter(
+                User, _currentFunctionTemplate.UnderlyingTemplate, fpvm.UnderlyingParameter, out error);
+        }
         else if (SelectedElement is GhostNodeViewModel ghostVm)
         {
             SelectElement(null);
@@ -3114,7 +3127,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         done:
 
         if (!success && error is not null)
-            await ShowError("Delete Failed", error);
+            ShowToast(error.Message ?? "Delete failed.", isError: true, durationMs: 4000);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

@@ -268,6 +268,48 @@ public sealed class ModelSystemDiff
     }
 }
 
+/// <summary>Represents the diff of a single <see cref="FunctionParameter"/> within a function template.</summary>
+public sealed class FunctionParameterDiff
+{
+    /// <summary>The stable GUID of this function parameter.</summary>
+    public Guid Id { get; }
+
+    public ElementDiffKind Kind { get; }
+
+    /// <summary>Parameter name in the left model system, or null if not present.</summary>
+    public string? LeftName { get; }
+    /// <summary>Parameter name in the right model system, or null if not present.</summary>
+    public string? RightName { get; }
+
+    /// <summary>Assembly-qualified type name in the left model system, or null if not present.</summary>
+    public string? LeftType { get; }
+    /// <summary>Assembly-qualified type name in the right model system, or null if not present.</summary>
+    public string? RightType { get; }
+
+    /// <summary>Canvas position in the left model system (null when not present on that side).</summary>
+    public Rectangle? LeftLocation { get; }
+    /// <summary>Canvas position in the right model system (null when not present on that side).</summary>
+    public Rectangle? RightLocation { get; }
+
+    public FunctionParameterDiff(Guid id, ElementDiffKind kind,
+        string? leftName, string? rightName,
+        string? leftType, string? rightType,
+        Rectangle? leftLocation = null, Rectangle? rightLocation = null)
+    {
+        Id = id;
+        Kind = kind;
+        LeftName = leftName;
+        RightName = rightName;
+        LeftType = leftType;
+        RightType = rightType;
+        LeftLocation = leftLocation;
+        RightLocation = rightLocation;
+    }
+
+    /// <summary>Human-readable display name using the available side's name.</summary>
+    public string DisplayName => RightName ?? LeftName ?? Id.ToString("N")[..8];
+}
+
 /// <summary>
 /// Represents the diff of an entire function template (recursive) between two model systems.
 /// </summary>
@@ -288,10 +330,14 @@ public sealed class FunctionTemplateDiff
 
     public BoundaryDiff SubBoundary { get; }
 
+    /// <summary>Diffs for each <see cref="FunctionParameter"/> within this template.</summary>
+    public IReadOnlyList<FunctionParameterDiff> FunctionParameters { get; }
+
     public FunctionTemplateDiff(Guid id, ElementDiffKind kind,
         string? leftName, string? rightName,
         Rectangle? leftLocation, Rectangle? rightLocation,
-        BoundaryDiff subBoundary)
+        BoundaryDiff subBoundary,
+        IReadOnlyList<FunctionParameterDiff>? functionParameters = null)
     {
         Id = id;
         Kind = kind;
@@ -300,16 +346,19 @@ public sealed class FunctionTemplateDiff
         LeftLocation = leftLocation;
         RightLocation = rightLocation;
         SubBoundary = subBoundary;
+        FunctionParameters = functionParameters ?? Array.Empty<FunctionParameterDiff>();
     }
 
     /// <summary>Human-readable boundary name for display.</summary>
     public string DisplayName => RightName ?? LeftName ?? "(unnamed)";
 
-    /// <summary>True if this function template has changes (name, location, or internal content).</summary>
+    /// <summary>True if this function template has changes (name, location, internal content, or function parameters).</summary>
     public bool HasChanges => Kind != ElementDiffKind.Unchanged;
 
-    /// <summary>Count of directly-changed elements within this boundary (excluding sub-boundaries).</summary>
-    public int DirectChangeCount => SubBoundary.DirectChangeCount;
+    /// <summary>Count of directly-changed elements within this template (including function parameters).</summary>
+    public int DirectChangeCount =>
+        SubBoundary.DirectChangeCount +
+        FunctionParameters.Count(fp => fp.Kind != ElementDiffKind.Unchanged);
 }
 
 /// <summary>Represents the diff of a single <see cref="FunctionInstance"/> between two model systems.</summary>

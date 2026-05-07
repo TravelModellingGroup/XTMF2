@@ -297,6 +297,16 @@ public sealed class DiffFunctionTemplateItem
             }
         }
 
+        foreach (var fp in diff.FunctionParameters)
+        {
+            if (showUnchanged || fp.Kind != ElementDiffKind.Unchanged)
+            {
+                var item = new DiffElementItem(fp);
+                if (!hasFilter || item.MatchesFilter(filter!))
+                    children.Add(item);
+            }
+        }
+
         Children = children;
     }
     
@@ -441,6 +451,32 @@ public sealed class DiffElementItem
         ElementId = fi.Id;
     }
 
+    /// <summary>Constructs a display item from a <see cref="FunctionParameterDiff"/>.</summary>
+    internal DiffElementItem(FunctionParameterDiff fp)
+    {
+        Kind = fp.Kind;
+        TypeTag = "FunctionParameter";
+        Label = fp.DisplayName;
+        if (fp.Kind != ElementDiffKind.Modified)
+        {
+            ChangeDescription = null;
+        }
+        else
+        {
+            var parts = new List<string>(3);
+            if (fp.LeftName != fp.RightName)
+                parts.Add($"\"{ fp.LeftName}\" \u2192 \"{fp.RightName}\"");
+            if (fp.LeftType != fp.RightType)
+                parts.Add($"type: {ShortTypeName(fp.LeftType)} \u2192 {ShortTypeName(fp.RightType)}");
+            if (fp.LeftLocation is Rectangle fpL && fp.RightLocation is Rectangle fpR
+                && fpL != Rectangle.Hidden && fpR != Rectangle.Hidden && fpL != fpR)
+                parts.Add("moved");
+            ChangeDescription = parts.Count > 0 ? string.Join("; ", parts) : null;
+        }
+        Tooltip = BuildFunctionParameterTooltip(fp);
+        ElementId = fp.Id;
+    }
+
     // ── Tooltip helpers ───────────────────────────────────────────────────
 
     private static string? BuildNodeTooltip(NodeDiff node, string typeTag)
@@ -567,6 +603,46 @@ public sealed class DiffElementItem
             if (fi.LeftLocation is Rectangle fiL && fi.RightLocation is Rectangle fiR
                 && fiL != Rectangle.Hidden && fiR != Rectangle.Hidden && fiL != fiR)
                 sb.Append($"\nMoved: ({fiL.X},{fiL.Y}) \u2192 ({fiR.X},{fiR.Y})");
+        }
+        return sb.ToString();
+    }
+
+    private static string? BuildFunctionParameterTooltip(FunctionParameterDiff fp)
+    {
+        if (fp.Kind == ElementDiffKind.Unchanged) return null;
+
+        var kindLabel = fp.Kind switch
+        {
+            ElementDiffKind.Added   => "Added",
+            ElementDiffKind.Removed => "Removed",
+            _                       => "Modified"
+        };
+        var sb = new StringBuilder();
+        sb.Append($"{kindLabel} FunctionParameter: \"{fp.DisplayName}\"");
+
+        if (fp.Kind == ElementDiffKind.Added)
+        {
+            if (fp.RightType is not null)
+                sb.Append($"\nType: {ShortTypeName(fp.RightType)}");
+            if (fp.RightLocation is Rectangle fpRAdd && fpRAdd != Rectangle.Hidden)
+                sb.Append($"\nLocation: ({fpRAdd.X},{fpRAdd.Y})");
+        }
+        else if (fp.Kind == ElementDiffKind.Removed)
+        {
+            if (fp.LeftType is not null)
+                sb.Append($"\nType: {ShortTypeName(fp.LeftType)}");
+            if (fp.LeftLocation is Rectangle fpLRem && fpLRem != Rectangle.Hidden)
+                sb.Append($"\nLocation: ({fpLRem.X},{fpLRem.Y})");
+        }
+        else
+        {
+            if (fp.LeftName != fp.RightName)
+                sb.Append($"\nName: \"{fp.LeftName}\" \u2192 \"{fp.RightName}\"");
+            if (fp.LeftType != fp.RightType)
+                sb.Append($"\nType: {ShortTypeName(fp.LeftType)} \u2192 {ShortTypeName(fp.RightType)}");
+            if (fp.LeftLocation is Rectangle fpL && fp.RightLocation is Rectangle fpR
+                && fpL != Rectangle.Hidden && fpR != Rectangle.Hidden && fpL != fpR)
+                sb.Append($"\nMoved: ({fpL.X},{fpL.Y}) \u2192 ({fpR.X},{fpR.Y})");
         }
         return sb.ToString();
     }

@@ -529,9 +529,9 @@ partial class ModelSystemCanvas
             };
 
             var removeItem = new MenuItem { Header = "Remove Function Parameter" };
-            removeItem.Click += async (_, _) =>
+            removeItem.Click += (_, _) =>
             {
-                await vm.RemoveFunctionParameterAsync(fpvm.UnderlyingParameter);
+                vm.RemoveFunctionParameterAsync(fpvm.UnderlyingParameter);
                 InvalidateAndMeasure();
             };
             menu.Items.Add(new Separator());
