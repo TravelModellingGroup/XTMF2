@@ -335,6 +335,7 @@ public static class ModelSystemComparer
             if (rightById.TryGetValue(id, out var right))
             {
                 var subBoundary = CompareBoundary(left.InternalModules, right.InternalModules);
+                var functionParameters = CompareFunctionParameters(left.FunctionParameters, right.FunctionParameters);
 
                 // All element types inside InternalModules — including Starts — have stable
                 // persisted GUIDs, so we can safely include them in the changed check.
@@ -347,13 +348,14 @@ public static class ModelSystemComparer
                     || subBoundary.CommentBlocks.Any(c => c.Kind != ElementDiffKind.Unchanged)
                     || subBoundary.FunctionInstances.Any(fi => fi.Kind != ElementDiffKind.Unchanged)
                     || subBoundary.FunctionTemplates.Any(ft => ft.HasChanges)
-                    || subBoundary.SubBoundaries.Any(b => b.HasChanges);
+                    || subBoundary.SubBoundaries.Any(b => b.HasChanges)
+                    || functionParameters.Any(fp => fp.Kind != ElementDiffKind.Unchanged);
 
                 result.Add(new FunctionTemplateDiff(id,
                     contentChanged ? ElementDiffKind.Modified : ElementDiffKind.Unchanged,
                     left.Name, right.Name,
                     left.Location, right.Location,
-                    subBoundary));
+                    subBoundary, functionParameters));
             }
             else
                 result.Add(FunctionTemplateRemoved(left));
@@ -368,15 +370,65 @@ public static class ModelSystemComparer
         return result;
     }
 
+    private static IReadOnlyList<FunctionParameterDiff> CompareFunctionParameters(
+        IEnumerable<FunctionParameter> leftParams, IEnumerable<FunctionParameter> rightParams)
+    {
+        var leftById  = leftParams.ToDictionary(fp => fp.Id);
+        var rightById = rightParams.ToDictionary(fp => fp.Id);
+        var result    = new List<FunctionParameterDiff>();
+
+        foreach (var (id, left) in leftById)
+        {
+            if (rightById.TryGetValue(id, out var right))
+            {
+                bool locationChanged = left.Location != right.Location
+                    && left.Location != Rectangle.Hidden
+                    && right.Location != Rectangle.Hidden;
+                bool changed = left.Name != right.Name || left.Type != right.Type || locationChanged;
+                result.Add(new FunctionParameterDiff(id,
+                    changed ? ElementDiffKind.Modified : ElementDiffKind.Unchanged,
+                    left.Name, right.Name,
+                    left.Type?.AssemblyQualifiedName, right.Type?.AssemblyQualifiedName,
+                    left.Location, right.Location));
+            }
+            else
+            {
+                result.Add(new FunctionParameterDiff(id, ElementDiffKind.Removed,
+                    left.Name, null,
+                    left.Type?.AssemblyQualifiedName, null,
+                    left.Location, null));
+            }
+        }
+
+        foreach (var (id, right) in rightById)
+        {
+            if (!leftById.ContainsKey(id))
+            {
+                result.Add(new FunctionParameterDiff(id, ElementDiffKind.Added,
+                    null, right.Name,
+                    null, right.Type?.AssemblyQualifiedName,
+                    null, right.Location));
+            }
+        }
+
+        return result;
+    }
+
     private static FunctionTemplateDiff FunctionTemplateAdded(FunctionTemplate ft) => new FunctionTemplateDiff(
         ft.Id, ElementDiffKind.Added, null, ft.Name,
         null, ft.Location,
-        BoundaryAdded(ft.InternalModules));
+        BoundaryAdded(ft.InternalModules),
+        ft.FunctionParameters.Select(fp => new FunctionParameterDiff(fp.Id, ElementDiffKind.Added,
+            null, fp.Name, null, fp.Type?.AssemblyQualifiedName,
+            null, fp.Location)).ToList());
 
     private static FunctionTemplateDiff FunctionTemplateRemoved(FunctionTemplate ft) => new FunctionTemplateDiff(
         ft.Id, ElementDiffKind.Removed, ft.Name, null,
         ft.Location, null,
-        BoundaryRemoved(ft.InternalModules));
+        BoundaryRemoved(ft.InternalModules),
+        ft.FunctionParameters.Select(fp => new FunctionParameterDiff(fp.Id, ElementDiffKind.Removed,
+            fp.Name, null, fp.Type?.AssemblyQualifiedName, null,
+            fp.Location, null)).ToList());
 
     // ── FunctionInstance comparison ────────────────────────────────────────
 
