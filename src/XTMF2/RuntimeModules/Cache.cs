@@ -1,24 +1,25 @@
 ﻿/*
-    Copyright 2014 Travel Modelling Group, Department of Civil Engineering, University of Toronto
+    Copyright 2017-2026 Travel Modelling Group, Department of Civil Engineering, University of Toronto
 
-    This file is part of XTMF.
+    This file is part of XTMF2.
 
-    XTMF is free software: you can redistribute it and/or modify
+    XTMF2 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    XTMF is distributed in the hope that it will be useful,
+    XTMF2 is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with XTMF.  If not, see <http://www.gnu.org/licenses/>.
+    along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 
 namespace XTMF2.RuntimeModules
 {
@@ -26,7 +27,7 @@ namespace XTMF2.RuntimeModules
     Description = "Provides a way to keep the result of a function unless unloaded by an event.")]
     public sealed class Cache<T> : BaseFunction<T>, IDisposable
     {
-        private readonly object _lock = new object();
+        private readonly Lock _lock = new Lock();
 
 #pragma warning disable CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
         private T _cachedValue;
@@ -37,7 +38,7 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "Source", Description = "Get the cached data", Index = 0)]
         public IFunction<T>? Source;
 
-        [SubModule(Required = true, Name = "Force Update", Description = "Invoke to force an update", Index = 1)]
+        [SubModule(Required = false, Name = "Force Update", Description = "Invoke to force an update", Index = 1)]
         public IEvent? ForceUpdate;
 
         public override T Invoke()
