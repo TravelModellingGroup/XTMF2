@@ -279,6 +279,11 @@ namespace XTMF2.Repository
             ModuleAttribute description = LoadModuleDescription(type);
             LoadFields(type, typeInfo, hooks);
             LoadProperties(type, typeInfo, hooks);
+            // Make sure all of the hooks have names
+            if (hooks.Any(h => String.IsNullOrWhiteSpace(h.Name)))
+            {
+                throw new XTMFCodeStyleError(type, "All sub module properties in must have a name defined in their attribute!");
+            }
             // ensure there are no duplicates
             var duplicates = from h in hooks
                              let name = h.Name
