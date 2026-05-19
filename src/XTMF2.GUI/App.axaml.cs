@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using XTMF2;
@@ -55,15 +56,38 @@ public partial class App : Application
                 }
                 catch (XTMFCodeStyleError codeError)
                 {
+                    System.Console.Error.WriteLine($"[XTMFCodeStyleError] {codeError.Message}");
+                    System.Console.Error.Flush();
                     // Handle code style errors (e.g. invalid config)
-                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                    Avalonia.Threading.Dispatcher.UIThread.Invoke(new Action(() =>
                     {
                         var errorDialog = new MessageDialog(
                             Strings.Format(Strings.RuntimeInitialization_CodeStyleError, codeError.Message),
                             Strings.RuntimeInitialization_ErrorTitle,
                             MessageDialog.MessageType.Error);
                         errorDialog.ShowDialog(mainWindow);
-                    });
+                    }));
+                    System.Environment.Exit(1);
+                }
+                catch (System.AggregateException ex)
+                {
+                    foreach(var error in ex.InnerExceptions)
+                    {
+                        if (error is XTMFCodeStyleError codeError)
+                        {
+                            System.Console.Error.WriteLine($"[XTMFCodeStyleError] {codeError.Message}");
+                            // Handle code style errors (e.g. invalid config)
+                            Avalonia.Threading.Dispatcher.UIThread.Invoke(new Action(() =>
+                            {
+                                var errorDialog = new MessageDialog(
+                                    Strings.Format(Strings.RuntimeInitialization_CodeStyleError, codeError.Message),
+                                    Strings.RuntimeInitialization_ErrorTitle,
+                                    MessageDialog.MessageType.Error);
+                                errorDialog.ShowDialog(mainWindow);
+                            }));
+                        }
+                        System.Console.Error.Flush();
+                    }
                     System.Environment.Exit(1);
                 }
                 catch (System.Exception ex)
