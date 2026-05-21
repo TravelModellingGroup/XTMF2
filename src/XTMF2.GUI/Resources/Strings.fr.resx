@@ -177,6 +177,9 @@ Cette action ne peut pas être annulée.</value>
   <data name="ModelSystems_Import" xml:space="preserve">
     <value>Importer un système de modèles</value>
   </data>
+  <data name="ModelSystems_OpenProjectDirectory" xml:space="preserve">
+    <value>Ouvrir le dossier du projet</value>
+  </data>
   <data name="ModelSystems_ImportTitle" xml:space="preserve">
     <value>Importer un système de modèles</value>
   </data>
@@ -203,6 +206,14 @@ Cette action ne peut pas être annulée.</value>
   </data>
   <data name="ModelSystems_OpenFailedTitle" xml:space="preserve">
     <value>Échec de l'ouverture du système de modèles</value>
+  </data>
+  <data name="ModelSystems_OpenProjectDirectoryFailedTitle" xml:space="preserve">
+    <value>Échec de l'ouverture du dossier du projet</value>
+  </data>
+  <data name="ModelSystems_OpenProjectDirectoryFailedMessage" xml:space="preserve">
+    <value>Impossible d'ouvrir le dossier du projet dans l'explorateur de fichiers.
+
+Chemin : {0}</value>
   </data>
   <data name="ModelSystems_Rename" xml:space="preserve">
     <value>Renommer</value>

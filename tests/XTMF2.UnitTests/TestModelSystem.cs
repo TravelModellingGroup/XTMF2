@@ -681,6 +681,25 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        public void EstimationFitnessNodePersistence()
+        {
+            RunInModelSystemContext("EstimationFitnessNodePersistence", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                CommandError error = null;
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "FitnessNode",
+                    typeof(SimpleTestModule), Rectangle.Hidden, out var node, out error), error?.Message);
+                Assert.IsTrue(mSession.SetEstimationFitnessNode(user, node, out error), error?.Message);
+                Assert.AreEqual(node, ms.EstimationFitnessNode);
+            }, (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                Assert.IsNotNull(ms.EstimationFitnessNode);
+                Assert.AreEqual("FitnessNode", ms.EstimationFitnessNode!.Name);
+            });
+        }
+
+        [TestMethod]
         public void RenameModelSystem()
         {
             RunInProjectContext("RenameModelSystem", (user, project) =>

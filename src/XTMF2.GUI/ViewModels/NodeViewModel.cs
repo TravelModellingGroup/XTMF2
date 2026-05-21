@@ -287,6 +287,22 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
         }
     }
 
+    /// <summary>
+    /// True when this node is a <see cref="BasicParameter{T}"/> where T is <see cref="float"/>
+    /// or <see cref="double"/>. These are the types that can be nominated for estimation or calibration.
+    /// </summary>
+    public bool IsNumericBasicParameter
+    {
+        get
+        {
+            var t = UnderlyingNode.Type;
+            if (t is null || !t.IsGenericType) return false;
+            if (t.GetGenericTypeDefinition() != typeof(BasicParameter<>)) return false;
+            var arg = t.GetGenericArguments()[0];
+            return arg == typeof(float) || arg == typeof(double);
+        }
+    }
+
     /// <summary>True when this node's type is <see cref="ScriptedParameter{T}"/>.</summary>
     public bool IsScriptedParameter
     {

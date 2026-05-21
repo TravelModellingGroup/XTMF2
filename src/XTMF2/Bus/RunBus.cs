@@ -36,12 +36,35 @@ namespace XTMF2.Bus
         private XTMFRuntime _runtime;
         private volatile bool _Exit = false;
         private string _id = string.Empty;
+        private readonly Action<string>? _statusCallback;
+
+        /// <summary>
+        /// The run currently being executed by this bus (if any).
+        /// Runtime modules can use this to inspect per-run flags.
+        /// </summary>
+        internal Run? CurrentRun { get; set; }
 
         public RunBus(string runId, Stream toClient, bool streamOwner, XTMFRuntime runtime)
         {
             _id = runId;
             _toClient = toClient;
             _streamOwner = streamOwner;
+            _runtime = runtime;
+            runtime.RunBus = this;
+        }
+
+        /// <summary>
+        /// Creates a lightweight RunBus that forwards status messages via a delegate
+        /// instead of a named pipe.  Intended for optimisation loops where a pipe is
+        /// not needed — only <see cref="SendStatusMessage"/> is active; all other
+        /// write methods are no-ops.
+        /// </summary>
+        internal RunBus(string runId, Action<string> statusCallback, XTMFRuntime runtime)
+        {
+            _id = runId;
+            _toClient = Stream.Null;
+            _streamOwner = false;
+            _statusCallback = statusCallback;
             _runtime = runtime;
             runtime.RunBus = this;
         }
@@ -118,6 +141,11 @@ namespace XTMF2.Bus
         /// <param name="message">The current status message.</param>
         internal void SendStatusMessage(string? message)
         {
+            if (_statusCallback is { } cb)
+            {
+                cb(message ?? string.Empty);
+                return;
+            }
             Write((writer) =>
             {
                 writer.Write((int)(Out.ClientReportedStatus));
@@ -167,9 +195,10 @@ namespace XTMF2.Bus
                             _id = reader.ReadString();
                             var cwd = reader.ReadString();
                             var start = reader.ReadString();
+                            var runMode = (RunMode)reader.ReadInt32();
                             var msSize = (int)reader.ReadInt64();
                             using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
-                            var run = new Run(_id, mem.ToArray(), start, _runtime, cwd);
+                            var run = new Run(_id, mem.ToArray(), start, _runtime, cwd, runMode);
                             Task.Factory.StartNew(() =>
                             {
                                 try

@@ -22,7 +22,7 @@
         </Grid.RowDefinitions>
         
         <!-- Menu Bar -->
-        <Menu Grid.Row="0" ZIndex="100">
+        <Menu Grid.Row="0" ZIndex="100" Classes="main-menu">
             <MenuItem Header="{res:Localize MainWindow_MenuFile}">
                 <MenuItem Header="{res:Localize MainWindow_MenuExit}" Click="Exit_Click"/>
             </MenuItem>

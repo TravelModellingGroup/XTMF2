@@ -88,6 +88,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>True when a <see cref="RunController"/> is available.</summary>
     public bool CanRun => _runController is not null;
 
+    /// <summary>True when at least one estimation group has at least one parameter configured.</summary>
+    public bool HasEstimationTargets =>
+        EstimationGroups.Any(g => g.Parameters.Count > 0);
+
+    /// <summary>True when at least one calibration group has at least one parameter configured.</summary>
+    public bool HasCalibrationTargets =>
+        CalibrationGroups.Any(g => g.Parameters.Count > 0);
+
     /// <summary>
     /// Optional callback invoked on the UI thread after a run is successfully submitted.
     /// Set by <see cref="MainWindow"/> to switch the active document to the Runs view.
@@ -205,6 +213,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>Observable view-models for the current FunctionTemplate's local variable list.
     /// Empty when not inside a FunctionTemplate.</summary>
     public ObservableCollection<ModelSystemVariableViewModel> LocalVariables { get; } = new();
+
+    /// <summary>Observable view-models for estimation groups (each containing nominated parameters).</summary>
+    public ObservableCollection<EstimationGroupViewModel> EstimationGroups { get; } = new();
+
+    /// <summary>Observable view-models for calibration groups.</summary>
+    public ObservableCollection<CalibrationGroupViewModel> CalibrationGroups { get; } = new();
 
     /// <summary>Text typed into the variables filter box; filters <see cref="FilteredModelSystemVariables"/> and <see cref="FilteredLocalVariables"/>.</summary>
     [ObservableProperty]
@@ -586,6 +600,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         SyncModelSystemVariables();
         ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.Variables)
             .CollectionChanged += OnModelSystemVariablesChanged;
+
+        // Build estimation/calibration group collections and keep them in sync.
+        SyncEstimationGroups();
+        SyncCalibrationGroups();
+        ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.EstimationGroups)
+            .CollectionChanged += OnEstimationGroupsChanged;
+        ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.CalibrationGroups)
+            .CollectionChanged += OnCalibrationGroupsChanged;
 
         // Mirror CanUndo/CanRedo from the session reactively.
         _canUndo = Session.CanUndo;
@@ -1916,13 +1938,231 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             await ShowError("Remove Local Variable Failed", error);
     }
 
+    // ── Estimation / Calibration – sync helpers ──────────────────────────
+
+    private void SyncEstimationGroups()
+    {
+        foreach (var gvm in EstimationGroups)
+        {
+            ((System.Collections.Specialized.INotifyCollectionChanged)gvm.Parameters).CollectionChanged -= OnAnyEstimationGroupParametersChanged;
+            gvm.Detach();
+        }
+        EstimationGroups.Clear();
+        foreach (var group in Session.ModelSystem.EstimationGroups)
+        {
+            var gvm = new EstimationGroupViewModel(group);
+            EstimationGroups.Add(gvm);
+            ((System.Collections.Specialized.INotifyCollectionChanged)gvm.Parameters).CollectionChanged += OnAnyEstimationGroupParametersChanged;
+        }
+        OnPropertyChanged(nameof(HasEstimationTargets));
+    }
+
+    private void OnEstimationGroupsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        SyncEstimationGroups();
+    }
+
+    private void OnAnyEstimationGroupParametersChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        => OnPropertyChanged(nameof(HasEstimationTargets));
+
+    private void SyncCalibrationGroups()
+    {
+        foreach (var gvm in CalibrationGroups)
+        {
+            ((System.Collections.Specialized.INotifyCollectionChanged)gvm.Parameters).CollectionChanged -= OnAnyCalibrationGroupParametersChanged;
+            gvm.Detach();
+        }
+        CalibrationGroups.Clear();
+        foreach (var group in Session.ModelSystem.CalibrationGroups)
+        {
+            var gvm = new CalibrationGroupViewModel(group);
+            CalibrationGroups.Add(gvm);
+            ((System.Collections.Specialized.INotifyCollectionChanged)gvm.Parameters).CollectionChanged += OnAnyCalibrationGroupParametersChanged;
+        }
+        OnPropertyChanged(nameof(HasCalibrationTargets));
+    }
+
+    private void OnCalibrationGroupsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        SyncCalibrationGroups();
+    }
+
+    private void OnAnyCalibrationGroupParametersChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        => OnPropertyChanged(nameof(HasCalibrationTargets));
+
+    // ── Estimation – context menu helpers ───────────────────────────────
+
+    /// <summary>Returns true when <paramref name="nvm"/> is already nominated for estimation in any group.</summary>
+    public bool IsNodeInEstimation(NodeViewModel nvm) =>
+        Session.ModelSystem.EstimationGroups.Any(g => g.Parameters.Any(e => e.Node == nvm.UnderlyingNode));
+
+    /// <summary>Returns true when <paramref name="nvm"/> is already nominated for calibration in any group.</summary>
+    public bool IsNodeInCalibration(NodeViewModel nvm) =>
+        Session.ModelSystem.CalibrationGroups.Any(g => g.Parameters.Any(e => e.Node == nvm.UnderlyingNode));
+
+    /// <summary>
+    /// Adds the given parameter node to an estimation group (creating a Default group
+    /// if none exist; prompting the user when more than one group exists) with bounds
+    /// derived from the current parameter value.
+    /// </summary>
+    public async Task AddNodeToEstimationAsync(NodeViewModel nvm)
+    {
+        if (ParentWindow is null) return;
+        var groups = Session.ModelSystem.EstimationGroups;
+        EstimationGroup? group;
+        if (groups.Count == 0)
+        {
+            if (!Session.AddEstimationGroup(User, "Default", out group, out var grpErr))
+            { await ShowError("Add Estimation Group Failed", grpErr); return; }
+        }
+        else if (groups.Count == 1)
+        {
+            group = groups[0];
+        }
+        else
+        {
+            var picker = new Views.GroupPickerDialog(
+                "Select the estimation group to add this parameter to:",
+                groups.Select(g => g.Name));
+            await picker.ShowDialog(ParentWindow);
+            if (!picker.Confirmed) return;
+            group = groups[picker.PickedIndex!.Value];
+        }
+        if (!TryParseCurrentParameterValue(nvm, out var currentVal)) currentVal = 0.0;
+        if (!Session.AddEstimationParameter(User, group!, nvm.UnderlyingNode,
+                Math.Min(0.0, currentVal), Math.Max(1.0, currentVal), currentVal,
+                out _, out var error))
+            await ShowError("Add Estimation Parameter Failed", error);
+    }
+
+    /// <summary>
+    /// Removes the given parameter node from whichever estimation group contains it.
+    /// </summary>
+    public async Task RemoveNodeFromEstimationAsync(NodeViewModel nvm)
+    {
+        foreach (var group in Session.ModelSystem.EstimationGroups)
+        {
+            var entry = group.Parameters.FirstOrDefault(e => e.Node == nvm.UnderlyingNode);
+            if (entry is null) continue;
+            if (!Session.RemoveEstimationParameter(User, group, entry, out var error))
+                await ShowError("Remove Estimation Parameter Failed", error);
+            return;
+        }
+    }
+
+    /// <summary>
+    /// Adds the given parameter node to a calibration group (creating a Default group
+    /// if none exist; prompting the user when more than one group exists) with bounds
+    /// derived from the current parameter value.
+    /// </summary>
+    public async Task AddNodeToCalibrationAsync(NodeViewModel nvm)
+    {
+        if (ParentWindow is null) return;
+        var groups = Session.ModelSystem.CalibrationGroups;
+        CalibrationGroup? group;
+        if (groups.Count == 0)
+        {
+            if (!Session.AddCalibrationGroup(User, "Default", out group, out var grpErr))
+            { await ShowError("Add Calibration Group Failed", grpErr); return; }
+        }
+        else if (groups.Count == 1)
+        {
+            group = groups[0];
+        }
+        else
+        {
+            var picker = new Views.GroupPickerDialog(
+                "Select the calibration group to add this parameter to:",
+                groups.Select(g => g.Name));
+            await picker.ShowDialog(ParentWindow);
+            if (!picker.Confirmed) return;
+            group = groups[picker.PickedIndex!.Value];
+        }
+        if (!TryParseCurrentParameterValue(nvm, out var currentVal)) currentVal = 0.0;
+        if (!Session.AddCalibrationParameter(User, group!, nvm.UnderlyingNode,
+                Math.Min(0.0, currentVal), Math.Max(1.0, currentVal),
+                out _, out var error))
+            await ShowError("Add Calibration Parameter Failed", error);
+    }
+
+    /// <summary>
+    /// Removes the given parameter node from whichever calibration group contains it.
+    /// </summary>
+    public async Task RemoveNodeFromCalibrationAsync(NodeViewModel nvm)
+    {
+        foreach (var group in Session.ModelSystem.CalibrationGroups)
+        {
+            var entry = group.Parameters.FirstOrDefault(e => e.Node == nvm.UnderlyingNode);
+            if (entry is null) continue;
+            if (!Session.RemoveCalibrationParameter(User, group, entry, out var error))
+                await ShowError("Remove Calibration Parameter Failed", error);
+            return;
+        }
+    }
+
+    /// <summary>
+    /// Returns all nodes from the whole model system (all boundaries, recursively) whose
+    /// runtime type implements <c>IFunction&lt;float&gt;</c> or <c>IFunction&lt;double&gt;</c>.
+    /// These are valid candidates for estimation fitness nodes and calibration target nodes.
+    /// </summary>
+    public System.Collections.Generic.List<XTMF2.ModelSystemConstruct.Node> GetFunctionNodes()
+    {
+        return CollectFunctionNodes(Session.ModelSystem.GlobalBoundary);
+    }
+
+    private static System.Collections.Generic.List<XTMF2.ModelSystemConstruct.Node> CollectFunctionNodes(
+        XTMF2.ModelSystemConstruct.Boundary boundary)
+    {
+        var result = new System.Collections.Generic.List<XTMF2.ModelSystemConstruct.Node>();
+        var iFunctionOpen = typeof(IFunction<>);
+        foreach (var node in boundary.Modules)
+        {
+            if (node.Type is { } t &&
+                t.GetInterfaces().Any(i =>
+                    i.IsGenericType &&
+                    i.GetGenericTypeDefinition() == iFunctionOpen &&
+                    (i.GetGenericArguments()[0] == typeof(float) || i.GetGenericArguments()[0] == typeof(double))))
+                result.Add(node);
+        }
+        foreach (var child in boundary.Boundaries)
+            result.AddRange(CollectFunctionNodes(child));
+        return result;
+    }
+
+    private static bool TryParseCurrentParameterValue(NodeViewModel nvm, out double value)
+    {
+        var rep = nvm.ParameterValueRepresentation;
+        if (double.TryParse(rep, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out value))
+            return true;
+        value = 0.0;
+        return false;
+    }
+
+    /// <summary>Opens the Estimation Parameters dialog.</summary>
+    public async Task OpenEstimationDialogAsync()
+    {
+        if (ParentWindow is null) return;
+        var dlg = new Views.EstimationDialog(this);
+        await dlg.ShowDialog(ParentWindow);
+    }
+
+    /// <summary>Opens the Calibration Parameters dialog.</summary>
+    public async Task OpenCalibrationDialogAsync()
+    {
+        if (ParentWindow is null) return;
+        var dlg = new Views.CalibrationDialog(this);
+        await dlg.ShowDialog(ParentWindow);
+    }
+
+    // ── Variable navigation ──────────────────────────────────────────────
+
     /// <summary>
     /// Navigates to the boundary containing the variable's node and selects it.
     /// Bound to the "Go To" button in the variables panel.
     /// </summary>
     [RelayCommand]
-    private void GoToVariableNode(ModelSystemVariableViewModel varVm)
-    {
+    private void GoToVariableNode(ModelSystemVariableViewModel varVm)    {
         var targetBoundary = varVm.UnderlyingNode.ContainedWithin;
         if (targetBoundary is not null)
             SwitchToBoundary(targetBoundary);
@@ -2621,13 +2861,119 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         var project = Session.Project;
-        if (!_runController.SendRun(project, Session, startToExecute, runName, out _, out var runError))
+        if (!_runController.SendRun(project, Session, User, startToExecute, runName, out _, out var runError))
         {
             ShowToast($"Failed to start run: {runError?.Message}", isError: true, durationMs: 6000);
             return;
         }
 
         ShowToast($"Run '{runName}' started.", durationMs: 3000);
+        RunStarted?.Invoke();
+    }
+
+    /// <summary>Runs the model system in estimation mode using the configured estimation groups.</summary>
+    [RelayCommand]
+    private async Task RunEstimation()
+    {
+        if (ParentWindow is null || _runController is null) return;
+
+        var availableStarts = Session.ModelSystem.GlobalBoundary.Starts.ToList();
+        if (availableStarts.Count == 0)
+        {
+            ShowToast("No starts are defined in this model system.", isError: true, durationMs: 5000);
+            return;
+        }
+
+        var defaultRunName = $"Estimation_{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var runNameDialog = new InputDialog(
+            title: "Run Estimation",
+            prompt: "Enter a name for this estimation run:",
+            defaultText: defaultRunName);
+        await runNameDialog.ShowDialog(ParentWindow);
+        if (runNameDialog.WasCancelled) return;
+        var runName = runNameDialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(runName)) return;
+
+        string startToExecute;
+        if (availableStarts.Count == 1)
+        {
+            startToExecute = availableStarts[0].Name;
+        }
+        else
+        {
+            var startNames = availableStarts.Select(s => s.Name).ToList();
+            var startDialog = new StartPickerDialog(
+                title: "Select Start",
+                prompt: "Select the start to execute:",
+                startNames: startNames,
+                defaultStart: startNames[0]);
+            await startDialog.ShowDialog(ParentWindow);
+            if (startDialog.WasCancelled) return;
+            startToExecute = startDialog.SelectedStartName ?? startNames[0];
+            if (string.IsNullOrEmpty(startToExecute)) return;
+        }
+
+        var project = Session.Project;
+        if (!_runController.SendEstimationRun(project, Session, User, startToExecute, runName, out _, out var runError))
+        {
+            ShowToast($"Failed to start estimation run: {runError?.Message}", isError: true, durationMs: 6000);
+            return;
+        }
+
+        ShowToast($"Estimation run '{runName}' started.", durationMs: 3000);
+        RunStarted?.Invoke();
+    }
+
+    /// <summary>Runs the model system in calibration mode using the configured calibration groups.</summary>
+    [RelayCommand]
+    private async Task RunCalibration()
+    {
+        if (ParentWindow is null || _runController is null) return;
+
+        var availableStarts = Session.ModelSystem.GlobalBoundary.Starts.ToList();
+        if (availableStarts.Count == 0)
+        {
+            ShowToast("No starts are defined in this model system.", isError: true, durationMs: 5000);
+            return;
+        }
+
+        var defaultRunName = $"Calibration_{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var runNameDialog = new InputDialog(
+            title: "Run Calibration",
+            prompt: "Enter a name for this calibration run:",
+            defaultText: defaultRunName);
+        await runNameDialog.ShowDialog(ParentWindow);
+        if (runNameDialog.WasCancelled) return;
+        var runName = runNameDialog.InputText?.Trim();
+        if (string.IsNullOrEmpty(runName)) return;
+
+        string startToExecute;
+        if (availableStarts.Count == 1)
+        {
+            startToExecute = availableStarts[0].Name;
+        }
+        else
+        {
+            var startNames = availableStarts.Select(s => s.Name).ToList();
+            var startDialog = new StartPickerDialog(
+                title: "Select Start",
+                prompt: "Select the start to execute:",
+                startNames: startNames,
+                defaultStart: startNames[0]);
+            await startDialog.ShowDialog(ParentWindow);
+            if (startDialog.WasCancelled) return;
+            startToExecute = startDialog.SelectedStartName ?? startNames[0];
+            if (string.IsNullOrEmpty(startToExecute)) return;
+        }
+
+        var project = Session.Project;
+        if (!_runController.SendCalibrationRun(project, Session, User, startToExecute, runName, out _, out var runError))
+        {
+            ShowToast($"Failed to start calibration run: {runError?.Message}", isError: true, durationMs: 6000);
+            return;
+        }
+
+        ShowToast($"Calibration run '{runName}' started.", durationMs: 3000);
         RunStarted?.Invoke();
     }
 
@@ -3695,6 +4041,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.Variables)
             .CollectionChanged -= OnModelSystemVariablesChanged;
+
+        ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.EstimationGroups)
+            .CollectionChanged -= OnEstimationGroupsChanged;
+        ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.CalibrationGroups)
+            .CollectionChanged -= OnCalibrationGroupsChanged;
+
+        foreach (var gvm in EstimationGroups) gvm.Detach();
+        foreach (var gvm in CalibrationGroups) gvm.Detach();
 
         ((System.ComponentModel.INotifyPropertyChanged)Session).PropertyChanged -= OnSessionPropertyChanged;
 

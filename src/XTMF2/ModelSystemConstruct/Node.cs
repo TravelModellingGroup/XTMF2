@@ -211,6 +211,10 @@ namespace XTMF2.ModelSystemConstruct
 
         internal bool Validate(ref string? moduleName, ref string? error)
         {
+            if (IsDisabled)
+            {
+                return true;
+            }
             foreach (var hook in Hooks)
             {
                 // if the 

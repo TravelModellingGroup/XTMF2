@@ -46,6 +46,15 @@ namespace XTMF2.Bus
         /// </summary>
         private readonly XTMFRuntime _runtime;
 
+        /// <summary>The run mode; controls post-execution result collection.</summary>
+        private readonly RunMode _runMode;
+
+        /// <summary>True when this run is executing in estimation mode.</summary>
+        internal bool IsEstimationRun => _runMode == RunMode.Estimation;
+
+        /// <summary>True when this run is executing in calibration mode.</summary>
+        internal bool IsCalibrationRun => _runMode == RunMode.Calibration;
+
         /// <summary>
         /// Set tot true if the model system has finished executing.
         /// </summary>
@@ -62,14 +71,39 @@ namespace XTMF2.Bus
         public string StartToExecute { get; private set; }
 
         /// <summary>
+        /// The fully-constructed model system after a successful execution.
+        /// Set only when <see cref="StartRun"/> returns without error.
+        /// Used by the optimisation loop to read fitness / calibration-target values.
+        /// </summary>
+        internal ModelSystem? ModelSystemAfterRun { get; private set; }
+
+        /// <summary>
+        /// The fitness value collected from <see cref="ModelSystem.EstimationFitnessNode"/>
+        /// after a successful estimation iteration.  Only valid when
+        /// <see cref="_runMode"/> is <see cref="RunMode.Estimation"/>.
+        /// </summary>
+        internal double? FitnessValue { get; private set; }
+
+        /// <summary>
+        /// Per-entry calibration signals collected from each
+        /// <see cref="XTMF2.ModelSystemConstruct.CalibrationEntry.TargetNode"/> after a
+        /// successful calibration iteration.  Only valid when
+        /// <see cref="_runMode"/> is <see cref="RunMode.Calibration"/>.
+        /// Ordered identically to the flat list of enabled calibration parameters.
+        /// </summary>
+        internal IReadOnlyList<double>? CalibrationTargetValues { get; private set; }
+
+        /// <summary>
         /// Creates a Run that is ready to execute.
         /// </summary>
         /// <param name="id">The ID of the run</param>
-        /// <param name="modelSystemAsString">A representation of the model system as a string.</param>
+        /// <param name="modelSystem">The serialised model system as bytes.</param>
         /// <param name="startToExecute">The Start that will be the point in which the model system will be invoked from.</param>
         /// <param name="runtime">The instance of XTMF that will be used.</param>
         /// <param name="cwd">The directory to run the model system in.</param>
-        public Run(string id, byte[] modelSystem, string startToExecute, XTMFRuntime runtime, string cwd)
+        /// <param name="runMode">Controls post-execution result collection (Normal / Estimation / Calibration).</param>
+        public Run(string id, byte[] modelSystem, string startToExecute, XTMFRuntime runtime, string cwd,
+            RunMode runMode = RunMode.Normal)
         {
             ID = id;
             _modelSystemAsData = modelSystem;
@@ -77,6 +111,7 @@ namespace XTMF2.Bus
             HasExecuted = false;
             _runtime = runtime;
             _currentWorkingDirectory = cwd;
+            _runMode = runMode;
         }
 
         /// <summary>
@@ -187,6 +222,9 @@ namespace XTMF2.Bus
         public RunError? StartRun()
         {
             string? error = null, moduleName = null, stackTrace = string.Empty;
+            var runBus = _runtime.RunBus;
+            if (runBus is not null)
+                runBus.CurrentRun = this;
             if (!ValidateModelSystem(ref error))
             {
                 return new RunError(RunErrorType.Validation, $"Failed when validating the model system! {error}", moduleName, stackTrace);
@@ -217,6 +255,9 @@ namespace XTMF2.Bus
                     return new RunError(RunErrorType.Runtime, "Unable to invoking the starting module!", startingMss.Module?.Name ?? "Unknown module", string.Empty);
                 }
                 RunResults.WriteRunCompleted(_currentWorkingDirectory);
+                // Expose the model system for post-execution result collection.
+                ModelSystemAfterRun = _modelSystem;
+                CollectOptimizationResults();
             }
             catch (Exception e)
             {
@@ -233,6 +274,8 @@ namespace XTMF2.Bus
             finally
             {
                 Directory.SetCurrentDirectory(originalDir);
+                if (runBus is not null && ReferenceEquals(runBus.CurrentRun, this))
+                    runBus.CurrentRun = null;
             }
             // success for now
             return null;
@@ -275,6 +318,43 @@ namespace XTMF2.Bus
                 }
             }
             return true;
+        }
+
+        /// <summary>
+        /// After a successful run, collect the fitness value (estimation) or all calibration
+        /// target signals (calibration) from the constructed module instances.
+        /// </summary>
+        private void CollectOptimizationResults()
+        {
+            if (_modelSystem is null) return;
+
+            if (_runMode == RunMode.Estimation)
+            {
+                var fitnessNode = _modelSystem.EstimationFitnessNode;
+                if (fitnessNode?.Module is IFunction<double> fd)
+                    FitnessValue = fd.Invoke();
+                else if (fitnessNode?.Module is IFunction<float> ff)
+                    FitnessValue = (double)ff.Invoke();
+            }
+            else if (_runMode == RunMode.Calibration)
+            {
+                var targets = new List<double>();
+                foreach (var group in _modelSystem.CalibrationGroups)
+                {
+                    foreach (var entry in group.Parameters)
+                    {
+                        if (!entry.IsEnabled || entry.ModelOutputNode is null || entry.TargetOutputNode is null) continue;
+                        double modelVal  = entry.ModelOutputNode.Module  is IFunction<double> fdM  ? fdM.Invoke()
+                                         : entry.ModelOutputNode.Module  is IFunction<float>  ffM  ? (double)ffM.Invoke()
+                                         : 1.0;
+                        double targetVal = entry.TargetOutputNode.Module is IFunction<double> fdT  ? fdT.Invoke()
+                                         : entry.TargetOutputNode.Module is IFunction<float>  ffT  ? (double)ffT.Invoke()
+                                         : 1.0;
+                        targets.Add(modelVal == 0.0 ? 1.0 : targetVal / modelVal);
+                    }
+                }
+                CalibrationTargetValues = targets;
+            }
         }
     }
 }

@@ -25,6 +25,7 @@ using System.ComponentModel;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.ModelSystemConstruct.Parameters;
 using XTMF2.Repository;
+using XTMF2.Bus.Optimization;
 
 namespace XTMF2.Editing
 {
@@ -1845,6 +1846,104 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Applies a set of optimised parameter values (as produced by an estimation or
+        /// calibration run) back to the live model system, wrapped in a single undoable
+        /// batch command so the entire change can be reverted in one step.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="results">
+        ///   Ordered list of (node serialisation index, new value) pairs produced by the run.
+        /// </param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if all updates succeeded; false with <paramref name="error"/> on failure.</returns>
+        public bool ApplyOptimizationResults(User user, IReadOnlyList<(int nodeIndex, double value)> results, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(results);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var nodesByIndex = ModelSystem.NodesByLoadIndex;
+                if (nodesByIndex is null)
+                {
+                    error = new CommandError("The model system has not been loaded from disk; node indices are unavailable.");
+                    return false;
+                }
+                Buffer.BeginAggregateBatch();
+                foreach (var (nodeIndex, value) in results)
+                {
+                    if (!nodesByIndex.TryGetValue(nodeIndex, out var node))
+                        continue;
+                    var previousValue = node.ParameterValue;
+                    var newValue = ParameterExpression.CreateParameter(
+                        value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        node.Type.GetGenericArguments()[0]);
+                    if (!node.SetParameterValue(newValue, out error))
+                    {
+                        Buffer.CommitAggregateBatch();
+                        return false;
+                    }
+                    var capturedPrev = previousValue;
+                    var capturedNew = newValue;
+                    var capturedNode = node;
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (capturedNode.SetParameterValue(capturedPrev!, out var e), e);
+                    }, () =>
+                    {
+                        return (capturedNode.SetParameterValue(capturedNew, out var e), e);
+                    }));
+                }
+                Buffer.CommitAggregateBatch();
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Returns metadata about all enabled optimisation parameters for use in the live
+        /// progress dialog.  Each entry contains the node's serialisation index, its name,
+        /// and its min/max bounds.
+        /// </summary>
+        public IReadOnlyList<(int nodeIndex, string name, double min, double max)> GetOptimizationParameterMeta(Bus.RunMode runMode)
+        {
+            var result = new System.Collections.Generic.List<(int, string, double, double)>();
+            lock (_sessionLock)
+            {
+                var nodesByIndex = ModelSystem.NodesByLoadIndex;
+                if (nodesByIndex is null) return result;
+                var nodeToIndex = nodesByIndex.ToDictionary(kv => kv.Value, kv => kv.Key);
+
+                if (runMode == Bus.RunMode.Estimation)
+                {
+                    foreach (var group in ModelSystem.EstimationGroups)
+                    foreach (var entry in group.Parameters)
+                    {
+                        if (!entry.IsEnabled) continue;
+                        if (nodeToIndex.TryGetValue(entry.Node, out var idx))
+                            result.Add((idx, entry.Node.Name ?? "", entry.Min, entry.Max));
+                    }
+                }
+                else if (runMode == Bus.RunMode.Calibration)
+                {
+                    foreach (var group in ModelSystem.CalibrationGroups)
+                    foreach (var entry in group.Parameters)
+                    {
+                        if (!entry.IsEnabled || entry.ModelOutputNode is null || entry.TargetOutputNode is null) continue;
+                        if (nodeToIndex.TryGetValue(entry.Node, out var idx))
+                            result.Add((idx, entry.Node.Name ?? "", entry.Min, entry.Max));
+                    }
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
         /// Set the value of a parameter to an expression
         /// </summary>
         /// <param name="user">The user issuing the command</param>
@@ -2020,6 +2119,125 @@ namespace XTMF2.Editing
             }
         }
 
+        private IEnumerable<Boundary> EnumerateAllBoundaries()
+        {
+            var stack = new Stack<Boundary>();
+            stack.Push(ModelSystem.GlobalBoundary);
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+                yield return current;
+
+                foreach (var child in current.Boundaries)
+                    stack.Push(child);
+                foreach (var ft in current.FunctionTemplates)
+                    stack.Push(ft.InternalModules);
+            }
+        }
+
+        private bool IsNodeUsedAsVariable(Node node, out string usageDescription)
+        {
+            if (ModelSystem.Variables.Contains(node))
+            {
+                usageDescription = "it is used as a Model System variable";
+                return true;
+            }
+
+            foreach (var boundary in EnumerateAllBoundaries())
+            {
+                foreach (var ft in boundary.FunctionTemplates)
+                {
+                    if (ft.LocalVariables.Contains(node))
+                    {
+                        usageDescription = $"it is used as a local variable in function template '{ft.Name}'";
+                        return true;
+                    }
+                }
+            }
+
+            usageDescription = string.Empty;
+            return false;
+        }
+
+        private static Node ResolveDestinationNode(Node destination)
+            => destination is GhostNode gn ? gn.ReferencedNode : destination;
+
+        private static bool DestinationWouldBeDisabledAfterChanging(Node destination, Node nodeBeingDisabled)
+        {
+            var resolved = ResolveDestinationNode(destination);
+
+            if (ReferenceEquals(resolved, nodeBeingDisabled))
+                return true;
+
+            if (resolved is FunctionInstance fi)
+            {
+                if (ReferenceEquals(fi, nodeBeingDisabled))
+                    return true;
+                if (ReferenceEquals(fi.Template.EntryNode, nodeBeingDisabled))
+                    return true;
+                return fi.IsDisabled || fi.Template.EntryNode?.IsDisabled == true;
+            }
+
+            return resolved.IsDisabled;
+        }
+
+        private bool IsNodeRequiredByEnabledLink(Node node, out string reason)
+        {
+            foreach (var boundary in EnumerateAllBoundaries())
+            {
+                foreach (var link in boundary.Links)
+                {
+                    if (link.IsDisabled || link.Origin.IsDisabled)
+                        continue;
+
+                    if (link is SingleLink sl)
+                    {
+                        bool targetsNode = ReferenceEquals(ResolveDestinationNode(sl.Destination), node)
+                            || (ResolveDestinationNode(sl.Destination) is FunctionInstance fi
+                                && ReferenceEquals(fi.Template.EntryNode, node));
+                        if (!targetsNode)
+                            continue;
+
+                        if (sl.OriginHook.Cardinality == HookCardinality.Single)
+                        {
+                            reason = $"it is required by hook '{sl.OriginHook.Name}' on node '{sl.Origin.Name}'";
+                            return true;
+                        }
+
+                        continue;
+                    }
+
+                    if (link is MultiLink ml && ml.OriginHook.Cardinality == HookCardinality.AtLeastOne)
+                    {
+                        int enabledAfterChange = 0;
+                        bool thisNodeWasReferenced = false;
+
+                        foreach (var dest in ml.Destinations)
+                        {
+                            var resolved = ResolveDestinationNode(dest);
+                            if (ReferenceEquals(resolved, node)
+                                || (resolved is FunctionInstance fi && ReferenceEquals(fi.Template.EntryNode, node)))
+                            {
+                                thisNodeWasReferenced = true;
+                            }
+
+                            if (!DestinationWouldBeDisabledAfterChanging(dest, node))
+                                enabledAfterChange++;
+                        }
+
+                        if (thisNodeWasReferenced && enabledAfterChange == 0)
+                        {
+                            reason = $"it is the last enabled destination of required hook '{ml.OriginHook.Name}' on node '{ml.Origin.Name}'";
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            reason = string.Empty;
+            return false;
+        }
+
         /// <summary>
         /// Set the node to the disabled state.
         /// </summary>
@@ -2040,6 +2258,27 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
+                if (node.IsDisabled == disabled)
+                {
+                    error = null;
+                    return true;
+                }
+
+                if (disabled)
+                {
+                    if (IsNodeUsedAsVariable(node, out var variableUsage))
+                    {
+                        error = new CommandError($"Unable to disable '{node.Name}' because {variableUsage}.");
+                        return false;
+                    }
+
+                    if (IsNodeRequiredByEnabledLink(node, out var requiredReason))
+                    {
+                        error = new CommandError($"Unable to disable '{node.Name}' because {requiredReason}.");
+                        return false;
+                    }
+                }
+
                 error = null;
                 if (node.SetDisabled(disabled, out error))
                 {
@@ -3952,6 +4191,483 @@ namespace XTMF2.Editing
             lock (_sessionLock)
             {
                 return ModelSystemFile.ExportModelSystemFromSession(user, this, exportPath, out error);
+            }
+        }
+
+        // ── Estimation group management ──────────────────────────────────────────
+
+        /// <summary>Creates and adds a new estimation group with the given name.</summary>
+        public bool AddEstimationGroup(User user, string name,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out EstimationGroup? group,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            group = null;
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var newGroup = new EstimationGroup(name);
+                ModelSystem.EstimationGroups.Add(newGroup);
+                Buffer.AddUndo(new Command(
+                    () => { ModelSystem.EstimationGroups.Remove(newGroup); return (true, null); },
+                    () => { ModelSystem.EstimationGroups.Add(newGroup); return (true, null); }));
+                group = newGroup;
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Removes an estimation group (and all its parameters) from the model system.</summary>
+        public bool RemoveEstimationGroup(User user, EstimationGroup group,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                int idx = ModelSystem.EstimationGroups.IndexOf(group);
+                if (idx < 0) { error = new CommandError("The estimation group was not found."); return false; }
+                ModelSystem.EstimationGroups.RemoveAt(idx);
+                Buffer.AddUndo(new Command(
+                    () => { ModelSystem.EstimationGroups.Insert(idx, group); return (true, null); },
+                    () => { ModelSystem.EstimationGroups.Remove(group); return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Renames an estimation group.</summary>
+        public bool RenameEstimationGroup(User user, EstimationGroup group, string newName,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldName = group.Name;
+                group.Name = newName;
+                Buffer.AddUndo(new Command(
+                    () => { group.Name = oldName; return (true, null); },
+                    () => { group.Name = newName; return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Sets (or clears) the single estimation fitness function node for the entire model system.
+        /// <paramref name="fitnessNode"/> must implement
+        /// <c>IFunction&lt;float&gt;</c> or <c>IFunction&lt;double&gt;</c>,
+        /// or be <c>null</c> to clear the selection.
+        /// </summary>
+        public bool SetEstimationFitnessNode(User user, Node? fitnessNode,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldNode = ModelSystem.EstimationFitnessNode;
+                ModelSystem.EstimationFitnessNode = fitnessNode;
+                Buffer.AddUndo(new Command(
+                    () => { ModelSystem.EstimationFitnessNode = oldNode; return (true, null); },
+                    () => { ModelSystem.EstimationFitnessNode = fitnessNode; return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Sets the estimation algorithm configuration for the model system.
+        /// This determines which search algorithm (Nelder-Mead, PSO, GA, etc.) is used
+        /// and its hyperparameters during an estimation run.
+        /// </summary>
+        public bool SetEstimationAlgorithmConfig(User user, EstimationAlgorithmConfig config,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(config);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldConfig = ModelSystem.EstimationAlgorithmConfig;
+                ModelSystem.EstimationAlgorithmConfig = config;
+                Buffer.AddUndo(new Command(
+                    () => { ModelSystem.EstimationAlgorithmConfig = oldConfig; return (true, null); },
+                    () => { ModelSystem.EstimationAlgorithmConfig = config;    return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Sets whether estimation minimises or maximises the fitness function.</summary>
+        public bool SetEstimationObjective(User user, EstimationObjective objective,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldObjective = ModelSystem.EstimationObjective;
+                ModelSystem.EstimationObjective = objective;
+                Buffer.AddUndo(new Command(
+                    () => { ModelSystem.EstimationObjective = oldObjective; return (true, null); },
+                    () => { ModelSystem.EstimationObjective = objective;    return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Enables or disables an estimation group.</summary>
+        public bool SetEstimationGroupEnabled(User user, EstimationGroup group, bool isEnabled,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldValue = group.IsEnabled;
+                group.IsEnabled = isEnabled;
+                Buffer.AddUndo(new Command(
+                    () => { group.IsEnabled = oldValue; return (true, null); },
+                    () => { group.IsEnabled = isEnabled; return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Nominates a node for estimation within <paramref name="group"/>.
+        /// </summary>
+        public bool AddEstimationParameter(User user, EstimationGroup group,
+            Node node, double min, double max, double nullHypothesis,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out EstimationEntry? entry,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            ArgumentNullException.ThrowIfNull(node);
+            entry = null;
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                if (ModelSystem.EstimationGroups.Any(g => g.Parameters.Any(e => e.Node == node)))
+                { error = new CommandError("This node is already nominated for estimation."); return false; }
+                var newEntry = new EstimationEntry(node, min, max, nullHypothesis);
+                group.Parameters.Add(newEntry);
+                Buffer.AddUndo(new Command(
+                    () => { group.Parameters.Remove(newEntry); return (true, null); },
+                    () => { group.Parameters.Add(newEntry); return (true, null); }));
+                entry = newEntry;
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Removes an estimation entry from its group.</summary>
+        public bool RemoveEstimationParameter(User user, EstimationGroup group, EstimationEntry entry,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            ArgumentNullException.ThrowIfNull(entry);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                int idx = group.Parameters.IndexOf(entry);
+                if (idx < 0) { error = new CommandError("The estimation entry was not found in the specified group."); return false; }
+                group.Parameters.RemoveAt(idx);
+                Buffer.AddUndo(new Command(
+                    () => { group.Parameters.Insert(idx, entry); return (true, null); },
+                    () => { group.Parameters.Remove(entry); return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Updates the bounds and null-hypothesis of an existing estimation entry.</summary>
+        public bool UpdateEstimationParameter(User user, EstimationEntry entry,
+            double min, double max, double nullHypothesis, bool isEnabled,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(entry);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldMin = entry.Min; var oldMax = entry.Max;
+                var oldNull = entry.NullHypothesis; var oldEnabled = entry.IsEnabled;
+                entry.Min = min; entry.Max = max; entry.NullHypothesis = nullHypothesis; entry.IsEnabled = isEnabled;
+                Buffer.AddUndo(new Command(
+                    () => { entry.Min = oldMin; entry.Max = oldMax; entry.NullHypothesis = oldNull; entry.IsEnabled = oldEnabled; return (true, null); },
+                    () => { entry.Min = min; entry.Max = max; entry.NullHypothesis = nullHypothesis; entry.IsEnabled = isEnabled; return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        // ── Calibration group management ─────────────────────────────────────────
+
+        /// <summary>Creates and adds a new calibration group with the given name.</summary>
+        public bool AddCalibrationGroup(User user, string name,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out CalibrationGroup? group,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            group = null;
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var newGroup = new CalibrationGroup(name);
+                ModelSystem.CalibrationGroups.Add(newGroup);
+                Buffer.AddUndo(new Command(
+                    () => { ModelSystem.CalibrationGroups.Remove(newGroup); return (true, null); },
+                    () => { ModelSystem.CalibrationGroups.Add(newGroup); return (true, null); }));
+                group = newGroup;
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Removes a calibration group (and all its parameters) from the model system.</summary>
+        public bool RemoveCalibrationGroup(User user, CalibrationGroup group,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                int idx = ModelSystem.CalibrationGroups.IndexOf(group);
+                if (idx < 0) { error = new CommandError("The calibration group was not found."); return false; }
+                ModelSystem.CalibrationGroups.RemoveAt(idx);
+                Buffer.AddUndo(new Command(
+                    () => { ModelSystem.CalibrationGroups.Insert(idx, group); return (true, null); },
+                    () => { ModelSystem.CalibrationGroups.Remove(group); return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Renames a calibration group.</summary>
+        public bool RenameCalibrationGroup(User user, CalibrationGroup group, string newName,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldName = group.Name;
+                group.Name = newName;
+                Buffer.AddUndo(new Command(
+                    () => { group.Name = oldName; return (true, null); },
+                    () => { group.Name = newName; return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Enables or disables a calibration group.</summary>
+        public bool SetCalibrationGroupEnabled(User user, CalibrationGroup group, bool isEnabled,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldValue = group.IsEnabled;
+                group.IsEnabled = isEnabled;
+                Buffer.AddUndo(new Command(
+                    () => { group.IsEnabled = oldValue; return (true, null); },
+                    () => { group.IsEnabled = isEnabled; return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Sets the default algorithm for new calibration entries in <paramref name="group"/>.</summary>
+        public bool SetCalibrationGroupDefaultAlgorithm(User user, CalibrationGroup group,
+            CalibrationAlgorithmBase algorithm,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldValue = group.DefaultAlgorithm;
+                group.DefaultAlgorithm = algorithm;
+                Buffer.AddUndo(new Command(
+                    () => { group.DefaultAlgorithm = oldValue; return (true, null); },
+                    () => { group.DefaultAlgorithm = algorithm; return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Nominates a node for calibration within <paramref name="group"/>.
+        /// </summary>
+        public bool AddCalibrationParameter(User user, CalibrationGroup group,
+            Node node, double min, double max,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out CalibrationEntry? entry,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+            => AddCalibrationParameter(user, group, node, min, max, 1.0, out entry, out error);
+
+        /// <summary>
+        /// Nominates a node for calibration within <paramref name="group"/>.
+        /// </summary>
+        public bool AddCalibrationParameter(User user, CalibrationGroup group,
+            Node node, double min, double max, double stepSize,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out CalibrationEntry? entry,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            ArgumentNullException.ThrowIfNull(node);
+            entry = null;
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                if (ModelSystem.CalibrationGroups.Any(g => g.Parameters.Any(e => e.Node == node)))
+                { error = new CommandError("This node is already nominated for calibration."); return false; }
+                var newEntry = new CalibrationEntry(node, min, max, algorithm: group.DefaultAlgorithm, stepSize: stepSize);
+                group.Parameters.Add(newEntry);
+                Buffer.AddUndo(new Command(
+                    () => { group.Parameters.Remove(newEntry); return (true, null); },
+                    () => { group.Parameters.Add(newEntry); return (true, null); }));
+                entry = newEntry;
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Removes a calibration entry from its group.</summary>
+        public bool RemoveCalibrationParameter(User user, CalibrationGroup group, CalibrationEntry entry,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(group);
+            ArgumentNullException.ThrowIfNull(entry);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                int idx = group.Parameters.IndexOf(entry);
+                if (idx < 0) { error = new CommandError("The calibration entry was not found in the specified group."); return false; }
+                group.Parameters.RemoveAt(idx);
+                Buffer.AddUndo(new Command(
+                    () => { group.Parameters.Insert(idx, entry); return (true, null); },
+                    () => { group.Parameters.Remove(entry); return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Updates the bounds, tolerance, and algorithm of an existing calibration entry.</summary>
+        public bool UpdateCalibrationParameter(User user, CalibrationEntry entry,
+            double min, double max, bool isEnabled, double errorTolerance, CalibrationAlgorithmBase algorithm,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+            => UpdateCalibrationParameter(user, entry, min, max, isEnabled, errorTolerance, entry.StepSize, algorithm, out error);
+
+        /// <summary>Updates the bounds, tolerance, step size, and algorithm of an existing calibration entry.</summary>
+        public bool UpdateCalibrationParameter(User user, CalibrationEntry entry,
+            double min, double max, bool isEnabled, double errorTolerance, double stepSize, CalibrationAlgorithmBase algorithm,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(entry);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldMin = entry.Min; var oldMax = entry.Max;
+                var oldEnabled = entry.IsEnabled;
+                var oldTolerance = entry.ErrorTolerance;
+                var oldStepSize = entry.StepSize;
+                var oldAlgorithm = entry.Algorithm;
+                entry.Min = min; entry.Max = max; entry.IsEnabled = isEnabled;
+                entry.ErrorTolerance = errorTolerance; entry.StepSize = stepSize; entry.Algorithm = algorithm;
+                Buffer.AddUndo(new Command(
+                    () => { entry.Min = oldMin; entry.Max = oldMax; entry.IsEnabled = oldEnabled;
+                            entry.ErrorTolerance = oldTolerance; entry.StepSize = oldStepSize; entry.Algorithm = oldAlgorithm;
+                            return (true, null); },
+                    () => { entry.Min = min; entry.Max = max; entry.IsEnabled = isEnabled;
+                            entry.ErrorTolerance = errorTolerance; entry.StepSize = stepSize; entry.Algorithm = algorithm;
+                            return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Sets (or clears) the model output node for a calibration entry.
+        /// <paramref name="modelOutputNode"/> must implement
+        /// <c>IFunction&lt;float&gt;</c> or <c>IFunction&lt;double&gt;</c>,
+        /// or be <c>null</c> to clear the selection.
+        /// </summary>
+        public bool SetCalibrationEntryModelOutputNode(User user, CalibrationEntry entry, Node? modelOutputNode,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(entry);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldNode = entry.ModelOutputNode;
+                entry.ModelOutputNode = modelOutputNode;
+                Buffer.AddUndo(new Command(
+                    () => { entry.ModelOutputNode = oldNode; return (true, null); },
+                    () => { entry.ModelOutputNode = modelOutputNode; return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Sets (or clears) the target output node for a calibration entry.
+        /// <paramref name="targetOutputNode"/> must implement
+        /// <c>IFunction&lt;float&gt;</c> or <c>IFunction&lt;double&gt;</c>,
+        /// or be <c>null</c> to clear the selection.
+        /// </summary>
+        public bool SetCalibrationEntryTargetOutputNode(User user, CalibrationEntry entry, Node? targetOutputNode,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(entry);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            lock (_sessionLock)
+            {
+                var oldNode = entry.TargetOutputNode;
+                entry.TargetOutputNode = targetOutputNode;
+                Buffer.AddUndo(new Command(
+                    () => { entry.TargetOutputNode = oldNode; return (true, null); },
+                    () => { entry.TargetOutputNode = targetOutputNode; return (true, null); }));
+                error = null;
+                return true;
             }
         }
     }

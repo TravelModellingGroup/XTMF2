@@ -19,6 +19,7 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using XTMF2.GUI.ViewModels;
 
 namespace XTMF2.GUI.Views;
@@ -59,5 +60,16 @@ public partial class RunsView : UserControl
     {
         // Auto-scroll to the bottom when new messages arrive.
         MessageScrollViewer.ScrollToEnd();
+    }
+
+    private void ViewProgressButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm?.SelectedRun is not { IsOptimizationRun: true } run) return;
+        var window = new OptimizationProgressWindow(run);
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        if (owner is not null)
+            window.Show(owner);
+        else
+            window.Show();
     }
 }

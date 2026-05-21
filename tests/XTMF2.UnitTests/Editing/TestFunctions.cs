@@ -20,6 +20,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.Editing;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.UnitTests.Editing
 {
@@ -212,6 +213,49 @@ namespace XTMF2.UnitTests.Editing
                  var functionTemplates = ms.GlobalBoundary.FunctionTemplates;
                  Assert.HasCount(1, functionTemplates, "The function template was not saved!");
              });
+        }
+
+        [TestMethod]
+        public void DisablingLocalVariableIsRejected()
+        {
+            TestHelper.RunInModelSystemContext(nameof(DisablingLocalVariableIsRejected), (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var ms = mSession.ModelSystem;
+                var gb = ms.GlobalBoundary;
+
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, gb, "MyTemplate", out var template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, template.InternalModules, "LocalVar", typeof(BasicParameter<int>), Rectangle.Hidden,
+                    out var localVarNode, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionTemplateVariable(user, template, localVarNode, out error), error?.Message);
+
+                Assert.IsFalse(mSession.SetNodeDisabled(user, localVarNode, true, out error),
+                    "Disabling a local variable should fail.");
+                Assert.IsNotNull(error);
+                Assert.IsFalse(localVarNode.IsDisabled);
+            });
+        }
+
+        [TestMethod]
+        public void FunctionInstanceDisabled_PersistsAcrossSaveLoad()
+        {
+            TestHelper.RunInModelSystemContext(nameof(FunctionInstanceDisabled_PersistsAcrossSaveLoad), (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var ms = mSession.ModelSystem;
+                var gb = ms.GlobalBoundary;
+
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, gb, "MyTemplate", out var template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionInstance(user, gb, template, "MyInstance",
+                    new Rectangle(10f, 10f, 160f, 70f), out var instance, out error), error?.Message);
+
+                Assert.IsTrue(mSession.SetNodeDisabled(user, instance, true, out error), error?.Message);
+                Assert.IsTrue(instance.IsDisabled, "FunctionInstance should be disabled before save.");
+            }, (user, pSession, mSession) =>
+            {
+                var fi = mSession.ModelSystem.GlobalBoundary.FunctionInstances.Single();
+                Assert.IsTrue(fi.IsDisabled, "FunctionInstance disabled state should persist after reload.");
+            });
         }
     }
 }

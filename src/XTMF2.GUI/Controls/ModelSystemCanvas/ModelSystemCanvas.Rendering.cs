@@ -338,21 +338,32 @@ partial class ModelSystemCanvas
             double rw = fi.Width;
             double rh = fi.Height;
             var rect = new Rect(fi.X, fi.Y, rw, rh);
+            bool isDisabled = fi.UnderlyingInstance.IsDisabled;
 
             // ── Border / fill — original teal FI palette ────────────────
-            var border = fi.IsSelected ? (_isLight ? FiSelBorderPenL : FiSelBorderPen) : (_isLight ? FiBorderPenL : FiBorderPen);
-            DrawRectGlow(ctx, rect, FiCornerRadius, fi.IsSelected ? SelectionGlowBrushes : (_isLight ? FiGlowBrushesL : FiGlowBrushes));
-            ctx.DrawRectangle(_isLight ? FiFillL : FiFill, border, rect, FiCornerRadius, FiCornerRadius);
+            var border = fi.IsSelected
+                ? (_isLight ? FiSelBorderPenL : FiSelBorderPen)
+                : isDisabled
+                    ? (_isLight ? DisabledFiBorderPenL : DisabledFiBorderPen)
+                    : (_isLight ? FiBorderPenL : FiBorderPen);
+            DrawRectGlow(ctx, rect, FiCornerRadius,
+                fi.IsSelected
+                    ? SelectionGlowBrushes
+                    : isDisabled
+                        ? (_isLight ? DisabledGlowBrushesL : DisabledGlowBrushes)
+                        : (_isLight ? FiGlowBrushesL : FiGlowBrushes));
+            ctx.DrawRectangle(isDisabled ? (_isLight ? DisabledFiFillL : DisabledFiFill) : (_isLight ? FiFillL : FiFill), border, rect, FiCornerRadius, FiCornerRadius);
 
             // ── Header band ────────────────────────────────────────────────
-            ctx.DrawRectangle(_isLight ? FiHeaderFillL : FiHeaderFill, null, rect, FiCornerRadius, FiCornerRadius);
-            ctx.DrawRectangle(_isLight ? FiFillL : FiFill, null,
+            ctx.DrawRectangle(isDisabled ? (_isLight ? DisabledFiHeaderFillL : DisabledFiHeaderFill) : (_isLight ? FiHeaderFillL : FiHeaderFill), null, rect, FiCornerRadius, FiCornerRadius);
+            ctx.DrawRectangle(isDisabled ? (_isLight ? DisabledFiFillL : DisabledFiFill) : (_isLight ? FiFillL : FiFill), null,
                 new Rect(fi.X, fi.Y + FtHeaderHeight, rw, rh - FtHeaderHeight));
             ctx.DrawRectangle(null, border, rect, FiCornerRadius, FiCornerRadius);
 
             // "⊡ InstanceName" in header
             var labelText = "\u22A1 " + fi.Name;
-            var labelFtText = MakeText(labelText, FtNameFontSize, _isLight ? FiTextBrushL : FiTextBrush);
+            var labelFtText = MakeText(labelText, FtNameFontSize,
+                isDisabled ? (_isLight ? DisabledFiTextBrushL : DisabledFiTextBrush) : (_isLight ? FiTextBrushL : FiTextBrush));
             double lx = fi.X + 8.0;
             double ly = fi.Y + (FtHeaderHeight - labelFtText.Height) / 2.0;
             using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
@@ -361,7 +372,8 @@ partial class ModelSystemCanvas
             // Template subtitle (small, muted) at the bottom of the header
             var subText = MakeText(
                 "[" + fi.TemplateName + "]" + (fi.EntryNodeTypeName.Length > 0 ? " : " + fi.EntryNodeTypeName : ""),
-                HookFontSize, _isLight ? FiSubTextBrushL : FiSubTextBrush);
+                HookFontSize,
+                isDisabled ? (_isLight ? DisabledSubTextBrushL : DisabledSubTextBrush) : (_isLight ? FiSubTextBrushL : FiSubTextBrush));
             double subX = fi.X + rw - subText.Width - 8.0;
             double subY = fi.Y + (FtHeaderHeight - subText.Height) / 2.0;
             using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
@@ -375,9 +387,9 @@ partial class ModelSystemCanvas
                 for (int d = 0; d < 3; d++)
                 {
                     double off = 4.0 + d * 4.0;
-                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
+                    ctx.DrawEllipse(isDisabled ? (_isLight ? DisabledHandleBrushL : DisabledHandleBrush) : (_isLight ? ResizeHandleBrushL : ResizeHandleBrush), null,
                         new Point(gx - off + dotR, gy - dotR), dotR, dotR);
-                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
+                    ctx.DrawEllipse(isDisabled ? (_isLight ? DisabledHandleBrushL : DisabledHandleBrush) : (_isLight ? ResizeHandleBrushL : ResizeHandleBrush), null,
                         new Point(gx - dotR, gy - off + dotR), dotR, dotR);
                 }
             }
@@ -386,7 +398,7 @@ partial class ModelSystemCanvas
                 continue;
 
             // ── FunctionParameter hook rows — same layout logic as Node hook rows ───
-            ctx.DrawLine(_isLight ? HookDividerPenL : HookDividerPen,
+            ctx.DrawLine(isDisabled ? (_isLight ? DisabledDividerPenL : DisabledDividerPen) : (_isLight ? HookDividerPenL : HookDividerPen),
                 new Point(fi.X + 1, fi.Y + FtHeaderHeight),
                 new Point(fi.X + rw - 1, fi.Y + FtHeaderHeight));
 
@@ -407,18 +419,20 @@ partial class ModelSystemCanvas
                 double dotCy   = rowY + HookRowHeight / 2.0;
 
                 // Row tint: amber for inlined param, red wash for unsatisfied (all FP hooks required).
-                if (hasInlinedFi)
+                if (!isDisabled && hasInlinedFi)
                     ctx.DrawRectangle(InlineParamRowBg, null,
                         new Rect(fi.X + 1, rowTopY, rw - 2, HookRowHeight));
-                else if (fpUnsatisfied)
+                else if (!isDisabled && fpUnsatisfied)
                     ctx.DrawRectangle(HookUnsatisfiedRowBg, null,
                         new Rect(fi.X + 1, rowTopY, rw - 2, HookRowHeight));
 
-                ctx.DrawLine(_isLight ? HookDividerPenThinL : HookDividerPenThin,
+                ctx.DrawLine(isDisabled ? (_isLight ? DisabledDividerPenThinL : DisabledDividerPenThin) : (_isLight ? HookDividerPenThinL : HookDividerPenThin),
                     new Point(fi.X, rowY), new Point(fi.X + rw, rowY));
 
                 // Dot on the RIGHT edge — green if satisfied, red if unsatisfied.
-                var dotBrush = fpUnsatisfied
+                var dotBrush = isDisabled
+                    ? (_isLight ? DisabledDotBrushL : DisabledDotBrush)
+                    : fpUnsatisfied
                     ? (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush)
                     : (_isLight ? HookConnectedBrushL   : HookConnectedBrush);
                 ctx.DrawEllipse(dotBrush, null,
@@ -437,7 +451,9 @@ partial class ModelSystemCanvas
                 string hookLabel = hasInlinedFi && inlinedFiParam is not null
                     ? $"{(inlinedFiParam.IsBasicParameter ? "\u2261" : "\u0192")} {fp.Name}: {(string.IsNullOrEmpty(inlinedFiParam.ParameterValueRepresentation) ? "(no value)" : inlinedFiParam.ParameterValueRepresentation)}"
                     : fp.Name ?? string.Empty;
-                IBrush hookTextBrush = fpUnsatisfied
+                IBrush hookTextBrush = isDisabled
+                    ? (_isLight ? DisabledHookTextBrushL : DisabledHookTextBrush)
+                    : fpUnsatisfied
                     ? (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush)
                     : fpConn
                         ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
@@ -603,12 +619,22 @@ partial class ModelSystemCanvas
             if (link.Destination is null) continue;
             if (link.Destination is NodeViewModel destNvm && destNvm.IsInlined) continue;
 
-            var brush = link.IsSelected ? LinkSelBrush : (_isLight ? LinkBrushL : LinkBrush);
-            var pen = link.IsSelected ? LinkSelStrokePen : (_isLight ? LinkStrokePenL : LinkStrokePen);
+            bool isDisabled = link.UnderlyingLink.IsDisabled;
+            var brush = link.IsSelected
+                ? LinkSelBrush
+                : isDisabled
+                    ? (_isLight ? LinkDisabledBrushL : LinkDisabledBrush)
+                    : (_isLight ? LinkBrushL : LinkBrush);
+            var pen = link.IsSelected
+                ? isDisabled ? LinkSelDisabledStrokePen : LinkSelStrokePen
+                : isDisabled
+                    ? (_isLight ? LinkDisabledStrokePenL : LinkDisabledStrokePen)
+                    : (_isLight ? LinkStrokePenL : LinkStrokePen);
 
             // Neon glow: two wider transparent halos drawn beneath the main link line.
             Pen glowOuter, glowInner;
             if (link.IsSelected) { glowOuter = LinkSelGlowOuterPen; glowInner = LinkSelGlowInnerPen; }
+            else if (isDisabled) { glowOuter = _isLight ? LinkDisabledGlowOuterPenL : LinkDisabledGlowOuterPen; glowInner = _isLight ? LinkDisabledGlowInnerPenL : LinkDisabledGlowInnerPen; }
             else if (_isLight)   { glowOuter = LinkGlowOuterPenL;   glowInner = LinkGlowInnerPenL; }
             else                 { glowOuter = LinkGlowOuterPen;     glowInner = LinkGlowInnerPen; }
 
@@ -834,16 +860,26 @@ partial class ModelSystemCanvas
             double rw = NodeRenderWidth(node);
             double rh = NodeRenderHeight(node);
             var rect = new Rect(node.X, node.Y, rw, rh);
+            bool isDisabled = node.UnderlyingNode.IsDisabled;
 
             // Determine whether this node is the designated entry point of the current template.
             bool isEntryNode = _vm.IsInsideFunctionTemplate
                 && _vm.CurrentFunctionTemplate?.UnderlyingTemplate.EntryNode == node.UnderlyingNode;
 
-            var border = node.IsSelected ? NodeSelPen : (_isLight ? NodeBorderPenL : NodeBorderPen);
+            var border = node.IsSelected
+                ? NodeSelPen
+                : isDisabled
+                    ? (_isLight ? DisabledNodeBorderPenL : DisabledNodeBorderPen)
+                    : (_isLight ? NodeBorderPenL : NodeBorderPen);
 
             // Node background + border
-            DrawRectGlow(ctx, rect, NodeCornerRadius, node.IsSelected ? SelectionGlowBrushes : (_isLight ? NodeGlowBrushesL : NodeGlowBrushes));
-            ctx.DrawRectangle(_isLight ? NodeFillL : NodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
+            DrawRectGlow(ctx, rect, NodeCornerRadius,
+                node.IsSelected
+                    ? SelectionGlowBrushes
+                    : isDisabled
+                        ? (_isLight ? DisabledGlowBrushesL : DisabledGlowBrushes)
+                        : (_isLight ? NodeGlowBrushesL : NodeGlowBrushes));
+            ctx.DrawRectangle(isDisabled ? (_isLight ? DisabledNodeFillL : DisabledNodeFill) : (_isLight ? NodeFillL : NodeFill), border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // ── Entry-node gold ring (drawn over the normal border) ───────────
             if (isEntryNode)
@@ -866,7 +902,8 @@ partial class ModelSystemCanvas
             string nodeDisplayName = node.IsParameterNode
                 ? (node.IsBasicParameter ? "≡ " : "ƒ ") + node.Name
                 : node.Name;
-            var ft = MakeText(nodeDisplayName, NodeFontSize, _isLight ? NodeTextBrushL : NodeTextBrush);
+            var ft = MakeText(nodeDisplayName, NodeFontSize,
+                isDisabled ? (_isLight ? DisabledNodeTextBrushL : DisabledNodeTextBrush) : (_isLight ? NodeTextBrushL : NodeTextBrush));
             double tx = node.X + (rw - ft.Width) / 2;
             double ty = node.Y + (NodeHeaderHeight - ft.Height) / 2;
             ctx.DrawText(ft, new Point(tx, ty));
@@ -893,9 +930,9 @@ partial class ModelSystemCanvas
                 for (int d = 0; d < 3; d++)
                 {
                     double offset = 4.0 + d * 4.0;
-                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
+                    ctx.DrawEllipse(isDisabled ? (_isLight ? DisabledHandleBrushL : DisabledHandleBrush) : (_isLight ? ResizeHandleBrushL : ResizeHandleBrush), null,
                         new Point(bx - offset + dotR, by - dotR), dotR, dotR);
-                    ctx.DrawEllipse(_isLight ? ResizeHandleBrushL : ResizeHandleBrush, null,
+                    ctx.DrawEllipse(isDisabled ? (_isLight ? DisabledHandleBrushL : DisabledHandleBrush) : (_isLight ? ResizeHandleBrushL : ResizeHandleBrush), null,
                         new Point(bx - dotR, by - offset + dotR), dotR, dotR);
                 }
             }
@@ -906,10 +943,13 @@ partial class ModelSystemCanvas
             if (!_vm.ShowAllHooks && node.UnderlyingNode.Hooks.Count > 0)
             {
                 var iconRect = HookToggleIconRect(node, rw);
-                var iconBg = node.ShowHooks ? (_isLight ? HookToggleActiveBgL : HookToggleActiveBg) : (_isLight ? HookToggleBgL : HookToggleBg);
+                var iconBg = isDisabled
+                    ? (_isLight ? DisabledToggleBgL : DisabledToggleBg)
+                    : node.ShowHooks ? (_isLight ? HookToggleActiveBgL : HookToggleActiveBg) : (_isLight ? HookToggleBgL : HookToggleBg);
                 ctx.DrawRectangle(iconBg, null, iconRect, 3.0, 3.0);
                 var glyph = node.ShowHooks ? "\u25BE" : "\u25B8";  // ▾ or ▸
-                var iconFt = MakeText(glyph, HookFontSize + 1.0, _isLight ? HookToggleTextL : HookToggleText);
+                var iconFt = MakeText(glyph, HookFontSize + 1.0,
+                    isDisabled ? (_isLight ? DisabledToggleTextL : DisabledToggleText) : (_isLight ? HookToggleTextL : HookToggleText));
                 var glyphX = iconRect.X + (iconRect.Width - iconFt.Width) / 2.0;
                 var glyphY = iconRect.Y + (iconRect.Height - iconFt.Height) / 2.0;
                 ctx.DrawText(iconFt, new Point(glyphX, glyphY));
@@ -922,7 +962,8 @@ partial class ModelSystemCanvas
             {
                 var minRect = InlineMinimizeButtonRect(node);
                 ctx.DrawRectangle(_isLight ? MinimizeBtnBgL : MinimizeBtnBg, null, minRect, 3.0, 3.0);
-                var minFt = MakeText("\u229f", HookFontSize, _isLight ? MinimizeBtnTextL : MinimizeBtnText);  // ⊟ minus-in-box
+                var minFt = MakeText("\u229f", HookFontSize,
+                    isDisabled ? (_isLight ? DisabledToggleTextL : DisabledToggleText) : (_isLight ? MinimizeBtnTextL : MinimizeBtnText));  // ⊟ minus-in-box
                 var minGlX = minRect.X + (minRect.Width - minFt.Width) / 2.0;
                 var minGlY = minRect.Y + (minRect.Height - minFt.Height) / 2.0;
                 ctx.DrawText(minFt, new Point(minGlX, minGlY));
@@ -936,7 +977,7 @@ partial class ModelSystemCanvas
                 continue;
 
             // Divider line separating header from content rows
-            var dividerPen = _isLight ? HookDividerPenL : HookDividerPen;
+            var dividerPen = isDisabled ? (_isLight ? DisabledDividerPenL : DisabledDividerPen) : (_isLight ? HookDividerPenL : HookDividerPen);
             ctx.DrawLine(dividerPen,
                 new Point(node.X + 1, headerBottom),
                 new Point(node.X + rw - 1, headerBottom));
@@ -950,7 +991,7 @@ partial class ModelSystemCanvas
                 double rowMidY = node.Y + NodeHeaderHeight + HookRowHeight / 2.0;
 
                 // Subtle tinted background for readability
-                ctx.DrawRectangle(_isLight ? ParamValueBgL : ParamValueBg, null,
+                ctx.DrawRectangle(isDisabled ? (_isLight ? DisabledDividerBrushL : DisabledDividerBrush) : (_isLight ? ParamValueBgL : ParamValueBg), null,
                     new Rect(node.X + 1, node.Y + NodeHeaderHeight, rw - 2, HookRowHeight));
 
                 const double textPad = 6.0;
@@ -959,7 +1000,8 @@ partial class ModelSystemCanvas
                 if (node != _editingParamNode)
                 {
                     var display = string.IsNullOrEmpty(paramValue) ? "(no value)" : paramValue;
-                    var paramFt = MakeText(display, HookFontSize, _isLight ? ParamValueTextBrushL : ParamValueTextBrush);
+                    var paramFt = MakeText(display, HookFontSize,
+                        isDisabled ? (_isLight ? DisabledHookTextBrushL : DisabledHookTextBrush) : (_isLight ? ParamValueTextBrushL : ParamValueTextBrush));
                     double maxW = rw - textPad * 2;
                     double paramTy = rowMidY - paramFt.Height / 2.0;
                     using (ctx.PushClip(new Rect(node.X + textPad, paramTy, Math.Max(0, maxW), paramFt.Height + 1)))
@@ -972,7 +1014,7 @@ partial class ModelSystemCanvas
                 if (hasHooks)
                 {
                     double sepY = node.Y + NodeHeaderHeight + HookRowHeight;
-                    ctx.DrawLine(new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
+                    ctx.DrawLine(isDisabled ? (_isLight ? DisabledDividerPenThinL : DisabledDividerPenThin) : new Pen(_isLight ? HookDividerBrushL : HookDividerBrush, 0.5),
                         new Point(node.X + 1, sepY),
                         new Point(node.X + rw - 1, sepY));
                 }
@@ -999,12 +1041,12 @@ partial class ModelSystemCanvas
                 double rowTopY = node.Y + NodeHeaderHeight + (rowOffset + i) * HookRowHeight;
 
                 // Tinted background: red for unsatisfied required hooks, amber for inlined params.
-                if (unsatisfied)
+                if (!isDisabled && unsatisfied)
                 {
                     ctx.DrawRectangle(HookUnsatisfiedRowBg, null,
                         new Rect(node.X + 1, rowTopY, rw - 2, HookRowHeight));
                 }
-                else if (hasInlined)
+                else if (!isDisabled && hasInlined)
                 {
                     ctx.DrawRectangle(InlineParamRowBg, null,
                         new Rect(node.X + 1, rowTopY, rw - 2, HookRowHeight));
@@ -1012,7 +1054,8 @@ partial class ModelSystemCanvas
 
                 // Dot on the right edge (the link anchor).
                 // Red for unsatisfied required hooks, green for connected/inlined, grey otherwise.
-                var dotBrush = unsatisfied ? (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush)
+                var dotBrush = isDisabled ? (_isLight ? DisabledDotBrushL : DisabledDotBrush)
+                             : unsatisfied ? (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush)
                              : (conn || hasInlined) ? (_isLight ? HookConnectedBrushL : HookConnectedBrush)
                              : (_isLight ? HookUnconnectedBrushL : HookUnconnectedBrush);
                 ctx.DrawEllipse(dotBrush, null,
@@ -1036,7 +1079,8 @@ partial class ModelSystemCanvas
                 string hookLabel = hasInlined && inlinedParam is not null
                     ? $"{(inlinedParam.IsBasicParameter ? "≡" : "ƒ")} {hook.Name}: {(string.IsNullOrEmpty(inlinedParam.ParameterValueRepresentation) ? "(no value)" : inlinedParam.ParameterValueRepresentation)}"
                     : hook.Name;
-                IBrush hookTextBrush = unsatisfied ? (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush)
+                IBrush hookTextBrush = isDisabled ? (_isLight ? DisabledHookTextBrushL : DisabledHookTextBrush)
+                                     : unsatisfied ? (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush)
                                      : hasInlined && inlinedParam is { IsScriptedParameter: true }
                                          ? (_isLight ? ScriptParamAccentBrushL : ScriptParamAccentBrush)
                                      : hasInlined ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
@@ -1052,7 +1096,7 @@ partial class ModelSystemCanvas
                 if (i < hooks.Count - 1)
                 {
                     double sepY = node.Y + NodeHeaderHeight + (rowOffset + i + 1) * HookRowHeight;
-                    ctx.DrawLine(_isLight ? HookDividerPenThinL : HookDividerPenThin,
+                    ctx.DrawLine(isDisabled ? (_isLight ? DisabledDividerPenThinL : DisabledDividerPenThin) : (_isLight ? HookDividerPenThinL : HookDividerPenThin),
                         new Point(node.X + 1, sepY),
                         new Point(node.X + rw - 1, sepY));
                 }

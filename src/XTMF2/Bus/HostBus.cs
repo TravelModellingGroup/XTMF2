@@ -94,7 +94,9 @@ public sealed class HostBus : IDisposable
         ClientErrorValidatingModelSystem = 5,
         ProgressUpdate = 6,
         SendModelSystemResult = 7,
-        ClientReportedStatus = 8
+        ClientReportedStatus = 8,
+        ClientOptimizationResults = 9,
+        ClientIterationProgress = 10
     }
 
     /// <summary>
@@ -129,6 +131,38 @@ public sealed class HostBus : IDisposable
     /// This event is triggered when the client has sent an update for the run's status message.
     /// </summary>
     public event ClientStatusUpdate? ClientReportedStatus;
+
+    /// <summary>
+    /// Carries the final parameter values produced by a completed estimation or calibration run.
+    /// </summary>
+    /// <param name="sender">The object reporting the event.</param>
+    /// <param name="runID">The ID of the run that produced the results.</param>
+    /// <param name="results">Ordered list of (node serialisation index, best value) pairs.</param>
+    public delegate void OptimizationResultsAvailable(
+        object sender, string runID, IReadOnlyList<(int nodeIndex, double value)> results);
+
+    /// <summary>
+    /// Fired immediately before <see cref="ClientFinishedModelSystem"/> when an estimation or
+    /// calibration run completes, carrying the final optimised parameter values.
+    /// </summary>
+    public event OptimizationResultsAvailable? ClientOptimizationResultsAvailable;
+
+    /// <summary>
+    /// Carries per-iteration progress data from a running estimation or calibration loop.
+    /// </summary>
+    /// <param name="sender">The object reporting the event.</param>
+    /// <param name="runID">The ID of the run sending the update.</param>
+    /// <param name="iteration">The current iteration number (1-based).</param>
+    /// <param name="fitness">The best fitness value seen so far.</param>
+    /// <param name="values">Ordered list of (node serialisation index, current value) pairs.</param>
+    public delegate void IterationProgressUpdate(
+        object sender, string runID, int iteration, double fitness,
+        IReadOnlyList<(int nodeIndex, double value)> values);
+
+    /// <summary>
+    /// Fired after each optimisation iteration with the parameter values that were tested.
+    /// </summary>
+    public event IterationProgressUpdate? ClientIterationProgressAvailable;
 
     private static void IgnoreWarnings(Action toRun)
     {
@@ -172,16 +206,54 @@ public sealed class HostBus : IDisposable
                             _Exit = true;
                             break;
                         case In.ClientErrorValidatingModelSystem:
-                            IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), String.Empty));
+                            {
+                                var runId = reader.ReadString();
+                                var errMsg = reader.ReadString();
+                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, String.Empty));
+                            }
                             break;
                         case In.ClientFinishedModelSystem:
-                            IgnoreWarnings(() => ClientFinishedModelSystem?.Invoke(this, reader.ReadString()));
+                            {
+                                var runId = reader.ReadString();
+                                IgnoreWarnings(() => ClientFinishedModelSystem?.Invoke(this, runId));
+                            }
                             break;
                         case In.ClientErrorWhenRunningModelSystem:
-                            IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, reader.ReadString(), reader.ReadString(), reader.ReadString()));
+                            {
+                                var runId = reader.ReadString();
+                                var errMsg = reader.ReadString();
+                                var stack = reader.ReadString();
+                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, stack));
+                            }
                             break;
                         case In.ClientReportedStatus:
-                            IgnoreWarnings(() => ClientReportedStatus?.Invoke(this, reader.ReadString(), reader.ReadString()));
+                            {
+                                var runId = reader.ReadString();
+                                var status = reader.ReadString();
+                                IgnoreWarnings(() => ClientReportedStatus?.Invoke(this, runId, status));
+                            }
+                            break;
+                        case In.ClientOptimizationResults:
+                            {
+                                var runId = reader.ReadString();
+                                int count = reader.ReadInt32();
+                                var results = new (int nodeIndex, double value)[count];
+                                for (int i = 0; i < count; i++)
+                                    results[i] = (reader.ReadInt32(), reader.ReadDouble());
+                                IgnoreWarnings(() => ClientOptimizationResultsAvailable?.Invoke(this, runId, results));
+                            }
+                            break;
+                        case In.ClientIterationProgress:
+                            {
+                                var runId = reader.ReadString();
+                                int iteration = reader.ReadInt32();
+                                double fitness = reader.ReadDouble();
+                                int count = reader.ReadInt32();
+                                var values = new (int nodeIndex, double value)[count];
+                                for (int i = 0; i < count; i++)
+                                    values[i] = (reader.ReadInt32(), reader.ReadDouble());
+                                IgnoreWarnings(() => ClientIterationProgressAvailable?.Invoke(this, runId, iteration, fitness, values));
+                            }
                             break;
                         default:
                             throw new Exception($"Unsupported command: {Enum.GetName<In>(command)}");
@@ -231,6 +303,21 @@ public sealed class HostBus : IDisposable
     /// <returns>True if the model system was sent</returns>
     public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, 
         [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
+        => RunModelSystem(modelSystem, cwd, startToExecute, RunMode.Normal, out id, out error);
+
+    /// <summary>
+    /// Send a run command to the client with an explicit run mode (Normal, Estimation or Calibration).
+    /// </summary>
+    /// <param name="modelSystem">The model system to execute.</param>
+    /// <param name="cwd">The directory to run in.</param>
+    /// <param name="startToExecute">The starting point for the model system run.</param>
+    /// <param name="runMode">Whether to run normally or as an estimation/calibration job.</param>
+    /// <param name="id">The unique ID of the run, null if the command fails.</param>
+    /// <param name="error">An error message if there is an issue creating the model system.</param>
+    /// <returns>True if the model system was sent</returns>
+    public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute,
+        RunMode runMode,
+        [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
     {
         id = null;
         lock (_outLock)
@@ -250,6 +337,7 @@ public sealed class HostBus : IDisposable
                 writer.Write(id);
                 writer.Write(cwd);
                 writer.Write(startToExecute);
+                writer.Write((int)runMode);
                 writer.Write(memStream.Length);
                 memStream.WriteTo(_HostStream);
                 return true;

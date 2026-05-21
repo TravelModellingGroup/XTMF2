@@ -1,0 +1,77 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:XTMF2.GUI.Views"
+        xmlns:opt="clr-namespace:XTMF2.Bus.Optimization;assembly=XTMF2"
+        x:Class="XTMF2.GUI.Views.EstimationAlgorithmConfigDialog"
+        x:DataType="local:EstimationAlgorithmConfigDialog"
+        x:CompileBindings="True"
+        Classes="neon-dialog"
+        Title="{Binding DialogTitle}"
+        Width="440"
+        SizeToContent="Height"
+        MinHeight="160"
+        MaxHeight="600"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="{Binding DialogTitle}"
+                       FontSize="16" FontWeight="Bold"
+                       Foreground="{DynamicResource DlgAccent}"/>
+            <TextBlock Text="{Binding AlgorithmDescription}"
+                       FontSize="11" Opacity="0.6"
+                       TextWrapping="Wrap" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- ── Algorithm parameters (dynamic) ─────────────────────────────── -->
+        <ItemsControl Grid.Row="1" ItemsSource="{Binding Parameters}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Spacing="10"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="opt:AlgorithmParameterDescriptor">
+                    <Grid ColumnDefinitions="180,*">
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Hint}"
+                                       FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding Value, Mode=TwoWay}"
+                                 FontSize="12" VerticalAlignment="Center"/>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,20,0,0">
+            <Button Content="OK"
+                    Classes="dlg-primary"
+                    Click="OK_Click"
+                    IsDefault="True"
+                    Padding="20,8"
+                    MinWidth="80"/>
+            <Button Content="Cancel"
+                    Click="Cancel_Click"
+                    IsCancel="True"
+                    Padding="20,8"
+                    MinWidth="80"/>
+        </StackPanel>
+
+    </Grid>
+</Window>

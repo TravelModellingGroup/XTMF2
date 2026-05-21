@@ -30,17 +30,9 @@
                     BorderBrush="{DynamicResource DlgListBorder}"
                     BorderThickness="1"
                     CornerRadius="4">
-                <Grid RowDefinitions="Auto,*">
+                <Grid RowDefinitions="*,Auto">
 
-                    <!-- Clear Completed button above the list -->
-                    <Button Grid.Row="0"
-                            Content="Clear Completed"
-                            Command="{Binding ClearCompletedRunsCommand}"
-                            Classes="dlg-primary"
-                            HorizontalAlignment="Stretch"
-                            Margin="4,4,4,2"/>
-
-                    <ListBox Grid.Row="1"
+                    <ListBox Grid.Row="0"
                              ItemsSource="{Binding Runs}"
                              SelectedItem="{Binding SelectedRun, Mode=TwoWay}">
                         <ListBox.ItemTemplate>
@@ -73,6 +65,13 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <Button Grid.Row="1"
+                            Content="Clear Completed"
+                            Command="{Binding ClearCompletedRunsCommand}"
+                            Classes="dlg-primary"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,4,0,2"/>
                 </Grid>
             </Border>
 
@@ -105,6 +104,22 @@
                                        Opacity="0.7"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
+                        <!-- Apply optimization results button — only visible after estimation/calibration runs -->
+                        <Button Content="⬇  Apply Optimization Results to Model System"
+                                Command="{Binding SelectedRun.ApplyOptimizationResultsCommand}"
+                                IsVisible="{Binding SelectedRun.HasOptimizationResults}"
+                                Classes="dlg-primary"
+                                Margin="0,6,0,0"
+                                HorizontalAlignment="Left"
+                                ToolTip.Tip="Write the estimated/calibrated parameter values back into the model system. Undoable."/>
+                        <!-- View per-iteration progress — only visible for estimation/calibration runs -->
+                        <Button Content="📊  View Parameter Progress"
+                                IsVisible="{Binding SelectedRun.IsOptimizationRun}"
+                                Classes="dlg-primary"
+                                Margin="0,4,0,0"
+                                HorizontalAlignment="Left"
+                                Click="ViewProgressButton_Click"
+                                ToolTip.Tip="Open the live optimisation progress window for this run."/>
                     </StackPanel>
 
                     <!-- Message log -->

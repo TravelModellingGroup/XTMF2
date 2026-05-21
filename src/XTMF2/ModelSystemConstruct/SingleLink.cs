@@ -63,6 +63,12 @@ namespace XTMF2.ModelSystemConstruct
 
         internal override bool Construct(ref string? error)
         {
+            if (Origin.IsDisabled)
+            {
+                error = null;
+                return true;
+            }
+
             // FunctionParameter destinations are resolved transitively at runtime by
             // FunctionInstance.ConstructRuntimeLink(); no static wiring is needed here.
             if (Destination is FunctionParameter)
@@ -102,23 +108,26 @@ namespace XTMF2.ModelSystemConstruct
             // and the actual IModule to wire (per-instance clone for FunctionInstances).
             Node effectiveDest;
             IModule? destModule;
+            bool destinationIsDisabled;
             if (resolved is FunctionInstance fi)
             {
                 effectiveDest = fi.Template.EntryNode ?? resolved;
                 destModule    = fi.Template.EntryNode is not null
                     ? fi.GetRuntimeModule(fi.Template.EntryNode)
                     : null;
+                destinationIsDisabled = fi.IsDisabled || effectiveDest.IsDisabled;
             }
             else
             {
                 effectiveDest = resolved;
                 destModule    = resolved.Module;
+                destinationIsDisabled = effectiveDest.IsDisabled;
             }
 
             // if not optional
             if (OriginHook!.Cardinality == HookCardinality.Single)
             {
-                if (effectiveDest.IsDisabled)
+                if (destinationIsDisabled)
                 {
                     error = "A link destined for a disabled module was not optional.";
                     return false;
@@ -129,7 +138,7 @@ namespace XTMF2.ModelSystemConstruct
                     return false;
                 }
             }
-            if (!IsDisabled && destModule is not null)
+            if (!IsDisabled && !destinationIsDisabled && destModule is not null)
             {
                 OriginHook.Install(Origin!.Module!, destModule, 0);
             }

@@ -84,6 +84,7 @@ public static class Strings
     public static string ModelSystems_UserFormat => Get(nameof(ModelSystems_UserFormat));
     public static string ModelSystems_NewModelSystem => Get(nameof(ModelSystems_NewModelSystem));
     public static string ModelSystems_Import => Get(nameof(ModelSystems_Import));
+    public static string ModelSystems_OpenProjectDirectory => Get(nameof(ModelSystems_OpenProjectDirectory));
     public static string ModelSystems_ImportTitle => Get(nameof(ModelSystems_ImportTitle));
     public static string ModelSystems_ImportNamePrompt => Get(nameof(ModelSystems_ImportNamePrompt));
     public static string ModelSystems_ImportError => Get(nameof(ModelSystems_ImportError));
@@ -92,6 +93,8 @@ public static class Strings
     public static string ModelSystems_ExportError => Get(nameof(ModelSystems_ExportError));
     public static string ModelSystems_Open => Get(nameof(ModelSystems_Open));
     public static string ModelSystems_OpenFailedTitle => Get(nameof(ModelSystems_OpenFailedTitle));
+    public static string ModelSystems_OpenProjectDirectoryFailedTitle => Get(nameof(ModelSystems_OpenProjectDirectoryFailedTitle));
+    public static string ModelSystems_OpenProjectDirectoryFailedMessage => Get(nameof(ModelSystems_OpenProjectDirectoryFailedMessage));
     public static string ModelSystems_Rename => Get(nameof(ModelSystems_Rename));
     public static string ModelSystems_Delete => Get(nameof(ModelSystems_Delete));
     public static string ModelSystems_UnknownProject => Get(nameof(ModelSystems_UnknownProject));

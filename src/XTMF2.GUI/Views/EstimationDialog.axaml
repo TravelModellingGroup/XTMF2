@@ -1,0 +1,222 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
+        xmlns:local="clr-namespace:XTMF2.GUI.Views"
+    xmlns:controls="clr-namespace:XTMF2.GUI.Controls"
+        xmlns:xtmf2="clr-namespace:XTMF2.ModelSystemConstruct;assembly=XTMF2"
+        xmlns:opt="clr-namespace:XTMF2.Bus.Optimization;assembly=XTMF2"
+        x:Class="XTMF2.GUI.Views.EstimationDialog"
+        x:DataType="local:EstimationDialog"
+        x:CompileBindings="True"
+        Classes="neon-dialog"
+        Title="Estimation Parameters"
+        Width="920"
+        Height="640"
+        MinWidth="540"
+        MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBox.invalid-number">
+            <Setter Property="Background" Value="#33FF3030"/>
+            <Setter Property="BorderBrush" Value="#CC4444"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+
+        <!-- ── Header ─────────────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="Estimation Parameters"
+                       FontSize="18" FontWeight="Bold"
+                       Foreground="{DynamicResource DlgAccent}"/>
+            <TextBlock Text="Organise parameters into groups. A single fitness function node (IFunction&lt;float&gt; or IFunction&lt;double&gt;) is shared across all groups."
+                       FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+            <!-- Fitness node (model-system level) -->
+            <Grid ColumnDefinitions="150,320,Auto,*" Margin="0,8,0,0">
+                <TextBlock Grid.Column="0" Text="Fitness Function Node:"
+                           VerticalAlignment="Center" FontSize="12" Margin="0,0,8,0"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding FunctionNodes}"
+                          SelectedItem="{Binding SelectedFitnessNode, Mode=TwoWay}"
+                          PlaceholderText="(none)"
+                          FontSize="12"
+                          HorizontalAlignment="Left"
+                          Width="320">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="xtmf2:Node">
+                            <TextBlock Text="{Binding Name}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Grid.Column="2" Content="Clear"
+                        Click="ClearFitnessNode_Click" Margin="4,0,0,0" Padding="10,5"/>
+            </Grid>
+            <!-- Algorithm + Objective row -->
+            <Grid ColumnDefinitions="150,320,Auto,*,Auto,180" Margin="0,8,0,0">
+                <!-- Algorithm -->
+                <TextBlock Grid.Column="0" Text="Search Algorithm:"
+                           VerticalAlignment="Center" FontSize="12" Margin="0,0,8,0"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{x:Static local:EstimationDialog.AvailableAlgorithms}"
+                          SelectedItem="{Binding SelectedAlgorithmConfig, Mode=TwoWay}"
+                          FontSize="12"
+                          HorizontalAlignment="Left"
+                          Width="320"/>
+                <Button Grid.Column="2" Content="Configure…"
+                        Click="ConfigureAlgorithm_Click"
+                        Margin="6,0,0,0" Padding="10,5" FontSize="12"
+                        ToolTip.Tip="Edit hyperparameters for the selected algorithm"/>
+                <!-- Objective -->
+                <TextBlock Grid.Column="4" Text="Objective:"
+                           VerticalAlignment="Center" FontSize="12" Margin="0,0,8,0"/>
+                <ComboBox Grid.Column="5"
+                          ItemsSource="{x:Static local:EstimationDialog.AvailableObjectives}"
+                          SelectedItem="{Binding SelectedObjective, Mode=TwoWay}"
+                          FontSize="12"
+                          HorizontalAlignment="Right"
+                          Width="180"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- ── Body: groups (left) + group details (right) ────────────────── -->
+        <Grid Grid.Row="1" ColumnDefinitions="210,8,*">
+
+            <!-- ── Left: group list ───────────────────────────────────────── -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*,Auto">
+                <TextBlock Grid.Row="0"
+                           Text="Groups" FontSize="11" FontWeight="SemiBold"
+                           Opacity="0.5" LetterSpacing="0.8" Margin="0,0,0,4"/>
+                <controls:SearchBox Grid.Row="1"
+                                    Text="{Binding GroupSearchText, Mode=TwoWay}"
+                                    Watermark="Search groups..."
+                                    Margin="0,0,0,6"/>
+                <Border Grid.Row="2" Classes="dlg-list" ClipToBounds="True">
+                    <ListBox x:Name="GroupListBox"
+                             ItemsSource="{Binding FilteredGroupVms}"
+                             SelectedItem="{Binding SelectedGroup, Mode=TwoWay}"
+                             Background="Transparent"
+                             KeyDown="GroupList_KeyDown">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:EstimationGroupViewModel">
+                                <Grid ColumnDefinitions="Auto,*,Auto" Margin="2,3">
+                                    <Grid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Rename"
+                                                      Tag="{Binding}"
+                                                      Click="RenameGroup_Click"/>
+                                        </ContextMenu>
+                                    </Grid.ContextMenu>
+                                    <CheckBox Grid.Column="0"
+                                              IsChecked="{Binding IsEnabled}"
+                                              VerticalAlignment="Center"
+                                              ToolTip.Tip="Enable this group"
+                                              IsCheckedChanged="GroupEnabled_Changed"
+                                              Margin="0,0,6,0"/>
+                                    <Panel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}"
+                                                   IsVisible="{Binding !IsEditing}"
+                                                   FontWeight="SemiBold" FontSize="12"/>
+                                        <TextBox Text="{Binding EditName, Mode=TwoWay}"
+                                                 IsVisible="{Binding IsEditing}"
+                                                 KeyDown="GroupRenameBox_KeyDown"
+                                                 LostFocus="GroupRenameBox_LostFocus"
+                                                 FontSize="12" Padding="2,1"
+                                                 VerticalAlignment="Center"/>
+                                    </Panel>
+                                    <Button Grid.Column="2" Classes="dlg-danger"
+                                            ToolTip.Tip="Remove group"
+                                            Click="RemoveGroup_Click" Tag="{Binding}"
+                                            Padding="4,2" Margin="4,0,0,0">
+                                        <TextBlock Text="✕" FontSize="10"/>
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+                <Button Content="+ Add Group" Grid.Row="3" HorizontalAlignment="Stretch" Click="AddGroup_Click" Padding="10,5"/>
+            </Grid>
+
+            <!-- ── Right: group details ───────────────────────────────────── -->
+            <Grid Grid.Column="2" RowDefinitions="Auto,Auto,Auto,*" IsEnabled="{Binding HasSelectedGroup}">
+
+                <TextBlock Grid.Row="0"
+                           Text="Targets" FontSize="11" FontWeight="SemiBold"
+                           Opacity="0.5" LetterSpacing="0.8" Margin="0,0,0,4"/>
+
+                <controls:SearchBox Grid.Row="1"
+                                    Text="{Binding TargetSearchText, Mode=TwoWay}"
+                                    Watermark="Search targets..."
+                                    Margin="0,0,0,8"/>
+
+                <!-- Parameters list -->
+                <Grid Grid.Row="2" ColumnDefinitions="24,*,90,90,90,36"
+                      Margin="6,0,6,2">
+                    <TextBlock Grid.Column="1" Text="Parameter"     FontSize="10" FontWeight="SemiBold" Opacity="0.5" LetterSpacing="0.8"/>
+                    <TextBlock Grid.Column="2" Text="Min"           FontSize="10" FontWeight="SemiBold" Opacity="0.5" HorizontalAlignment="Center"/>
+                    <TextBlock Grid.Column="3" Text="Max"           FontSize="10" FontWeight="SemiBold" Opacity="0.5" HorizontalAlignment="Center"/>
+                    <TextBlock Grid.Column="4" Text="Null Hypothesis" FontSize="10" FontWeight="SemiBold" Opacity="0.5" HorizontalAlignment="Center"/>
+                </Grid>
+
+                <Border Grid.Row="3" Classes="dlg-list" ClipToBounds="True">
+                    <ListBox ItemsSource="{Binding FilteredGroupEntries}"
+                             Background="Transparent">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:EstimationEntryViewModel">
+                                <Grid ColumnDefinitions="24,*,90,90,90,36" Margin="2,3">
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                              VerticalAlignment="Center"
+                                              ToolTip.Tip="Include in estimation run"
+                                              IsCheckedChanged="EntryEnabled_Changed"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding NodeName}"
+                                               VerticalAlignment="Center"
+                                               FontSize="12" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Go To Node"
+                                                          Tag="{Binding Entry.Node}"
+                                                          Click="GoToNode_Click"/>
+                                            </ContextMenu>
+                                        </TextBlock.ContextMenu>
+                                    </TextBlock>
+                                    <TextBox Grid.Column="2" Text="{Binding EditMin, Mode=TwoWay}"
+                                             FontSize="11" LostFocus="EntryTextBox_LostFocus"
+                                             KeyDown="EntryTextBox_KeyDown"
+                                             TextChanged="EntryNumericBox_TextChanged"
+                                             HorizontalContentAlignment="Center" Padding="2,2"/>
+                                    <TextBox Grid.Column="3" Text="{Binding EditMax, Mode=TwoWay}"
+                                             FontSize="11" LostFocus="EntryTextBox_LostFocus"
+                                             KeyDown="EntryTextBox_KeyDown"
+                                             TextChanged="EntryNumericBox_TextChanged"
+                                             HorizontalContentAlignment="Center" Padding="2,2"/>
+                                    <TextBox Grid.Column="4" Text="{Binding EditNullHypothesis, Mode=TwoWay}"
+                                             FontSize="11" LostFocus="EntryTextBox_LostFocus"
+                                             KeyDown="EntryTextBox_KeyDown"
+                                             TextChanged="EntryNumericBox_TextChanged"
+                                             HorizontalContentAlignment="Center" Padding="2,2"/>
+                                    <Button Grid.Column="5" Classes="dlg-danger"
+                                            ToolTip.Tip="Remove from estimation"
+                                            Click="RemoveEntry_Click" Tag="{Binding}">
+                                        <TextBlock Text="✕" FontSize="11"/>
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+            </Grid>
+        </Grid>
+
+        <!-- ── Footer ─────────────────────────────────────────────────────── -->
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource DlgSep}" BorderThickness="0,1,0,0"
+                Margin="0,8,0,0" Padding="0,8,0,0">
+            <Button Content="Close" HorizontalAlignment="Right"
+                    Padding="24,8" IsCancel="True" Click="Close_Click"/>
+        </Border>
+
+    </Grid>
+</Window>

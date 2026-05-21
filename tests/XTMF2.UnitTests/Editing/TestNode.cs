@@ -17,8 +17,6 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System.IO;
-using System.Threading;
 using XTMF2.UnitTests.Modules;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
@@ -567,47 +565,43 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
-        public void DisabledNodeRunValidationFailure()
+        public void DisablingRequiredNodeIsRejected()
         {
-            TestHelper.RunInModelSystemContext("DisabledNodeRunValidationFailure", (user, pSession, msSession) =>
+            TestHelper.RunInModelSystemContext("DisablingRequiredNodeIsRejected", (user, pSession, msSession) =>
             {
-                CommandError error2 = null;
+                CommandError error = null;
                 var ms = msSession.ModelSystem;
-                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden, out Start start, out error2), error2?.Message);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignoreMSS, out error2), error2?.Message);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), Rectangle.Hidden, out var spm, out error2), error2?.Message);
-                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), Rectangle.Hidden, out var basicParameter, out error2), error2?.Message);
-                Assert.IsTrue(msSession.SetNodeDisabled(user, basicParameter, true, out error2), error2?.Message);
-                Assert.IsTrue(msSession.SetParameterValue(user, basicParameter, "Hello World Parameter", out error2), error2?.Message);
-                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMSS, out var ignoreLink1, out error2), error2?.Message);
-                Assert.IsTrue(msSession.AddLink(user, ignoreMSS, ignoreMSS.Hooks[0], spm, out var ignoreLink2, out error2), error2?.Message);
-                Assert.IsTrue(msSession.AddLink(user, spm, spm.Hooks[0], basicParameter, out var ignoreLink3, out error2), error2?.Message);
-                TestHelper.CreateRunClient(true, (runBus) =>
-                {
-                    CommandError error = null;
-                    string errorString = null;
-                    bool success = false;
-                    using (SemaphoreSlim sim = new SemaphoreSlim(0))
-                    {
-                        runBus.ClientFinishedModelSystem += (sender, e) =>
-                        {
-                            success = true;
-                            sim.Release();
-                        };
-                        runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
-                        {
-                            errorString = e + "\r\n" + stack;
-                            sim.Release();
-                        };
-                        Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "Start", out var id, out error), error?.Message);
-                        // give the models system some time to complete
-                        if (!sim.Wait(2000))
-                        {
-                            Assert.Fail("The model system failed to execute in time!");
-                        }
-                        Assert.IsFalse(success, "The model system finished running instead of having a validation error!");
-                    }
-                });
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden, out Start start, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "AnIgnore", typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignoreMss, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SPM", typeof(SimpleParameterModule), Rectangle.Hidden, out var spm, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyParameter", typeof(BasicParameter<string>), Rectangle.Hidden, out var basicParameter, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], ignoreMss, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, ignoreMss, ignoreMss.Hooks[0], spm, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, spm, spm.Hooks[0], basicParameter, out _, out error), error?.Message);
+
+                Assert.IsFalse(msSession.SetNodeDisabled(user, basicParameter, true, out error),
+                    "Disabling a required node should fail immediately.");
+                Assert.IsNotNull(error);
+                Assert.IsFalse(basicParameter.IsDisabled);
+            });
+        }
+
+        [TestMethod]
+        public void DisablingModelSystemVariableIsRejected()
+        {
+            TestHelper.RunInModelSystemContext("DisablingModelSystemVariableIsRejected", (user, pSession, msSession) =>
+            {
+                CommandError error = null;
+                var ms = msSession.ModelSystem;
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "MyVar", typeof(BasicParameter<int>), Rectangle.Hidden,
+                    out var variableNode, out error), error?.Message);
+                Assert.IsTrue(msSession.AddVariable(user, variableNode, out error), error?.Message);
+
+                Assert.IsFalse(msSession.SetNodeDisabled(user, variableNode, true, out error),
+                    "Disabling a model-system variable should fail.");
+                Assert.IsNotNull(error);
+                Assert.IsFalse(variableNode.IsDisabled);
             });
         }
 

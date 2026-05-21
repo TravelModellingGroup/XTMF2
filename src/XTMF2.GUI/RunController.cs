@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
@@ -51,6 +52,18 @@ public class RunController : IDisposable
     /// The hostbus that this controller uses to communicate with the client. This is used to send commands to the client and receive status updates from the client.
     /// </summary>
     private HostBus _hostBus;
+
+    /// <summary>
+    /// Maps run IDs to the model system session and the user that submitted the run,
+    /// so that optimization results can be forwarded to the correct session.
+    /// </summary>
+    private readonly Dictionary<string, (ModelSystemSession Session, User User)> _sessionsByRunId = new();
+
+    /// <summary>
+    /// Fires when an estimation or calibration run completes and has results ready to be
+    /// optionally applied back to the model system.
+    /// </summary>
+    public event Action<string, ModelSystemSession, IReadOnlyList<(int nodeIndex, double value)>>? OptimizationResultsAvailable;
 
     /// <summary>
     /// If running in debug mode, the RunServerBus with be run within the same process as the GUI to make debugging easier.
@@ -94,6 +107,8 @@ public class RunController : IDisposable
         hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
         hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
         hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
+        hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
+        hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
         // Start the client processing in a separate thread to avoid blocking the GUI
         Task.Factory.StartNew(
             () =>
@@ -138,6 +153,8 @@ public class RunController : IDisposable
             hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
             hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
             hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
+            hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
+            hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
             return true;
         }
         catch (Exception ex)
@@ -163,9 +180,29 @@ public class RunController : IDisposable
         RunsViewModel.NotifyStatus(runID, status);
     }
 
+    private void OnClientIterationProgressAvailable(
+        object sender, string runID, int iteration, double fitness,
+        IReadOnlyList<(int nodeIndex, double value)> values)
+    {
+        RunsViewModel.NotifyIterationProgress(runID, iteration, fitness, values);
+    }
+
+    private void OnClientOptimizationResultsAvailable(
+        object sender, string runID, IReadOnlyList<(int nodeIndex, double value)> results)
+    {
+        (ModelSystemSession Session, User User) entry;
+        lock (_sessionsByRunId)
+        {
+            if (!_sessionsByRunId.TryGetValue(runID, out entry)) return;
+        }
+        RunsViewModel.NotifyOptimizationResults(runID, entry.Session, entry.User, results);
+        OptimizationResultsAvailable?.Invoke(runID, entry.Session, results);
+    }
+
     /// <summary>
     /// Sends a run command to the model system.
     /// </summary>
+    /// <param name="user">The user submitting the run.</param>
     /// <param name="session">The model system session.</param>
     /// <param name="startToExecute">The command to start execution.</param>
     /// <param name="id">The unique ID of the run, null if the command fails.</param>
@@ -174,8 +211,46 @@ public class RunController : IDisposable
     public bool SendRun(
         Project projectSession,
         ModelSystemSession msSession,
+        User user,
         string startToExecute,
         string runName,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Normal, out id, out error);
+
+    /// <summary>
+    /// Sends an estimation run (Nelder-Mead loop) to the client process.
+    /// </summary>
+    public bool SendEstimationRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Estimation, out id, out error);
+
+    /// <summary>
+    /// Sends a calibration run (proportional-update loop) to the client process.
+    /// </summary>
+    public bool SendCalibrationRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Calibration, out id, out error);
+
+    private bool SendRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        RunMode runMode,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
     {
@@ -187,11 +262,22 @@ public class RunController : IDisposable
             return false;
         }
         var runDirectory = Path.Combine(projectDirectory, "runs", runName);
-        if (!_hostBus.RunModelSystem(msSession, runDirectory, startToExecute, out id, out error))
+        if (!_hostBus.RunModelSystem(msSession, runDirectory, startToExecute, runMode, out id, out error))
         {
             return false;
         }
-        RunsViewModel.AddRun(id, runName);
+        lock (_sessionsByRunId)
+        {
+            _sessionsByRunId[id] = (msSession, user);
+        }
+        var vm = RunsViewModel.AddRun(id, runName);
+        if (runMode != RunMode.Normal)
+        {
+            // Extract parameter metadata so the progress dialog can show names/bounds.
+            var meta = msSession.GetOptimizationParameterMeta(runMode);
+            var runId = id;
+            vm.SetRunMode(runMode, meta, () => _hostBus.CancelModelRun(runId, out _));
+        }
         return true;
     }
 

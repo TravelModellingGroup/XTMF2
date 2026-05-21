@@ -186,6 +186,9 @@ This action cannot be undone.</value>
   <data name="ModelSystems_Import" xml:space="preserve">
     <value>Import Model System</value>
   </data>
+  <data name="ModelSystems_OpenProjectDirectory" xml:space="preserve">
+    <value>Open Project Folder</value>
+  </data>
   <data name="ModelSystems_ImportTitle" xml:space="preserve">
     <value>Import Model System</value>
   </data>
@@ -215,6 +218,14 @@ This action cannot be undone.</value>
   </data>
   <data name="ModelSystems_OpenFailedTitle" xml:space="preserve">
     <value>Failed to Open Model System</value>
+  </data>
+  <data name="ModelSystems_OpenProjectDirectoryFailedTitle" xml:space="preserve">
+    <value>Failed to Open Project Folder</value>
+  </data>
+  <data name="ModelSystems_OpenProjectDirectoryFailedMessage" xml:space="preserve">
+    <value>Could not open the project folder in the file explorer.
+
+Path: {0}</value>
   </data>
   <data name="ModelSystems_Rename" xml:space="preserve">
     <value>Rename</value>
