@@ -154,55 +154,31 @@ public partial class App : Application
     /// <summary>
     /// Change the application theme
     /// </summary>
-    /// <param name="themeName">The theme to apply (Dark, Light, ForestGreen, RubyRed, SapphireBlue)</param>
+    /// <param name="themeName">The theme to apply (Dark or Light)</param>
     public void ChangeTheme(string themeName)
     {
-        switch (themeName)
-        {
-            case "Dark":
-                RequestedThemeVariant = ThemeVariant.Dark;
-                break;
-            case "Light":
-            case "ForestGreen":
-            case "RubyRed":
-            case "SapphireBlue":
-                // Colored themes use Light as the base
-                RequestedThemeVariant = ThemeVariant.Light;
-                break;
-            default:
-                RequestedThemeVariant = ThemeVariant.Dark;
-                break;
-        }
+        ApplyTheme(themeName);
         
         // Save theme preference
-        SaveThemePreference(themeName);
+        SaveThemePreference(NormalizeThemeName(themeName));
     }
 
     private void LoadThemePreference()
     {
         // Load theme from settings
-        var savedTheme = Properties.Settings.Default.Theme ?? "Dark";
+        var savedTheme = NormalizeThemeName(Properties.Settings.Default.Theme);
         ApplyTheme(savedTheme);
     }
 
     private void ApplyTheme(string themeName)
     {
-        switch (themeName)
-        {
-            case "Dark":
-                RequestedThemeVariant = ThemeVariant.Dark;
-                break;
-            case "Light":
-            case "ForestGreen":
-            case "RubyRed":
-            case "SapphireBlue":
-                RequestedThemeVariant = ThemeVariant.Light;
-                break;
-            default:
-                RequestedThemeVariant = ThemeVariant.Dark;
-                break;
-        }
+        RequestedThemeVariant = NormalizeThemeName(themeName) == "Light"
+            ? ThemeVariant.Light
+            : ThemeVariant.Dark;
     }
+
+    public static string NormalizeThemeName(string? themeName)
+        => themeName == "Light" ? "Light" : "Dark";
 
     /// <summary>
     /// Apply a theme without saving (for preview purposes)
@@ -214,7 +190,7 @@ public partial class App : Application
 
     private void SaveThemePreference(string themeName)
     {
-        Properties.Settings.Default.Theme = themeName;
+        Properties.Settings.Default.Theme = NormalizeThemeName(themeName);
         Properties.Settings.Default.Save();
     }
 }

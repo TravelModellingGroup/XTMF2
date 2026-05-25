@@ -3,59 +3,48 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:res="clr-namespace:XTMF2.GUI.Resources"
-        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="360"
         x:Class="XTMF2.GUI.Views.SettingsWindow"
         x:CompileBindings="True"
+        Classes="neon-dialog"
         Title="{res:Localize Settings_Title}"
         Width="600"
-        Height="450"
+        Height="360"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
         KeyUp="Window_KeyUp"
         >
-    
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-        
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
             <TextBlock Text="{res:Localize Settings_Title}"
-                       FontSize="24"
-                       FontWeight="Bold"/>
+                       FontSize="18"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource DlgAccent}"/>
             <TextBlock Text="{res:Localize Settings_Subtitle}"
-                       FontSize="12"
-                       Opacity="0.7"
+                       FontSize="11"
+                       Opacity="0.6"
+                       TextWrapping="Wrap"
                        Margin="0,5,0,0"/>
         </StackPanel>
         
         <!-- Settings Content -->
-        <ScrollViewer Grid.Row="1" Margin="0,0,0,20">
-            <StackPanel Spacing="20">
+        <ScrollViewer Grid.Row="1" Margin="0,0,0,16">
+            <StackPanel Spacing="16">
                 
                 <!-- General Section -->
-                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                <Border BorderBrush="{DynamicResource DlgListBorder}"
                         BorderThickness="1"
-                        CornerRadius="4"
+                        CornerRadius="6"
                         Padding="15">
                     <StackPanel Spacing="12">
                         <TextBlock Text="{res:Localize Settings_General}"
                                    FontSize="16"
                                    FontWeight="SemiBold"
+                                   Foreground="{DynamicResource DlgAccent}"
                                    Margin="0,0,0,5"/>
-                        
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="{res:Localize Settings_DefaultUser}"
-                                       FontWeight="SemiBold"/>
-                            <TextBox x:Name="DefaultUserTextBox"
-                                     Watermark="{res:Localize Settings_DefaultUserWatermark}"
-                                     Width="300"
-                                     HorizontalAlignment="Left"/>
-                        </StackPanel>
-                        
+
                         <StackPanel Spacing="8">
                             <TextBlock Text="{res:Localize Settings_Theme}"
                                        FontWeight="SemiBold"/>
@@ -65,9 +54,6 @@
                                       SelectionChanged="ThemeComboBox_SelectionChanged">
                                 <ComboBoxItem Content="{res:Localize Settings_ThemeDark}" Tag="Dark"/>
                                 <ComboBoxItem Content="{res:Localize Settings_ThemeLight}" Tag="Light"/>
-                                <ComboBoxItem Content="{res:Localize Settings_ThemeForestGreen}" Tag="ForestGreen"/>
-                                <ComboBoxItem Content="{res:Localize Settings_ThemeRubyRed}" Tag="RubyRed"/>
-                                <ComboBoxItem Content="{res:Localize Settings_ThemeSapphireBlue}" Tag="SapphireBlue"/>
                             </ComboBox>
                         </StackPanel>
                         
@@ -87,23 +73,17 @@
                 </Border>
                 
                 <!-- Runtime Section -->
-                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                <Border BorderBrush="{DynamicResource DlgListBorder}"
                         BorderThickness="1"
-                        CornerRadius="4"
+                        CornerRadius="6"
                         Padding="15">
                     <StackPanel Spacing="12">
                         <TextBlock Text="{res:Localize Settings_Runtime}"
                                    FontSize="16"
                                    FontWeight="SemiBold"
+                                   Foreground="{DynamicResource DlgAccent}"
                                    Margin="0,0,0,5"/>
                         
-                        <CheckBox Content="{res:Localize Settings_VerboseLogging}"
-                                  x:Name="VerboseLoggingCheckBox"/>
-                        
-                        <CheckBox Content="{res:Localize Settings_AutoSave}"
-                                  x:Name="AutoSaveCheckBox"
-                                  IsChecked="True"/>
-
                         <CheckBox Content="{res:Localize Settings_PlaySystemSounds}"
                                   x:Name="PlaySystemSoundsCheckBox"/>
                     </StackPanel>
@@ -113,21 +93,23 @@
         </ScrollViewer>
         
         <!-- Footer Buttons -->
-        <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Spacing="10">
-            <Button Content="{res:Localize Dialog_OK}"
-                    Click="Save_Click"
-                    Padding="20,8"
-                    Width="100"/>
+        <Border Grid.Row="2"
+            BorderBrush="{DynamicResource DlgSep}"
+            BorderThickness="0,1,0,0"
+            Margin="0,8,0,0"
+            Padding="0,8,0,0">
+            <StackPanel Orientation="Horizontal"
+                HorizontalAlignment="Right"
+                Spacing="10">
+            <Button Classes="dlg-primary"
+                Content="{res:Localize Dialog_OK}"
+                Click="Save_Click"
+                Width="100"/>
             <Button Content="{res:Localize Dialog_Cancel}"
-                    Click="Cancel_Click"
-                    Padding="20,8"
-                    Width="100"/>
-            
-        </StackPanel>
-        
+                Click="Cancel_Click"
+                Width="100"/>
+            </StackPanel>
+        </Border>
+
     </Grid>
-    
 </Window>

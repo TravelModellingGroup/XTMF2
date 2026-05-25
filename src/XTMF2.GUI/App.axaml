@@ -114,27 +114,6 @@
                 </ResourceDictionary>
 
             </ResourceDictionary.ThemeDictionaries>
-
-            <!-- Forest Green Theme Colors -->
-            <ResourceDictionary x:Key="ForestGreen">
-                <Color x:Key="AccentColor">#2D5016</Color>
-                <Color x:Key="AccentColorLight">#4A7C2C</Color>
-                <Color x:Key="AccentColorDark">#1A3009</Color>
-            </ResourceDictionary>
-            
-            <!-- Ruby Red Theme Colors -->
-            <ResourceDictionary x:Key="RubyRed">
-                <Color x:Key="AccentColor">#9B111E</Color>
-                <Color x:Key="AccentColorLight">#C41E3A</Color>
-                <Color x:Key="AccentColorDark">#6B0C15</Color>
-            </ResourceDictionary>
-            
-            <!-- Sapphire Blue Theme Colors -->
-            <ResourceDictionary x:Key="SapphireBlue">
-                <Color x:Key="AccentColor">#0F52BA</Color>
-                <Color x:Key="AccentColorLight">#4169E1</Color>
-                <Color x:Key="AccentColorDark">#0A3A82</Color>
-            </ResourceDictionary>
         </ResourceDictionary>
     </Application.Resources>
     
