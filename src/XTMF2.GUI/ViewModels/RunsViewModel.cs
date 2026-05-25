@@ -17,11 +17,13 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using XTMF2.Editing;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -103,6 +105,34 @@ public sealed partial class RunsViewModel : ObservableObject
         var vm = FindRun(runId);
         if (vm is null) return;
         Dispatcher.UIThread.Post(() => vm.AppendStatus(status));
+    }
+
+    /// <summary>
+    /// Stores optimization results on the run entry so the user can apply them.
+    /// Safe to call from any thread.
+    /// </summary>
+    internal void NotifyOptimizationResults(
+        string runId,
+        ModelSystemSession session,
+        User user,
+        IReadOnlyList<(int nodeIndex, double value)> results)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.SetOptimizationResults(session, user, results));
+    }
+
+    /// <summary>
+    /// Forwards per-iteration progress to the corresponding run view model.
+    /// Safe to call from any thread.
+    /// </summary>
+    internal void NotifyIterationProgress(
+        string runId, int iteration, double fitness,
+        IReadOnlyList<(int nodeIndex, double value)> values)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.UpdateIterationProgress(iteration, fitness, values));
     }
 
     private RunViewModel? FindRun(string runId)

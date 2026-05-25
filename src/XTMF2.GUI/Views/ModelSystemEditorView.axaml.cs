@@ -281,4 +281,52 @@ public partial class ModelSystemEditorView : UserControl
             _variablesDialog.Activate();
         }
     }
+
+    private EstimationDialog? _estimationDialog;
+
+    private void OnShowEstimationClick(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+
+        if (_estimationDialog is null || !_estimationDialog.IsVisible)
+        {
+            _estimationDialog = new EstimationDialog(_vm);
+
+            var owner = TopLevel.GetTopLevel(this) as Window;
+            if (owner is not null)
+                _estimationDialog.ShowDialog(owner);
+            else
+                _estimationDialog.Show();
+
+            _estimationDialog.Closed += (_, _) => _estimationDialog = null;
+        }
+        else
+        {
+            _estimationDialog.Activate();
+        }
+    }
+
+    private CalibrationDialog? _calibrationDialog;
+
+    private void OnShowCalibrationClick(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+
+        if (_calibrationDialog is null || !_calibrationDialog.IsVisible)
+        {
+            _calibrationDialog = new CalibrationDialog(_vm);
+
+            var owner = TopLevel.GetTopLevel(this) as Window;
+            if (owner is not null)
+                _calibrationDialog.ShowDialog(owner);
+            else
+                _calibrationDialog.Show();
+
+            _calibrationDialog.Closed += (_, _) => _calibrationDialog = null;
+        }
+        else
+        {
+            _calibrationDialog.Activate();
+        }
+    }
 }

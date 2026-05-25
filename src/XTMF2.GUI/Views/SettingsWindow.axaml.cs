@@ -39,7 +39,7 @@ public partial class SettingsWindow : Window
     private void LoadSettings()
     {
         // Load theme preference
-        _currentTheme = Properties.Settings.Default.Theme ?? "Dark";
+        _currentTheme = App.NormalizeThemeName(Properties.Settings.Default.Theme);
         
         // Set the selected theme in the combo box
         var themeItem = ThemeComboBox.Items
@@ -77,7 +77,7 @@ public partial class SettingsWindow : Window
             {
                 // Apply theme immediately for preview
                 app.ChangeTheme(themeName);
-                _currentTheme = themeName;
+                _currentTheme = App.NormalizeThemeName(themeName);
             }
         }
     }
@@ -107,7 +107,7 @@ public partial class SettingsWindow : Window
         // Restore the original theme if user cancels
         if (Application.Current is App app)
         {
-            var savedTheme = Properties.Settings.Default.Theme ?? "Dark";
+            var savedTheme = App.NormalizeThemeName(Properties.Settings.Default.Theme);
             
             if (_currentTheme != null && savedTheme != _currentTheme)
             {

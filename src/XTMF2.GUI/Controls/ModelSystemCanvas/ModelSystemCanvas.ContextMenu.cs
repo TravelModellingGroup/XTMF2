@@ -228,6 +228,22 @@ partial class ModelSystemCanvas
             var routingItem = new MenuItem { Header = routingHeader };
             routingItem.Click += (_, _) => vm.ToggleLinkOrthogonal(capturedRoutingLink.UnderlyingLink);
             menu.Items.Add(routingItem);
+
+            bool nextDisabled = !link.UnderlyingLink.IsDisabled;
+            var toggleDisableItem = new MenuItem
+            {
+                Header = nextDisabled ? "Disable Link" : "Enable Link"
+            };
+            toggleDisableItem.Click += (_, _) =>
+            {
+                if (!vm.Session.SetLinkDisabled(vm.User, link.UnderlyingLink, nextDisabled, out var err))
+                {
+                    vm.ShowToast(err?.Message ?? "Unable to change link disabled state.",
+                        isError: true, durationMs: 6000);
+                }
+                InvalidateVisual();
+            };
+            menu.Items.Add(toggleDisableItem);
             menu.Items.Add(new Separator());
         }
 
@@ -251,6 +267,27 @@ partial class ModelSystemCanvas
                 vm.SelectLinkCommand.Execute(link);
             _ = vm.DeleteSelectedCommand.ExecuteAsync(null);
         };
+
+        // ── Enable/Disable regular nodes ─────────────────────────────────
+        if (element is NodeViewModel disableNodeVm)
+        {
+            bool nextDisabled = !disableNodeVm.UnderlyingNode.IsDisabled;
+            var disableNodeItem = new MenuItem
+            {
+                Header = nextDisabled ? "Disable Node" : "Enable Node"
+            };
+            disableNodeItem.Click += (_, _) =>
+            {
+                if (!vm.Session.SetNodeDisabled(vm.User, disableNodeVm.UnderlyingNode, nextDisabled, out var err))
+                {
+                    vm.ShowToast(err?.Message ?? "Unable to change node disabled state.",
+                        isError: true, durationMs: 6000);
+                }
+                InvalidateVisual();
+            };
+            menu.Items.Add(disableNodeItem);
+            menu.Items.Add(new Separator());
+        }
 
         // ── Variable list management + inline option ────────────────────
         if (element is NodeViewModel paramNode && paramNode.IsParameterNode)
@@ -327,6 +364,41 @@ partial class ModelSystemCanvas
                 };
                 menu.Items.Add(varItem);
                 menu.Items.Add(new Separator());
+
+                // ── Estimation / Calibration (float or double BasicParameter only) ──
+                if (paramNode.IsNumericBasicParameter)
+                {
+                    bool alreadyEst = vm.IsNodeInEstimation(paramNode);
+                    var estHeader = alreadyEst
+                        ? "Remove from Estimation Parameters"
+                        : "Add to Estimation Parameters";
+                    var capturedEstNode = paramNode;
+                    var estItem = new MenuItem { Header = estHeader };
+                    estItem.Click += (_, _) =>
+                    {
+                        if (vm.IsNodeInEstimation(capturedEstNode))
+                            _ = vm.RemoveNodeFromEstimationAsync(capturedEstNode);
+                        else
+                            _ = vm.AddNodeToEstimationAsync(capturedEstNode);
+                    };
+                    menu.Items.Add(estItem);
+
+                    bool alreadyCal = vm.IsNodeInCalibration(paramNode);
+                    var calHeader = alreadyCal
+                        ? "Remove from Calibration Parameters"
+                        : "Add to Calibration Parameters";
+                    var capturedCalNode = paramNode;
+                    var calItem = new MenuItem { Header = calHeader };
+                    calItem.Click += (_, _) =>
+                    {
+                        if (vm.IsNodeInCalibration(capturedCalNode))
+                            _ = vm.RemoveNodeFromCalibrationAsync(capturedCalNode);
+                        else
+                            _ = vm.AddNodeToCalibrationAsync(capturedCalNode);
+                    };
+                    menu.Items.Add(calItem);
+                    menu.Items.Add(new Separator());
+                }
             }
         }
 
@@ -490,10 +562,26 @@ partial class ModelSystemCanvas
                 InvalidateAndMeasure();
             };
 
+            bool nextDisabled = !capturedFi.UnderlyingInstance.IsDisabled;
+            var disableFiItem = new MenuItem
+            {
+                Header = nextDisabled ? "Disable Function Instance" : "Enable Function Instance"
+            };
+            disableFiItem.Click += (_, _) =>
+            {
+                if (!vm.Session.SetNodeDisabled(vm.User, capturedFi.UnderlyingInstance, nextDisabled, out var err))
+                {
+                    vm.ShowToast(err?.Message ?? "Unable to change function instance disabled state.",
+                        isError: true, durationMs: 6000);
+                }
+                InvalidateVisual();
+            };
+
             menu.Items.Add(new Separator());
             menu.Items.Add(openTemplateItem);
             menu.Items.Add(renameItem);
             menu.Items.Add(moveFiItem);
+            menu.Items.Add(disableFiItem);
         }
 
         // ── "Add Function Parameter" — when we're inside a function template ─────

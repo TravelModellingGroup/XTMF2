@@ -174,6 +174,9 @@ Esta acción no se puede deshacer.</value>
   <data name="ModelSystems_Import" xml:space="preserve">
     <value>Importar sistema de modelos</value>
   </data>
+  <data name="ModelSystems_OpenProjectDirectory" xml:space="preserve">
+    <value>Abrir carpeta del proyecto</value>
+  </data>
   <data name="ModelSystems_ImportTitle" xml:space="preserve">
     <value>Importar sistema de modelos</value>
   </data>
@@ -197,6 +200,14 @@ Esta acción no se puede deshacer.</value>
   </data>
   <data name="ModelSystems_OpenFailedTitle" xml:space="preserve">
     <value>Error al abrir el sistema de modelos</value>
+  </data>
+  <data name="ModelSystems_OpenProjectDirectoryFailedTitle" xml:space="preserve">
+    <value>Error al abrir la carpeta del proyecto</value>
+  </data>
+  <data name="ModelSystems_OpenProjectDirectoryFailedMessage" xml:space="preserve">
+    <value>No se pudo abrir la carpeta del proyecto en el explorador de archivos.
+
+Ruta: {0}</value>
   </data>
   <data name="ModelSystems_Rename" xml:space="preserve">
     <value>Renombrar</value>

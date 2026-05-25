@@ -104,13 +104,21 @@ partial class ModelSystemCanvas
         _inlineEnumEditor.IsVisible = false;
         _inlineEditor.Text = node.ParameterValueRepresentation;
 
+            bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+
         // For scripted parameters the text is rendered by Render() with syntax colours;
         // make the TextBox itself transparent so the coloured tokens show through.
         if (node.IsScriptedParameter)
         {
             _inlineEditor.Foreground = Brushes.Transparent;
-            bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
-            _inlineEditor.CaretBrush = isLight ? Brushes.Black : Brushes.White;
+                // Set background to light grey for light mode, dark blue for dark mode
+                _inlineEditor.Background = isLight
+                    ? new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8))
+                    : new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
+                    // Use a dark caret in light theme and bright yellow in dark theme.
+                    _inlineEditor.CaretBrush = isLight
+                        ? new SolidColorBrush(Color.FromRgb(0x1C, 0x24, 0x33))
+                        : new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0x00));
             _scriptTokens = TokenizeScript(node.ParameterValueRepresentation);
             _scriptOverlay.Tokens = _scriptTokens;
             _scriptOverlay.IsVisible = true;
@@ -143,9 +151,16 @@ partial class ModelSystemCanvas
         }
         else
         {
-            _inlineEditor.Foreground = ParamValueTextBrush;
-            _inlineEditor.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
-            _inlineEditor.CaretBrush = null; // default (uses Foreground)
+            _inlineEditor.Foreground = isLight ? ParamValueTextBrushL : ParamValueTextBrush;
+            // Set background to light grey for light mode, dark blue for dark mode
+            _inlineEditor.Background = isLight
+                ? new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8))
+                : new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38));
+            // Use bright yellow caret for both themes for maximum visibility
+                // Use a dark caret in light theme and bright yellow in dark theme.
+                _inlineEditor.CaretBrush = isLight
+                    ? new SolidColorBrush(Color.FromRgb(0x1C, 0x24, 0x33))
+                    : new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0x00));
             _scriptTokens = Array.Empty<(string, IBrush)>();
             _scriptOverlay.Tokens = _scriptTokens;
             _scriptOverlay.IsVisible = false;

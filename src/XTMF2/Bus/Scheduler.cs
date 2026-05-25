@@ -126,5 +126,16 @@ namespace XTMF2.Bus
             _ToRun.Enqueue(context);
             _RunsToGo.Release();
         }
+
+        /// <summary>
+        /// Requests cancellation of the currently executing run if its ID matches.
+        /// Also cancels a queued run with the matching ID.
+        /// </summary>
+        internal void RequestCancel(string runId)
+        {
+            Current?.RequestCancelRun(runId);
+            foreach (var queued in _ToRun)
+                queued.RequestCancelRun(runId);
+        }
     }
 }

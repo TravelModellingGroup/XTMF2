@@ -155,6 +155,10 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteNumber(YProperty, Location.Y);
             writer.WriteNumber(WidthProperty, Location.Width);
             writer.WriteNumber(HeightProperty, Location.Height);
+            if (IsDisabled)
+            {
+                writer.WriteBoolean(DisabledProperty, true);
+            }
             writer.WriteEndObject();
         }
 
@@ -180,6 +184,7 @@ namespace XTMF2.ModelSystemConstruct
             int     fiIndex      = -1;
             Guid    id           = Guid.Empty;
             float   x = 40, y = 40, w = 120, h = 50;
+            bool    disabled     = false;
 
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
@@ -193,6 +198,7 @@ namespace XTMF2.ModelSystemConstruct
                 else if (reader.ValueTextEquals(YProperty))            { reader.Read(); y            = reader.GetSingle(); }
                 else if (reader.ValueTextEquals(WidthProperty))        { reader.Read(); w            = reader.GetSingle(); }
                 else if (reader.ValueTextEquals(HeightProperty))       { reader.Read(); h            = reader.GetSingle(); }
+                else if (reader.ValueTextEquals(DisabledProperty))     { reader.Read(); disabled     = reader.GetBoolean(); }
                 else                                                              reader.Skip();
             }
 
@@ -215,6 +221,10 @@ namespace XTMF2.ModelSystemConstruct
             }
 
             instance = new FunctionInstance(name, template, parentBoundary, new Rectangle(x, y, w, h), id);
+            if (disabled)
+            {
+                _ = instance.SetDisabled(true, out _);
+            }
 
             // Register in the node dictionary so links can resolve this FI as a destination.
             if (fiIndex >= 0)
@@ -293,6 +303,13 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         internal bool ConstructRuntimeModules(XTMFRuntime runtime, ref string? error)
         {
+            if (IsDisabled)
+            {
+                _runtimeModules = null;
+                _parameterBindings = null;
+                error = null;
+                return true;
+            }
             _runtimeModules = new Dictionary<Node, IModule>(ReferenceEqualityComparer.Instance);
             _parameterBindings = new Dictionary<FunctionParameter, IModule?>(ReferenceEqualityComparer.Instance);
             var internals = Template.InternalModules;
@@ -370,6 +387,11 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         internal bool ConstructRuntimeLinks(ref string? error)
         {
+            if (IsDisabled)
+            {
+                error = null;
+                return true;
+            }
             if (_runtimeModules is null) { error = null; return true; }
             foreach (var link in Template.InternalModules.Links)
             {
@@ -415,7 +437,10 @@ namespace XTMF2.ModelSystemConstruct
                 }
 
                 var dest = sl.Destination is GhostNode gn ? gn.ReferencedNode : sl.Destination!;
-                if (sl.OriginHook.Cardinality == HookCardinality.Single && dest.IsDisabled)
+                bool destDisabled = dest.IsDisabled
+                    || (dest is FunctionInstance destFi
+                        && (destFi.IsDisabled || destFi.Template.EntryNode?.IsDisabled == true));
+                if (sl.OriginHook.Cardinality == HookCardinality.Single && destDisabled)
                 {
                     error = "An internal FunctionInstance link targets a disabled node for a required hook.";
                     return false;
@@ -438,7 +463,10 @@ namespace XTMF2.ModelSystemConstruct
                     else
                     {
                         var r = d is GhostNode rGn ? rGn.ReferencedNode : d;
-                        if (!r.IsDisabled && ResolveRuntimeDestModule(d) is not null) enabled++;
+                        bool runtimeDisabled = r.IsDisabled
+                            || (r is FunctionInstance nestedFi
+                                && (nestedFi.IsDisabled || nestedFi.Template.EntryNode?.IsDisabled == true));
+                        if (!runtimeDisabled && ResolveRuntimeDestModule(d) is not null) enabled++;
                     }
                 }
                 if (ml.OriginHook.Cardinality == HookCardinality.AtLeastOne && enabled == 0)
@@ -460,7 +488,10 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         var r = d is GhostNode rGn ? rGn.ReferencedNode : d;
                         var dm = ResolveRuntimeDestModule(d);
-                        if (!r.IsDisabled && dm is not null)
+                        bool runtimeDisabled = r.IsDisabled
+                            || (r is FunctionInstance nestedFi
+                                && (nestedFi.IsDisabled || nestedFi.Template.EntryNode?.IsDisabled == true));
+                        if (!runtimeDisabled && dm is not null)
                             ml.OriginHook.Install(originModule, dm, idx++);
                     }
                 }

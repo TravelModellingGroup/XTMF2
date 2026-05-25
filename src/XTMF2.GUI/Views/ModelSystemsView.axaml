@@ -27,10 +27,9 @@
         
         <!-- Model Systems List -->
         <Border Grid.Row="1"
-                BorderBrush="{DynamicResource DlgListBorder}"
-                BorderThickness="1"
-                CornerRadius="4"
-                Padding="0">
+            Classes="dlg-list"
+            Background="Transparent"
+            Padding="0">
             
             <Grid RowDefinitions="Auto,*">
                 
@@ -53,6 +52,11 @@
                                     ToolTip.Tip="{res:Localize ModelSystems_Import}">
                                 <TextBlock Text="↑" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
                             </Button>
+                            <Button Command="{Binding OpenProjectDirectoryCommand}"
+                                    Padding="10,6"
+                                    ToolTip.Tip="{res:Localize ModelSystems_OpenProjectDirectory}">
+                                <TextBlock Text="📁" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+                            </Button>
                         </StackPanel>
                         <controls:SearchBox Grid.Column="2"
                                             x:Name="ModelSystemSearchBox"
@@ -66,14 +70,52 @@
                 </Border>
                 
                 <!-- Model Systems List -->
-                <ScrollViewer Grid.Row="1">
+                <ScrollViewer Grid.Row="1" Background="Transparent">
                     <ListBox x:Name="ModelSystemListBox"
                              ItemsSource="{Binding FilteredModelSystems}"
-                             SelectedItem="{Binding SelectedModelSystem, Mode=TwoWay}">
+                             SelectedItem="{Binding SelectedModelSystem, Mode=TwoWay}"
+                             Background="Transparent">
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="3"/>
+                                <Setter Property="CornerRadius" Value="6"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                            </Style>
+                            <Style Selector="ListBoxItem /template/ ContentPresenter">
+                                <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                                <Setter Property="Background" Value="{DynamicResource DlgHover}"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                                <Setter Property="Background" Value="{DynamicResource DlgSelected}"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+                                <Setter Property="Background" Value="{DynamicResource DlgSelected}"/>
+                            </Style>
+                            <Style Selector="ListBoxItem > Border.modelsystem-row">
+                                <Setter Property="CornerRadius" Value="6"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource DlgSep}"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Padding" Value="15,10"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:pointerover > Border.modelsystem-row">
+                                <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected > Border.modelsystem-row">
+                                <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected:pointerover > Border.modelsystem-row">
+                                <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                        </ListBox.Styles>
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="xtmf2:ModelSystemHeader">
-                                <Border Background="{DynamicResource DlgInputBg}"
-                                        BorderBrush="{DynamicResource DlgSep}"
+                                <Border Classes="modelsystem-row" Background="Transparent"
+                                    BorderBrush="{DynamicResource DlgSep}"
                                         BorderThickness="0,0,0,1"
                                         Padding="15,10"
                                         Cursor="Hand"
@@ -112,11 +154,6 @@
                                             </MenuItem>
                                         </ContextMenu>
                                     </Border.ContextMenu>
-                                    <Border.Styles>
-                                        <Style Selector="Border:pointerover">
-                                            <Setter Property="Background" Value="{DynamicResource DlgHover}"/>
-                                        </Style>
-                                    </Border.Styles>
                                     <StackPanel>
                                         <TextBlock Text="{Binding Name}"
                                                    FontSize="16"

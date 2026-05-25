@@ -20,7 +20,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
@@ -162,6 +164,67 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
         else
         {
             await ShowError(Strings.ModelSystems_ImportError, error?.Message ?? Strings.ModelSystems_UnknownError);
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenProjectDirectory()
+    {
+        var projectDirectory = _project.ProjectDirectory;
+        if (string.IsNullOrWhiteSpace(projectDirectory) || !Directory.Exists(projectDirectory))
+        {
+            await ShowError(
+                Strings.ModelSystems_OpenProjectDirectoryFailedTitle,
+                Strings.Format(Strings.ModelSystems_OpenProjectDirectoryFailedMessage, projectDirectory ?? "(null)"));
+            return;
+        }
+
+        if (TryOpenDirectoryInFileExplorer(projectDirectory))
+        {
+            return;
+        }
+
+        await ShowError(
+            Strings.ModelSystems_OpenProjectDirectoryFailedTitle,
+            Strings.Format(Strings.ModelSystems_OpenProjectDirectoryFailedMessage, projectDirectory));
+    }
+
+    private static bool TryOpenDirectoryInFileExplorer(string directoryPath)
+    {
+        try
+        {
+            ProcessStartInfo startInfo;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                startInfo = new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    UseShellExecute = true
+                };
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                startInfo = new ProcessStartInfo
+                {
+                    FileName = "open",
+                    UseShellExecute = false
+                };
+            }
+            else
+            {
+                startInfo = new ProcessStartInfo
+                {
+                    FileName = "xdg-open",
+                    UseShellExecute = false
+                };
+            }
+
+            startInfo.ArgumentList.Add(directoryPath);
+            return Process.Start(startInfo) is not null;
+        }
+        catch
+        {
+            return false;
         }
     }
 

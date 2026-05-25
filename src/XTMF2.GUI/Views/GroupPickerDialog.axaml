@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:XTMF2.GUI.Views"
+        x:Class="XTMF2.GUI.Views.GroupPickerDialog"
+        x:CompileBindings="True"
+        x:DataType="local:GroupPickerDialog"
+        Classes="neon-dialog"
+        Title="Select Group"
+        Width="360"
+        Height="280"
+        MinWidth="280"
+        MinHeight="200"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+
+        <!-- Prompt -->
+        <TextBlock Grid.Row="0"
+                   Text="{Binding Prompt}"
+                   FontSize="13"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,8"/>
+
+        <!-- Group list -->
+        <Border Grid.Row="1"
+                Classes="dlg-list">
+            <ListBox x:Name="GroupListBox"
+                     ItemsSource="{Binding GroupNames}"
+                     SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                     SelectionMode="Single"
+                     DoubleTapped="OK_Click">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{Binding}"
+                                   FontSize="13"
+                                   Padding="2,2"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,12,0,0">
+            <Button Content="Select"
+                    Classes="dlg-primary"
+                    Click="OK_Click"
+                    IsDefault="True"
+                    IsEnabled="{Binding HasSelection}"
+                    Padding="16,8"
+                    MinWidth="80"/>
+            <Button Content="Cancel"
+                    Click="Cancel_Click"
+                    IsCancel="True"
+                    Padding="16,8"
+                    MinWidth="80"/>
+        </StackPanel>
+
+    </Grid>
+</Window>

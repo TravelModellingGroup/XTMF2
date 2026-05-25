@@ -111,7 +111,9 @@ namespace XTMF2.Bus
             ClientErrorValidatingModelSystem = 5,
             ProgressUpdate = 6,
             SendModelSystemResult = 7,
-            ClientReportedStatus = 8
+            ClientReportedStatus = 8,
+            ClientOptimizationResults = 9,
+            ClientIterationProgress = 10
         }
 
         /// <summary>
@@ -157,6 +159,28 @@ namespace XTMF2.Bus
                                 return;
                             case Out.ProgressUpdate:
                                 SendProgressUpdate(reader.ReadString(), reader.ReadSingle());
+                                break;
+                            case Out.ClientOptimizationResults:
+                                {
+                                    var runId = reader.ReadString();
+                                    int count = reader.ReadInt32();
+                                    var results = new List<(int nodeIndex, double value)>(count);
+                                    for (int i = 0; i < count; i++)
+                                        results.Add((reader.ReadInt32(), reader.ReadDouble()));
+                                    SendOptimizationResults(runId, results);
+                                }
+                                break;
+                            case Out.ClientIterationProgress:
+                                {
+                                    var runId = reader.ReadString();
+                                    int iteration = reader.ReadInt32();
+                                    double fitness = reader.ReadDouble();
+                                    int count = reader.ReadInt32();
+                                    var values = new (int nodeIndex, double value)[count];
+                                    for (int i = 0; i < count; i++)
+                                        values[i] = (reader.ReadInt32(), reader.ReadDouble());
+                                    SendIterationProgress(runId, iteration, fitness, values);
+                                }
                                 break;
                             default:
                                 return;
@@ -239,6 +263,46 @@ namespace XTMF2.Bus
         }
 
         /// <summary>
+        /// Sends the final optimised parameter values to the host so the user can
+        /// choose whether to apply them back to the model system.
+        /// </summary>
+        internal void SendOptimizationResults(string runId, IReadOnlyList<(int nodeIndex, double value)> results)
+        {
+            Write((writer) =>
+            {
+                writer.Write((int)Out.ClientOptimizationResults);
+                writer.Write(runId);
+                writer.Write(results.Count);
+                foreach (var (idx, val) in results)
+                {
+                    writer.Write(idx);
+                    writer.Write(val);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Sends the per-iteration parameter snapshot to the host for live display.
+        /// </summary>
+        internal void SendIterationProgress(string runId, int iteration, double fitness,
+            IReadOnlyList<(int nodeIndex, double value)> values)
+        {
+            Write((writer) =>
+            {
+                writer.Write((int)Out.ClientIterationProgress);
+                writer.Write(runId);
+                writer.Write(iteration);
+                writer.Write(fitness);
+                writer.Write(values.Count);
+                foreach (var (idx, val) in values)
+                {
+                    writer.Write(idx);
+                    writer.Write(val);
+                }
+            });
+        }
+
+        /// <summary>
         /// Signal to the host that the run has completed.
         /// </summary>
         /// <param name="context">The run that has completed.</param>
@@ -281,9 +345,10 @@ namespace XTMF2.Bus
                                 var id = reader.ReadString();
                                 var cwd = reader.ReadString();
                                 var start = reader.ReadString();
+                                var runMode = (RunMode)reader.ReadInt32();
                                 var msSize = (int)reader.ReadInt64();
                                 using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
-                                if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, out var context))
+                                if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, runMode, out var context))
                                 {
                                     _runScheduler.Run(context);
                                 }
@@ -291,6 +356,12 @@ namespace XTMF2.Bus
                             break;
                         case In.KillClient:
                             _exit = true;
+                            break;
+                        case In.CancelModelRun:
+                            {
+                                var runId = reader.ReadString();
+                                _runScheduler.RequestCancel(runId);
+                            }
                             break;
                         // failsafe
                         default:

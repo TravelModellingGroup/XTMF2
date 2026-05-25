@@ -155,6 +155,8 @@
                             <Setter Property="BorderThickness" Value="0"/>
                             <Setter Property="CornerRadius" Value="20"/>
                             <Setter Property="Padding" Value="10,6"/>
+                            <Setter Property="ToolTip.Placement" Value="Right"/>
+                            <Setter Property="ToolTip.HorizontalOffset" Value="12"/>
                         </Style>
                         <Style Selector="Button:pointerover /template/ ContentPresenter">
                             <Setter Property="Background" Value="{DynamicResource NeonPillHover}"/>
@@ -169,8 +171,7 @@
 
                     <!-- Step Out: exit function template or ascend to parent boundary -->
                     <Button Command="{Binding NavigateUpCommand}"
-                            ToolTip.Tip="Step out to parent scope  (Alt+← / Mouse Back)"
-                            ToolTip.Placement="Pointer">
+                            ToolTip.Tip="Step out to parent scope  (Alt+← / Mouse Back)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Arrow shaft + head -->
@@ -192,8 +193,7 @@
                     <!-- Undo -->
                     <Button Command="{Binding UndoCommand}"
                             IsEnabled="{Binding CanUndo}"
-                            ToolTip.Tip="Undo (Ctrl+Z)"
-                            ToolTip.Placement="Pointer">
+                            ToolTip.Tip="Undo (Ctrl+Z)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- J-hook body: arc sweeping from mid-right, over top, down to mid-left -->
@@ -214,8 +214,7 @@
                     <!-- Redo -->
                     <Button Command="{Binding RedoCommand}"
                             IsEnabled="{Binding CanRedo}"
-                            ToolTip.Tip="Redo (Ctrl+Y)"
-                            ToolTip.Placement="Pointer">
+                            ToolTip.Tip="Redo (Ctrl+Y)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- J-hook body mirrored: arc sweeping from mid-left, over top, down to mid-right -->
@@ -237,8 +236,7 @@
 
                     <!-- Save -->
                     <Button Command="{Binding SaveModelSystemCommand}"
-                            ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}"
-                            ToolTip.Placement="Pointer">
+                            ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Floppy disk: outline body so details are visible in both themes -->
@@ -266,8 +264,7 @@
 
                     <!-- Export -->
                     <Button Command="{Binding ExportModelSystemCommand}"
-                            ToolTip.Tip="{res:Localize ModelSystemEditor_ExportTooltip}"
-                            ToolTip.Placement="Pointer">
+                            ToolTip.Tip="{res:Localize ModelSystemEditor_ExportTooltip}">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Up arrow shaft + head -->
@@ -286,8 +283,7 @@
 
                     <!-- Revert -->
                     <Button Command="{Binding RevertModelSystemCommand}"
-                            ToolTip.Tip="{res:Localize ModelSystemEditor_RevertTooltip}"
-                            ToolTip.Placement="Pointer">
+                            ToolTip.Tip="{res:Localize ModelSystemEditor_RevertTooltip}">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- ~285° CCW arc: starts upper-right, sweeps almost all the way around,
@@ -308,8 +304,7 @@
                     <!-- Run -->
                     <Button Command="{Binding RunModelSystemCommand}"
                             IsEnabled="{Binding CanRun}"
-                            ToolTip.Tip="Run this model system (save first to apply changes)"
-                            ToolTip.Placement="Pointer">
+                            ToolTip.Tip="Run this model system (save first to apply changes)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Filled play triangle -->
@@ -325,12 +320,54 @@
                         </Viewbox>
                     </Button>
 
+                    <!-- Estimation Run — only visible when estimation targets are configured -->
+                    <Button Command="{Binding RunEstimationCommand}"
+                            IsEnabled="{Binding CanRun}"
+                            IsVisible="{Binding HasEstimationTargets}"
+                            ToolTip.Tip="Run in estimation mode">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- Play triangle (shifted left) -->
+                                <Path Data="M 2,3 L 2,17 L 12,10 Z"
+                                      Fill="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="0"/>
+                                <!-- Zigzag = iterative search -->
+                                <Path Data="M 14,6 L 17,9 L 14,12 L 17,15"
+                                      Stroke="{DynamicResource NeonIconSecondary}"
+                                      StrokeThickness="2" StrokeLineCap="Round"
+                                      Fill="Transparent"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Calibration Run — only visible when calibration targets are configured -->
+                    <Button Command="{Binding RunCalibrationCommand}"
+                            IsEnabled="{Binding CanRun}"
+                            IsVisible="{Binding HasCalibrationTargets}"
+                            ToolTip.Tip="Run in calibration mode">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- Play triangle (shifted left) -->
+                                <Path Data="M 2,3 L 2,17 L 12,10 Z"
+                                      Fill="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="0"/>
+                                <!-- Target: outer ring + centre dot -->
+                                <Ellipse Width="7" Height="7"
+                                         Stroke="{DynamicResource NeonIconSecondary}"
+                                         StrokeThickness="1.5" Fill="Transparent"
+                                         Canvas.Left="12.5" Canvas.Top="6.5"/>
+                                <Ellipse Width="3" Height="3"
+                                         Fill="{DynamicResource NeonIconSecondary}"
+                                         Canvas.Left="14.5" Canvas.Top="8.5"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
                     <Separator/>
 
                     <!-- Variables -->
                     <Button Click="OnShowVariablesClick"
-                            ToolTip.Tip="View / manage Model System Variables"
-                            ToolTip.Placement="Pointer">
+                            ToolTip.Tip="View / manage Model System Variables">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Three slider tracks -->
@@ -348,6 +385,52 @@
                                 <Ellipse Width="4" Height="4"
                                          Fill="{DynamicResource NeonIconSecondary}"
                                          Canvas.Left="6" Canvas.Top="13"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <Separator/>
+
+                    <!-- Estimation parameters -->
+                    <Button Click="OnShowEstimationClick"
+                            ToolTip.Tip="View / manage Estimation Parameters">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- Upward-trending line (search/optimize icon) -->
+                                <Path Data="M 2,16 L 7,10 L 12,12 L 18,4"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="2" StrokeLineCap="Round" StrokeJoin="Round"
+                                      Fill="Transparent"/>
+                                <!-- Arrow head -->
+                                <Path Data="M 15,2 L 18,4 L 16,7"
+                                      Stroke="{DynamicResource NeonIconSecondary}"
+                                      StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round"
+                                      Fill="Transparent"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Calibration parameters -->
+                    <Button Click="OnShowCalibrationClick"
+                            ToolTip.Tip="View / manage Calibration Parameters">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <!-- Target/crosshair icon -->
+                                <Ellipse Width="14" Height="14"
+                                         Stroke="{DynamicResource NeonIconPrimary}"
+                                         StrokeThickness="1.6"
+                                         Fill="Transparent"
+                                         Canvas.Left="3" Canvas.Top="3"/>
+                                <Ellipse Width="6" Height="6"
+                                         Stroke="{DynamicResource NeonIconSecondary}"
+                                         StrokeThickness="1.6"
+                                         Fill="Transparent"
+                                         Canvas.Left="7" Canvas.Top="7"/>
+                                <!-- Cross hairs -->
+                                <Path Data="M 10,1 V 4 M 10,16 V 19 M 1,10 H 4 M 16,10 H 19"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="1.4" StrokeLineCap="Round"
+                                      Fill="Transparent"/>
                             </Canvas>
                         </Viewbox>
                     </Button>

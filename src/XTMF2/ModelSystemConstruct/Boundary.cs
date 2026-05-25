@@ -242,6 +242,10 @@ namespace XTMF2.ModelSystemConstruct
             {
                 foreach (var start in _starts)
                 {
+                    if (start.IsDisabled)
+                    {
+                        continue;
+                    }
                     if (!start.ConstructModule(runtime, ref error))
                     {
                         return false;
@@ -249,6 +253,10 @@ namespace XTMF2.ModelSystemConstruct
                 }
                 foreach (var module in _modules)
                 {
+                    if (module.IsDisabled)
+                    {
+                        continue;
+                    }
                     if (!module.ConstructModule(runtime, ref error))
                     {
                         return false;
@@ -681,6 +689,10 @@ namespace XTMF2.ModelSystemConstruct
                 //  initialize it with an empty list or array.
                 foreach (var module in _modules)
                 {
+                    if (module.IsDisabled)
+                    {
+                        continue;
+                    }
                     module.ConstructEmptyLinks(ref error);
                 }
                 // now construct all of the children
@@ -693,7 +705,13 @@ namespace XTMF2.ModelSystemConstruct
                 }
                 // Fill empty AnyNumber hooks on per-instance FunctionInstance modules.
                 foreach (var fi in _functionInstances)
+                {
+                    if (fi.IsDisabled)
+                    {
+                        continue;
+                    }
                     fi.ConstructEmptyRuntimeLinks();
+                }
                 return true;
             }
         }

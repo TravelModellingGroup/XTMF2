@@ -86,17 +86,24 @@ namespace XTMF2.ModelSystemConstruct
 
         internal override bool Construct(ref string? error)
         {
+            if (Origin.IsDisabled)
+            {
+                error = null;
+                return true;
+            }
+
             // Resolves a destination to its effective Node and per-instance IModule,
             // handling both GhostNode cross-boundary references and FunctionInstance clones.
-            static (Node effectiveNode, IModule? destModule) ResolveDest(Node d)
+            static (Node effectiveNode, IModule? destModule, bool isDisabled) ResolveDest(Node d)
             {
                 var r = d is GhostNode gn ? gn.ReferencedNode : d;
                 if (r is FunctionInstance fi)
                 {
                     var entry = fi.Template.EntryNode;
-                    return (entry ?? r, entry is not null ? fi.GetRuntimeModule(entry) : null);
+                    var effective = entry ?? r;
+                    return (effective, entry is not null ? fi.GetRuntimeModule(entry) : null, fi.IsDisabled || effective.IsDisabled);
                 }
-                return (r, r.Module);
+                return (r, r.Module, r.IsDisabled);
             }
 
             // FunctionParameter destinations are handled transitively by FunctionInstance at runtime;
@@ -104,8 +111,8 @@ namespace XTMF2.ModelSystemConstruct
             var moduleCount = _Destinations.Count(d =>
             {
                 if (d is FunctionParameter) return false;
-                var (node, _) = ResolveDest(d);
-                return !node.IsDisabled;
+                var (_, _, isDisabled) = ResolveDest(d);
+                return !isDisabled;
             });
             if(OriginHook!.Cardinality == HookCardinality.AtLeastOne)
             {
@@ -128,8 +135,8 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     // Skip FunctionParameter destinations — resolved transitively via FunctionInstance.
                     if (_Destinations[i] is FunctionParameter) continue;
-                    var (effectiveDest, destModule) = ResolveDest(_Destinations[i]);
-                    if (!effectiveDest.IsDisabled && destModule is not null)
+                    var (_, destModule, isDisabled) = ResolveDest(_Destinations[i]);
+                    if (!isDisabled && destModule is not null)
                     {
                         OriginHook.Install(Origin!.Module!, destModule, index++);
                     }

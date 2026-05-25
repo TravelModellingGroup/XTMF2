@@ -1,0 +1,192 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="560"
+        x:Class="XTMF2.GUI.Views.OptimizationProgressWindow"
+        x:DataType="vm:RunViewModel"
+        x:CompileBindings="True"
+        Classes="neon-dialog"
+        Title="Optimization Progress"
+        Width="800"
+        Height="560"
+        MinWidth="620"
+        MinHeight="400"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+
+        <!-- ── Header ──────────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="{Binding RunName}"
+                       FontSize="18" FontWeight="Bold"
+                       Foreground="{DynamicResource DlgAccent}"/>
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                <TextBlock Text="{Binding StatusBadge}" FontSize="14"/>
+                <TextBlock Text="{Binding StatusText}"
+                           FontSize="12" Opacity="0.7" VerticalAlignment="Center"/>
+                <Separator Width="1" Height="14" Background="{DynamicResource DlgSep}"
+                           VerticalAlignment="Center" Margin="4,0"/>
+                <TextBlock Text="Iteration:" FontSize="12" Opacity="0.5" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding CurrentIteration}"
+                           FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <TextBlock Text="Fitness:" FontSize="12" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                <TextBlock Text="{Binding CurrentFitness, StringFormat=G6}"
+                           FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
+                           FontFamily="Cascadia Code,Consolas,monospace"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ── Body: iteration list (left) + parameter detail (right) ── -->
+        <Grid Grid.Row="1" ColumnDefinitions="200,Auto,*">
+
+            <!-- Left: iteration history -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*">
+                <TextBlock Grid.Row="0"
+                           Text="ITERATIONS" FontSize="10" FontWeight="SemiBold"
+                           Opacity="0.5" LetterSpacing="0.8" Margin="0,0,0,4"/>
+                <Border Grid.Row="1" Classes="dlg-list" ClipToBounds="True">
+                    <ListBox ItemsSource="{Binding IterationHistory}"
+                             SelectedItem="{Binding SelectedIteration, Mode=TwoWay}"
+                             Background="Transparent"
+                             x:Name="IterationListBox">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:OptimizationIterationViewModel">
+                                <Grid ColumnDefinitions="36,*" Margin="4,4">
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding Iteration}"
+                                               FontWeight="SemiBold" FontSize="12"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding FitnessDisplay}"
+                                               FontSize="11"
+                                               FontFamily="Cascadia Code,Consolas,monospace"
+                                               Opacity="0.85"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding FitnessDisplay}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+            </Grid>
+
+            <!-- Splitter -->
+            <GridSplitter Grid.Column="1"
+                          ResizeDirection="Columns"
+                          Width="6"
+                          Background="Transparent"
+                          Margin="2,0"/>
+
+            <!-- Right: parameter values for selected iteration -->
+            <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*">
+
+                <!-- Column header row -->
+                <Grid Grid.Row="0"
+                      ColumnDefinitions="*,80,80,100"
+                      Margin="6,0,6,4"
+                      IsVisible="{Binding SelectedIteration, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <TextBlock Grid.Column="0" Text="PARAMETER"
+                               FontSize="10" FontWeight="SemiBold" Opacity="0.5" LetterSpacing="0.8"/>
+                    <TextBlock Grid.Column="1" Text="MIN"
+                               FontSize="10" FontWeight="SemiBold" Opacity="0.5" LetterSpacing="0.8"
+                               HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Column="2" Text="MAX"
+                               FontSize="10" FontWeight="SemiBold" Opacity="0.5" LetterSpacing="0.8"
+                               HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Column="3" Text="VALUE"
+                               FontSize="10" FontWeight="SemiBold" Opacity="0.5" LetterSpacing="0.8"
+                               HorizontalAlignment="Right"/>
+                </Grid>
+
+                <!-- Selected-iteration sub-header -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="6,0,0,6"
+                            IsVisible="{Binding SelectedIteration, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <TextBlock Text="Iteration"
+                               FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding SelectedIteration.Iteration}"
+                               FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock Text="&#x2014;" FontSize="11" Opacity="0.4" VerticalAlignment="Center"/>
+                    <TextBlock Text="fitness"
+                               FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding SelectedIteration.FitnessDisplay}"
+                               FontSize="11" FontWeight="SemiBold"
+                               FontFamily="Cascadia Code,Consolas,monospace"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Parameter value list for selected iteration -->
+                <Border Grid.Row="2" Classes="dlg-list" ClipToBounds="True"
+                        IsVisible="{Binding SelectedIteration, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding SelectedIteration.ParameterValues}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ParameterSnapshot">
+                                    <Grid ColumnDefinitions="*,80,80,100" Margin="6,5">
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                                   FontSize="12"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip.Tip="{Binding Name}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Min, StringFormat=G6}"
+                                                   FontSize="11"
+                                                   FontFamily="Cascadia Code,Consolas,monospace"
+                                                   Opacity="0.65"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Max, StringFormat=G6}"
+                                                   FontSize="11"
+                                                   FontFamily="Cascadia Code,Consolas,monospace"
+                                                   Opacity="0.65"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding Value, StringFormat=G6}"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   FontFamily="Cascadia Code,Consolas,monospace"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource DlgAccent}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- Placeholder: no iteration selected yet -->
+                <TextBlock Grid.Row="2"
+                           Text="No iterations recorded yet."
+                           Opacity="0.4" FontSize="13"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding SelectedIteration, Converter={x:Static ObjectConverters.IsNull}}"/>
+            </Grid>
+        </Grid>
+
+        <!-- ── Footer ──────────────────────────────────────────────────── -->
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource DlgSep}"
+                BorderThickness="0,1,0,0"
+                Margin="0,8,0,0"
+                Padding="0,8,0,0">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Spacing="8">
+                <Button Content="&#x26D4;  Cancel Run"
+                        Command="{Binding CancelRunCommand}"
+                        Classes="dlg-danger"
+                        Padding="16,8"
+                        ToolTip.Tip="Request the optimisation loop to stop after the current iteration."/>
+                <Button Content="Close"
+                        Classes="dlg-primary"
+                        Padding="24,8"
+                        Click="CloseButton_Click"/>
+            </StackPanel>
+        </Border>
+
+    </Grid>
+</Window>

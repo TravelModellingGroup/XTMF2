@@ -29,6 +29,7 @@ using XTMF2.Repository;
 using XTMF2.ModelSystemConstruct;
 using System.Diagnostics.CodeAnalysis;
 using XTMF2.ModelSystemConstruct.Parameters.Compiler;
+using XTMF2.Bus.Optimization;
 
 namespace XTMF2
 {
@@ -89,12 +90,76 @@ namespace XTMF2
         /// </summary>
         public ObservableCollection<Node> Variables { get; private set; } = new ObservableCollection<Node>();
 
+        /// <summary>Named groups of estimation parameters.</summary>
+        public ObservableCollection<EstimationGroup> EstimationGroups { get; private set; } = new ObservableCollection<EstimationGroup>();
+
+        /// <summary>
+        /// The single fitness function node used for all estimation groups.  Must implement
+        /// <c>IFunction&lt;float&gt;</c> or <c>IFunction&lt;double&gt;</c>.
+        /// May be <c>null</c> until assigned by the user.
+        /// </summary>
+        public Node? EstimationFitnessNode
+        {
+            get => _estimationFitnessNode;
+            internal set
+            {
+                _estimationFitnessNode = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EstimationFitnessNode)));
+            }
+        }
+        private Node? _estimationFitnessNode;
+
+        /// <summary>Named groups of calibration parameters.</summary>
+        public ObservableCollection<CalibrationGroup> CalibrationGroups { get; private set; } = new ObservableCollection<CalibrationGroup>();
+
+        /// <summary>
+        /// The algorithm configuration used for estimation runs.
+        /// Defaults to <see cref="NelderMeadConfig"/> when not set.
+        /// </summary>
+        public EstimationAlgorithmConfig EstimationAlgorithmConfig
+        {
+            get => _estimationAlgorithmConfig;
+            internal set
+            {
+                _estimationAlgorithmConfig = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EstimationAlgorithmConfig)));
+            }
+        }
+        private EstimationAlgorithmConfig _estimationAlgorithmConfig = EstimationAlgorithmConfig.Default;
+
+        /// <summary>
+        /// Whether the estimation fitness function should be minimised or maximised.
+        /// Default is <see cref="EstimationObjective.Minimize"/>.
+        /// </summary>
+        public EstimationObjective EstimationObjective
+        {
+            get => _estimationObjective;
+            internal set
+            {
+                _estimationObjective = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EstimationObjective)));
+            }
+        }
+        private EstimationObjective _estimationObjective = EstimationObjective.Minimize;
+
+        /// <summary>
+        /// Maps the integer serialisation index to each <see cref="Node"/>.
+        /// Populated by <see cref="Load(Stream, ModuleRepository, ModelSystemHeader, ref string?)"/>
+        /// and used by the optimisation loop to locate parameter nodes by index.
+        /// </summary>
+        internal IReadOnlyDictionary<int, Node>? NodesByLoadIndex { get; private set; }
+
         private const string GlobalBoundaryName = "global";
         private const string IndexProperty = "Index";
         private const string TypeProperty = "Type";
         private const string TypesProperty = "Types";
         private const string BoundariesProperty = "Boundaries";
         private const string VariablesProperty = "Variables";
+        private const string EstimationGroupsProperty      = "EstimationGroups";
+        private const string EstimationFitnessNodeProperty = "EstimationFitnessNode";
+        private const string EstimationAlgorithmConfigProperty = "EstimationAlgorithmConfig";
+        private const string EstimationObjectiveProperty   = "EstimationObjective";
+        private const string CalibrationGroupsProperty     = "CalibrationGroups";
 
         /// <summary>
         /// The lock that must be acquired before editing the model system's attributes.
@@ -151,7 +216,16 @@ namespace XTMF2
                 writer.WriteStartObject();
                 WriteTypes(writer, typeDictionary);
                 var nodeDictionary = WriteBoundaries(writer, typeDictionary);
+                // Keep the reverse mapping in sync so the host can map optimization-result
+                // node indices back to live Node objects after a run completes.
+                NodesByLoadIndex = new System.Collections.ObjectModel.ReadOnlyDictionary<int, Node>(
+                    nodeDictionary.ToDictionary(kv => kv.Value, kv => kv.Key));
                 WriteVariables(writer, nodeDictionary);
+                WriteEstimationGroups(writer, nodeDictionary);
+                WriteEstimationFitnessNode(writer, nodeDictionary);
+                WriteEstimationAlgorithmConfig(writer);
+                WriteEstimationObjective(writer);
+                WriteCalibrationGroups(writer, nodeDictionary);
                 writer.WriteEndObject();
                 return true;
             }
@@ -228,6 +302,42 @@ namespace XTMF2
                 if (nodeDictionary.TryGetValue(node, out var idx))
                     writer.WriteNumberValue(idx);
             }
+            writer.WriteEndArray();
+        }
+
+        private void WriteEstimationGroups(Utf8JsonWriter writer, Dictionary<Node, int> nodeDictionary)
+        {
+            writer.WritePropertyName(EstimationGroupsProperty);
+            writer.WriteStartArray();
+            foreach (var group in EstimationGroups)
+                group.Save(writer, nodeDictionary);
+            writer.WriteEndArray();
+        }
+
+        private void WriteEstimationFitnessNode(Utf8JsonWriter writer, Dictionary<Node, int> nodeDictionary)
+        {
+            if (_estimationFitnessNode is not null
+                && nodeDictionary.TryGetValue(_estimationFitnessNode, out var idx))
+                writer.WriteNumber(EstimationFitnessNodeProperty, idx);
+        }
+
+        private void WriteEstimationAlgorithmConfig(Utf8JsonWriter writer)
+        {
+            writer.WritePropertyName(EstimationAlgorithmConfigProperty);
+            _estimationAlgorithmConfig.Save(writer);
+        }
+
+        private void WriteEstimationObjective(Utf8JsonWriter writer)
+        {
+            writer.WriteString(EstimationObjectiveProperty, _estimationObjective.ToString());
+        }
+
+        private void WriteCalibrationGroups(Utf8JsonWriter writer, Dictionary<Node, int> nodeDictionary)
+        {
+            writer.WritePropertyName(CalibrationGroupsProperty);
+            writer.WriteStartArray();
+            foreach (var group in CalibrationGroups)
+                group.Save(writer, nodeDictionary);
             writer.WriteEndArray();
         }
 
@@ -364,6 +474,42 @@ namespace XTMF2
                                 return null;
                             }
                         }
+                        else if (reader.ValueTextEquals(EstimationGroupsProperty))
+                        {
+                            if (!LoadEstimationGroups(nodes, ref reader, modelSystem, ref error))
+                            {
+                                return null;
+                            }
+                        }
+                        else if (reader.ValueTextEquals(EstimationFitnessNodeProperty))
+                        {
+                            reader.Read();
+                            if (nodes.TryGetValue(reader.GetInt32(), out var fn))
+                                modelSystem.EstimationFitnessNode = fn;
+                        }
+                        else if (reader.ValueTextEquals(EstimationAlgorithmConfigProperty))
+                        {
+                            reader.Read(); // move to StartObject
+                            if (reader.TokenType == JsonTokenType.StartObject)
+                            {
+                                var cfg = EstimationAlgorithmConfig.Load(ref reader);
+                                if (cfg is not null)
+                                    modelSystem.EstimationAlgorithmConfig = cfg;
+                            }
+                        }
+                        else if (reader.ValueTextEquals(EstimationObjectiveProperty))
+                        {
+                            reader.Read();
+                            if (Enum.TryParse<EstimationObjective>(reader.GetString(), out var obj))
+                                modelSystem.EstimationObjective = obj;
+                        }
+                        else if (reader.ValueTextEquals(CalibrationGroupsProperty))
+                        {
+                            if (!LoadCalibrationGroups(nodes, ref reader, modelSystem, ref error))
+                            {
+                                return null;
+                            }
+                        }
                         // Unknown properties are silently skipped for forward compatibility.
                     }
                 }
@@ -377,6 +523,8 @@ namespace XTMF2
                     }
                     containedIn.AddGhostNode(ghost!, out _);
                 }
+                // Expose the node index mapping for the optimisation loop.
+                modelSystem.NodesByLoadIndex = new System.Collections.ObjectModel.ReadOnlyDictionary<int, Node>(nodes);
                 // Now that all of the modules have been loaded we can process the scripted parameters
                 foreach (var (toAssignTo, parameterExpression) in scriptedParameters)
                 {
@@ -423,6 +571,38 @@ namespace XTMF2
                     var idx = reader.GetInt32();
                     if (nodes.TryGetValue(idx, out var node))
                         modelSystem.Variables.Add(node);
+                }
+            }
+            return true;
+        }
+
+        private static bool LoadEstimationGroups(Dictionary<int, Node> nodes, ref Utf8JsonReader reader, ModelSystem modelSystem, [NotNullWhen(false)] ref string? error)
+        {
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                return FailWith(out error, "Expected an array when loading estimation groups!");
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                if (reader.TokenType == JsonTokenType.StartObject)
+                {
+                    var group = EstimationGroup.Load(nodes, ref reader, ref error);
+                    if (group is not null)
+                        modelSystem.EstimationGroups.Add(group);
+                }
+            }
+            return true;
+        }
+
+        private static bool LoadCalibrationGroups(Dictionary<int, Node> nodes, ref Utf8JsonReader reader, ModelSystem modelSystem, [NotNullWhen(false)] ref string? error)
+        {
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                return FailWith(out error, "Expected an array when loading calibration groups!");
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                if (reader.TokenType == JsonTokenType.StartObject)
+                {
+                    var group = CalibrationGroup.Load(nodes, ref reader, ref error);
+                    if (group is not null)
+                        modelSystem.CalibrationGroups.Add(group);
                 }
             }
             return true;
