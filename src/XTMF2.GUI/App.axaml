@@ -57,6 +57,8 @@
                     <SolidColorBrush x:Key="DlgPrimaryBtnBg">#FF00D4FF</SolidColorBrush>
                     <SolidColorBrush x:Key="DlgPrimaryBtnFg">#FF000A0E</SolidColorBrush>
                     <SolidColorBrush x:Key="DlgPrimaryBtnHover">#CC00D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonIconPrimary">#FF00D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonIconSecondary">#FFBF7FFF</SolidColorBrush>
                     <SolidColorBrush x:Key="CtxBg">#F20A1120</SolidColorBrush>
                     <SolidColorBrush x:Key="CtxBorder">#AA00D4FF</SolidColorBrush>
                     <SolidColorBrush x:Key="CtxFg">#FFF2FCFF</SolidColorBrush>
@@ -97,6 +99,8 @@
                     <SolidColorBrush x:Key="DlgPrimaryBtnBg">#FF0066CC</SolidColorBrush>
                     <SolidColorBrush x:Key="DlgPrimaryBtnFg">#FFFFFFFF</SolidColorBrush>
                     <SolidColorBrush x:Key="DlgPrimaryBtnHover">#CC0066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonIconPrimary">#FF0040A8</SolidColorBrush>
+                    <SolidColorBrush x:Key="NeonIconSecondary">#FF6020C0</SolidColorBrush>
                     <SolidColorBrush x:Key="CtxBg">#F7F4FAFF</SolidColorBrush>
                     <SolidColorBrush x:Key="CtxBorder">#AA0066CC</SolidColorBrush>
                     <SolidColorBrush x:Key="CtxFg">#FF001830</SolidColorBrush>

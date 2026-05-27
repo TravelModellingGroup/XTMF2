@@ -41,21 +41,79 @@
                         BorderThickness="0,0,0,1">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                            <StackPanel.Styles>
+                                <Style Selector="Button.toolbar-icon">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="CornerRadius" Value="20"/>
+                                    <Setter Property="Padding" Value="7,5"/>
+                                    <Setter Property="MinWidth" Value="0"/>
+                                    <Setter Property="Width" Value="34"/>
+                                    <Setter Property="Height" Value="30"/>
+                                </Style>
+                                <Style Selector="Button.toolbar-icon:pointerover /template/ ContentPresenter">
+                                    <Setter Property="Background" Value="{DynamicResource DlgHover}"/>
+                                </Style>
+                                <Style Selector="Button.toolbar-icon:pressed /template/ ContentPresenter">
+                                    <Setter Property="Background" Value="{DynamicResource DlgAccentMid}"/>
+                                </Style>
+                            </StackPanel.Styles>
                             <Button Command="{Binding CreateNewModelSystemCommand}"
-                                    Classes="dlg-primary"
-                                    Padding="10,6"
+                                    Classes="toolbar-icon"
                                     ToolTip.Tip="{res:Localize ModelSystems_NewModelSystem}">
-                                <TextBlock Text="+" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+                                <Viewbox Width="18" Height="18">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="M 10,4 V 16 M 4,10 H 16"
+                                              Stroke="{DynamicResource NeonIconPrimary}"
+                                              StrokeThickness="2.2"
+                                              StrokeLineCap="Round"
+                                              Fill="Transparent"/>
+                                        <Ellipse Width="2.8"
+                                                 Height="2.8"
+                                                 Canvas.Left="8.6"
+                                                 Canvas.Top="8.6"
+                                                 Fill="{DynamicResource NeonIconSecondary}"/>
+                                    </Canvas>
+                                </Viewbox>
                             </Button>
                             <Button Command="{Binding ImportModelSystemCommand}"
-                                    Padding="10,6"
+                                    Classes="toolbar-icon"
                                     ToolTip.Tip="{res:Localize ModelSystems_Import}">
-                                <TextBlock Text="↑" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+                                <Viewbox Width="18" Height="18">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="M 10,4 V 12 M 6.5,8.5 L 10,12 L 13.5,8.5"
+                                              Stroke="{DynamicResource NeonIconPrimary}"
+                                              StrokeThickness="1.9"
+                                              StrokeLineCap="Round"
+                                              StrokeJoin="Round"
+                                              Fill="Transparent"/>
+                                        <Path Data="M 4,13.5 V 16 H 16 V 13.5"
+                                              Stroke="{DynamicResource NeonIconSecondary}"
+                                              StrokeThickness="1.8"
+                                              StrokeLineCap="Round"
+                                              StrokeJoin="Round"
+                                              Fill="Transparent"/>
+                                    </Canvas>
+                                </Viewbox>
                             </Button>
                             <Button Command="{Binding OpenProjectDirectoryCommand}"
-                                    Padding="10,6"
+                                    Classes="toolbar-icon"
                                     ToolTip.Tip="{res:Localize ModelSystems_OpenProjectDirectory}">
-                                <TextBlock Text="📁" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+                                <Viewbox Width="18" Height="18">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="M 2.5,7 H 8 L 9.8,5 H 17.5 V 16.5 H 2.5 Z"
+                                              Stroke="{DynamicResource NeonIconPrimary}"
+                                              StrokeThickness="1.7"
+                                              StrokeLineCap="Round"
+                                              StrokeJoin="Round"
+                                              Fill="Transparent"/>
+                                        <Path Data="M 2.5,9.2 H 17.5"
+                                              Stroke="{DynamicResource NeonIconSecondary}"
+                                              StrokeThickness="1.5"
+                                              StrokeLineCap="Round"
+                                              Fill="Transparent"/>
+                                    </Canvas>
+                                </Viewbox>
                             </Button>
                         </StackPanel>
                         <controls:SearchBox Grid.Column="2"
