@@ -112,6 +112,13 @@ public partial class ModelSystemEditorView : UserControl
         DockBar.BoxShadow = BoxShadows.Parse(isLight
             ? "0 2 10 2 #500066CC, 0 4 20 0 #28000088"
             : "0 0 14 3 #8000D4FF, 0 0 40 10 #4000A0FF, 0 6 24 0 #80000000");
+
+        if (SidePanel is not null)
+        {
+            SidePanel.BoxShadow = BoxShadows.Parse(isLight
+                ? "0 2 10 2 #500066CC, 0 4 20 0 #28000088"
+                : "0 0 14 3 #8000D4FF, 0 0 40 10 #4000A0FF, 0 6 24 0 #80000000");
+        }
     }
 
     // -- Keyboard ---------------------------------------------------------------

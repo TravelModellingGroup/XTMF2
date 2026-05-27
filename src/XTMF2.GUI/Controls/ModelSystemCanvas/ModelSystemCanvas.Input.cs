@@ -556,9 +556,7 @@ partial class ModelSystemCanvas
             }
             else
             {
-                // Truly empty space — deselect all and begin canvas pan.
-                ClearMultiSelection();
-                _vm.SelectElementCommand.Execute(null);
+                // Truly empty space — begin canvas pan without changing selection.
                 var sv = GetScrollViewer();
                 if (sv is not null)
                 {
@@ -656,11 +654,9 @@ partial class ModelSystemCanvas
 
         // ── Cursor feedback while idle ────────────────────────────────────
         if (_dragging is null)
-        {
             Cursor = HitTestResizeHandle(mpos) is not null
                 ? new Cursor(StandardCursorType.SizeAll)
                 : Cursor.Default;
-        }
 
         if (_dragging is null) return;
 
@@ -735,63 +731,19 @@ partial class ModelSystemCanvas
             }
         }
 
-        // ── Right-button release: complete link creation ──────────────────
-        if (_linkOrigin is not null)
-        {
-            var origin = _linkOrigin;
-            _linkOrigin = null;
-            e.Pointer.Capture(null);
-            InvalidateVisual();
-
-            if (_vm is not null)
-            {
-                var pos = e.GetCurrentPoint(this).Position;
-                var hit = HitTest(ToCanvasPos(pos), testComments: false);
-                // Accepts NodeViewModel or FunctionInstanceViewModel as a link destination.
-                if (hit is NodeViewModel dest && !ReferenceEquals(dest, origin))
-                    _ = _vm.CreateLinkAsync(origin, dest);
-                else if (hit is FunctionInstanceViewModel fiDest
-                    && !ReferenceEquals(fiDest, origin)
-                    && fiDest.UnderlyingInstance.Template.EntryNode is not null)
-                    _ = _vm.CreateLinkAsync(origin, fiDest);
-                else if (hit is FunctionParameterViewModel fpDest
-                    && !ReferenceEquals(fpDest, origin))
-                    _ = _vm.CreateLinkAsync(origin, fpDest);
-            }
-
-            e.Handled = true;
-            return;
-        }
-
-        // ── Left-button release: end resize drag ─────────────────────────
-        if (_resizing is not null)
-        {
-            // Commit the final size to the session (single undo entry).
-            _resizing.CommitResize();
-            _resizing = null;
-            e.Pointer.Capture(null);
-            Cursor = Cursor.Default;
-            InvalidateAndMeasure();
-            e.Handled = true;
-            return;
-        }
-
-        // ── Left-button release: end canvas pan ──────────────────────────
-        if (_panning)
-        {
-            _panning = false;
-            e.Pointer.Capture(null);
-            Cursor = Cursor.Default;
-            e.Handled = true;
-            return;
-        }
-
-        // ── Left-button release: finalize rubber-band selection ───────────
+        // ── Rubber-band selection rectangle release ──────────────────────
         if (_selRectStart is not null)
         {
-            var finalRect = NormalizeRect(_selRectStart.Value, _selRectCurrent);
+            var start = _selRectStart.Value;
+            var end = _selRectCurrent;
             _selRectStart = null;
-            e.Pointer.Capture(null);
+            _selRectCurrent = default;
+
+            var finalRect = new Rect(
+                Math.Min(start.X, end.X),
+                Math.Min(start.Y, end.Y),
+                Math.Abs(end.X - start.X),
+                Math.Abs(end.Y - start.Y));
 
             if (_vm is not null && (finalRect.Width > 2 || finalRect.Height > 2))
             {
@@ -827,14 +779,14 @@ partial class ModelSystemCanvas
                         firstHit ??= ghost;
                     }
                 }
-                foreach (var start in _vm.Starts)
+                foreach (var startVm in _vm.Starts)
                 {
-                    var sr = new Rect(start.X, start.Y, start.Diameter, start.Diameter);
+                    var sr = new Rect(startVm.X, startVm.Y, startVm.Diameter, startVm.Diameter);
                     if (finalRect.Intersects(sr))
                     {
-                        _multiSelection.Add(start);
-                        start.IsSelected = true;
-                        firstHit ??= start;
+                        _multiSelection.Add(startVm);
+                        startVm.IsSelected = true;
+                        firstHit ??= startVm;
                     }
                 }
                 foreach (var ft in _vm.FunctionTemplates)
@@ -867,6 +819,7 @@ partial class ModelSystemCanvas
                         firstHit ??= fp;
                     }
                 }
+
                 if (firstHit is not null)
                     _vm.SelectedElement = firstHit;
             }
@@ -895,58 +848,44 @@ partial class ModelSystemCanvas
                 if (el is NodeViewModel gnvm)
                 {
                     var r = gnvm.TakePendingMoveRect();
-                    if (r.HasValue) 
-                    {
+                    if (r.HasValue)
                         nodeMoves.Add((gnvm.UnderlyingNode, r.Value));
-                    }
                 }
                 else if (el is StartViewModel gsvm)
                 {
                     var r = gsvm.TakePendingMoveRect();
-                    if (r.HasValue) 
-                    {
+                    if (r.HasValue)
                         nodeMoves.Add((gsvm.UnderlyingStart, r.Value));
-                    }
                 }
                 else if (el is CommentBlockViewModel gcvm)
                 {
                     var r = gcvm.TakePendingMoveRect();
-                    if (r.HasValue) 
-                    {
+                    if (r.HasValue)
                         commentMoves.Add((gcvm.UnderlyingBlock, r.Value));
-                    }
                 }
                 else if (el is GhostNodeViewModel ggvm)
                 {
                     var r = ggvm.TakePendingMoveRect();
                     if (r.HasValue)
-                    {
                         nodeMoves.Add((ggvm.UnderlyingGhostNode, r.Value));
-                    } 
                 }
                 else if (el is FunctionTemplateViewModel gftvm)
                 {
                     var r = gftvm.TakePendingMoveRect();
-                    if (r.HasValue) 
-                    {
+                    if (r.HasValue)
                         templateMoves.Add((gftvm.UnderlyingTemplate, r.Value));
-                    }
                 }
                 else if (el is FunctionInstanceViewModel gfivm)
                 {
                     var r = gfivm.TakePendingMoveRect();
-                    if (r.HasValue) 
-                    {
+                    if (r.HasValue)
                         instanceMoves.Add((gfivm.UnderlyingInstance, r.Value));
-                    }
                 }
                 else if (el is FunctionParameterViewModel gfpvm)
                 {
                     var r = gfpvm.TakePendingMoveRect();
-                    if (r.HasValue) 
-                    {
+                    if (r.HasValue)
                         nodeMoves.Add((gfpvm.UnderlyingParameter, r.Value));
-                    }
                 }
             }
 
@@ -963,11 +902,28 @@ partial class ModelSystemCanvas
             _dragging?.CommitMove();
         }
 
-        _dragging = null;
-        _autoScrollTimer.Stop();
-        e.Pointer.Capture(null);
+        EndPointerInteraction(e.Pointer);
         InvalidateAndMeasure();
         e.Handled = true;
     }
 
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        EndPointerInteraction(e.Pointer);
+    }
+
+    private void EndPointerInteraction(IPointer? pointer)
+    {
+        _dragging = null;
+        _resizing = null;
+        _panning = false;
+        _rightClickPending = false;
+        _selRectStart = null;
+        _selRectCurrent = default;
+        _linkOrigin = null;
+        _linkCurrentPos = default;
+        _autoScrollTimer.Stop();
+        pointer?.Capture(null);
+    }
 }

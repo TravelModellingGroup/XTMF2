@@ -398,4 +398,34 @@ partial class ModelSystemCanvas
     private static readonly IBrush[] FpGlowBrushes        = MakeGlowBrushes(FpGlowColor);
     private static readonly IBrush[] FpGlowBrushesL       = MakeGlowBrushes(FpGlowColorL);
 
+    // ── Side Panel (information display for selected items) ───────────────
+    // Dark neon theme matching the bottom zoom bar
+    private static readonly IBrush SidePanelFill = new SolidColorBrush(Color.FromArgb(0xE6, 0x05, 0x05, 0x10)); // matches zoom bar background
+    private static readonly IBrush SidePanelBorder = new SolidColorBrush(Color.FromRgb(0x00, 0xD4, 0xFF)); // neon cyan, matches zoom bar
+    private static readonly IBrush SidePanelTextBrush = new SolidColorBrush(Color.FromRgb(0xEE, 0xFF, 0xFF)); // light text
+    private static readonly IBrush SidePanelTitleBrush = new SolidColorBrush(Color.FromRgb(0x00, 0xD4, 0xFF)); // neon cyan for title
+    private static readonly IBrush SidePanelSubtitleBrush = new SolidColorBrush(Color.FromRgb(0xAA, 0xCC, 0xDD)); // muted cyan for type name
+    private static readonly IBrush SidePanelLinkBrush = new SolidColorBrush(Color.FromRgb(0x44, 0xDD, 0xFF)); // brighter cyan for links
+    private static readonly IBrush SidePanelScrollBg = new SolidColorBrush(Color.FromArgb(0x30, 0x00, 0xCC, 0xFF)); // semi-transparent cyan
+    private static readonly IBrush[] SidePanelGlowBrushes = MakeGlowBrushes(Color.FromRgb(0x00, 0xD4, 0xFF));
+    // Light mode
+    private static readonly IBrush SidePanelFillL = new SolidColorBrush(Color.FromRgb(0xF0, 0xF4, 0xF8)); // light background
+    private static readonly IBrush SidePanelBorderL = new SolidColorBrush(Color.FromRgb(0x00, 0x66, 0xBB)); // strong blue border
+    private static readonly IBrush SidePanelTextBrushL = new SolidColorBrush(Color.FromRgb(0x0D, 0x1B, 0x2A)); // dark text
+    private static readonly IBrush SidePanelTitleBrushL = new SolidColorBrush(Color.FromRgb(0x00, 0x66, 0xBB)); // blue for title
+    private static readonly IBrush SidePanelSubtitleBrushL = new SolidColorBrush(Color.FromRgb(0x44, 0x77, 0xAA)); // muted blue for type name
+    private static readonly IBrush SidePanelLinkBrushL = new SolidColorBrush(Color.FromRgb(0x00, 0x55, 0xAA)); // link blue
+    private static readonly IBrush SidePanelScrollBgL = new SolidColorBrush(Color.FromArgb(0x20, 0x00, 0x66, 0xBB)); // semi-transparent blue
+    private static readonly IBrush[] SidePanelGlowBrushesL = MakeGlowBrushes(Color.FromRgb(0x00, 0x66, 0xBB));
+    
+    private const double SidePanelWidth = 300.0;
+    private const double SidePanelCornerRadius = 8.0;
+    private const double SidePanelPadding = 12.0;
+    private const double SidePanelBorderThickness = 1.5;
+    private const double SidePanelTitleFontSize = 14.0;
+    private const double SidePanelSubtitleFontSize = 11.0;
+    private const double SidePanelTextFontSize = 12.0;
+    private const double SidePanelDescriptionMaxHeight = 400.0;
+    private const double SidePanelMargin = 16.0; // gap from canvas edge
+
 }
