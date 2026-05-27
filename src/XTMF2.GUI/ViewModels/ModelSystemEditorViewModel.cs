@@ -17,11 +17,13 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
@@ -392,6 +394,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     [NotifyPropertyChangedFor(nameof(NothingSelected))]
     private ICanvasElement? _selectedElement;
 
+
+
     /// <summary>
     /// A mutable copy of <see cref="SelectedElement"/>'s name/text for the properties panel text box.
     /// For nodes/starts this is the name; for comment blocks this is the comment text.
@@ -444,8 +448,48 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         CommentBlockViewModel      => "Comment Block",
         FunctionTemplateViewModel  => "Function Template",
         FunctionInstanceViewModel  => "Function Instance",
+        FunctionParameterViewModel => "Function Parameter",
         _                          => string.Empty
     };
+
+    /// <summary>True when the floating side panel should be shown.</summary>
+    public bool SelectedSidePanelIsVisible => true;
+
+    /// <summary>Module display name shown in the floating side panel.</summary>
+    public string SelectedSidePanelModuleName
+        => TryGetSelectedSidePanelMetadata(out var metadata) ? metadata.moduleName : string.Empty;
+
+    /// <summary>Module or template type name shown beneath the title in the floating side panel.</summary>
+    public string SelectedSidePanelTypeName
+        => TryGetSelectedSidePanelMetadata(out var metadata) ? metadata.typeName : string.Empty;
+
+    /// <summary>Module description shown inside the floating side panel.</summary>
+    public string SelectedSidePanelDescription
+        => TryGetSelectedSidePanelMetadata(out var metadata) ? metadata.description : string.Empty;
+
+    /// <summary>Documentation URL shown as a link in the floating side panel.</summary>
+    public string SelectedSidePanelDocumentationLink
+        => TryGetSelectedSidePanelMetadata(out var metadata) ? metadata.documentationLink : string.Empty;
+
+    /// <summary>True when the selected item exposes a documentation link.</summary>
+    public bool SelectedSidePanelHasDocumentationLink
+        => !string.IsNullOrWhiteSpace(SelectedSidePanelDocumentationLink);
+
+    /// <summary>True when the selected element is a <see cref="FunctionInstanceViewModel"/>.</summary>
+    public bool SelectedSidePanelHasTemplateLink => SelectedElement is FunctionInstanceViewModel;
+
+    /// <summary>The button text used to open the selected function instance's template.</summary>
+    public string SelectedFunctionInstanceTemplateActionText
+        => string.IsNullOrWhiteSpace(SelectedFunctionInstanceTemplateName)
+            ? "Open Template"
+            : $"Open Template: {SelectedFunctionInstanceTemplateName}";
+
+    /// <summary>The name of the selected function parameter's template, shown as a quick context link.</summary>
+    public string SelectedFunctionParameterTemplateName
+        => (SelectedElement as FunctionParameterViewModel)?.UnderlyingParameter.Template.Name ?? string.Empty;
+
+    /// <summary>True when the selected element is a <see cref="FunctionParameterViewModel"/>.</summary>
+    public bool SelectedSidePanelHasFunctionParameterContext => SelectedElement is FunctionParameterViewModel;
 
     /// <summary>True when the selected element is a <see cref="FunctionTemplateViewModel"/>.</summary>
     public bool SelectedElementIsFunctionTemplate => SelectedElement is FunctionTemplateViewModel;
@@ -535,8 +579,18 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         OnPropertyChanged(nameof(SelectedFunctionTemplateHasNoFunctionParameters));
         OnPropertyChanged(nameof(SelectedElementIsFunctionInstance));
         OnPropertyChanged(nameof(SelectedFunctionInstanceTemplateName));
+        OnPropertyChanged(nameof(SelectedFunctionInstanceTemplateActionText));
         OnPropertyChanged(nameof(SelectedFunctionInstanceFunctionParameters));
         OnPropertyChanged(nameof(SelectedFunctionInstanceHasNoFunctionParameters));
+        OnPropertyChanged(nameof(SelectedFunctionParameterTemplateName));
+        OnPropertyChanged(nameof(SelectedSidePanelIsVisible));
+        OnPropertyChanged(nameof(SelectedSidePanelModuleName));
+        OnPropertyChanged(nameof(SelectedSidePanelTypeName));
+        OnPropertyChanged(nameof(SelectedSidePanelDescription));
+        OnPropertyChanged(nameof(SelectedSidePanelDocumentationLink));
+        OnPropertyChanged(nameof(SelectedSidePanelHasDocumentationLink));
+        OnPropertyChanged(nameof(SelectedSidePanelHasTemplateLink));
+        OnPropertyChanged(nameof(SelectedSidePanelHasFunctionParameterContext));
         SelectedElementParameterValue =
             value is NodeViewModel pnvm && pnvm.IsParameterNode
                 ? pnvm.ParameterValueRepresentation
@@ -545,13 +599,117 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     private void OnSelectedElementPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(NodeViewModel.TypeName))
+        if (e.PropertyName is nameof(NodeViewModel.TypeName)
+            or nameof(FunctionParameterViewModel.TypeName)
+            or nameof(FunctionInstanceViewModel.TemplateName)
+            or nameof(ICanvasElement.Name))
+        {
             OnPropertyChanged(nameof(SelectedElementTypeName));
+            OnPropertyChanged(nameof(SelectedSidePanelIsVisible));
+            OnPropertyChanged(nameof(SelectedSidePanelModuleName));
+            OnPropertyChanged(nameof(SelectedSidePanelTypeName));
+            OnPropertyChanged(nameof(SelectedSidePanelDescription));
+            OnPropertyChanged(nameof(SelectedSidePanelDocumentationLink));
+            OnPropertyChanged(nameof(SelectedSidePanelHasDocumentationLink));
+            OnPropertyChanged(nameof(SelectedSidePanelHasTemplateLink));
+            OnPropertyChanged(nameof(SelectedSidePanelHasFunctionParameterContext));
+            OnPropertyChanged(nameof(SelectedFunctionInstanceTemplateName));
+            OnPropertyChanged(nameof(SelectedFunctionInstanceTemplateActionText));
+            OnPropertyChanged(nameof(SelectedFunctionParameterTemplateName));
+        }
         if (e.PropertyName == nameof(NodeViewModel.ParameterValueRepresentation))
         {
             if (SelectedElement is NodeViewModel nvm && nvm.IsParameterNode)
                 SelectedElementParameterValue = nvm.ParameterValueRepresentation;
         }
+    }
+
+    [RelayCommand]
+    private void OpenSelectedDocumentation()
+    {
+        var documentationLink = SelectedSidePanelDocumentationLink;
+        if (string.IsNullOrWhiteSpace(documentationLink))
+            return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = documentationLink,
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // Ignore link launch failures.
+        }
+    }
+
+    [RelayCommand]
+    private void OpenSelectedFunctionTemplate()
+    {
+        if (SelectedElement is FunctionInstanceViewModel fivm)
+            OpenFunctionTemplateOfInstance(fivm);
+    }
+
+    private bool TryGetSelectedSidePanelMetadata(out (string moduleName, string typeName, string description, string documentationLink) metadata)
+    {
+        metadata = SelectedElement switch
+        {
+            null => ("No module selected", string.Empty, string.Empty, string.Empty),
+            CommentBlockViewModel comment => ("Comment Block", "Comment", comment.Name, string.Empty),
+            NodeViewModel node => BuildModuleMetadata(node.Name, node.UnderlyingNode.Type),
+            FunctionTemplateViewModel template => BuildModuleMetadata(template.Name, template.UnderlyingTemplate.Type),
+            FunctionInstanceViewModel instance => BuildModuleMetadata(instance.Name, instance.UnderlyingInstance.Template.Type),
+            FunctionParameterViewModel parameter => (
+                parameter.Name,
+                FormatTypeNameWithGenerics(parameter.UnderlyingParameter.Type),
+                string.Empty,
+                string.Empty),
+            _ => (string.Empty, string.Empty, string.Empty, string.Empty)
+        };
+
+        return true;
+    }
+
+    private static (string moduleName, string typeName, string description, string documentationLink) BuildModuleMetadata(string moduleName, Type? moduleType)
+    {
+        if (moduleType is null)
+            return (moduleName, string.Empty, string.Empty, string.Empty);
+
+        ModuleAttribute? moduleAttribute;
+        try
+        {
+            moduleAttribute = moduleType.GetCustomAttribute<ModuleAttribute>();
+        }
+        catch
+        {
+            moduleAttribute = null;
+        }
+
+        return (
+            moduleName,
+            FormatTypeNameWithGenerics(moduleType),
+            moduleAttribute?.Description ?? string.Empty,
+            moduleAttribute?.DocumentationLink ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Formats a type name with full namespace, expanding generic parameters.
+    /// For example: "BasicParameter`1" becomes "XTMF2.ModelSystemConstruct.BasicParameter&lt;System.Single&gt;".
+    /// </summary>
+    private static string FormatTypeNameWithGenerics(Type type)
+    {
+        string typeName = type.FullName ?? type.Name;
+        
+        if (!type.IsGenericType)
+            return typeName;
+
+        var backtickIndex = typeName.IndexOf('`');
+        var baseName = backtickIndex >= 0 ? typeName.Substring(0, backtickIndex) : typeName;
+        var genericArgs = type.GetGenericArguments();
+        var argNames = string.Join(", ", genericArgs.Select(arg => FormatTypeNameWithGenerics(arg)));
+        return $"{baseName}<{argNames}>";
     }
 
     // ── Parent window reference (set by the view) ─────────────────────────

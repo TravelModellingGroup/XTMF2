@@ -438,6 +438,77 @@
                 </StackPanel>
             </Border>
 
+            <!-- ── Floating side panel (right-side neon card) ───────────── -->
+            <Border x:Name="SidePanel"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Margin="0,60,16,0"
+                    Width="320"
+                    Padding="16"
+                    CornerRadius="18"
+                    Background="{DynamicResource NeonPillBg}"
+                    BorderBrush="{DynamicResource NeonIconSecondary}"
+                    BorderThickness="1.5"
+                    ZIndex="40">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="{Binding SelectedSidePanelModuleName}"
+                               Foreground="{DynamicResource NeonPillFg}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"/>
+
+                    <Button Command="{Binding OpenSelectedDocumentationCommand}"
+                            IsVisible="{Binding SelectedSidePanelHasDocumentationLink}"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            HorizontalAlignment="Left"
+                            Padding="0"
+                            Cursor="Hand"
+                            ToolTip.Tip="{Binding SelectedSidePanelDocumentationLink}">
+                        <TextBlock Text="{Binding SelectedSidePanelTypeName}"
+                                   Foreground="{DynamicResource NeonIconSecondary}"
+                                   FontSize="11"
+                                   TextDecorations="Underline"
+                                   TextWrapping="Wrap"/>
+                    </Button>
+
+                    <TextBlock Text="{Binding SelectedSidePanelTypeName}"
+                               Foreground="{DynamicResource NeonIconSecondary}"
+                               FontSize="11"
+                               Opacity="0.9"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding SelectedSidePanelHasDocumentationLink, Converter={x:Static BoolConverters.Not}}"/>
+
+                    <Button Command="{Binding OpenSelectedFunctionTemplateCommand}"
+                        IsVisible="{Binding SelectedSidePanelHasTemplateLink}"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        HorizontalAlignment="Left"
+                        Padding="0"
+                        Cursor="Hand">
+                    <TextBlock Text="{Binding SelectedFunctionInstanceTemplateActionText}"
+                           Foreground="{DynamicResource NeonIconSecondary}"
+                           FontSize="11"
+                           TextDecorations="Underline"
+                           TextWrapping="Wrap"/>
+                    </Button>
+
+                    <Border Background="{DynamicResource NeonPillHover}"
+                            CornerRadius="10"
+                            Padding="10"
+                            IsVisible="{Binding SelectedSidePanelDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      MaxHeight="220">
+                            <TextBlock Text="{Binding SelectedSidePanelDescription}"
+                                       Foreground="{DynamicResource NeonPillFg}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"/>
+                        </ScrollViewer>
+                    </Border>
+                </StackPanel>
+            </Border>
+
         </Grid>
 
         <!-- ── Toast notification overlay ──────────────────────────────── -->
