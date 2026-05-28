@@ -190,13 +190,17 @@ partial class ModelSystemCanvas
                 e.Handled = true;
             }
         }
-        else if (e.Key == Key.Up && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        else if (e.Key == Key.Up
+            && _editingParamNode is null
+            && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
         {
             // Arrow Up: navigate to nearest element above current selection.
             NavigateToNextElement(NavigationDirection.Up);
             e.Handled = true;
         }
-        else if (e.Key == Key.Down && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        else if (e.Key == Key.Down
+            && _editingParamNode is null
+            && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
         {
             // Arrow Down: navigate to nearest element below current selection.
             NavigateToNextElement(NavigationDirection.Down);
@@ -213,6 +217,15 @@ partial class ModelSystemCanvas
             // Arrow Right: navigate to nearest element to the right of current selection.
             NavigateToNextElement(NavigationDirection.Right);
             e.Handled = true;
+        }
+        else if (e.Key == Key.Tab && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0)
+        {
+            // Tab or Shift+Tab: navigate between parameters within a node or function instance.
+            bool isShiftTab = (e.KeyModifiers & KeyModifiers.Shift) != 0;
+            if (NavigateToNextParameter(isShiftTab))
+            {
+                e.Handled = true;
+            }
         }
     }
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -334,7 +347,7 @@ partial class ModelSystemCanvas
             if (paramRowHit is not null)
             {
                 _vm.SelectElementCommand.Execute(paramRowHit);
-                BeginParamEdit(paramRowHit);
+                BeginParamEdit(paramRowHit, parentElement: paramRowHit, hook: SelfParameterNavigationKey);
                 e.Handled = true;
                 return;
             }
@@ -342,10 +355,10 @@ partial class ModelSystemCanvas
             var inlinedRowHit = HitTestInlinedParamRow(mpos);
             if (inlinedRowHit is not null)
             {
-                var (originEl, _, inlinedParam, rx, ry, rw2) = inlinedRowHit.Value;
+                var (originEl, hook, inlinedParam, rx, ry, rw2) = inlinedRowHit.Value;
                 if (originEl is not null)
                     _vm.SelectElementCommand.Execute(originEl);
-                BeginParamEdit(inlinedParam, rx, ry, rw2);
+                BeginParamEdit(inlinedParam, rx, ry, rw2, originEl, hook);
                 e.Handled = true;
                 return;
             }
@@ -926,6 +939,9 @@ partial class ModelSystemCanvas
         Right
     }
 
+    /// <summary>Sentinel key used for direct value-row editing on parameter nodes.</summary>
+    private static readonly object SelfParameterNavigationKey = new();
+
     /// <summary>
     /// Navigates to the next canvas element in the specified direction from the currently selected element.
     /// Finds the closest element that lies in the target direction and selects it.
@@ -1148,5 +1164,226 @@ partial class ModelSystemCanvas
 
         // Apply the new scroll offset.
         sv.Offset = new Vector(desiredScrollX, desiredScrollY);
+    }
+
+    // ── Parameter navigation (Tab/Shift+Tab) ──────────────────────────────
+    /// <summary>
+    /// Navigates to the next or previous parameter within the currently selected element.
+    /// If no parameter is being edited, starts with the first (or last if backward) parameter.
+    /// Returns <c>true</c> if navigation was successful, <c>false</c> if no parameters available.
+    /// </summary>
+    private bool NavigateToNextParameter(bool backward)
+    {
+        if (_vm is null) return false;
+
+        ICanvasElement? parentElement = _editingParamParentElement;
+        object? currentHook = _editingParamHook;
+
+        // If no parameter is currently being edited, determine the parent from the selected element.
+        if (_editingParamNode is null)
+        {
+            parentElement = _vm.SelectedElement;
+            currentHook = null;
+        }
+        else if (parentElement is null || currentHook is null)
+        {
+            // Infer the parent from the parameter node if not already set.
+            InferParameterContext(_editingParamNode, out parentElement, out currentHook);
+        }
+
+        if (parentElement is null) return false;
+
+        // Get all editable parameter targets for this parent element.
+        var hooks = GetParameterHooksForElement(parentElement);
+        if (hooks.Count == 0) return false;
+
+        // Find the index of the current parameter hook.
+        int currentIndex = currentHook is not null
+            ? hooks.FindIndex(h => h.Hook == currentHook)
+            : -1;
+
+        // For backward, if starting fresh, begin at the end; otherwise go backward.
+        int nextIndex = backward
+            ? (currentIndex < 0 ? hooks.Count - 1 : currentIndex - 1)
+            : (currentIndex < 0 ? 0 : currentIndex + 1);
+
+        // Wrap around.
+        if (nextIndex < 0) nextIndex = hooks.Count - 1;
+        else if (nextIndex >= hooks.Count) nextIndex = 0;
+
+        // Get the next hook and its inlined parameter.
+        var nextHookInfo = hooks[nextIndex];
+        var nextHook = nextHookInfo.Hook;
+        var nextParam = nextHookInfo.InlinedParam;
+
+        if (nextParam is null) return false;
+
+        // Commit the current edit if one is active.
+        if (_editingParamNode is not null)
+        {
+            CommitParamEdit();
+        }
+
+        // Calculate the proper row position for this parameter.
+        var rowPosition = CalculateParameterRowPosition(parentElement, nextHook);
+        if (rowPosition is null) return false;
+        
+        BeginParamEdit(nextParam, rowPosition.Value.X, rowPosition.Value.Y, rowPosition.Value.W, parentElement, nextHook);
+        InvalidateVisual();
+        return true;
+    }
+
+    /// <summary>
+    /// Calculates the row position (X, Y, Width) for a parameter on the given parent element and hook.
+    /// Returns null if the position cannot be calculated.
+    /// </summary>
+    private (double X, double Y, double W)? CalculateParameterRowPosition(ICanvasElement element, object hook)
+    {
+        if (element is NodeViewModel nodeVm)
+        {
+            if (ReferenceEquals(hook, SelfParameterNavigationKey) && nodeVm.IsParameterNode)
+            {
+                return (nodeVm.X, nodeVm.Y + NodeHeaderHeight, NodeRenderWidth(nodeVm));
+            }
+
+            var nodeHooks = nodeVm.UnderlyingNode.Hooks;
+            if (nodeHooks is null) return null;
+
+            int hookIdx = -1;
+            for (int j = 0; j < nodeHooks.Count; j++)
+            {
+                if (ReferenceEquals(nodeHooks[j], hook)) { hookIdx = j; break; }
+            }
+            if (hookIdx < 0) return null;
+
+            int rowOffset = nodeVm.IsParameterNode ? 1 : 0;
+            double rw = NodeRenderWidth(nodeVm);
+            double rowTop = nodeVm.Y + NodeHeaderHeight + (rowOffset + hookIdx) * HookRowHeight;
+            return (nodeVm.X, rowTop, rw);
+        }
+        else if (element is FunctionInstanceViewModel fiVm)
+        {
+            var fiHooks = fiVm.UnderlyingInstance.Hooks;
+            if (fiHooks is null) return null;
+
+            int hookIdx = -1;
+            for (int j = 0; j < fiHooks.Count; j++)
+            {
+                if (ReferenceEquals(fiHooks[j], hook)) { hookIdx = j; break; }
+            }
+            if (hookIdx < 0) return null;
+
+            double rw = fiVm.Width;
+            double rowTop = fiVm.Y + FtHeaderHeight + hookIdx * FtHookRowHeight;
+            return (fiVm.X, rowTop, rw);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Infers the parent element and hook of a given parameter node by searching through
+    /// inlined parameter mappings.
+    /// </summary>
+    private void InferParameterContext(NodeViewModel paramNode, out ICanvasElement? parentElement, out object? hook)
+    {
+        parentElement = null;
+        hook = null;
+
+        if (paramNode.IsParameterNode)
+        {
+            parentElement = paramNode;
+            hook = SelfParameterNavigationKey;
+            return;
+        }
+
+        if (_vm is null) return;
+
+        // Search through node-based inlined parameters.
+        foreach (var (key, value) in _hookInlinedParam)
+        {
+            if (value == paramNode)
+            {
+                parentElement = key.Item1;
+                hook = key.Item2;
+                return;
+            }
+        }
+
+        // Search through function-instance-based inlined parameters.
+        foreach (var (key, value) in _fiHookInlinedParam)
+        {
+            if (value == paramNode)
+            {
+                parentElement = key.Item1;
+                hook = key.Item2;
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Represents an editable parameter target and its associated navigation key.
+    /// </summary>
+    private struct ParameterHookInfo
+    {
+        public object Hook { get; set; }
+        public NodeViewModel? InlinedParam { get; set; }
+    }
+
+    /// <summary>
+    /// Gets all editable parameter targets on the given element, in order.
+    /// Includes direct value-row editing for parameter nodes and inlined parameters for hooks.
+    /// </summary>
+    private List<ParameterHookInfo> GetParameterHooksForElement(ICanvasElement element)
+    {
+        var hooks = new List<ParameterHookInfo>();
+
+        if (element is NodeViewModel nodeVm)
+        {
+            if (nodeVm.IsParameterNode)
+            {
+                hooks.Add(new ParameterHookInfo
+                {
+                    Hook = SelfParameterNavigationKey,
+                    InlinedParam = nodeVm
+                });
+            }
+
+            // Regular nodes can have parameter hooks.
+            var nodeHooks = nodeVm.UnderlyingNode.Hooks;
+            if (nodeHooks is not null)
+            {
+                foreach (var hook in nodeHooks)
+                {
+                    var inlinedParam = _hookInlinedParam.TryGetValue((nodeVm, hook), out var param) ? param : null;
+                    if (inlinedParam is not null)
+                    {
+                        hooks.Add(new ParameterHookInfo { Hook = hook, InlinedParam = inlinedParam });
+                    }
+                }
+            }
+        }
+        else if (element is FunctionInstanceViewModel fiVm)
+        {
+            // Function instances have function parameter hooks.
+            var fpHooks = fiVm.UnderlyingInstance.Hooks;
+            if (fpHooks is not null)
+            {
+                foreach (var hook in fpHooks)
+                {
+                    if (hook is FunctionParameterHook fpHook)
+                    {
+                        var inlinedParam = _fiHookInlinedParam.TryGetValue((fiVm, fpHook), out var param) ? param : null;
+                        if (inlinedParam is not null)
+                        {
+                            hooks.Add(new ParameterHookInfo { Hook = fpHook, InlinedParam = inlinedParam });
+                        }
+                    }
+                }
+            }
+        }
+
+        return hooks;
     }
 }

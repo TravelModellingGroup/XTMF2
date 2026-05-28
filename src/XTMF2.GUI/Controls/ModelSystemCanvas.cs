@@ -99,6 +99,10 @@ public sealed partial class ModelSystemCanvas : Control
     private NodeViewModel? _editingParamNode;
     /// <summary>Screen position and width of the inline editor overlay (set in <see cref="BeginParamEdit"/>).</summary>
     private double _editingParamEditorX, _editingParamEditorY, _editingParamEditorW;
+    /// <summary>The parent canvas element (Node or FunctionInstance) that owns the currently editing parameter.</summary>
+    private ICanvasElement? _editingParamParentElement;
+    /// <summary>The hook on the parent element that this parameter is attached to for inlined parameters.</summary>
+    private object? _editingParamHook;
     /// <summary>
     /// Transparent, non-interactive overlay that draws syntax-highlighted tokens
     /// on top of the scripted-parameter TextBox. Added to VisualChildren after

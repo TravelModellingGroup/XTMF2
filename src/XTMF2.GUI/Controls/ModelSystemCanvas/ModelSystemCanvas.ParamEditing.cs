@@ -66,13 +66,16 @@ partial class ModelSystemCanvas
         return null;
     }
 
-    private void BeginParamEdit(NodeViewModel node, double rowX = -1, double rowY = -1, double rowW = -1)
+    private void BeginParamEdit(NodeViewModel node, double rowX = -1, double rowY = -1, double rowW = -1, ICanvasElement? parentElement = null, object? hook = null)
     {
         HideVarDropdown();
         _editingParamNode = node;
         _editingParamEditorX = rowX >= 0 ? rowX : node.X;
         _editingParamEditorY = rowY >= 0 ? rowY : node.Y + NodeHeaderHeight;
-        _editingParamEditorW = rowW >= 0 ? rowW : NodeRenderWidth(node);
+        // Width must be positive for ArrangeOverride to position the inline editor.
+        _editingParamEditorW = rowW > 0 ? rowW : NodeRenderWidth(node);
+        _editingParamParentElement = parentElement;
+        _editingParamHook = hook;
 
         var enumType = GetEffectiveEnumType(node);
         _editingParamIsEnum = enumType is not null && !node.IsScriptedParameter;
@@ -193,6 +196,9 @@ partial class ModelSystemCanvas
             HideVarDropdown();
             if (_editingParamNode is null) return;
             var node = _editingParamNode;
+            // Clear tracking fields after capturing node
+            _editingParamParentElement = null;
+            _editingParamHook = null;
             var value = _editingParamIsEnum
                 ? (_inlineEnumEditor.SelectedItem as string ?? string.Empty)
                 : (_inlineEditor.Text ?? string.Empty);
@@ -236,6 +242,8 @@ partial class ModelSystemCanvas
         HideVarDropdown();
         UnsubscribeInlineEditorScroll();
         _editingParamNode   = null;
+        _editingParamParentElement = null;
+        _editingParamHook = null;
         _editingParamIsEnum = false;
         _enumEditorLoading  = false;
         _inlineEditor.IsVisible     = false;
