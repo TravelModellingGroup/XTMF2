@@ -27,10 +27,10 @@ partial class ModelSystemCanvas
     private static readonly IBrush CanvasBackgroundLight = new SolidColorBrush(Color.FromRgb(0xF0, 0xF4, 0xF8));
     private static readonly IBrush NodeFill = new SolidColorBrush(Color.FromRgb(0x0E, 0x22, 0x38)); // deep dark blue
     private static readonly IBrush NodeBorderBrush = new SolidColorBrush(Color.FromRgb(0x00, 0xCC, 0xFF)); // neon cyan
-    private static readonly IBrush NodeSelBrush = Brushes.DodgerBlue;
+    private static readonly IBrush NodeSelBrush = new SolidColorBrush(Color.FromRgb(0xAA, 0x55, 0xFF));
     private static readonly IBrush NodeTextBrush = Brushes.White;
     private static readonly IBrush StartFill = new SolidColorBrush(Color.FromRgb(0xFF, 0x77, 0x00)); // vivid orange
-    private static readonly IBrush StartSelFill = Brushes.DodgerBlue;
+    private static readonly IBrush StartSelFill = new SolidColorBrush(Color.FromRgb(0xAA, 0x55, 0xFF));
     private static readonly IBrush StartTextBrush = Brushes.White;
     private static readonly IBrush StartTextBrushLight = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E));
     private static readonly IBrush LinkBrush = new SolidColorBrush(Color.FromRgb(0x22, 0xBB, 0xDD)); // teal-cyan
@@ -42,7 +42,7 @@ partial class ModelSystemCanvas
     // Ghost node styling
     private static readonly IBrush GhostNodeFill = new SolidColorBrush(Color.FromArgb(0x50, 0x0E, 0x22, 0x38));
     private static readonly IBrush GhostNodeBorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x99, 0xDD)); // steel-blue neon
-    private static readonly IBrush GhostNodeSelBrush = Brushes.DodgerBlue;
+    private static readonly IBrush GhostNodeSelBrush = new SolidColorBrush(Color.FromRgb(0xAA, 0x55, 0xFF));
     private static readonly DashStyle GhostNodeDash = new DashStyle([6, 4], 0);
 
     // Scripted-parameter syntax-highlight token colours
@@ -61,7 +61,7 @@ partial class ModelSystemCanvas
     private static readonly IBrush CommentFill = new SolidColorBrush(Color.FromArgb(0xF0, 0xFF, 0xF2, 0x90));
     private static readonly IBrush CommentSelFill = new SolidColorBrush(Color.FromArgb(0xF0, 0xFF, 0xE0, 0x50));
     private static readonly IBrush CommentBorderBrush = new SolidColorBrush(Color.FromRgb(0xDD, 0xBB, 0x00));   // warm gold
-    private static readonly IBrush CommentSelBorder = Brushes.DodgerBlue;
+    private static readonly IBrush CommentSelBorder = new SolidColorBrush(Color.FromRgb(0x77, 0x22, 0xCC));
     private static readonly IBrush CommentTextBrush = new SolidColorBrush(Color.FromRgb(0x22, 0x1E, 0x00));
     /// <summary>Slightly deeper/more saturated yellow for the adhesive-tab band at the top of the sticky note.</summary>
     private static readonly IBrush CommentHeaderBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xD5, 0x1A));
@@ -159,7 +159,7 @@ partial class ModelSystemCanvas
     private static readonly IBrush FiFillL = new SolidColorBrush(Color.FromRgb(0xE8, 0xFF, 0xF8));
     private static readonly IBrush FiHeaderFillL = new SolidColorBrush(Color.FromRgb(0x7B, 0xCF, 0xC0));
     private static readonly IBrush FiBorderBrushL = new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0x6B));
-    private static readonly IBrush FiSelBorderBrushL = new SolidColorBrush(Color.FromRgb(0x00, 0x55, 0x48));
+    private static readonly IBrush FiSelBorderBrushL = new SolidColorBrush(Color.FromRgb(0x77, 0x22, 0xCC));
     private static readonly IBrush FiTextBrushL = new SolidColorBrush(Color.FromRgb(0x00, 0x33, 0x28));
     private static readonly IBrush FiSubTextBrushL = new SolidColorBrush(Color.FromArgb(0xC0, 0x3A, 0x55, 0x50));
     private static readonly IBrush FiHookTextBrushL = new SolidColorBrush(Color.FromRgb(0x00, 0x57, 0x4E));
@@ -174,7 +174,7 @@ partial class ModelSystemCanvas
     private static readonly IBrush FtFill = new SolidColorBrush(Color.FromRgb(0x20, 0x12, 0x38));
     private static readonly IBrush FtHeaderFill = new SolidColorBrush(Color.FromRgb(0x4A, 0x28, 0x6E));
     private static readonly IBrush FtBorderBrush = new SolidColorBrush(Color.FromRgb(0xAA, 0x55, 0xFF)); // vivid purple
-    private static readonly IBrush FtSelBorderBrush = Brushes.DodgerBlue;
+    private static readonly IBrush FtSelBorderBrush = new SolidColorBrush(Color.FromRgb(0xAA, 0x55, 0xFF));
     private static readonly IBrush FtTextBrush = new SolidColorBrush(Color.FromRgb(0xDD, 0xCC, 0xFF));
     private static readonly IBrush FtHookTextBrush = new SolidColorBrush(Color.FromRgb(0xCC, 0xAA, 0xFF));
     private static readonly IBrush FtCountTextBrush = new SolidColorBrush(Color.FromArgb(0x90, 0xCC, 0xAA, 0xFF));
@@ -187,7 +187,7 @@ partial class ModelSystemCanvas
     private static readonly IBrush FiFill = new SolidColorBrush(Color.FromRgb(0x07, 0x24, 0x24));
     private static readonly IBrush FiHeaderFill = new SolidColorBrush(Color.FromRgb(0x0E, 0x4A, 0x44));
     private static readonly IBrush FiBorderBrush = new SolidColorBrush(Color.FromRgb(0x00, 0xFF, 0xCC)); // vivid mint-teal
-    private static readonly IBrush FiSelBorderBrush = new SolidColorBrush(Color.FromRgb(0x24, 0xCF, 0xCA));
+    private static readonly IBrush FiSelBorderBrush = new SolidColorBrush(Color.FromRgb(0xAA, 0x55, 0xFF));
     private static readonly IBrush FiTextBrush = new SolidColorBrush(Color.FromRgb(0xB2, 0xFF, 0xF0));
     private static readonly IBrush FiSubTextBrush = new SolidColorBrush(Color.FromArgb(0xB0, 0x80, 0xE8, 0xD0));
     private static readonly IBrush FiHookTextBrush = new SolidColorBrush(Color.FromRgb(0x80, 0xCB, 0xC4));
@@ -247,7 +247,7 @@ partial class ModelSystemCanvas
     private static readonly Color LinkDisabledGlowColor = Color.FromRgb(0x7A, 0x80, 0x8A); // muted grey
     private static readonly Color LinkDisabledGlowColorL = Color.FromRgb(0x9A, 0xA2, 0xAD); // muted grey (light)
     private static readonly Color LinkSelGlowColor = Color.FromRgb(0xFF, 0x55, 0x00); // orange-red
-    private static readonly Color SelectionGlowColor = Color.FromRgb(0x22, 0xAA, 0xFF); // bright blue (selected objects)
+    private static readonly Color SelectionGlowColor = Color.FromRgb(0xAA, 0x44, 0xFF); // neon purple (selected objects)
     private static readonly Color DisabledGlowColor = Color.FromRgb(0x78, 0x7F, 0x8A); // muted grey glow
     private static readonly Color DisabledGlowColorL = Color.FromRgb(0xA5, 0xAD, 0xB8); // muted grey glow (light)
 
@@ -304,11 +304,11 @@ partial class ModelSystemCanvas
     // Node
     private static readonly Pen NodeBorderPen    = new(NodeBorderBrush,  NodeBorderThickness);
     private static readonly Pen NodeBorderPenL   = new(NodeBorderBrushL, NodeBorderThickness);
-    private static readonly Pen NodeSelPen        = new(NodeSelBrush,     NodeBorderThickness);
+    private static readonly Pen NodeSelPen        = new(NodeSelBrush,     NodeBorderThickness + 1.0);
     // Ghost node (dashed)
     private static readonly Pen GhostBorderPen   = new(GhostNodeBorderBrush,  NodeBorderThickness, dashStyle: GhostNodeDash);
     private static readonly Pen GhostBorderPenL  = new(GhostNodeBorderBrushL, NodeBorderThickness, dashStyle: GhostNodeDash);
-    private static readonly Pen GhostSelPen      = new(GhostNodeSelBrush,     NodeBorderThickness, dashStyle: GhostNodeDash);
+    private static readonly Pen GhostSelPen      = new(GhostNodeSelBrush,     NodeBorderThickness + 1.0, dashStyle: GhostNodeDash);
     // Start
     private static readonly Pen StartBorderPenL  = new(StartBorderBrushL, NodeBorderThickness);
     // Hook divider (1.0 thickness)
@@ -342,12 +342,12 @@ partial class ModelSystemCanvas
     // Function-template border (dashed)
     private static readonly Pen FtBorderPen    = new(FtBorderBrush,    NodeBorderThickness + 0.5, dashStyle: FtBorderDash);
     private static readonly Pen FtBorderPenL   = new(FtBorderBrushL,   NodeBorderThickness + 0.5, dashStyle: FtBorderDash);
-    private static readonly Pen FtSelBorderPen = new(FtSelBorderBrush, NodeBorderThickness + 0.5, dashStyle: FtBorderDash);
+    private static readonly Pen FtSelBorderPen = new(FtSelBorderBrush, NodeBorderThickness + 1.5, dashStyle: FtBorderDash);
     // Function-instance border
     private static readonly Pen FiBorderPen     = new(FiBorderBrush,     NodeBorderThickness);
     private static readonly Pen FiBorderPenL    = new(FiBorderBrushL,    NodeBorderThickness);
-    private static readonly Pen FiSelBorderPen  = new(FiSelBorderBrush,  NodeBorderThickness);
-    private static readonly Pen FiSelBorderPenL = new(FiSelBorderBrushL, NodeBorderThickness);
+    private static readonly Pen FiSelBorderPen  = new(FiSelBorderBrush,  NodeBorderThickness + 1.0);
+    private static readonly Pen FiSelBorderPenL = new(FiSelBorderBrushL, NodeBorderThickness + 1.0);
     private static readonly Pen DisabledNodeBorderPen = new(DisabledNodeBorderBrush, NodeBorderThickness);
     private static readonly Pen DisabledNodeBorderPenL = new(DisabledNodeBorderBrushL, NodeBorderThickness);
     private static readonly Pen DisabledFiBorderPen = new(DisabledFiBorderBrush, NodeBorderThickness);
@@ -358,12 +358,12 @@ partial class ModelSystemCanvas
     private static readonly Pen DisabledDividerPenThinL = new(DisabledDividerBrushL, 0.5);
     // FunctionParameter border
     private static readonly Pen FpBorderPen     = new(FpBorderBrush,    NodeBorderThickness);
-    private static readonly Pen FpSelBorderPen  = new(FpSelBorderBrush, NodeBorderThickness);
+    private static readonly Pen FpSelBorderPen  = new(FpSelBorderBrush, NodeBorderThickness + 1.0);
     private static readonly Pen FpBorderPenL    = new(FpBorderBrushL,   NodeBorderThickness);
-    private static readonly Pen FpSelBorderPenL = new(NodeSelBrush,     NodeBorderThickness);
+    private static readonly Pen FpSelBorderPenL = new(NodeSelBrush,     NodeBorderThickness + 1.0);
     // Comment border
     private static readonly Pen CommentBorderPen    = new(CommentBorderBrush, NodeBorderThickness);
-    private static readonly Pen CommentSelBorderPen = new(CommentSelBorder,   NodeBorderThickness);
+    private static readonly Pen CommentSelBorderPen = new(CommentSelBorder,   NodeBorderThickness + 1.0);
     private static readonly Pen CommentFoldPen      = new(CommentBorderBrush, 1.0);
     private static readonly Pen CommentSelFoldPen   = new(CommentSelBorder,   1.0);
     // Entry-node gold ring

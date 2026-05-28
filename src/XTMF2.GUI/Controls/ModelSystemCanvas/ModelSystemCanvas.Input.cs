@@ -965,7 +965,7 @@ partial class ModelSystemCanvas
         if (allElements.Count == 0) return;
 
         // Find the best candidate element in the given direction.
-        ICanvasElement? nextElement = FindNearestElement(current, allElements, direction);
+        ICanvasElement? nextElement = FindNextElement(current, allElements, direction);
 
         if (nextElement is not null && nextElement != current)
         {
@@ -1005,7 +1005,7 @@ partial class ModelSystemCanvas
     /// Finds the nearest element to <paramref name="current"/> in the specified <paramref name="direction"/>.
     /// Elements are scored based on their position relative to the current element.
     /// </summary>
-    private ICanvasElement? FindNearestElement(ICanvasElement current, List<ICanvasElement> candidates, NavigationDirection direction)
+    private ICanvasElement? FindNextElement(ICanvasElement current, List<ICanvasElement> candidates, NavigationDirection direction)
     {
         ICanvasElement? nearest = null;
         double nearestScore = double.MinValue;
@@ -1037,26 +1037,17 @@ partial class ModelSystemCanvas
     /// </summary>
     private double FindBestNavigationScore(ICanvasElement current, ICanvasElement candidate, NavigationDirection direction)
     {
-        var currentPoints = GetElementNavigationPoints(current);
-        var candidatePoints = GetElementNavigationPoints(candidate);
-
         double bestScore = double.MinValue;
         bool found = false;
 
-        foreach (var from in currentPoints)
+        double dx = candidate.CenterX - current.CenterX;
+        double dy = candidate.CenterY - current.CenterY;
+        double distance = Math.Sqrt(dx * dx + dy * dy);
+        double score = CalculateNavigationScore(dx, dy, distance, direction, HasLinkBetween(current, candidate));
+        if (!double.IsNaN(score) && score > bestScore)
         {
-            foreach (var to in candidatePoints)
-            {
-                double dx = to.X - from.X;
-                double dy = to.Y - from.Y;
-                double distance = Math.Sqrt(dx * dx + dy * dy);
-                double score = CalculateNavigationScore(dx, dy, distance, direction, HasLinkBetween(current, candidate));
-                if (!double.IsNaN(score) && score > bestScore)
-                {
-                    bestScore = score;
-                    found = true;
-                }
-            }
+            bestScore = score;
+            found = true;
         }
 
         return found ? bestScore : double.NaN;
@@ -1107,8 +1098,8 @@ partial class ModelSystemCanvas
         }
 
         const double GeometryScale = 100.0;
-        const double WrongDirectionPenalty = 60.0;
-        const double LinkedElementBonus = 20.0;
+        const double WrongDirectionPenalty = 2048.0;
+        const double LinkedElementBonus = 200.0;
         double score = selectedGeometryScore * GeometryScale;
         if (bestGeometryScore > selectedGeometryScore)
         {
@@ -1131,26 +1122,33 @@ partial class ModelSystemCanvas
         double angle = Math.Atan2(dy, dx) * 180 / Math.PI;
         if (angle < 0) angle += 360;
 
+        const int directionCone = 85; // degrees of tolerance on either side of the ideal direction (e.g. for Right, ideal is 0°, so valid range is [360-70, 0+70] = [290, 70])
+
         double angleDeviation = direction switch
         {
-            NavigationDirection.Right when angle <= 45 || angle >= 315
+            NavigationDirection.Right when angle <= directionCone || angle >= 360 - directionCone
                 => Math.Abs(NormalizeSignedAngle(angle)),
-            NavigationDirection.Down when angle >= 45 && angle <= 135
+            NavigationDirection.Down when angle >= 90 - directionCone && angle <= 90 + directionCone
                 => Math.Abs(angle - 90),
-            NavigationDirection.Left when angle >= 135 && angle <= 225
+            NavigationDirection.Left when angle >= 180 - directionCone && angle <= 180 + directionCone
                 => Math.Abs(angle - 180),
-            NavigationDirection.Up when angle >= 225 && angle <= 315
+            NavigationDirection.Up when angle >= 270 - directionCone && angle <= 270 + directionCone
                 => Math.Abs(angle - 270),
             _ => double.NaN,
         };
 
         if (double.IsNaN(angleDeviation)) return 0.0;
 
-        const double DistanceWeight = 0.02;
-        const double AngleExponent = 2.0;
-        double angleCloseness = 1.0 - (angleDeviation / 45.0);
-        double distanceCloseness = 1.0 / (1.0 + (distance * DistanceWeight));
-        return Math.Pow(angleCloseness, AngleExponent) * distanceCloseness;
+        // TODO: calibrate these parameters based on user testing to find a good balance between directional fidelity and distance sensitivity.
+        const double DistanceWeight = 100.0;
+        const double AnglePenaltyAt45 = 0.20;
+        const double ReferenceAngle = 45.0;
+        // Calibrated angular decay: 45° off-axis yields a 20% penalty
+        // (i.e., 80% of the in-direction utility at the same distance).
+        double angleCloseness = Math.Pow(1.0 - AnglePenaltyAt45, angleDeviation / ReferenceAngle);
+        double distanceCloseness = 1.0 / (1.0 + distance * DistanceWeight);
+        var utility = angleCloseness * distanceCloseness;
+        return utility;
     }
 
     private static double NormalizeSignedAngle(double angle)
