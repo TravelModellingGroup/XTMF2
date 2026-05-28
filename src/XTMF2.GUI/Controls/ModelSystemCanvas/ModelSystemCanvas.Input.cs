@@ -190,6 +190,30 @@ partial class ModelSystemCanvas
                 e.Handled = true;
             }
         }
+        else if (e.Key == Key.Up && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        {
+            // Arrow Up: navigate to nearest element above current selection.
+            NavigateToNextElement(NavigationDirection.Up);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Down && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        {
+            // Arrow Down: navigate to nearest element below current selection.
+            NavigateToNextElement(NavigationDirection.Down);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Left && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        {
+            // Arrow Left: navigate to nearest element to the left of current selection.
+            NavigateToNextElement(NavigationDirection.Left);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Right && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        {
+            // Arrow Right: navigate to nearest element to the right of current selection.
+            NavigateToNextElement(NavigationDirection.Right);
+            e.Handled = true;
+        }
     }
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
@@ -890,5 +914,239 @@ partial class ModelSystemCanvas
         _linkCurrentPos = default;
         _autoScrollTimer.Stop();
         pointer?.Capture(null);
+    }
+
+    // ── Keyboard navigation (arrow keys) ──────────────────────────────────
+    /// <summary>Enumeration for navigation directions used in arrow key navigation.</summary>
+    private enum NavigationDirection
+    {
+        Up,
+        Down,
+        Left,
+        Right
+    }
+
+    /// <summary>
+    /// Navigates to the next canvas element in the specified direction from the currently selected element.
+    /// Finds the closest element that lies in the target direction and selects it.
+    /// Automatically scrolls to center the element in the viewport.
+    /// </summary>
+    private void NavigateToNextElement(NavigationDirection direction)
+    {
+        if (_vm is null) return;
+
+        // Get current selected element.
+        var current = _vm.SelectedElement;
+        if (current is null) 
+        {
+            // If nothing is selected, select the first available element.
+            SelectFirstElement();
+            return;
+        }
+
+        // Collect all navigable elements.
+        var allElements = CollectAllCanvasElements();
+        if (allElements.Count == 0) return;
+
+        // Find the best candidate element in the given direction.
+        ICanvasElement? nextElement = FindNearestElement(current, allElements, direction);
+
+        if (nextElement is not null && nextElement != current)
+        {
+            // Clear multi-selection and select the next element.
+            ClearMultiSelection();
+            _vm.SelectElementCommand.Execute(nextElement);
+            
+            // Scroll to center the element in the viewport.
+            CenterElementInViewport(nextElement);
+            
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Collects all navigable canvas elements from the current boundary view.
+    /// </summary>
+    private List<ICanvasElement> CollectAllCanvasElements()
+    {
+        if (_vm is null) return new List<ICanvasElement>();
+
+        var elements = new List<ICanvasElement>();
+
+        // Collect all types of canvas elements visible on the current boundary.
+        elements.AddRange(_vm.Starts);
+        elements.AddRange(_vm.Nodes.Where(n => !n.IsInlined));
+        elements.AddRange(_vm.CommentBlocks);
+        elements.AddRange(_vm.GhostNodes);
+        elements.AddRange(_vm.FunctionTemplates);
+        elements.AddRange(_vm.FunctionInstances);
+        elements.AddRange(_vm.FunctionParameterVMs);
+
+        return elements;
+    }
+
+    /// <summary>
+    /// Finds the nearest element to <paramref name="current"/> in the specified <paramref name="direction"/>.
+    /// Elements are scored based on their position relative to the current element.
+    /// </summary>
+    private ICanvasElement? FindNearestElement(ICanvasElement current, List<ICanvasElement> candidates, NavigationDirection direction)
+    {
+        double currentX = current.CenterX;
+        double currentY = current.CenterY;
+
+        ICanvasElement? nearest = null;
+        double nearestScore = double.MaxValue;
+
+        foreach (var candidate in candidates)
+        {
+            // Skip the current element.
+            if (candidate == current) continue;
+
+            double dx = candidate.CenterX - currentX;
+            double dy = candidate.CenterY - currentY;
+            double distance = Math.Sqrt(dx * dx + dy * dy);
+
+            // Score is based on the distance and whether the element is in the target direction.
+            double score = CalculateNavigationScore(dx, dy, distance, direction);
+
+            // Lower score is better. Only consider elements with a positive score
+            // (i.e., in the target direction).
+            if (score >= 0 && score < nearestScore)
+            {
+                nearestScore = score;
+                nearest = candidate;
+            }
+        }
+
+        return nearest;
+    }
+
+    /// <summary>
+    /// Calculates a navigation score for an element relative to the current position and direction.
+    /// Returns a negative score if the element is not in the target direction, or a positive score
+    /// indicating the distance-weighted angle deviation if the element is in the target direction.
+    /// Lower positive scores indicate better matches.
+    /// </summary>
+    private double CalculateNavigationScore(double dx, double dy, double distance, NavigationDirection direction)
+    {
+        // Minimum distance threshold: don't skip very close elements.
+        const double MinDistance = 10.0;
+        if (distance < MinDistance) return double.MaxValue;
+
+        // Calculate angle from current element to candidate (in degrees, 0° = right, 90° = down, etc.).
+        double angle = Math.Atan2(dy, dx) * 180 / Math.PI;
+        // Normalize to 0-360 range.
+        if (angle < 0) angle += 360;
+
+        // Define acceptable angle ranges for each direction (with a 45° tolerance).
+        // The score penalizes both angular deviation and distance.
+        double angleDeviation = 0;
+        bool isInDirection = false;
+
+        switch (direction)
+        {
+            case NavigationDirection.Right:  // 0° (±45°)
+                if (angle <= 45 || angle >= 315)
+                {
+                    isInDirection = true;
+                    angleDeviation = angle <= 45 ? angle : angle - 360;
+                }
+                break;
+
+            case NavigationDirection.Down:   // 90° (±45°)
+                if (angle >= 45 && angle <= 135)
+                {
+                    isInDirection = true;
+                    angleDeviation = Math.Abs(angle - 90);
+                }
+                break;
+
+            case NavigationDirection.Left:   // 180° (±45°)
+                if (angle >= 135 && angle <= 225)
+                {
+                    isInDirection = true;
+                    angleDeviation = Math.Abs(angle - 180);
+                }
+                break;
+
+            case NavigationDirection.Up:     // 270° (±45°)
+                if (angle >= 225 && angle <= 315)
+                {
+                    isInDirection = true;
+                    angleDeviation = Math.Abs(angle - 270);
+                }
+                break;
+        }
+
+        if (!isInDirection) return -1; // Not in target direction.
+
+        // Combine angle deviation and distance for the final score.
+        // Prioritize elements more aligned with the direction (lower angle deviation).
+        double score = angleDeviation + (distance * 0.1);
+        return score;
+    }
+
+    /// <summary>
+    /// Selects the first available canvas element when no element is currently selected.
+    /// Prioritizes by: Starts → Nodes → CommentBlocks → GhostNodes → FunctionTemplates → FunctionInstances → FunctionParameters.
+    /// Automatically scrolls to center the element in the viewport.
+    /// </summary>
+    private void SelectFirstElement()
+    {
+        if (_vm is null) return;
+
+        ICanvasElement? firstElement = null;
+
+        // Check each collection in priority order
+        if (_vm.Starts.Count > 0) firstElement = _vm.Starts[0];
+        else if (_vm.Nodes.Any(n => !n.IsInlined)) firstElement = _vm.Nodes.First(n => !n.IsInlined);
+        else if (_vm.CommentBlocks.Count > 0) firstElement = _vm.CommentBlocks[0];
+        else if (_vm.GhostNodes.Count > 0) firstElement = _vm.GhostNodes[0];
+        else if (_vm.FunctionTemplates.Count > 0) firstElement = _vm.FunctionTemplates[0];
+        else if (_vm.FunctionInstances.Count > 0) firstElement = _vm.FunctionInstances[0];
+        else if (_vm.FunctionParameterVMs.Count > 0) firstElement = _vm.FunctionParameterVMs[0];
+
+        if (firstElement is not null)
+        {
+            _vm.SelectElementCommand.Execute(firstElement);
+            
+            // Scroll to center the element in the viewport.
+            CenterElementInViewport(firstElement);
+            
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Scrolls the canvas to center the given element in the current viewport.
+    /// Calculates the required scroll offset to place the element's center at the viewport center.
+    /// </summary>
+    private void CenterElementInViewport(ICanvasElement element)
+    {
+        var sv = GetScrollViewer();
+        if (sv is null) return;
+
+        // Get the element's center in canvas/model coordinates.
+        double elementCenterX = element.CenterX;
+        double elementCenterY = element.CenterY;
+
+        // Get the current viewport dimensions in screen coordinates.
+        double viewportWidth = sv.Viewport.Width;
+        double viewportHeight = sv.Viewport.Height;
+
+        // The scroll offset is in screen coordinates (device pixels).
+        // To center the element at the viewport center:
+        // ScrollOffset = (ElementCenterInScreenCoords) - (ViewportCenter)
+        // Where ElementCenterInScreenCoords = ElementCenterX * _scale
+        
+        double desiredScrollX = (elementCenterX * _scale) - (viewportWidth / 2.0);
+        double desiredScrollY = (elementCenterY * _scale) - (viewportHeight / 2.0);
+
+        // Clamp to valid range (minimum 0). ScrollViewer will clamp to max extent.
+        desiredScrollX = Math.Max(0, desiredScrollX);
+        desiredScrollY = Math.Max(0, desiredScrollY);
+
+        // Apply the new scroll offset.
+        sv.Offset = new Vector(desiredScrollX, desiredScrollY);
     }
 }
