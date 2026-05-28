@@ -34,7 +34,7 @@ partial class ModelSystemCanvas
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (_vm is null) 
+        if (_vm is null)
         {
             return;
         }
@@ -169,7 +169,7 @@ partial class ModelSystemCanvas
         {
             // Paste at the centre of the current viewport.
             var sv = GetScrollViewer();
-            double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width  ?? Bounds.Width)  / 2.0) / _scale;
+            double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width ?? Bounds.Width) / 2.0) / _scale;
             double vy = ((sv?.Offset.Y ?? 0) + (sv?.Viewport.Height ?? Bounds.Height) / 2.0) / _scale;
             _ = PasteElementsAsync(vx, vy);
             e.Handled = true;
@@ -187,6 +187,43 @@ partial class ModelSystemCanvas
             if (toExtract.Count > 0 && _vm is not null)
             {
                 _ = _vm.ExtractSelectionToFunctionTemplateAsync(toExtract);
+                e.Handled = true;
+            }
+        }
+        else if (e.Key == Key.Up
+            && _editingParamNode is null
+            && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        {
+            // Arrow Up: navigate to nearest element above current selection.
+            NavigateToNextElement(NavigationDirection.Up);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Down
+            && _editingParamNode is null
+            && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        {
+            // Arrow Down: navigate to nearest element below current selection.
+            NavigateToNextElement(NavigationDirection.Down);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Left && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        {
+            // Arrow Left: navigate to nearest element to the left of current selection.
+            NavigateToNextElement(NavigationDirection.Left);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Right && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        {
+            // Arrow Right: navigate to nearest element to the right of current selection.
+            NavigateToNextElement(NavigationDirection.Right);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Tab && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0)
+        {
+            // Tab or Shift+Tab: navigate between parameters within a node or function instance.
+            bool isShiftTab = (e.KeyModifiers & KeyModifiers.Shift) != 0;
+            if (NavigateToNextParameter(isShiftTab))
+            {
                 e.Handled = true;
             }
         }
@@ -310,7 +347,7 @@ partial class ModelSystemCanvas
             if (paramRowHit is not null)
             {
                 _vm.SelectElementCommand.Execute(paramRowHit);
-                BeginParamEdit(paramRowHit);
+                BeginParamEdit(paramRowHit, parentElement: paramRowHit, hook: SelfParameterNavigationKey);
                 e.Handled = true;
                 return;
             }
@@ -318,10 +355,10 @@ partial class ModelSystemCanvas
             var inlinedRowHit = HitTestInlinedParamRow(mpos);
             if (inlinedRowHit is not null)
             {
-                var (originEl, _, inlinedParam, rx, ry, rw2) = inlinedRowHit.Value;
+                var (originEl, hook, inlinedParam, rx, ry, rw2) = inlinedRowHit.Value;
                 if (originEl is not null)
                     _vm.SelectElementCommand.Execute(originEl);
-                BeginParamEdit(inlinedParam, rx, ry, rw2);
+                BeginParamEdit(inlinedParam, rx, ry, rw2, originEl, hook);
                 e.Handled = true;
                 return;
             }
@@ -486,7 +523,7 @@ partial class ModelSystemCanvas
             if (_editingCommentBlock is not null) CommitCommentEdit();
             if (_editingNameElement is not null) CommitNameEdit();
 
-            if (hit is NodeViewModel or CommentBlockViewModel or GhostNodeViewModel or FunctionTemplateViewModel or FunctionInstanceViewModel or FunctionParameterViewModel)
+            if (hit is not null)
             {
                 // On the very first Ctrl+click, absorb the existing primary selection into the set.
                 if (_multiSelection.Count == 0 && _vm.SelectedElement is not null
@@ -597,30 +634,7 @@ partial class ModelSystemCanvas
         {
             var dw = mpos.X - _resizeStartPos.X;
             var dh = mpos.Y - _resizeStartPos.Y;
-            if (_resizing is NodeViewModel resizingNode)
-            {
-                resizingNode.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
-            else if (_resizing is CommentBlockViewModel resizingComment)
-            {
-                resizingComment.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
-            else if (_resizing is GhostNodeViewModel resizingGhost)
-            {
-                resizingGhost.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
-            else if (_resizing is FunctionTemplateViewModel resizingFt)
-            {
-                resizingFt.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
-            else if (_resizing is FunctionInstanceViewModel resizingFi)
-            {
-                resizingFi.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
-            else if (_resizing is FunctionParameterViewModel resizingFp)
-            {
-                resizingFp.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
+            _resizing.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             InvalidateAndMeasure();
             e.Handled = true;
             return;
@@ -671,13 +685,7 @@ partial class ModelSystemCanvas
             {
                 double nx = Math.Max(0, el.X + dx);
                 double ny = Math.Max(0, el.Y + dy);
-                if (el is NodeViewModel gnvm) gnvm.MoveToPreview(nx, ny);
-                else if (el is StartViewModel gsvm) gsvm.MoveToPreview(nx, ny);
-                else if (el is CommentBlockViewModel gcvm) gcvm.MoveToPreview(nx, ny);
-                else if (el is GhostNodeViewModel ggvm) ggvm.MoveToPreview(nx, ny);
-                else if (el is FunctionTemplateViewModel gftvm) gftvm.MoveToPreview(nx, ny);
-                else if (el is FunctionInstanceViewModel gfivm) gfivm.MoveToPreview(nx, ny);
-                else if (el is FunctionParameterViewModel gfpvm) gfpvm.MoveToPreview(nx, ny);
+                el.MoveToPreview(nx, ny);
             }
         }
         else
@@ -685,13 +693,7 @@ partial class ModelSystemCanvas
             // Single-element drag: preview only, no session command issued yet.
             var newX = Math.Max(0, mpos.X - _dragOffset.X);
             var newY = Math.Max(0, mpos.Y - _dragOffset.Y);
-            if (_dragging is NodeViewModel nvm) nvm.MoveToPreview(newX, newY);
-            if (_dragging is StartViewModel svm) svm.MoveToPreview(newX, newY);
-            if (_dragging is CommentBlockViewModel cvm) cvm.MoveToPreview(newX, newY);
-            if (_dragging is GhostNodeViewModel gvm) gvm.MoveToPreview(newX, newY);
-            if (_dragging is FunctionTemplateViewModel ftvm) ftvm.MoveToPreview(newX, newY);
-            if (_dragging is FunctionInstanceViewModel fivm) fivm.MoveToPreview(newX, newY);
-            if (_dragging is FunctionParameterViewModel fpvm2) fpvm2.MoveToPreview(newX, newY);
+            _dragging.MoveToPreview(newX, newY);
         }
 
         InvalidateAndMeasure();
@@ -925,5 +927,533 @@ partial class ModelSystemCanvas
         _linkCurrentPos = default;
         _autoScrollTimer.Stop();
         pointer?.Capture(null);
+    }
+
+    // ── Keyboard navigation (arrow keys) ──────────────────────────────────
+    /// <summary>Enumeration for navigation directions used in arrow key navigation.</summary>
+    private enum NavigationDirection
+    {
+        Up,
+        Down,
+        Left,
+        Right
+    }
+
+    /// <summary>Sentinel key used for direct value-row editing on parameter nodes.</summary>
+    private static readonly object SelfParameterNavigationKey = new();
+
+    /// <summary>
+    /// Navigates to the next canvas element in the specified direction from the currently selected element.
+    /// Finds the closest element that lies in the target direction and selects it.
+    /// Automatically scrolls to center the element in the viewport.
+    /// </summary>
+    private void NavigateToNextElement(NavigationDirection direction)
+    {
+        if (_vm is null) return;
+
+        // Get current selected element.
+        var current = _vm.SelectedElement;
+        if (current is null)
+        {
+            // If nothing is selected, select the first available element.
+            SelectFirstElement();
+            return;
+        }
+
+        // Collect all navigable elements.
+        var allElements = CollectAllCanvasElements();
+        if (allElements.Count == 0) return;
+
+        // Find the best candidate element in the given direction.
+        ICanvasElement? nextElement = FindNextElement(current, allElements, direction);
+
+        if (nextElement is not null && nextElement != current)
+        {
+            // Clear multi-selection and select the next element.
+            ClearMultiSelection();
+            _vm.SelectElementCommand.Execute(nextElement);
+
+            // Scroll to center the element in the viewport.
+            CenterElementInViewport(nextElement);
+
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Collects all navigable canvas elements from the current boundary view.
+    /// </summary>
+    private List<ICanvasElement> CollectAllCanvasElements()
+    {
+        if (_vm is null) return new List<ICanvasElement>();
+
+        var elements = new List<ICanvasElement>();
+
+        // Collect all types of canvas elements visible on the current boundary.
+        elements.AddRange(_vm.Starts);
+        elements.AddRange(_vm.Nodes.Where(n => !n.IsInlined));
+        elements.AddRange(_vm.CommentBlocks);
+        elements.AddRange(_vm.GhostNodes);
+        elements.AddRange(_vm.FunctionTemplates);
+        elements.AddRange(_vm.FunctionInstances);
+        elements.AddRange(_vm.FunctionParameterVMs);
+
+        return elements;
+    }
+
+    /// <summary>
+    /// Finds the nearest element to <paramref name="current"/> in the specified <paramref name="direction"/>.
+    /// Elements are scored based on their position relative to the current element.
+    /// </summary>
+    private ICanvasElement? FindNextElement(ICanvasElement current, List<ICanvasElement> candidates, NavigationDirection direction)
+    {
+        ICanvasElement? nearest = null;
+        double nearestScore = double.MinValue;
+
+        foreach (var candidate in candidates)
+        {
+            // Skip the current element.
+            if (candidate == current) continue;
+
+            // Score this candidate using the best corner-to-corner directional vector.
+            double score = FindBestNavigationScore(current, candidate, direction);
+
+            // Higher score is better. Only consider elements with a valid score
+            // (i.e., in the target direction).
+            if (!double.IsNaN(score) && score > nearestScore)
+            {
+                nearestScore = score;
+                nearest = candidate;
+            }
+        }
+
+        return nearest;
+    }
+
+    /// <summary>
+    /// Returns the best (highest) navigation score across all corner-to-corner vectors
+    /// between <paramref name="current"/> and <paramref name="candidate"/>.
+    /// Returns -1 when no corner pair falls within the requested direction cone.
+    /// </summary>
+    private double FindBestNavigationScore(ICanvasElement current, ICanvasElement candidate, NavigationDirection direction)
+    {
+        double bestScore = double.MinValue;
+        bool found = false;
+
+        double dx = candidate.CenterX - current.CenterX;
+        double dy = candidate.CenterY - current.CenterY;
+        double distance = Math.Sqrt(dx * dx + dy * dy);
+        double score = CalculateNavigationScore(dx, dy, distance, direction, HasLinkBetween(current, candidate));
+        if (!double.IsNaN(score) && score > bestScore)
+        {
+            bestScore = score;
+            found = true;
+        }
+
+        return found ? bestScore : double.NaN;
+    }
+
+    /// <summary>
+    /// Returns center + four corners for directional navigation scoring.
+    /// </summary>
+    private static Point[] GetElementNavigationPoints(ICanvasElement element)
+    {
+        double left = element.X;
+        double top = element.Y;
+        double right = element.X + element.Width;
+        double bottom = element.Y + element.Height;
+
+        return new[]
+        {
+            new Point(element.CenterX, element.CenterY),
+            new Point(left, top),
+            new Point(right, top),
+            new Point(left, bottom),
+            new Point(right, bottom)
+        };
+    }
+
+    /// <summary>
+    /// Calculates a navigation score for an element relative to the current position and direction.
+    /// Returns <see cref="double.NaN"/> if the element is not in the target direction.
+    /// Higher scores indicate more attractive matches.
+    /// </summary>
+    private double CalculateNavigationScore(double dx, double dy, double distance, NavigationDirection direction, bool isLinked)
+    {
+        // Minimum distance threshold: don't skip very close elements.
+        const double MinDistance = 10.0;
+        if (distance < MinDistance) return double.NaN;
+
+        double selectedGeometryScore = GetDirectionalGeometryScore(dx, dy, distance, direction);
+        if (selectedGeometryScore <= 0.0) return double.NaN;
+
+        double bestGeometryScore = selectedGeometryScore;
+        foreach (NavigationDirection candidateDirection in Enum.GetValues<NavigationDirection>())
+        {
+            double candidateScore = GetDirectionalGeometryScore(dx, dy, distance, candidateDirection);
+            if (candidateScore > bestGeometryScore)
+            {
+                bestGeometryScore = candidateScore;
+            }
+        }
+
+        const double GeometryScale = 100.0;
+        const double WrongDirectionPenalty = 2048.0;
+        const double LinkedElementBonus = 200.0;
+        double score = selectedGeometryScore * GeometryScale;
+        if (bestGeometryScore > selectedGeometryScore)
+        {
+            score -= WrongDirectionPenalty;
+        }
+        if (isLinked)
+        {
+            score += LinkedElementBonus;
+        }
+        return score;
+    }
+
+    /// <summary>
+    /// Returns the raw geometry attractiveness for a particular direction, independent of link bonuses.
+    /// A score of 0 means the vector is a better fit for some other direction or lies outside the direction cone.
+    /// </summary>
+    private static double GetDirectionalGeometryScore(double dx, double dy, double distance, NavigationDirection direction)
+    {
+        // Calculate angle from current element to candidate (in degrees, 0° = right, 90° = down, etc.).
+        double angle = Math.Atan2(dy, dx) * 180 / Math.PI;
+        if (angle < 0) angle += 360;
+
+        const int directionCone = 85; // degrees of tolerance on either side of the ideal direction (e.g. for Right, ideal is 0°, so valid range is [360-70, 0+70] = [290, 70])
+
+        double angleDeviation = direction switch
+        {
+            NavigationDirection.Right when angle <= directionCone || angle >= 360 - directionCone
+                => Math.Abs(NormalizeSignedAngle(angle)),
+            NavigationDirection.Down when angle >= 90 - directionCone && angle <= 90 + directionCone
+                => Math.Abs(angle - 90),
+            NavigationDirection.Left when angle >= 180 - directionCone && angle <= 180 + directionCone
+                => Math.Abs(angle - 180),
+            NavigationDirection.Up when angle >= 270 - directionCone && angle <= 270 + directionCone
+                => Math.Abs(angle - 270),
+            _ => double.NaN,
+        };
+
+        if (double.IsNaN(angleDeviation)) return 0.0;
+
+        // TODO: calibrate these parameters based on user testing to find a good balance between directional fidelity and distance sensitivity.
+        const double DistanceWeight = 100.0;
+        const double AnglePenaltyAt45 = 0.20;
+        const double ReferenceAngle = 45.0;
+        // Calibrated angular decay: 45° off-axis yields a 20% penalty
+        // (i.e., 80% of the in-direction utility at the same distance).
+        double angleCloseness = Math.Pow(1.0 - AnglePenaltyAt45, angleDeviation / ReferenceAngle);
+        double distanceCloseness = 1.0 / (1.0 + distance * DistanceWeight);
+        var utility = angleCloseness * distanceCloseness;
+        return utility;
+    }
+
+    private static double NormalizeSignedAngle(double angle)
+    {
+        if (angle > 180.0)
+        {
+            angle -= 360.0;
+        }
+        return angle;
+    }
+
+    /// <summary>
+    /// Returns whether two canvas elements are directly connected by a link.
+    /// </summary>
+    private bool HasLinkBetween(ICanvasElement first, ICanvasElement second)
+    {
+        if (_vm is null) return false;
+
+        return _vm.Links.Any(link =>
+            (ReferenceEquals(link.Origin, first) && ReferenceEquals(link.Destination, second)) ||
+            (ReferenceEquals(link.Origin, second) && ReferenceEquals(link.Destination, first)));
+    }
+
+    /// <summary>
+    /// Selects the first available canvas element when no element is currently selected.
+    /// Prioritizes by: Starts → Nodes → CommentBlocks → GhostNodes → FunctionTemplates → FunctionInstances → FunctionParameters.
+    /// Automatically scrolls to center the element in the viewport.
+    /// </summary>
+    private void SelectFirstElement()
+    {
+        if (_vm is null) return;
+
+        ICanvasElement? firstElement = null;
+
+        // Check each collection in priority order
+        if (_vm.Starts.Count > 0) firstElement = _vm.Starts[0];
+        else if (_vm.Nodes.Any(n => !n.IsInlined)) firstElement = _vm.Nodes.First(n => !n.IsInlined);
+        else if (_vm.CommentBlocks.Count > 0) firstElement = _vm.CommentBlocks[0];
+        else if (_vm.GhostNodes.Count > 0) firstElement = _vm.GhostNodes[0];
+        else if (_vm.FunctionTemplates.Count > 0) firstElement = _vm.FunctionTemplates[0];
+        else if (_vm.FunctionInstances.Count > 0) firstElement = _vm.FunctionInstances[0];
+        else if (_vm.FunctionParameterVMs.Count > 0) firstElement = _vm.FunctionParameterVMs[0];
+
+        if (firstElement is not null)
+        {
+            _vm.SelectElementCommand.Execute(firstElement);
+
+            // Scroll to center the element in the viewport.
+            CenterElementInViewport(firstElement);
+
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Scrolls the canvas to center the given element in the current viewport.
+    /// Calculates the required scroll offset to place the element's center at the viewport center.
+    /// </summary>
+    private void CenterElementInViewport(ICanvasElement element)
+    {
+        var sv = GetScrollViewer();
+        if (sv is null) return;
+
+        // Get the element's center in canvas/model coordinates.
+        double elementCenterX = element.CenterX;
+        double elementCenterY = element.CenterY;
+
+        // Get the current viewport dimensions in screen coordinates.
+        double viewportWidth = sv.Viewport.Width;
+        double viewportHeight = sv.Viewport.Height;
+
+        // The scroll offset is in screen coordinates (device pixels).
+        // To center the element at the viewport center:
+        // ScrollOffset = (ElementCenterInScreenCoords) - (ViewportCenter)
+        // Where ElementCenterInScreenCoords = ElementCenterX * _scale
+
+        double desiredScrollX = (elementCenterX * _scale) - (viewportWidth / 2.0);
+        double desiredScrollY = (elementCenterY * _scale) - (viewportHeight / 2.0);
+
+        // Clamp to valid range (minimum 0). ScrollViewer will clamp to max extent.
+        desiredScrollX = Math.Max(0, desiredScrollX);
+        desiredScrollY = Math.Max(0, desiredScrollY);
+
+        // Apply the new scroll offset.
+        sv.Offset = new Vector(desiredScrollX, desiredScrollY);
+    }
+
+    // ── Parameter navigation (Tab/Shift+Tab) ──────────────────────────────
+    /// <summary>
+    /// Navigates to the next or previous parameter within the currently selected element.
+    /// If no parameter is being edited, starts with the first (or last if backward) parameter.
+    /// Returns <c>true</c> if navigation was successful, <c>false</c> if no parameters available.
+    /// </summary>
+    private bool NavigateToNextParameter(bool backward)
+    {
+        if (_vm is null) return false;
+
+        ICanvasElement? parentElement = _editingParamParentElement;
+        object? currentHook = _editingParamHook;
+
+        // If no parameter is currently being edited, determine the parent from the selected element.
+        if (_editingParamNode is null)
+        {
+            parentElement = _vm.SelectedElement;
+            currentHook = null;
+        }
+        else if (parentElement is null || currentHook is null)
+        {
+            // Infer the parent from the parameter node if not already set.
+            InferParameterContext(_editingParamNode, out parentElement, out currentHook);
+        }
+
+        if (parentElement is null) return false;
+
+        // Get all editable parameter targets for this parent element.
+        var hooks = GetParameterHooksForElement(parentElement);
+        if (hooks.Count == 0) return false;
+
+        // Find the index of the current parameter hook.
+        int currentIndex = currentHook is not null
+            ? hooks.FindIndex(h => h.Hook == currentHook)
+            : -1;
+
+        // For backward, if starting fresh, begin at the end; otherwise go backward.
+        int nextIndex = backward
+            ? (currentIndex < 0 ? hooks.Count - 1 : currentIndex - 1)
+            : (currentIndex < 0 ? 0 : currentIndex + 1);
+
+        // Wrap around.
+        if (nextIndex < 0) nextIndex = hooks.Count - 1;
+        else if (nextIndex >= hooks.Count) nextIndex = 0;
+
+        // Get the next hook and its inlined parameter.
+        var nextHookInfo = hooks[nextIndex];
+        var nextHook = nextHookInfo.Hook;
+        var nextParam = nextHookInfo.InlinedParam;
+
+        if (nextParam is null) return false;
+
+        // Commit the current edit if one is active.
+        if (_editingParamNode is not null)
+        {
+            CommitParamEdit();
+        }
+
+        // Calculate the proper row position for this parameter.
+        var rowPosition = CalculateParameterRowPosition(parentElement, nextHook);
+        if (rowPosition is null) return false;
+
+        BeginParamEdit(nextParam, rowPosition.Value.X, rowPosition.Value.Y, rowPosition.Value.W, parentElement, nextHook);
+        InvalidateVisual();
+        return true;
+    }
+
+    /// <summary>
+    /// Calculates the row position (X, Y, Width) for a parameter on the given parent element and hook.
+    /// Returns null if the position cannot be calculated.
+    /// </summary>
+    private (double X, double Y, double W)? CalculateParameterRowPosition(ICanvasElement element, object hook)
+    {
+        if (element is NodeViewModel nodeVm)
+        {
+            if (ReferenceEquals(hook, SelfParameterNavigationKey) && nodeVm.IsParameterNode)
+            {
+                return (nodeVm.X, nodeVm.Y + NodeHeaderHeight, NodeRenderWidth(nodeVm));
+            }
+
+            var nodeHooks = nodeVm.UnderlyingNode.Hooks;
+            if (nodeHooks is null) return null;
+
+            int hookIdx = -1;
+            for (int j = 0; j < nodeHooks.Count; j++)
+            {
+                if (ReferenceEquals(nodeHooks[j], hook)) { hookIdx = j; break; }
+            }
+            if (hookIdx < 0) return null;
+
+            int rowOffset = nodeVm.IsParameterNode ? 1 : 0;
+            double rw = NodeRenderWidth(nodeVm);
+            double rowTop = nodeVm.Y + NodeHeaderHeight + (rowOffset + hookIdx) * HookRowHeight;
+            return (nodeVm.X, rowTop, rw);
+        }
+        else if (element is FunctionInstanceViewModel fiVm)
+        {
+            var fiHooks = fiVm.UnderlyingInstance.Hooks;
+            if (fiHooks is null) return null;
+
+            int hookIdx = -1;
+            for (int j = 0; j < fiHooks.Count; j++)
+            {
+                if (ReferenceEquals(fiHooks[j], hook)) { hookIdx = j; break; }
+            }
+            if (hookIdx < 0) return null;
+
+            double rw = fiVm.Width;
+            double rowTop = fiVm.Y + FtHeaderHeight + hookIdx * FtHookRowHeight;
+            return (fiVm.X, rowTop, rw);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Infers the parent element and hook of a given parameter node by searching through
+    /// inlined parameter mappings.
+    /// </summary>
+    private void InferParameterContext(NodeViewModel paramNode, out ICanvasElement? parentElement, out object? hook)
+    {
+        parentElement = null;
+        hook = null;
+
+        if (paramNode.IsParameterNode)
+        {
+            parentElement = paramNode;
+            hook = SelfParameterNavigationKey;
+            return;
+        }
+
+        if (_vm is null) return;
+
+        // Search through node-based inlined parameters.
+        foreach (var (key, value) in _hookInlinedParam)
+        {
+            if (value == paramNode)
+            {
+                parentElement = key.Item1;
+                hook = key.Item2;
+                return;
+            }
+        }
+
+        // Search through function-instance-based inlined parameters.
+        foreach (var (key, value) in _fiHookInlinedParam)
+        {
+            if (value == paramNode)
+            {
+                parentElement = key.Item1;
+                hook = key.Item2;
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Represents an editable parameter target and its associated navigation key.
+    /// </summary>
+    private struct ParameterHookInfo
+    {
+        public object Hook { get; set; }
+        public NodeViewModel? InlinedParam { get; set; }
+    }
+
+    /// <summary>
+    /// Gets all editable parameter targets on the given element, in order.
+    /// Includes direct value-row editing for parameter nodes and inlined parameters for hooks.
+    /// </summary>
+    private List<ParameterHookInfo> GetParameterHooksForElement(ICanvasElement element)
+    {
+        var hooks = new List<ParameterHookInfo>();
+
+        if (element is NodeViewModel nodeVm)
+        {
+            if (nodeVm.IsParameterNode)
+            {
+                hooks.Add(new ParameterHookInfo
+                {
+                    Hook = SelfParameterNavigationKey,
+                    InlinedParam = nodeVm
+                });
+            }
+
+            // Regular nodes can have parameter hooks.
+            var nodeHooks = nodeVm.UnderlyingNode.Hooks;
+            if (nodeHooks is not null)
+            {
+                foreach (var hook in nodeHooks)
+                {
+                    var inlinedParam = _hookInlinedParam.TryGetValue((nodeVm, hook), out var param) ? param : null;
+                    if (inlinedParam is not null)
+                    {
+                        hooks.Add(new ParameterHookInfo { Hook = hook, InlinedParam = inlinedParam });
+                    }
+                }
+            }
+        }
+        else if (element is FunctionInstanceViewModel fiVm)
+        {
+            // Function instances have function parameter hooks.
+            var fpHooks = fiVm.UnderlyingInstance.Hooks;
+            if (fpHooks is not null)
+            {
+                foreach (var hook in fpHooks)
+                {
+                    if (hook is FunctionParameterHook fpHook)
+                    {
+                        var inlinedParam = _fiHookInlinedParam.TryGetValue((fiVm, fpHook), out var param) ? param : null;
+                        if (inlinedParam is not null)
+                        {
+                            hooks.Add(new ParameterHookInfo { Hook = fpHook, InlinedParam = inlinedParam });
+                        }
+                    }
+                }
+            }
+        }
+
+        return hooks;
     }
 }

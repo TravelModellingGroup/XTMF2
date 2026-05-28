@@ -73,6 +73,19 @@ public interface ICanvasElement : INotifyPropertyChanged
     /// </summary>
     void CommitResize();
 
+    /// <summary>
+    /// Updates the visual size without touching the session (for resize-drag preview).
+    /// Call <see cref="CommitResize"/> on mouse-up to persist the change.
+    /// Width is clamped to a minimum of 120; height to a minimum of 28.
+    /// </summary>
+    void ResizeToPreview(double w, double h);
+
+    /// <summary>
+    /// Updates the visual position without touching the session (for drag preview).
+    /// Call <see cref="CommitMove"/> on mouse-up to persist the change.
+    /// </summary>
+    void MoveToPreview(double x, double y);
+
     bool IsPointWithin(Point point)
     {
         return new Rect(X, Y, Width, Height).Contains(point);
