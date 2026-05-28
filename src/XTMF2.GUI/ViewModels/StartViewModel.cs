@@ -160,6 +160,11 @@ public sealed partial class StartViewModel : ObservableObject, ICanvasElement
         // Starts are fixed-size, so ignore resize attempts.
     }
 
+    public void ResizeToPreview(double w, double h)
+    {
+        // Starts are fixed-size, so ignore resize attempts.
+    }
+
     bool IsPointWithin(Point point)
     {
         var dx = X - CenterX;

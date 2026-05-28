@@ -597,30 +597,7 @@ partial class ModelSystemCanvas
         {
             var dw = mpos.X - _resizeStartPos.X;
             var dh = mpos.Y - _resizeStartPos.Y;
-            if (_resizing is NodeViewModel resizingNode)
-            {
-                resizingNode.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
-            else if (_resizing is CommentBlockViewModel resizingComment)
-            {
-                resizingComment.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
-            else if (_resizing is GhostNodeViewModel resizingGhost)
-            {
-                resizingGhost.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
-            else if (_resizing is FunctionTemplateViewModel resizingFt)
-            {
-                resizingFt.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
-            else if (_resizing is FunctionInstanceViewModel resizingFi)
-            {
-                resizingFi.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
-            else if (_resizing is FunctionParameterViewModel resizingFp)
-            {
-                resizingFp.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
-            }
+            _resizing.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
             InvalidateAndMeasure();
             e.Handled = true;
             return;
