@@ -486,7 +486,7 @@ partial class ModelSystemCanvas
             if (_editingCommentBlock is not null) CommitCommentEdit();
             if (_editingNameElement is not null) CommitNameEdit();
 
-            if (hit is NodeViewModel or CommentBlockViewModel or GhostNodeViewModel or FunctionTemplateViewModel or FunctionInstanceViewModel or FunctionParameterViewModel)
+            if (hit is not null)
             {
                 // On the very first Ctrl+click, absorb the existing primary selection into the set.
                 if (_multiSelection.Count == 0 && _vm.SelectedElement is not null
@@ -648,13 +648,7 @@ partial class ModelSystemCanvas
             {
                 double nx = Math.Max(0, el.X + dx);
                 double ny = Math.Max(0, el.Y + dy);
-                if (el is NodeViewModel gnvm) gnvm.MoveToPreview(nx, ny);
-                else if (el is StartViewModel gsvm) gsvm.MoveToPreview(nx, ny);
-                else if (el is CommentBlockViewModel gcvm) gcvm.MoveToPreview(nx, ny);
-                else if (el is GhostNodeViewModel ggvm) ggvm.MoveToPreview(nx, ny);
-                else if (el is FunctionTemplateViewModel gftvm) gftvm.MoveToPreview(nx, ny);
-                else if (el is FunctionInstanceViewModel gfivm) gfivm.MoveToPreview(nx, ny);
-                else if (el is FunctionParameterViewModel gfpvm) gfpvm.MoveToPreview(nx, ny);
+                el.MoveToPreview(nx, ny);
             }
         }
         else
@@ -662,13 +656,7 @@ partial class ModelSystemCanvas
             // Single-element drag: preview only, no session command issued yet.
             var newX = Math.Max(0, mpos.X - _dragOffset.X);
             var newY = Math.Max(0, mpos.Y - _dragOffset.Y);
-            if (_dragging is NodeViewModel nvm) nvm.MoveToPreview(newX, newY);
-            if (_dragging is StartViewModel svm) svm.MoveToPreview(newX, newY);
-            if (_dragging is CommentBlockViewModel cvm) cvm.MoveToPreview(newX, newY);
-            if (_dragging is GhostNodeViewModel gvm) gvm.MoveToPreview(newX, newY);
-            if (_dragging is FunctionTemplateViewModel ftvm) ftvm.MoveToPreview(newX, newY);
-            if (_dragging is FunctionInstanceViewModel fivm) fivm.MoveToPreview(newX, newY);
-            if (_dragging is FunctionParameterViewModel fpvm2) fpvm2.MoveToPreview(newX, newY);
+            _dragging.MoveToPreview(newX, newY);
         }
 
         InvalidateAndMeasure();
