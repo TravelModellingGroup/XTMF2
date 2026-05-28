@@ -34,7 +34,7 @@ partial class ModelSystemCanvas
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (_vm is null) 
+        if (_vm is null)
         {
             return;
         }
@@ -169,7 +169,7 @@ partial class ModelSystemCanvas
         {
             // Paste at the centre of the current viewport.
             var sv = GetScrollViewer();
-            double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width  ?? Bounds.Width)  / 2.0) / _scale;
+            double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width ?? Bounds.Width) / 2.0) / _scale;
             double vy = ((sv?.Offset.Y ?? 0) + (sv?.Viewport.Height ?? Bounds.Height) / 2.0) / _scale;
             _ = PasteElementsAsync(vx, vy);
             e.Handled = true;
@@ -953,7 +953,7 @@ partial class ModelSystemCanvas
 
         // Get current selected element.
         var current = _vm.SelectedElement;
-        if (current is null) 
+        if (current is null)
         {
             // If nothing is selected, select the first available element.
             SelectFirstElement();
@@ -972,10 +972,10 @@ partial class ModelSystemCanvas
             // Clear multi-selection and select the next element.
             ClearMultiSelection();
             _vm.SelectElementCommand.Execute(nextElement);
-            
+
             // Scroll to center the element in the viewport.
             CenterElementInViewport(nextElement);
-            
+
             InvalidateVisual();
         }
     }
@@ -1007,27 +1007,20 @@ partial class ModelSystemCanvas
     /// </summary>
     private ICanvasElement? FindNearestElement(ICanvasElement current, List<ICanvasElement> candidates, NavigationDirection direction)
     {
-        double currentX = current.CenterX;
-        double currentY = current.CenterY;
-
         ICanvasElement? nearest = null;
-        double nearestScore = double.MaxValue;
+        double nearestScore = double.MinValue;
 
         foreach (var candidate in candidates)
         {
             // Skip the current element.
             if (candidate == current) continue;
 
-            double dx = candidate.CenterX - currentX;
-            double dy = candidate.CenterY - currentY;
-            double distance = Math.Sqrt(dx * dx + dy * dy);
+            // Score this candidate using the best corner-to-corner directional vector.
+            double score = FindBestNavigationScore(current, candidate, direction);
 
-            // Score is based on the distance and whether the element is in the target direction.
-            double score = CalculateNavigationScore(dx, dy, distance, direction);
-
-            // Lower score is better. Only consider elements with a positive score
+            // Higher score is better. Only consider elements with a valid score
             // (i.e., in the target direction).
-            if (score >= 0 && score < nearestScore)
+            if (!double.IsNaN(score) && score > nearestScore)
             {
                 nearestScore = score;
                 nearest = candidate;
@@ -1038,68 +1031,147 @@ partial class ModelSystemCanvas
     }
 
     /// <summary>
-    /// Calculates a navigation score for an element relative to the current position and direction.
-    /// Returns a negative score if the element is not in the target direction, or a positive score
-    /// indicating the distance-weighted angle deviation if the element is in the target direction.
-    /// Lower positive scores indicate better matches.
+    /// Returns the best (highest) navigation score across all corner-to-corner vectors
+    /// between <paramref name="current"/> and <paramref name="candidate"/>.
+    /// Returns -1 when no corner pair falls within the requested direction cone.
     /// </summary>
-    private double CalculateNavigationScore(double dx, double dy, double distance, NavigationDirection direction)
+    private double FindBestNavigationScore(ICanvasElement current, ICanvasElement candidate, NavigationDirection direction)
+    {
+        var currentPoints = GetElementNavigationPoints(current);
+        var candidatePoints = GetElementNavigationPoints(candidate);
+
+        double bestScore = double.MinValue;
+        bool found = false;
+
+        foreach (var from in currentPoints)
+        {
+            foreach (var to in candidatePoints)
+            {
+                double dx = to.X - from.X;
+                double dy = to.Y - from.Y;
+                double distance = Math.Sqrt(dx * dx + dy * dy);
+                double score = CalculateNavigationScore(dx, dy, distance, direction, HasLinkBetween(current, candidate));
+                if (!double.IsNaN(score) && score > bestScore)
+                {
+                    bestScore = score;
+                    found = true;
+                }
+            }
+        }
+
+        return found ? bestScore : double.NaN;
+    }
+
+    /// <summary>
+    /// Returns center + four corners for directional navigation scoring.
+    /// </summary>
+    private static Point[] GetElementNavigationPoints(ICanvasElement element)
+    {
+        double left = element.X;
+        double top = element.Y;
+        double right = element.X + element.Width;
+        double bottom = element.Y + element.Height;
+
+        return new[]
+        {
+            new Point(element.CenterX, element.CenterY),
+            new Point(left, top),
+            new Point(right, top),
+            new Point(left, bottom),
+            new Point(right, bottom)
+        };
+    }
+
+    /// <summary>
+    /// Calculates a navigation score for an element relative to the current position and direction.
+    /// Returns <see cref="double.NaN"/> if the element is not in the target direction.
+    /// Higher scores indicate more attractive matches.
+    /// </summary>
+    private double CalculateNavigationScore(double dx, double dy, double distance, NavigationDirection direction, bool isLinked)
     {
         // Minimum distance threshold: don't skip very close elements.
         const double MinDistance = 10.0;
-        if (distance < MinDistance) return double.MaxValue;
+        if (distance < MinDistance) return double.NaN;
 
-        // Calculate angle from current element to candidate (in degrees, 0° = right, 90° = down, etc.).
-        double angle = Math.Atan2(dy, dx) * 180 / Math.PI;
-        // Normalize to 0-360 range.
-        if (angle < 0) angle += 360;
+        double selectedGeometryScore = GetDirectionalGeometryScore(dx, dy, distance, direction);
+        if (selectedGeometryScore <= 0.0) return double.NaN;
 
-        // Define acceptable angle ranges for each direction (with a 45° tolerance).
-        // The score penalizes both angular deviation and distance.
-        double angleDeviation = 0;
-        bool isInDirection = false;
-
-        switch (direction)
+        double bestGeometryScore = selectedGeometryScore;
+        foreach (NavigationDirection candidateDirection in Enum.GetValues<NavigationDirection>())
         {
-            case NavigationDirection.Right:  // 0° (±45°)
-                if (angle <= 45 || angle >= 315)
-                {
-                    isInDirection = true;
-                    angleDeviation = angle <= 45 ? angle : angle - 360;
-                }
-                break;
-
-            case NavigationDirection.Down:   // 90° (±45°)
-                if (angle >= 45 && angle <= 135)
-                {
-                    isInDirection = true;
-                    angleDeviation = Math.Abs(angle - 90);
-                }
-                break;
-
-            case NavigationDirection.Left:   // 180° (±45°)
-                if (angle >= 135 && angle <= 225)
-                {
-                    isInDirection = true;
-                    angleDeviation = Math.Abs(angle - 180);
-                }
-                break;
-
-            case NavigationDirection.Up:     // 270° (±45°)
-                if (angle >= 225 && angle <= 315)
-                {
-                    isInDirection = true;
-                    angleDeviation = Math.Abs(angle - 270);
-                }
-                break;
+            double candidateScore = GetDirectionalGeometryScore(dx, dy, distance, candidateDirection);
+            if (candidateScore > bestGeometryScore)
+            {
+                bestGeometryScore = candidateScore;
+            }
         }
 
-        if (!isInDirection) return -1; // Not in target direction.
-
-        // Combine angle deviation and distance for the final score.
-        // Prioritize elements more aligned with the direction (lower angle deviation).
-        double score = angleDeviation + (distance * 0.1);
+        const double GeometryScale = 100.0;
+        const double WrongDirectionPenalty = 60.0;
+        const double LinkedElementBonus = 20.0;
+        double score = selectedGeometryScore * GeometryScale;
+        if (bestGeometryScore > selectedGeometryScore)
+        {
+            score -= WrongDirectionPenalty;
+        }
+        if (isLinked)
+        {
+            score += LinkedElementBonus;
+        }
         return score;
+    }
+
+    /// <summary>
+    /// Returns the raw geometry attractiveness for a particular direction, independent of link bonuses.
+    /// A score of 0 means the vector is a better fit for some other direction or lies outside the direction cone.
+    /// </summary>
+    private static double GetDirectionalGeometryScore(double dx, double dy, double distance, NavigationDirection direction)
+    {
+        // Calculate angle from current element to candidate (in degrees, 0° = right, 90° = down, etc.).
+        double angle = Math.Atan2(dy, dx) * 180 / Math.PI;
+        if (angle < 0) angle += 360;
+
+        double angleDeviation = direction switch
+        {
+            NavigationDirection.Right when angle <= 45 || angle >= 315
+                => Math.Abs(NormalizeSignedAngle(angle)),
+            NavigationDirection.Down when angle >= 45 && angle <= 135
+                => Math.Abs(angle - 90),
+            NavigationDirection.Left when angle >= 135 && angle <= 225
+                => Math.Abs(angle - 180),
+            NavigationDirection.Up when angle >= 225 && angle <= 315
+                => Math.Abs(angle - 270),
+            _ => double.NaN,
+        };
+
+        if (double.IsNaN(angleDeviation)) return 0.0;
+
+        const double DistanceWeight = 0.02;
+        const double AngleExponent = 2.0;
+        double angleCloseness = 1.0 - (angleDeviation / 45.0);
+        double distanceCloseness = 1.0 / (1.0 + (distance * DistanceWeight));
+        return Math.Pow(angleCloseness, AngleExponent) * distanceCloseness;
+    }
+
+    private static double NormalizeSignedAngle(double angle)
+    {
+        if (angle > 180.0)
+        {
+            angle -= 360.0;
+        }
+        return angle;
+    }
+
+    /// <summary>
+    /// Returns whether two canvas elements are directly connected by a link.
+    /// </summary>
+    private bool HasLinkBetween(ICanvasElement first, ICanvasElement second)
+    {
+        if (_vm is null) return false;
+
+        return _vm.Links.Any(link =>
+            (ReferenceEquals(link.Origin, first) && ReferenceEquals(link.Destination, second)) ||
+            (ReferenceEquals(link.Origin, second) && ReferenceEquals(link.Destination, first)));
     }
 
     /// <summary>
@@ -1125,10 +1197,10 @@ partial class ModelSystemCanvas
         if (firstElement is not null)
         {
             _vm.SelectElementCommand.Execute(firstElement);
-            
+
             // Scroll to center the element in the viewport.
             CenterElementInViewport(firstElement);
-            
+
             InvalidateVisual();
         }
     }
@@ -1154,7 +1226,7 @@ partial class ModelSystemCanvas
         // To center the element at the viewport center:
         // ScrollOffset = (ElementCenterInScreenCoords) - (ViewportCenter)
         // Where ElementCenterInScreenCoords = ElementCenterX * _scale
-        
+
         double desiredScrollX = (elementCenterX * _scale) - (viewportWidth / 2.0);
         double desiredScrollY = (elementCenterY * _scale) - (viewportHeight / 2.0);
 
@@ -1227,7 +1299,7 @@ partial class ModelSystemCanvas
         // Calculate the proper row position for this parameter.
         var rowPosition = CalculateParameterRowPosition(parentElement, nextHook);
         if (rowPosition is null) return false;
-        
+
         BeginParamEdit(nextParam, rowPosition.Value.X, rowPosition.Value.Y, rowPosition.Value.W, parentElement, nextHook);
         InvalidateVisual();
         return true;
