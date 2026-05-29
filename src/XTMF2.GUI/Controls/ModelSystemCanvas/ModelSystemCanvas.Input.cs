@@ -733,6 +733,31 @@ partial class ModelSystemCanvas
             }
         }
 
+        // ── Right-drag release: complete link creation ────────────────────
+        if (_linkOrigin is not null)
+        {
+            var origin = _linkOrigin;
+            _linkOrigin = null;
+            _linkCurrentPos = default;
+            e.Pointer.Capture(null);
+
+            if (_vm is not null)
+            {
+                var releasePos = ToCanvasPos(e.GetCurrentPoint(this).Position);
+                var destHit = HitTest(releasePos, testComments: false);
+                if (destHit is NodeViewModel destNode && !ReferenceEquals(destNode, origin))
+                    _ = _vm.CreateLinkAsync(origin, destNode);
+                else if (destHit is FunctionInstanceViewModel destFi && !ReferenceEquals(destFi, origin))
+                    _ = _vm.CreateLinkAsync(origin, destFi);
+                else if (destHit is FunctionParameterViewModel destFp && !ReferenceEquals(destFp, origin))
+                    _ = _vm.CreateLinkAsync(origin, destFp);
+            }
+
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
         // ── Rubber-band selection rectangle release ──────────────────────
         if (_selRectStart is not null)
         {
