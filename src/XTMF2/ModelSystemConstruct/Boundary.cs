@@ -945,7 +945,7 @@ namespace XTMF2.ModelSystemConstruct
 
         internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
-            ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error)
+            ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
             {
@@ -1016,11 +1016,12 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!Node.Load(modules, typeLookup, node, scriptedParameters, this, ref reader, out var mss, ref error))
+                            if (!Node.Load(modules, typeLookup, node, scriptedParameters, this, ref reader, out var mss, ref error, warnings))
                             {
                                 return false;
                             }
-                            _modules.Add(mss!);
+                            if (mss is not null)
+                                _modules.Add(mss);
                         }
                     }
                 }
@@ -1035,7 +1036,7 @@ namespace XTMF2.ModelSystemConstruct
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
                             var boundary = new Boundary(this);
-                            if (!boundary.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error))
+                            if (!boundary.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings))
                             {
                                 return false;
                             }
@@ -1053,11 +1054,12 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!Link.Create(modules, node, ref reader, out var link, ref error))
+                            if (!Link.Create(modules, node, ref reader, out var link, ref error, warnings))
                             {
                                 return false;
                             }
-                            _links.Add(link!);
+                            if (link is not null)
+                                _links.Add(link);
                         }
                     }
                 }
@@ -1087,12 +1089,10 @@ namespace XTMF2.ModelSystemConstruct
                     }
                     while(reader.Read() &&  reader.TokenType != JsonTokenType.EndArray)
                     {
-                        if(reader.TokenType != JsonTokenType.Comment)
+                        if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if(!FunctionTemplate.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, this, out var template, ref error))
-                            {
+                            if (!FunctionTemplate.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, this, out var template, ref error, warnings))
                                 return false;
-                            }
                             _functionTemplates.Add(template!);
                         }
                     }

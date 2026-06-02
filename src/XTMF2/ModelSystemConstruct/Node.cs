@@ -450,7 +450,7 @@ namespace XTMF2.ModelSystemConstruct
         }
 
         internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
-            Boundary boundary, ref Utf8JsonReader reader, out Node? mss, [NotNullWhen(false)] ref string? error)
+            Boundary boundary, ref Utf8JsonReader reader, out Node? mss, [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
             {
@@ -517,10 +517,8 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     reader.Read();
                     var typeIndex = reader.GetInt32();
-                    if (!typeLookup.TryGetValue(typeIndex, out type))
-                    {
-                        return FailWith(out mss, out error, $"Invalid type index {typeIndex}!");
-                    }
+                    // type remains null if not found; treated as a warning below
+                    typeLookup.TryGetValue(typeIndex, out type);
                 }
                 else if (reader.ValueTextEquals(ParameterProperty))
                 {
@@ -556,12 +554,16 @@ namespace XTMF2.ModelSystemConstruct
             }
             if (type is null)
             {
-                return FailWith(out mss, out error, $"When trying to create a node {name} there was no type defined!");
+                warnings?.Add($"Node '{name}' in boundary '{boundary.FullPath}' could not be loaded because its type was not found and will be skipped.");
+                mss = null;
+                return true;
             }
             (_, _, var hooks) = modules[type];
             if (hooks == null)
             {
-                return FailWith(out mss, out error, $"When trying to create a node {name} we were unable to find a hook for type {type.FullName}!");
+                warnings?.Add($"Node '{name}' in boundary '{boundary.FullPath}' could not be loaded because the type '{type.FullName}' has no module hooks and will be skipped.");
+                mss = null;
+                return true;
             }
             var basicParameter = basicParameterValue is not null ?
                 ParameterExpression.CreateParameter(basicParameterValue, type.GenericTypeArguments[0]) 

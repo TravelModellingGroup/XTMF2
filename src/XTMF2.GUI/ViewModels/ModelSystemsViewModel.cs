@@ -319,11 +319,13 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
     /// <param name="header">The model system to edit.</param>
     /// <param name="session">The new session, or <see langword="null"/> on failure.</param>
     /// <param name="error">Error information on failure.</param>
+    /// <param name="warnings">Non-fatal warnings generated while loading the model system.</param>
     /// <returns><see langword="true"/> if the session was created successfully.</returns>
     public bool TryEditModelSystem(ModelSystemHeader header,
         out ModelSystemSession? session,
-        out CommandError? error)
-        => _session.EditModelSystem(_user, header, out session, out error);
+        out CommandError? error,
+        out List<string>? warnings)
+        => _session.EditModelSystem(_user, header, out session, out error, out warnings);
 
     /// <summary>
     /// Loads a read-only snapshot of a model system for diff comparison.
