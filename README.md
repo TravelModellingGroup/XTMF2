@@ -4,17 +4,19 @@
 # XTMF2
 The eXtensible Travel Modelling Framework 2
 
-This repository contains the core DLL for operating with and using XTMF problematically.
+This repository contains the core DLL for operating with and a desktop user interface a desktop user interface.
+
 The modules curated by TMG can be found in different repositories.
 * [TMG-Framework](https://github.com/TravelModellingGroup/TMG-Framework) contains
 the core modules for building travel demand models.
+
 * [TMG.Tasha2](https://github.com/TravelModellingGroup/TMG.Tasha2) contains the modules for
 running TASHA (included in GTAModel V4) and TASHA2 (to be included in GTAModel V5).
+
 * [TMG.EMME](https://github.com/TravelModellingGroup/TMG.EMME) contains the modules
 for interacting with INRO's EMME software.  Additionally it contains TMG's TMGToolbox2 for EMME.
 
-[XTMF2.Web](https://github.com/TravelModellingGroup/XTMF2.Web) provides a web user experience for
-operating XTMF2.
+* [TMG.Visum](https://github.com/TravelModellingGroup/TMG.Visum) contains the modules for interacting with PTV Groups' VISUM from XTMF2.
 
 ## Building XTMF2
 
@@ -32,6 +34,9 @@ operating XTMF2.
 
 > dotnet test -c Release
 
+### Running from the command line
+
+> dotnet run -c Release --project src/XTMF2.GUI/XTMF2.GUI.csproj
 
 ## Main Branches
 

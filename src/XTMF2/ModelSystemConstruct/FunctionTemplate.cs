@@ -446,10 +446,10 @@ namespace XTMF2.ModelSystemConstruct
         /// <param name="error">An error message if we failed to load the function template or its children.</param>
         /// <returns>True if the operation succeeded, false otherwise with an error message.</returns>
         internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
-            ref Utf8JsonReader reader, Boundary parent, [NotNullWhen(true)] out FunctionTemplate? template, [NotNullWhen(false)] ref string? error)
+            ref Utf8JsonReader reader, Boundary parent, [NotNullWhen(true)] out FunctionTemplate? template, [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
         {
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes = new();
-            return Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, parent, out template, ref error);
+            return Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, parent, out template, ref error, warnings);
         }
 
         internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
@@ -457,7 +457,7 @@ namespace XTMF2.ModelSystemConstruct
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
             ref Utf8JsonReader reader, Boundary parent,
             [NotNullWhen(true)] out FunctionTemplate? template,
-            [NotNullWhen(false)] ref string? error)
+            [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
         {
             template = null;
             Guid? id = null;
@@ -527,7 +527,7 @@ namespace XTMF2.ModelSystemConstruct
                 else if (reader.ValueTextEquals(nameof(InternalModules)))
                 {
                     reader.Read();
-                    if (!innerModules.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error))
+                    if (!innerModules.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings))
                         return false;
                 }
                 else if (reader.ValueTextEquals(EntryNodeProperty))

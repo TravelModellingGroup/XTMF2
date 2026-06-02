@@ -519,8 +519,8 @@ namespace XTMF2
                 var header = new ModelSystemHeader(null, displayName);
                 string? errorStr = null;
                 using var msStream = msEntry.Open();
-                ms = ModelSystem.Load(msStream, modules, header, ref errorStr);
-                  if (ms is null)
+                ms = ModelSystem.Load(msStream, modules, header, ref errorStr, out _);
+                if (ms is null)
                 {
                     error = new CommandError(errorStr ?? "Failed to load model system from exported file.");
                     return false;

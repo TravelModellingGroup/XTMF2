@@ -387,7 +387,7 @@ namespace XTMF2
             }
             using var stream = new MemoryStream(converted);
             var header = ModelSystemHeader.CreateRunHeader(runtime);
-            ms = Load(stream, runtime.Modules, header, ref error);
+            ms = Load(stream, runtime.Modules, header, ref error, out _);
             if(error is not null)
             {
                 error = "Failed when running the Load method of the model system! \r\n" + error;
@@ -395,13 +395,14 @@ namespace XTMF2
             return ms != null;
         }
 
-        internal static bool Load(ProjectSession session, ModelSystemHeader modelSystemHeader, [NotNullWhen(true)] out ModelSystemSession? msSession, [NotNullWhen(false)] out CommandError? error)
+        internal static bool Load(ProjectSession session, ModelSystemHeader modelSystemHeader, [NotNullWhen(true)] out ModelSystemSession? msSession, [NotNullWhen(false)] out CommandError? error, out List<string>? warnings)
         {
             // the parameters are have already been vetted
             var path = modelSystemHeader.ModelSystemPath;
             var info = new FileInfo(path);
             string? errorString = null;
             error = null;
+            warnings = null;
 
             try
             {
@@ -409,7 +410,9 @@ namespace XTMF2
                 if (info.Exists)
                 {
                     using var rawStream = File.OpenRead(modelSystemHeader.ModelSystemPath);
-                    ms = Load(rawStream, session.GetModuleRepository(), modelSystemHeader, ref errorString);
+                    ms = Load(rawStream, session.GetModuleRepository(), modelSystemHeader, ref errorString, out var loadWarnings);
+                    if (loadWarnings.Count > 0)
+                        warnings = loadWarnings;
                 }
                 else
                 {
@@ -435,8 +438,10 @@ namespace XTMF2
         }
 
         internal static ModelSystem? Load(Stream rawStream, ModuleRepository modules, ModelSystemHeader modelSystemHeader,
-            [NotNullWhen(false)] ref string? error)
+            [NotNullWhen(false)] ref string? error, out List<string> warnings)
         {
+            warnings = new List<string>();
+            var capturedWarnings = warnings;
             try
             {
                 var modelSystem = new ModelSystem(modelSystemHeader);
@@ -455,14 +460,14 @@ namespace XTMF2
                     {
                         if (reader.ValueTextEquals(TypesProperty))
                         {
-                            if (!LoadTypes(typeLookup, ref reader, ref error))
+                            if (!LoadTypes(typeLookup, ref reader, ref error, capturedWarnings))
                             {
                                 return null;
                             }
                         }
                         else if (reader.ValueTextEquals(BoundariesProperty))
                         {
-                            if (!LoadBoundaries(modules, typeLookup, nodes, scriptedParameters, deferredGhostNodes, ref reader, modelSystem.GlobalBoundary, ref error))
+                            if (!LoadBoundaries(modules, typeLookup, nodes, scriptedParameters, deferredGhostNodes, ref reader, modelSystem.GlobalBoundary, ref error, capturedWarnings))
                             {
                                 return null;
                             }
@@ -608,7 +613,7 @@ namespace XTMF2
             return true;
         }
 
-        private static bool LoadTypes(Dictionary<int, Type> typeLookup, ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error)
+        private static bool LoadTypes(Dictionary<int, Type> typeLookup, ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
@@ -650,7 +655,8 @@ namespace XTMF2
                 var trueType = Type.GetType(type);
                 if (trueType == null)
                 {
-                    return FailWith(out error, $"Unable to find type {type}!");
+                    warnings?.Add($"The type '{type}' could not be found. Nodes using this type will be skipped.");
+                    continue;
                 }
                 if (typeLookup.ContainsKey(index))
                 {
@@ -664,7 +670,7 @@ namespace XTMF2
         private static bool LoadBoundaries(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> nodes,
             List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
-            ref Utf8JsonReader reader, Boundary global, [NotNullWhen(false)] ref string? error)
+            ref Utf8JsonReader reader, Boundary global, [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
@@ -676,7 +682,7 @@ namespace XTMF2
                 return FailWith(out error, "Unexpected end of file when loading boundaries!");
             }
 
-            if (!global.Load(modules, typeLookup, nodes, scriptedParameters, deferredGhostNodes, ref reader, ref error))
+            if (!global.Load(modules, typeLookup, nodes, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings))
             {
                 return false;
             }

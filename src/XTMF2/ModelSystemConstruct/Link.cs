@@ -87,7 +87,17 @@ namespace XTMF2
             return false;
         }
 
-        internal static bool Create(ModuleRepository modules, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, [NotNullWhen(true)] out Link? link, [NotNullWhen(false)] ref string? error)
+        /// <summary>
+        /// Creates a new link from the given JSON reader.
+        /// </summary>
+        /// <param name="modules">The module repository.</param>
+        /// <param name="nodes">The dictionary of nodes.</param>
+        /// <param name="reader">The JSON reader.</param>
+        /// <param name="link">The created link, null if there is a warning!</param>
+        /// <param name="error">The error message if creation fails.</param>
+        /// <param name="warnings">Optional list of warnings.</param>
+        /// <returns>True if the link was created successfully or if there was only a warning; otherwise, false.</returns>
+        internal static bool Create(ModuleRepository modules, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, out Link? link, [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
         {
             if(reader.TokenType != JsonTokenType.StartObject)
             {
@@ -120,7 +130,7 @@ namespace XTMF2
                 {
                     reader.Read();
                     var index = reader.GetInt32();
-                    origin = nodes[index];
+                    nodes.TryGetValue(index, out origin);
                 }
                 else if(reader.ValueTextEquals(HookProperty))
                 {
@@ -138,7 +148,7 @@ namespace XTMF2
                         case JsonTokenType.Number:
                             {
                                 var index = reader.GetInt32();
-                                destination = nodes[index];
+                                nodes.TryGetValue(index, out destination);
                             }
                             break;
                         case JsonTokenType.StartArray:
@@ -146,7 +156,8 @@ namespace XTMF2
                                 destinations = new List<Node>();
                                 while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                                 {
-                                    destinations.Add(nodes[reader.GetInt32()]);
+                                    if (nodes.TryGetValue(reader.GetInt32(), out var dest))
+                                        destinations.Add(dest);
                                 }
                             }
                             break;
@@ -176,22 +187,30 @@ namespace XTMF2
             // ensure all of the types were filled out
             if(origin == null)
             {
-                return FailWith(out link, out error, "No origin specified on link!");
+                // Origin node was not found – likely skipped because its type was missing.
+                link = null;
+                warnings?.Add("A link could not be loaded because its origin node was not found (possibly skipped due to a missing type) and will be skipped.");
+                return true;
             }
             if (hookName == null)
             {
                 return FailWith(out link, out error, "No origin hook specified on link!");
             }
-            if (destination == null && destinations == null)
+            if (destination == null && (destinations == null || destinations.Count == 0))
             {
-                return FailWith(out link, out error, "No destination specified on link!");
+                // Destination node(s) not found – likely skipped because their type was missing.
+                link = null;
+                warnings?.Add($"A link from '{origin.Name}' via hook '{hookName}' could not be loaded because its destination node(s) were not found (possibly skipped due to a missing type) and will be skipped.");
+                return true;
             }
             var hook = origin is FunctionInstance fi
                 ? fi.Hooks.FirstOrDefault(h => h.Name.Equals(hookName, StringComparison.OrdinalIgnoreCase))
                 : modules[origin!.Type!].Hooks?.FirstOrDefault(h => h.Name.Equals(hookName, StringComparison.OrdinalIgnoreCase));
             if(hook == null)
             {
-                return FailWith(out link, out error, "Unable to find a hook with the name " + hookName);
+                link = null;
+                warnings?.Add($"A link from '{origin.Name}' could not be loaded because the hook '{hookName}' was not found on the module and will be skipped.");
+                return true;
             }
             if (destination != null)
             {

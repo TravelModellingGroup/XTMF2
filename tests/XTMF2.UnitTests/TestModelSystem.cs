@@ -577,6 +577,63 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        public void ImportGivenModelSystemWithUnknownHookGeneratesWarning()
+        {
+            var modelSystemString = @"{""Types"":[{""Index"":0,""Type"":""XTMF2.UnitTests.Modules.SimpleTestModule, XTMF2.UnitTests, Version = 1.0.0.0, Culture = neutral, PublicKeyToken = null""}],""Boundaries"":[{""Name"":""global"",""Description"":"""",""Starts"":[{""Name"":""TestStart"",""Description"":"""",""Index"":0,""X"":10,""Y"":10}],""Nodes"":[{""Name"":""TestNode1"",""Description"":"""",""Type"":0,""X"":10,""Y"":10,""Width"":100,""Height"":100,""Index"":1}],""Boundaries"":[{""Name"":""TestBoundary1"",""Description"":"""",""Starts"":[],""Nodes"":[{""Name"":""TestNode2"",""Description"":"""",""Type"":0,""X"":10,""Y"":10,""Width"":100,""Height"":100,""Index"":2}],""Boundaries"":[],""Links"":[],""CommentBlocks"":[]}],""Links"":[{""Origin"":0,""Hook"":""NotARealHook"",""Destination"":1}],""CommentBlocks"":[]}]}";
+            var metadata = @"{""Name"":""MyMS""}";
+
+            void Write(string fileName, string text)
+            {
+                using var stream = File.OpenWrite(fileName);
+                stream.Write(Encoding.UTF8.GetBytes(text).AsSpan());
+            }
+
+            TestHelper.RunInProjectContext(nameof(ImportGivenModelSystemWithUnknownHookGeneratesWarning), (user, project) =>
+            {
+                var tempDirName = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "XTMF-" + Guid.NewGuid());
+                var exportPath = Path.GetTempFileName();
+
+                try
+                {
+                    CommandError error;
+                    Directory.CreateDirectory(tempDirName);
+                    Write(Path.Combine(tempDirName, "ModelSystem.xmsys"), modelSystemString);
+                    Write(Path.Combine(tempDirName, "metadata.json"), metadata);
+
+                    // The destination cannot exist before creating the archive.
+                    File.Delete(exportPath);
+                    ZipFile.CreateFromDirectory(tempDirName, exportPath);
+
+                    Assert.IsTrue(project.ImportModelSystem(user, exportPath, "TestModelSystemWithUnknownHook", out ModelSystemHeader importedHeader, out error), error?.Message);
+
+                    Assert.IsTrue(project.EditModelSystem(user, importedHeader, out var modelSystemSession, out error, out var warnings), error?.Message);
+                    Assert.IsNotNull(modelSystemSession, "Model system session should still be created when non-fatal hook warnings exist.");
+
+                    using (modelSystemSession)
+                    {
+                        Assert.IsNotNull(warnings, "Warnings should be returned when a link references an unknown hook.");
+                        Assert.IsTrue(warnings!.Any(w => w.Contains("NotARealHook", StringComparison.Ordinal)),
+                            "Expected warning mentioning the unknown hook name 'NotARealHook'.");
+
+                        // Ensure the model still loaded and the invalid link was skipped.
+                        Assert.IsNotNull(modelSystemSession.ModelSystem);
+                        Assert.HasCount(1, modelSystemSession.ModelSystem.GlobalBoundary.Modules);
+                        Assert.HasCount(0, modelSystemSession.ModelSystem.GlobalBoundary.Links);
+                    }
+                }
+                finally
+                {
+                    try
+                    {
+                        Directory.Delete(tempDirName);
+                        File.Delete(exportPath);
+                    }
+                    catch (IOException) { }
+                }
+            });
+        }
+
+        [TestMethod]
         public void ImportModelSystemBadUser()
         {
             RunInProjectContext("ImportModelSystemBadUser", (user, unauthorizedUser, project) =>

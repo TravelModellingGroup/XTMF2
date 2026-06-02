@@ -116,7 +116,7 @@ public partial class ModelSystemsView : UserControl
         var mainWindow = TopLevel.GetTopLevel(this) as MainWindow;
         if (mainWindow is null || _viewModel is null) return;
 
-        if (!_viewModel.TryEditModelSystem(header, out var session, out var error) || session is null)
+        if (!_viewModel.TryEditModelSystem(header, out var session, out var error, out var warnings) || session is null)
         {
             // Show an error dialog if we have a parent window
             if (mainWindow is not null)
@@ -129,6 +129,25 @@ public partial class ModelSystemsView : UserControl
                     await dialog.ShowDialog(mainWindow);
                 });
             }
+            return;
+        }
+
+        if (warnings is { Count: > 0 })
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+            {
+                var dialog = new ValidationIssueDialog(
+                    Strings.ModelSystems_OpenFailedTitle,
+                    string.Join(Environment.NewLine, warnings));
+                await dialog.ShowDialog(mainWindow);
+                if (!dialog.Result)
+                {
+                    session.Dispose();
+                    return;
+                }
+
+                mainWindow.OpenModelSystemTab(session, _viewModel.CurrentUser);
+            });
             return;
         }
 
@@ -229,8 +248,22 @@ public partial class ModelSystemsView : UserControl
                         return existing;
                     }
                     // Otherwise open a new editing session.
-                    if (!capturedViewModel.TryEditModelSystem(header, out var session, out _))
+                    if (!capturedViewModel.TryEditModelSystem(header, out var session, out var error, out var warnings))
                         return null;
+
+                    if (warnings is { Count: > 0 })
+                    {
+                        var warningDialog = new ValidationIssueDialog(
+                            Strings.ModelSystems_OpenFailedTitle,
+                            string.Join(Environment.NewLine, warnings));
+                        await warningDialog.ShowDialog(mainWindow);
+                        if (!warningDialog.Result)
+                        {
+                            session?.Dispose();
+                            return null;
+                        }
+                    }
+
                     return mainWindow.OpenModelSystemTabAndGet(session!, capturedViewModel.CurrentUser);
                 });
         });

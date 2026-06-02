@@ -305,7 +305,7 @@ namespace XTMF2.Editing
                 if (System.IO.File.Exists(path))
                 {
                     using var stream = System.IO.File.OpenRead(path);
-                    ms = ModelSystem.Load(stream, GetModuleRepository(), modelSystemHeader, ref errorStr);
+                    ms = ModelSystem.Load(stream, GetModuleRepository(), modelSystemHeader, ref errorStr, out _);
                 }
                 else
                 {
@@ -359,11 +359,15 @@ namespace XTMF2.Editing
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns>
         public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, [NotNullWhen(true)] out ModelSystemSession? session, [NotNullWhen(false)] out CommandError? error)
+            => EditModelSystem(user, modelSystemHeader, out session, out error, out _);
+
+        public bool EditModelSystem(User user, ModelSystemHeader modelSystemHeader, [NotNullWhen(true)] out ModelSystemSession? session, [NotNullWhen(false)] out CommandError? error, out List<string>? warnings)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(modelSystemHeader);
 
             session = null;
+            warnings = null;
             lock (_sessionLock)
             {
                 if (!Project.CanAccess(user))
@@ -378,7 +382,7 @@ namespace XTMF2.Editing
                 }
                 if (!_activeSessions.TryGetValue(modelSystemHeader, out session))
                 {
-                    if (ModelSystem.Load(this, modelSystemHeader, out session, out error))
+                    if (ModelSystem.Load(this, modelSystemHeader, out session, out error, out warnings))
                     {
                         _activeSessions.Add(modelSystemHeader, session!);
                         Interlocked.Increment(ref _references);
