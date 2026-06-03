@@ -146,6 +146,9 @@ partial class ModelSystemCanvas
 
     private void OnNameEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        // Don't commit if we're in the middle of a drag/resize operation.
+        if (_inDragOrResize) return;
+
         if (_editingNameElement is not null)
         {
             CommitNameEdit();
@@ -240,6 +243,9 @@ partial class ModelSystemCanvas
 
     private void OnCommentEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        // Don't commit if we're in the middle of a drag/resize operation.
+        if (_inDragOrResize) return;
+
         if (_editingCommentBlock is not null)
         {
             CommitCommentEdit();

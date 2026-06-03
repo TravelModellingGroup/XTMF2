@@ -684,9 +684,77 @@ partial class ModelSystemCanvas
         // and will immediately return focus to the inline editor.
         if (_varDropdownVisible) return;
 
+        // Don't commit if we're in the middle of a drag/resize operation (focus naturally shifts to canvas during pointer operations).
+        if (_inDragOrResize) return;
+
         // Commit on focus loss (e.g. user clicks away to another element).
         if (_editingParamNode is not null)
             CommitParamEdit();
+    }
+
+    /// <summary>
+    /// Updates the stored inline editor position and size fields to match the current
+    /// position and size of the element being edited. This is called during element
+    /// move/resize operations to keep the inline editor textbox synchronized.
+    /// </summary>
+    private void SyncEditingElementPositions()
+    {
+        // Sync parameter editor position/size if editing
+        if (_editingParamNode is not null)
+        {
+            _editingParamEditorX = _editingParamNode.X;
+            _editingParamEditorY = _editingParamNode.Y + NodeHeaderHeight;
+            _editingParamEditorW = NodeRenderWidth(_editingParamNode);
+        }
+
+        // Sync name editor position/size if editing
+        if (_editingNameElement is not null)
+        {
+            if (_editingNameElement is NodeViewModel nvm)
+            {
+                _nameEditorX = nvm.X;
+                _nameEditorY = nvm.Y;
+                _nameEditorW = NodeRenderWidth(nvm);
+                _nameEditorH = NodeHeaderHeight;
+            }
+            else if (_editingNameElement is StartViewModel svm)
+            {
+                _nameEditorX = svm.X - StartViewModel.Radius;
+                _nameEditorY = svm.Y + StartViewModel.Radius + 2;
+                _nameEditorW = svm.Diameter + 20;
+                _nameEditorH = NodeHeaderHeight;
+            }
+            else if (_editingNameElement is FunctionTemplateViewModel ftvm)
+            {
+                _nameEditorX = ftvm.X;
+                _nameEditorY = ftvm.Y;
+                _nameEditorW = ftvm.Width;
+                _nameEditorH = FtHeaderHeight;
+            }
+            else if (_editingNameElement is FunctionInstanceViewModel fivm)
+            {
+                _nameEditorX = fivm.X;
+                _nameEditorY = fivm.Y;
+                _nameEditorW = fivm.Width;
+                _nameEditorH = FtHeaderHeight;
+            }
+            else if (_editingNameElement is FunctionParameterViewModel fpvm)
+            {
+                _nameEditorX = fpvm.X;
+                _nameEditorY = fpvm.Y;
+                _nameEditorW = fpvm.Width;
+                _nameEditorH = FtHeaderHeight;
+            }
+        }
+
+        // Sync comment editor position/size if editing
+        if (_editingCommentBlock is not null)
+        {
+            _editingCommentEditorX = _editingCommentBlock.X;
+            _editingCommentEditorY = _editingCommentBlock.Y;
+            _editingCommentEditorW = _editingCommentBlock.Width;
+            _editingCommentEditorH = _editingCommentBlock.Height;
+        }
     }
 
 }

@@ -398,6 +398,8 @@ public sealed partial class ModelSystemCanvas : Control
     // ── Resize drag state ─────────────────────────────────────────────────
     /// <summary>The canvas element being resized, or <c>null</c> when not resizing.</summary>
     private ICanvasElement? _resizing;
+    /// <summary><c>true</c> while a drag or resize operation is in progress (used to prevent inline editor close on focus loss).</summary>
+    private bool _inDragOrResize;
     /// <summary>Pointer position at the start of the resize drag.</summary>
     private Point _resizeStartPos;
     /// <summary>Node rendered width at the start of the resize drag.</summary>
