@@ -110,17 +110,17 @@ public class TestExtractToFunctionTemplate
     }
 
     [TestMethod]
-    public void ExtractToFunctionTemplate_MultipleExternalIncomingLinks_Fails()
+    public void ExtractToFunctionTemplate_MultipleIncomingLinksToSameNode_Succeeds()
     {
+        // Both incoming SingleLinks point to the same entry node → should succeed;
+        // all incoming links must be redirected to the FunctionInstance.
         TestHelper.RunInModelSystemContext(
-            nameof(ExtractToFunctionTemplate_MultipleExternalIncomingLinks_Fails),
+            nameof(ExtractToFunctionTemplate_MultipleIncomingLinksToSameNode_Succeeds),
             (user, pSess, ms) =>
             {
                 var boundary = ms.ModelSystem.GlobalBoundary;
-                // entryNode: IgnoreResult<string> (IAction)
                 Assert.IsTrue(ms.AddNode(user, boundary, "Entry", typeof(IgnoreResult<string>),
                     EntryLoc, out var entryNode, out var error), error?.Message);
-                // Two callers pointing to entryNode.
                 Assert.IsTrue(ms.AddModelSystemStart(user, boundary, "Start1",
                     CallerLoc, out var start1, out error), error?.Message);
                 Assert.IsTrue(ms.AddModelSystemStart(user, boundary, "Start2",
@@ -132,11 +132,110 @@ public class TestExtractToFunctionTemplate
                     TestHelper.GetHook(start2.Hooks, "ToExecute"), entryNode,
                     out _, out error), error?.Message);
 
-                Assert.IsFalse(ms.ExtractToFunctionTemplate(
+                Assert.IsTrue(ms.ExtractToFunctionTemplate(
                     user, boundary, new[] { entryNode! },
+                    "T", "FI", FtLoc, FiLoc,
+                    out var ft, out var fi, out error), error?.Message);
+
+                Assert.IsNotNull(ft);
+                Assert.IsNotNull(fi);
+
+                // Both start nodes must now link to the FunctionInstance.
+                var link1 = boundary.Links.OfType<SingleLink>()
+                    .FirstOrDefault(l => l.Origin == start1 && l.Destination == fi);
+                var link2 = boundary.Links.OfType<SingleLink>()
+                    .FirstOrDefault(l => l.Origin == start2 && l.Destination == fi);
+                Assert.IsNotNull(link1, "start1 must link to FunctionInstance.");
+                Assert.IsNotNull(link2, "start2 must link to FunctionInstance.");
+            });
+    }
+
+    [TestMethod]
+    public void ExtractToFunctionTemplate_MultipleIncomingLinksToDifferentNodes_Fails()
+    {
+        // Two incoming SingleLinks pointing to different selected nodes → should fail.
+        TestHelper.RunInModelSystemContext(
+            nameof(ExtractToFunctionTemplate_MultipleIncomingLinksToDifferentNodes_Fails),
+            (user, pSess, ms) =>
+            {
+                var boundary = ms.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(ms.AddNode(user, boundary, "NodeA", typeof(IgnoreResult<string>),
+                    EntryLoc, out var nodeA, out var error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, boundary, "NodeB", typeof(IgnoreResult<string>),
+                    ExtDestLoc, out var nodeB, out error), error?.Message);
+                Assert.IsTrue(ms.AddModelSystemStart(user, boundary, "Start1",
+                    CallerLoc, out var start1, out error), error?.Message);
+                Assert.IsTrue(ms.AddModelSystemStart(user, boundary, "Start2",
+                    new Rectangle(0, 80, 160, 60), out var start2, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, start1,
+                    TestHelper.GetHook(start1.Hooks, "ToExecute"), nodeA,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, start2,
+                    TestHelper.GetHook(start2.Hooks, "ToExecute"), nodeB,
+                    out _, out error), error?.Message);
+
+                Assert.IsFalse(ms.ExtractToFunctionTemplate(
+                    user, boundary, new[] { nodeA!, nodeB! },
                     "T", "FI", FtLoc, FiLoc,
                     out _, out _, out error));
                 Assert.IsNotNull(error);
+            });
+    }
+
+    [TestMethod]
+    public void ExtractToFunctionTemplate_IncomingMultiLink_Succeeds()
+    {
+        // The external caller connects to the selected entry node via a MultiLink
+        // (Execute's "To Execute" hook accepts IAction[]).
+        TestHelper.RunInModelSystemContext(
+            nameof(ExtractToFunctionTemplate_IncomingMultiLink_Succeeds),
+            (user, pSess, ms) =>
+            {
+                var boundary = ms.ModelSystem.GlobalBoundary;
+                // entryNode and otherDest are both IAction (IgnoreResult<string> / Execute).
+                Assert.IsTrue(ms.AddNode(user, boundary, "Entry", typeof(IgnoreResult<string>),
+                    EntryLoc, out var entryNode, out var error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, boundary, "OtherDest", typeof(IgnoreResult<string>),
+                    ExtDestLoc, out var otherDest, out error), error?.Message);
+                // Use Execute as the multi-cardinality caller (IAction[] "To Execute" hook).
+                Assert.IsTrue(ms.AddNode(user, boundary, "Caller", typeof(Execute),
+                    CallerLoc, out var caller, out error), error?.Message);
+                Assert.IsTrue(ms.AddModelSystemStart(user, boundary, "Start",
+                    new Rectangle(0, 200, 160, 60), out var start, out error), error?.Message);
+                // start → caller (single link).
+                Assert.IsTrue(ms.AddLink(user, start,
+                    TestHelper.GetHook(start.Hooks, "ToExecute"), caller,
+                    out _, out error), error?.Message);
+
+                // Build a MultiLink on caller's "To Execute": first dest = entryNode.
+                Assert.IsTrue(ms.AddLink(user, caller,
+                    TestHelper.GetHook(caller.Hooks, "To Execute"), entryNode,
+                    out var firstLink, out error), error?.Message);
+                // Second dest = otherDest; this upgrades to a MultiLink and returns it.
+                Assert.IsTrue(ms.AddLink(user, caller,
+                    TestHelper.GetHook(caller.Hooks, "To Execute"), otherDest,
+                    out var multiLink, out error), error?.Message);
+                Assert.IsInstanceOfType(multiLink, typeof(MultiLink),
+                    "Adding a second destination must produce a MultiLink.");
+
+                Assert.IsTrue(ms.ExtractToFunctionTemplate(
+                    user, boundary, new[] { entryNode! },
+                    "MLTemplate", "MLInstance",
+                    FtLoc, FiLoc,
+                    out var ft, out var fi, out error), error?.Message);
+
+                Assert.IsNotNull(ft);
+                Assert.IsNotNull(fi);
+
+                // The MultiLink must now contain the FunctionInstance instead of entryNode.
+                var ml = (MultiLink)multiLink!;
+                Assert.Contains(fi, ml.Destinations,
+                    "MultiLink must contain the FunctionInstance.");
+                Assert.DoesNotContain(entryNode, ml.Destinations,
+                    "MultiLink must no longer contain entryNode.");
+                // otherDest remains in the MultiLink.
+                Assert.Contains(otherDest, ml.Destinations,
+                    "MultiLink must still contain otherDest.");
             });
     }
 

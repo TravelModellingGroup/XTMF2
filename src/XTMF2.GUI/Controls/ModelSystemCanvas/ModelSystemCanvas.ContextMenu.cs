@@ -548,6 +548,13 @@ partial class ModelSystemCanvas
                 InvalidateAndMeasure();
             };
 
+            var expandItem = new MenuItem { Header = "Expand Function Instance" };
+            expandItem.Click += async (_, _) =>
+            {
+                await vm.ExpandFunctionInstanceAsync(capturedFi);
+                InvalidateAndMeasure();
+            };
+
             var renameItem = new MenuItem { Header = "Rename…" };
             renameItem.Click += async (_, _) =>
             {
@@ -579,6 +586,7 @@ partial class ModelSystemCanvas
 
             menu.Items.Add(new Separator());
             menu.Items.Add(openTemplateItem);
+            menu.Items.Add(expandItem);
             menu.Items.Add(renameItem);
             menu.Items.Add(moveFiItem);
             menu.Items.Add(disableFiItem);

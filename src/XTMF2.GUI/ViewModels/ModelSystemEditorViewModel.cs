@@ -2683,6 +2683,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Expands (inlines) the given function instance back into regular boundary elements.
+    /// </summary>
+    public async Task ExpandFunctionInstanceAsync(FunctionInstanceViewModel fivm)
+    {
+        if (!Session.ExpandFunctionInstance(User, fivm.UnderlyingInstance, out var error))
+            await ShowError("Expand Function Instance Failed", error);
+    }
+
+    /// <summary>
     /// Navigates the canvas into <paramref name="ftvm"/>'s
     /// <see cref="FunctionTemplate.InternalModules"/> boundary so the user can
     /// edit the nodes contained within the function template.
