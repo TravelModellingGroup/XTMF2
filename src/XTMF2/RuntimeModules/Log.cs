@@ -25,7 +25,7 @@ using System.Threading;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Log.html",
 Description = "Provides functionality for synchronizing the writing of events to a log and providing time stamps.")]
     public sealed class Log : BaseAction<string>, IFunction<Log>, IDisposable
     {

@@ -22,7 +22,7 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
         Description = "Writes the provided mess to the log and then invokes the next step.")]
     public sealed class WriteToLogF<Return> : BaseFunction<Return>
     {
@@ -43,7 +43,7 @@ namespace XTMF2.RuntimeModules
         }
     }
 
-    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
         Description = "Writes the provided mess to the log and then invokes the next step.")]
     public sealed class WriteToLogF<Context, Return> : BaseFunction<Context, Return>
     {
@@ -64,7 +64,7 @@ namespace XTMF2.RuntimeModules
         }
     }
 
-    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
         Description = "Writes the provided mess to the log and then invokes the next step.")]
     public sealed class WriteToLogBasedOnContextF<Context, Return> : BaseFunction<Context, Return>
     {
@@ -85,7 +85,7 @@ namespace XTMF2.RuntimeModules
         }
     }
 
-    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
         Description = "Writes the provided mess to the log and then invokes the next step.")]
     public sealed class WriteToLogA : BaseAction
     {
@@ -106,7 +106,7 @@ namespace XTMF2.RuntimeModules
         }
     }
 
-    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
         Description = "Writes the provided mess to the log and then invokes the next step.")]
     public sealed class WriteToLogA<Context> : BaseAction<Context>
     {
@@ -127,7 +127,7 @@ namespace XTMF2.RuntimeModules
         }
     }
 
-    [Module(Name = "Write to Log", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
         Description = "Writes the provided mess to the log and then invokes the next step.")]
     public sealed class WriteToLogBasedOnContextA<Context> : BaseAction<Context>
     {

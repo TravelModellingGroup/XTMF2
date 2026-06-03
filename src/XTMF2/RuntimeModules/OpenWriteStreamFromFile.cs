@@ -23,7 +23,7 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Open Write Stream From File", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Open Write Stream From File", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/OpenWriteStreamFromFile.html",
 Description = "Provides a WriteStream to the given file name from context.")]
     public class OpenWriteStreamFromFile : BaseFunction<WriteStream>
     {

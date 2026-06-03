@@ -17,7 +17,7 @@ namespace XTMF2.RuntimeModules;
 
 
 [Module(Name = "Set Parameter", Description = "Sets the value of a parameter to the provided value.",
-    DocumentationLink = "http://tmg.utoronto.ca/doc/2.0")]
+    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/SetParameter.html")]
 public sealed class SetParameter<T> : BaseAction
 {
     [Parameter(Required = true, Name = "Value", Description = "The value to set the parameter to.", Index = 0)]

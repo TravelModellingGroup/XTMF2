@@ -22,7 +22,7 @@ using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Scripted Parameter", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Scripted Parameter", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ScriptedParameter.html",
     Description = "Provides the ability to have a value that is calculated in an expression.")]
     public sealed class ScriptedParameter<T> : BaseFunction<T>
     {

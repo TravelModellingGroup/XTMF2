@@ -21,7 +21,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Is Estimation Run",
     Description = "Returns true when the currently executing run is in estimation mode.",
-    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0")]
+    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IsEstimationRun.html")]
 public sealed class IsEstimationRun : BaseFunction<bool>
 {
     private readonly XTMFRuntime _runtime;

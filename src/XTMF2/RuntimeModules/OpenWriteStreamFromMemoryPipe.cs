@@ -22,7 +22,7 @@ namespace XTMF2.RuntimeModules
 {
     [Module(Name = "Open Write Stream From Memory Pipe",
     Description = "Gets a WriteStream that is backed by memory.",
-    DocumentationLink = "http://tmg.utoronto.ca/doc/2.0")]
+    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/OpenWriteStreamFromMemoryPipe.html")]
     public sealed class OpenWriteStreamFromMemoryPipe : BaseFunction<WriteStream>
     {
         [SubModule(Index = 0, Name = "Pipe", Description = "The pipe to write to", Required = true)]

@@ -22,7 +22,7 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Combine Context From No Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Combine Context From No Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/CombineContextFromNoContext.html",
 Description = "Combines the contexts as derived from First and Second and invokes To Invoke with the combined context.")]
     public sealed class CombineContextAFromNoContext<Context1, Context2> : BaseAction
     {
@@ -41,7 +41,7 @@ Description = "Combines the contexts as derived from First and Second and invoke
         }
     }
 
-    [Module(Name = "Combine Context From No Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Combine Context From No Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/CombineContextFromNoContext.html",
 Description = "Combines the contexts as derived from First and Second and invokes To Invoke with the combined context.")]
     public sealed class CombineContextA<Context1, Context2> : BaseAction<Context1>
     {
@@ -56,7 +56,7 @@ Description = "Combines the contexts as derived from First and Second and invoke
         }
     }
 
-    [Module(Name = "Combine Context From No Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Combine Context From No Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/CombineContextFromNoContext.html",
 Description = "Combines the contexts as derived from First and Second and invokes To Invoke with the combined context.")]
     public sealed class CombineContextAFromContext<Context1, Context2> : BaseAction<Context1>
     {
@@ -71,7 +71,7 @@ Description = "Combines the contexts as derived from First and Second and invoke
         }
     }
 
-    [Module(Name = "Combine Context From No Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Combine Context From No Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/CombineContextFromNoContext.html",
 Description = "Combines the contexts as derived from First and Second and invokes To Invoke with the combined context.")]
     public sealed class CombineContextFFromNoContext<Context1, Context2, Return> : BaseFunction<Return>
     {
@@ -90,7 +90,7 @@ Description = "Combines the contexts as derived from First and Second and invoke
         }
     }
 
-    [Module(Name = "Combine Context From No Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Combine Context From No Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/CombineContextFromNoContext.html",
 Description = "Combines the contexts as derived from First and Second and invokes To Invoke with the combined context.")]
     public sealed class CombineContexF<Context1, Context2, Return> : BaseFunction<Context1, Return>
     {
@@ -105,7 +105,7 @@ Description = "Combines the contexts as derived from First and Second and invoke
         }
     }
 
-    [Module(Name = "Combine Context From No Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Combine Context From No Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/CombineContextFromNoContext.html",
 Description = "Combines the contexts as derived from First and Second and invokes To Invoke with the combined context.")]
     public sealed class CombineContextFFromContext<Context1, Context2, Return> : BaseFunction<Context1, Return>
     {

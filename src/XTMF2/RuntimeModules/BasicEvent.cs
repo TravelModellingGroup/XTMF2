@@ -23,7 +23,7 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Basic Event", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Basic Event", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/BasicEvent.html",
     Description = "Provides the ability for modules to invoke a set of other modules that are waiting for something to occur.")]
     public sealed class BasicEvent : BaseEvent
     {
@@ -52,7 +52,7 @@ namespace XTMF2.RuntimeModules
         }
     }
 
-    [Module(Name = "Basic Event", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Basic Event", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/BasicEvent.html",
     Description = "Provides the ability for modules to invoke a set of other modules that are waiting for something to occur.")]
     public sealed class BasicEvent<Context> : BaseEvent<Context>
     {

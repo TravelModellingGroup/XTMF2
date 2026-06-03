@@ -22,7 +22,7 @@ using System.Threading.Tasks;
 
 namespace XTMF2.RuntimeModules;
 
-[Module(Name = "Sleep", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0", Description = "Pauses execution for a specified duration.")]
+[Module(Name = "Sleep", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Sleep.html", Description = "Pauses execution for a specified duration.")]
 public sealed class Sleep : BaseAction
 {
     [Parameter(DefaultValue = "1000", Description = "The number of milliseconds to sleep for.", Index = 0,

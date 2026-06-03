@@ -21,7 +21,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name ="OpenWriteStreamToRunStatus",
     Description = "Opens a stream that can be written to in order to send status messages back to the client.  This works with Logs.",
-    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0")]
+    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/OpenWriteStreamToRunStatus.html")]
 public sealed class OpenWriteStreamToRunStatus : BaseFunction<WriteStream>
 {
     private readonly XTMFRuntime _runtime;

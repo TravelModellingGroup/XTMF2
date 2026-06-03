@@ -21,7 +21,7 @@ using System.Runtime.InteropServices;
 
 namespace XTMF2.RuntimeModules;
 
-[Module(Name = "With Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+[Module(Name = "With Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WithContext.html",
     Description = "Provides a way to execute an action with a context loaded from the provided context.")]
 public sealed class WithContext<Context1, Context2> : BaseAction where Context1 : Context2
 {
@@ -38,7 +38,7 @@ public sealed class WithContext<Context1, Context2> : BaseAction where Context1 
     }
 }
 
-[Module(Name = "Return Using Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+[Module(Name = "Return Using Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ReturnUsingContext.html",
     Description = "Provides a way to execute a function with a context loaded from the provided context and return the result.")]
 public sealed class ReturnUsingContext<Context, Return> : BaseFunction<Return>
 {
