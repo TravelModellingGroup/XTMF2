@@ -3834,24 +3834,57 @@ namespace XTMF2.Editing
                 }
 
                 // ── Classify links ─────────────────────────────────────────────
-                // External incoming: origin outside selection, destination (single) inside selection.
-                var externalIncomingLinks = boundary.Links
-                    .Where(l => l is SingleLink sl
-                                && !selectedSet.Contains(l.Origin)
-                                && selectedSet.Contains(sl.Destination))
-                    .Cast<SingleLink>()
-                    .ToList();
+                // External incoming: origin outside selection, destination inside selection.
+                // Supports both SingleLink and MultiLink originating from outside the selection.
+                // Each entry: (originalDestNode, redirectDelegate) where redirectDelegate(newDest)
+                // redirects that particular connection to newDest.
+                var incomingRedirects = new List<(Node OriginalDest, Action<Node> Redirect)>();
 
-                if (externalIncomingLinks.Count != 1)
+                foreach (var link in boundary.Links)
+                {
+                    if (selectedSet.Contains(link.Origin)) continue;
+
+                    if (link is SingleLink inSl && selectedSet.Contains(inSl.Destination))
+                    {
+                        var capturedSl = inSl;
+                        incomingRedirects.Add((inSl.Destination,
+                            dest => capturedSl.SetDestination(dest, out _)));
+                    }
+                    else if (link is MultiLink inMl)
+                    {
+                        // Each destination inside the selection is an individual redirect.
+                        // Replacing at the same index (remove + insert at i) doesn't shift other indices.
+                        for (int mlDi = 0; mlDi < inMl.Destinations.Count; mlDi++)
+                        {
+                            if (!selectedSet.Contains(inMl.Destinations[mlDi])) continue;
+                            var capturedMl   = inMl;
+                            var capturedIdx  = mlDi;
+                            var capturedDest = inMl.Destinations[mlDi];
+                            incomingRedirects.Add((capturedDest, dest =>
+                            {
+                                capturedMl.RemoveDestination(capturedIdx);
+                                capturedMl.AddDestination(dest, capturedIdx, out _);
+                            }));
+                        }
+                    }
+                }
+
+                // All external incoming edges must lead to the same selected node (the entry node).
+                var distinctEntries = incomingRedirects.Select(r => r.OriginalDest).Distinct().ToList();
+                if (distinctEntries.Count == 0)
+                {
+                    error = new CommandError("Extraction requires at least one external incoming link.");
+                    return false;
+                }
+                if (distinctEntries.Count > 1)
                 {
                     error = new CommandError(
-                        $"Extraction requires exactly one external incoming link, " +
-                        $"but {externalIncomingLinks.Count} were found.");
+                        $"Extraction requires all external incoming links to target the same selected node, " +
+                        $"but {distinctEntries.Count} different destination nodes were found.");
                     return false;
                 }
 
-                var externalIncoming = externalIncomingLinks[0];
-                var entryNode        = externalIncoming.Destination;
+                var entryNode = distinctEntries[0];
 
                 // Reject mixed MultiLinks that cross the selection boundary (some dests in, some out).
                 var ambiguousMulti = boundary.Links
@@ -3910,14 +3943,27 @@ namespace XTMF2.Editing
                 ft!.SetLocation(functionTemplateLocation);
                 var internalBoundary = ft.InternalModules;
 
-                // Step 2 – Remove external outgoing links from boundary so they don't follow
-                //          their origin nodes into InternalModules during the move.
-                foreach (var link in externalOutgoing)
-                    boundary.RemoveLink(link, out _);
+                    // Step 2 – Set entry node so the FunctionInstance has the correct type when added.
+                    ft.SetEntryNode(entryNode);
 
-                // Step 3 – Move each selected node (and its hidden inline children) to
-                //          InternalModules.  Their remaining outgoing links (internal ones
-                //          plus links to hidden children) also move.
+                    // Step 3 – Create FunctionInstance and redirect incoming links BEFORE removing
+                    //          any nodes from the boundary.  This ensures that when the incoming
+                    //          MultiLink/SingleLink ObservableCollection events fire, both the old
+                    //          destination (still in boundary) and the new one (fi) are resolvable
+                    //          by the canvas VM, preventing a stale extra arrowhead.
+                    boundary.AddFunctionInstance(functionInstanceName, ft, functionInstanceLocation,
+                        out var fi, out _);
+                    foreach (var (_, redirect) in incomingRedirects)
+                        redirect(fi!);
+
+                    // Step 4 – Remove external outgoing links from boundary so they don't follow
+                    //          their origin nodes into InternalModules during the move.
+                    foreach (var link in externalOutgoing)
+                        boundary.RemoveLink(link, out _);
+
+                    // Step 5 – Move each selected node (and its hidden inline children) to
+                    //          InternalModules. Their remaining outgoing links (internal ones
+                    //          plus links to hidden children) also move.
                 var moveInfo = new List<(Node Node, List<Node> HiddenChildren, List<Link> MovedLinks)>();
                 foreach (var node in selectedNodes)
                 {
@@ -3965,7 +4011,7 @@ namespace XTMF2.Editing
                     moveInfo.Add((node, hiddenChildren, nodeOutgoing));
                 }
 
-                // Compute the bounding box of the selected nodes so we can place
+                 // Compute bounding box of selected nodes so we can place
                 // FunctionParameters visibly above them, centred horizontally.
                 const float FpWidth  = 120f;
                 const float FpHeight =  50f;
@@ -3986,7 +4032,7 @@ namespace XTMF2.Editing
                 float fpStartX     = (bboxMinX + bboxMaxX) / 2f - totalFpWidth / 2f;
                 float fpY          = MathF.Max(0f, bboxMinY - FpHeight - 40f);
 
-                // Step 4 – Create FunctionParameters and internal FP-destination links.
+                // Step 6 – Create FunctionParameters and internal FP-destination links.
                 var usedFpNames = new HashSet<string>(StringComparer.Ordinal);
                 var fpData = new List<(FunctionParameter Fp, SingleLink ExternalLink, SingleLink InternalFpLink)>();
                 int fpIndex = 0;
@@ -4012,17 +4058,7 @@ namespace XTMF2.Editing
                     fpData.Add((fp!, extLink, internalFpLink));
                 }
 
-                // Step 5 – Create FunctionInstance.
-                boundary.AddFunctionInstance(functionInstanceName, ft, functionInstanceLocation,
-                    out var fi, out _);
-
-                // Step 6 – Set the entry node on the template.
-                ft.SetEntryNode(entryNode);
-
-                // Step 7 – Redirect the external incoming link to the new FunctionInstance.
-                externalIncoming.SetDestination(fi!, out _);
-
-                // Step 8 – Create links from the FunctionInstance's hooks to the external destinations.
+                 // Step 7 – Create links from the FunctionInstance's hooks to the external destinations.
                 var fiOutgoingLinks = new List<SingleLink>();
                 foreach (var (fp, extLink, _) in fpData)
                 {
@@ -4045,7 +4081,7 @@ namespace XTMF2.Editing
                 var capturedFt              = ft;
                 var capturedFi              = fi!;
                 var capturedEntryNode       = entryNode;
-                var capturedExternalIn      = externalIncoming;
+                var capturedIncomingRedirects = incomingRedirects;
                 var capturedFpData          = fpData;
                 var capturedMoveInfo        = moveInfo;
                 var capturedExternalOut     = externalOutgoing;
@@ -4093,9 +4129,10 @@ namespace XTMF2.Editing
                         foreach (var lk in capturedExternalOut)
                             boundary.AddLink(lk, out _);
 
-                        // 4. Restore external incoming link destination (fires PropertyChanged;
+                        // 4. Restore external incoming link/destination (fires PropertyChanged;
                         //    capturedEntryNode is now in the boundary so the VM resolves correctly).
-                        capturedExternalIn.SetDestination(capturedEntryNode, out _);
+                        foreach (var (origDest, redirect) in capturedIncomingRedirects)
+                            redirect(origDest);
 
                         // 5. Clear the entry node.
                         capturedFt.SetEntryNode(null);
@@ -4122,11 +4159,19 @@ namespace XTMF2.Editing
                         boundary.AddFunctionTemplate(capturedFt, out _);
                         capturedFt.SetLocation(functionTemplateLocation);
 
-                        // Remove external outgoing links.
-                        foreach (var lk in capturedExternalOut)
-                            boundary.RemoveLink(lk, out _);
+                            // Re-add FunctionInstance and set entry node, then redirect incoming
+                            // links BEFORE moving nodes (mirrors the corrected forward-direction order
+                            // so that stale MultiLink arrowheads are properly cleaned up on redo too).
+                            boundary.AddFunctionInstance(capturedFi, out _);
+                            capturedFt.SetEntryNode(capturedEntryNode);
+                            foreach (var (_, redirect) in capturedIncomingRedirects)
+                                redirect(capturedFi);
 
-                        // Move nodes to InternalModules.
+                            // Remove external outgoing links.
+                            foreach (var lk in capturedExternalOut)
+                                boundary.RemoveLink(lk, out _);
+
+                            // Move nodes to InternalModules.
                         foreach (var (node, hiddenChildren, movedLinks) in capturedMoveInfo)
                         {
                             foreach (var lk in movedLinks)
@@ -4154,16 +4199,7 @@ namespace XTMF2.Editing
                             internalBoundary.AddLink(internalFpLink, out _);
                         }
 
-                        // Re-add FunctionInstance.
-                        boundary.AddFunctionInstance(capturedFi, out _);
-
-                        // Set entry node.
-                        capturedFt.SetEntryNode(capturedEntryNode);
-
-                        // Redirect external incoming link.
-                        capturedExternalIn.SetDestination(capturedFi, out _);
-
-                        // Re-add fi→external links.
+                            // Re-add fi→external links.
                         foreach (var lk in capturedFiOutgoing)
                             boundary.AddLink(lk, out _);
 
@@ -4182,6 +4218,266 @@ namespace XTMF2.Editing
         /// <param name="exportPath">The path to export the model system to.</param>
         /// <param name="error">The error message if the export fails.</param>
         /// <returns>True if the export was successful, false otherwise with error message.</returns>
+        /// <summary>
+        /// Expands (inlines) a <see cref="FunctionInstance"/> back into the boundary it lives in.
+        /// This is the inverse of <see cref="ExtractToFunctionTemplate"/>:
+        /// internal nodes are moved out, links are reconnected, and the template + instance are removed.
+        /// </summary>
+        public bool ExpandFunctionInstance(
+            User user,
+            FunctionInstance instance,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(instance);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var ft               = instance.Template;
+                var boundary         = instance.ContainedWithin!;
+                var internalBoundary = ft.InternalModules;
+
+                if (ft.EntryNode is null)
+                {
+                    error = new CommandError(
+                        $"Cannot expand '{instance.Name}': the template '{ft.Name}' has no entry node set.");
+                    return false;
+                }
+
+                var allInstances = GetAllFunctionInstancesOf(ft);
+                if (allInstances.Count > 1)
+                {
+                    error = new CommandError(
+                        $"Cannot expand '{instance.Name}': template '{ft.Name}' has {allInstances.Count} instances. " +
+                        $"Expansion is only supported when a single instance exists.");
+                    return false;
+                }
+
+                var entryNode     = ft.EntryNode;
+                var internalNodes = internalBoundary.Modules.ToList();
+
+                // Partition internal links: those targeting a FunctionParameter vs. the rest.
+                var allInternalLinks = internalBoundary.Links.ToList();
+                var fpLinks  = allInternalLinks.OfType<SingleLink>()
+                    .Where(sl => sl.Destination is FunctionParameter)
+                    .ToList();
+                var movedLinks = allInternalLinks.Except(fpLinks.Cast<Link>()).ToList();
+
+                // FI outgoing links: fi → external via FunctionParameterHook.
+                var fiOutgoingLinks = boundary.Links
+                    .OfType<SingleLink>()
+                    .Where(sl => ReferenceEquals(sl.Origin, instance))
+                    .ToList();
+
+                // Map each FunctionParameter to its external destination.
+                var fpToExternal = new Dictionary<FunctionParameter, (NodeHook OriginHook, Node Dest)>();
+                foreach (var sl in fiOutgoingLinks)
+                {
+                    if (sl.OriginHook is FunctionParameterHook fph)
+                        fpToExternal[fph.Parameter] = (fph, sl.Destination);
+                }
+
+                // For each FP-internal link, build the replacement direct link.
+                var newDirectLinks = new List<SingleLink>();
+                foreach (var fpLink in fpLinks)
+                {
+                    if (fpLink.Destination is FunctionParameter fp
+                        && fpToExternal.TryGetValue(fp, out var ext))
+                    {
+                        newDirectLinks.Add(new SingleLink(fpLink.Origin, fpLink.OriginHook, ext.Dest, false));
+                    }
+                }
+
+                // Incoming links pointing at the FI (to be redirected to entryNode).
+                var incomingToFi   = GetLinksGoingTo(instance);
+                var multiLinkInfo  = BuildMultiLinkRestoreInfo(incomingToFi, instance);
+
+                // ── Perform the expansion ─────────────────────────────────────────
+
+                // 1. Remove fi→external (FP outgoing) links from boundary.
+                foreach (var lk in fiOutgoingLinks)
+                    boundary.RemoveLink(lk, out _);
+
+                // 2. Remove FP-destination links from internalBoundary.
+                foreach (var lk in fpLinks)
+                    internalBoundary.RemoveLink(lk, out _);
+
+                // 3. Remove non-FP links from internalBoundary (they move to boundary).
+                foreach (var lk in movedLinks)
+                    internalBoundary.RemoveLink(lk, out _);
+
+                // 4. Move internal nodes to boundary.
+                foreach (var node in internalNodes)
+                {
+                    internalBoundary.RemoveNode(node, out _);
+                    node.UpdateContainedWithin(boundary);
+                    boundary.AddNode(node, out _);
+                }
+
+                // 5. Re-add moved links to boundary.
+                foreach (var lk in movedLinks)
+                    boundary.AddLink(lk, out _);
+
+                // 6. Add replacement direct links (bypass FP) to boundary.
+                foreach (var lk in newDirectLinks)
+                    boundary.AddLink(lk, out _);
+
+                // 7. Redirect all incoming links from fi to entryNode.
+                //    Do this only after entryNode is back in the boundary so the canvas
+                //    can resolve both old and new destinations during link VM updates.
+                foreach (var lk in incomingToFi)
+                {
+                    if (lk is SingleLink sl)
+                    {
+                        sl.SetDestination(entryNode, out _);
+                    }
+                    else if (lk is MultiLink ml && multiLinkInfo.TryGetValue(ml, out var entries))
+                    {
+                        foreach (var (idx, _) in entries)
+                        {
+                            ml.RemoveDestination(idx);
+                            ml.AddDestination(entryNode, idx, out _);
+                        }
+                    }
+                }
+
+                // 8. Remove fi from boundary.
+                boundary.RemoveFunctionInstance(instance, out _);
+
+                // 9. Remove FunctionParameters from template, then remove template from boundary.
+                var fpsToRestore = ft.FunctionParameters.ToList();
+                foreach (var fp in fpsToRestore)
+                    ft.RemoveFunctionParameter(fp, out _);
+                boundary.RemoveFunctionTemplate(ft, out _);
+
+                error = null;
+
+                // ── Register undo/redo ─────────────────────────────────────────────
+                var capturedFt            = ft;
+                var capturedFi            = instance;
+                var capturedEntryNode     = entryNode;
+                var capturedInternalNodes = internalNodes;
+                var capturedMovedLinks    = movedLinks;
+                var capturedFpLinks       = fpLinks;
+                var capturedNewDirect     = newDirectLinks;
+                var capturedFiOutgoing    = fiOutgoingLinks;
+                var capturedIncomingToFi  = incomingToFi;
+                var capturedMultiInfo     = multiLinkInfo;
+                var capturedFps           = fpsToRestore;
+
+                Buffer.AddUndo(new Command(
+                    // ── Undo: restore everything ──
+                    () =>
+                    {
+                        // 1. Restore FunctionTemplate and FunctionParameters.
+                        boundary.AddFunctionTemplate(capturedFt, out _);
+                        foreach (var (fp, idx) in capturedFps.Select((fp, i) => (fp, i)))
+                            capturedFt.RestoreFunctionParameter(fp, idx);
+
+                        // 2. Re-add FunctionInstance to boundary.
+                        boundary.AddFunctionInstance(capturedFi, out _);
+
+                        // 3. Restore incoming links to point back at FI while entry is still
+                        //    in the boundary so the canvas can resolve both endpoints.
+                        RestoreIncomingLinks(capturedIncomingToFi, capturedFi, capturedMultiInfo);
+
+                        // 4. Remove replacement direct links.
+                        foreach (var lk in capturedNewDirect)
+                            boundary.RemoveLink(lk, out _);
+
+                        // 5. Remove moved links from boundary.
+                        foreach (var lk in capturedMovedLinks)
+                            boundary.RemoveLink(lk, out _);
+
+                        // 6. Move nodes back to internalBoundary.
+                        foreach (var node in capturedInternalNodes)
+                        {
+                            boundary.RemoveNode(node, out _);
+                            node.UpdateContainedWithin(internalBoundary);
+                            internalBoundary.AddNode(node, out _);
+                        }
+
+                        // 7. Re-add moved links to internalBoundary.
+                        foreach (var lk in capturedMovedLinks)
+                            internalBoundary.AddLink(lk, out _);
+
+                        // 8. Re-add FP-destination links to internalBoundary.
+                        foreach (var lk in capturedFpLinks)
+                            internalBoundary.AddLink(lk, out _);
+
+                        // 9. Re-add fi→external outgoing links.
+                        foreach (var lk in capturedFiOutgoing)
+                            boundary.AddLink(lk, out _);
+
+                        return (true, null);
+                    },
+                    // ── Redo: re-apply expansion ──
+                    () =>
+                    {
+                        // Mirror the forward direction exactly.
+
+                        // 1. Remove fi→external links.
+                        foreach (var lk in capturedFiOutgoing)
+                            boundary.RemoveLink(lk, out _);
+
+                        // 2. Move internals out to boundary first.
+                        foreach (var lk in capturedFpLinks)
+                            internalBoundary.RemoveLink(lk, out _);
+
+                        foreach (var lk in capturedMovedLinks)
+                            internalBoundary.RemoveLink(lk, out _);
+
+                        foreach (var node in capturedInternalNodes)
+                        {
+                            internalBoundary.RemoveNode(node, out _);
+                            node.UpdateContainedWithin(boundary);
+                            boundary.AddNode(node, out _);
+                        }
+
+                        foreach (var lk in capturedMovedLinks)
+                            boundary.AddLink(lk, out _);
+
+                        foreach (var lk in capturedNewDirect)
+                            boundary.AddLink(lk, out _);
+
+                        // 3. Redirect incoming from FI to entry while both are in boundary.
+                        foreach (var lk in capturedIncomingToFi)
+                        {
+                            if (lk is SingleLink sl)
+                            {
+                                sl.SetDestination(capturedEntryNode, out _);
+                            }
+                            else if (lk is MultiLink ml && capturedMultiInfo.TryGetValue(ml, out var entries))
+                            {
+                                foreach (var (idx, _) in entries)
+                                {
+                                    ml.RemoveDestination(idx);
+                                    ml.AddDestination(capturedEntryNode, idx, out _);
+                                }
+                            }
+                        }
+
+                        // 4. Remove FI and then remove template metadata.
+                        boundary.RemoveFunctionInstance(capturedFi, out _);
+
+                        foreach (var fp in capturedFps)
+                            capturedFt.RemoveFunctionParameter(fp, out _);
+                        boundary.RemoveFunctionTemplate(capturedFt, out _);
+
+                        return (true, null);
+                    }
+                ));
+
+                return true;
+            }
+        }
+
         public bool ExportModelSystem(User user, string exportPath, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);

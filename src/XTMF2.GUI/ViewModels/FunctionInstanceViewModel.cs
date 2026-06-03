@@ -35,6 +35,12 @@ namespace XTMF2.GUI.ViewModels;
 /// </summary>
 public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanvasElement
 {
+    // Keep these in sync with ModelSystemCanvas function-instance layout constants.
+    private const double DefaultWidth = 120.0;
+    private const double DefaultHeight = 50.0;
+    private const double HeaderHeight = 28.0;
+    private const double HookRowHeight = 16.0;
+
     /// <summary>The underlying model object.</summary>
     public FunctionInstance UnderlyingInstance { get; }
 
@@ -52,10 +58,22 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
     public double Y => _previewY ?? (double)UnderlyingInstance.Location.Y;
 
     /// <summary>Rendered width; defaults to 120 when the stored value is 0.</summary>
-    public double Width  => _previewW ?? (UnderlyingInstance.Location.Width  is 0 ? 120.0 : (double)UnderlyingInstance.Location.Width);
+    public double Width  => _previewW ?? (UnderlyingInstance.Location.Width is 0 ? DefaultWidth : (double)UnderlyingInstance.Location.Width);
 
-    /// <summary>Rendered height; defaults to 50 when the stored value is 0.</summary>
-    public double Height => _previewH ?? (UnderlyingInstance.Location.Height is 0 ? 50.0  : (double)UnderlyingInstance.Location.Height);
+    /// <summary>
+    /// Minimum height needed to show the FI header and all function-parameter hook rows.
+    /// </summary>
+    public double MinimumHeight => Math.Max(DefaultHeight, HeaderHeight + FunctionParameters.Count * HookRowHeight);
+
+    /// <summary>Rendered height; never below <see cref="MinimumHeight"/>.</summary>
+    public double Height
+    {
+        get
+        {
+            var h = _previewH ?? (UnderlyingInstance.Location.Height is 0 ? DefaultHeight : (double)UnderlyingInstance.Location.Height);
+            return Math.Max(h, MinimumHeight);
+        }
+    }
 
     public double CenterX => X + Width  / 2.0;
     public double CenterY => Y + Height / 2.0;
@@ -129,7 +147,12 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
     }
 
     private void OnFunctionParametersChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => SyncFunctionParameters();
+    {
+        SyncFunctionParameters();
+        OnPropertyChanged(nameof(Height));
+        OnPropertyChanged(nameof(MinimumHeight));
+        OnPropertyChanged(nameof(CenterY));
+    }
 
     private void SyncFunctionParameters()
     {
@@ -172,16 +195,18 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
         _previewX = null;
         _previewY = null;
         var loc = UnderlyingInstance.Location;
-        var w = loc.Width  is 0 ? 120f : loc.Width;
-        var h = loc.Height is 0 ? 50f  : loc.Height;
+        var w = loc.Width is 0 ? (float)DefaultWidth : loc.Width;
+        var h = loc.Height is 0 ? (float)DefaultHeight : loc.Height;
+        if (h < (float)MinimumHeight) h = (float)MinimumHeight;
         return new Rectangle((float)x, (float)y, w, h);
     }
 
     public void MoveTo(double x, double y)
     {
         var loc = UnderlyingInstance.Location;
-        var w = loc.Width  is 0 ? 120f : loc.Width;
-        var h = loc.Height is 0 ? 50f  : loc.Height;
+        var w = loc.Width is 0 ? (float)DefaultWidth : loc.Width;
+        var h = loc.Height is 0 ? (float)DefaultHeight : loc.Height;
+        if (h < (float)MinimumHeight) h = (float)MinimumHeight;
         _session.SetFunctionInstanceLocation(_user, UnderlyingInstance,
             new Rectangle((float)x, (float)y, w, h), out _);
     }
@@ -190,8 +215,8 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
 
     public void ResizeToPreview(double w, double h)
     {
-        _previewW = Math.Max(120.0, w);
-        _previewH = Math.Max(50.0,  h);
+        _previewW = Math.Max(DefaultWidth, w);
+        _previewH = Math.Max(MinimumHeight, h);
         OnPropertyChanged(nameof(Width));
         OnPropertyChanged(nameof(Height));
         OnPropertyChanged(nameof(CenterX));
