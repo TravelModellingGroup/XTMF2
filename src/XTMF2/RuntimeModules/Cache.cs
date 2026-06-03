@@ -23,7 +23,7 @@ using System.Threading;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Cache", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Cache", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Cache.html",
     Description = "Provides a way to keep the result of a function unless unloaded by an event.")]
     public sealed class Cache<T> : BaseFunction<T>, IDisposable
     {

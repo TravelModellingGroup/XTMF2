@@ -23,7 +23,7 @@ using System.Threading.Tasks;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Execute Actions Then Function", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Execute Actions Then Function", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ExecuteActionsThenFunction.html",
 Description = "Allows you to execute actions before calling a function.  This allows you to ")]
     public class ExecuteActionsThenFunction<Return> : BaseFunction<Return>
     {

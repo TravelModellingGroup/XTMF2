@@ -19,7 +19,7 @@
 
 namespace XTMF2.RuntimeModules;
 
-[Module(Name = "Execute With Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+[Module(Name = "Execute With Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ExecuteWithContext.html",
     Description = "Provides a way to execute a series of actions with a context loaded from the provided context.")]
 public sealed class ExecuteWithContext<Context> : BaseAction
 {
@@ -39,7 +39,7 @@ public sealed class ExecuteWithContext<Context> : BaseAction
     }
 }
 
-[Module(Name = "Execute With Forwarded Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+[Module(Name = "Execute With Forwarded Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ExecuteWithForwardedContext.html",
     Description = "Provides a way to execute a series of actions using a context provided to it.")]
 public sealed class ExecuteWithForwardedContext<Context> : BaseAction<Context>
 {

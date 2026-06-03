@@ -25,7 +25,7 @@ namespace XTMF2.RuntimeModules
     /// <summary>
     /// The type used for a start node
     /// </summary>
-    [Module(Name = "Start", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Start", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Start.html",
 Description = "A starting point for a model system.")]
     public sealed class StartModule : BaseAction
     {

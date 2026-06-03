@@ -21,7 +21,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Is Calibration Run",
     Description = "Returns true when the currently executing run is in calibration mode.",
-    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0")]
+    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IsCalibrationRun.html")]
 public sealed class IsCalibrationRun : BaseFunction<bool>
 {
     private readonly XTMFRuntime _runtime;

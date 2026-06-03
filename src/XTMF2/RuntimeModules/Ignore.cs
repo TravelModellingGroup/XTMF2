@@ -23,7 +23,7 @@ using XTMF2;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Ignore Result", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Ignore Result", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IgnoreResult.html",
 Description = "Ignore the result of a function call.  This allows you to call functions from an action.")]
     public class IgnoreResult<FuncReturn> : BaseAction
     {
@@ -36,7 +36,7 @@ Description = "Ignore the result of a function call.  This allows you to call fu
         }
     }
 
-    [Module(Name = "Ignore Result", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Ignore Result", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IgnoreResult.html",
 Description = "Ignore the result of a function call.  This allows you to call functions from an action.")]
     public class IgnoreResult<Context, FuncReturn> : BaseAction<Context>
     {
@@ -49,7 +49,7 @@ Description = "Ignore the result of a function call.  This allows you to call fu
         }
     }
 
-    [Module(Name = "Ignore Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Ignore Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IgnoreContext.html",
 Description = "Ignore the context of a function call.  This allows you to call functions that don't require a context.")]
     public class IgnoreContext<Context> : BaseAction<Context>
     {
@@ -62,7 +62,7 @@ Description = "Ignore the context of a function call.  This allows you to call f
         }
     }
 
-    [Module(Name = "Ignore Context", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Ignore Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IgnoreContext.html",
 Description = "Ignore the context of a function call.  This allows you to call functions that don't require a context.")]
     public class IgnoreContext<Context,Return> : BaseFunction<Context,Return>
     {

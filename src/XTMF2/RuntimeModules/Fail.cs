@@ -23,7 +23,7 @@ using System.Text;
 namespace XTMF2.RuntimeModules
 {
     [Module(Name = "Fail", Description = "Crash the model run with a message.",
-        DocumentationLink = "http://tmg.utoronto.ca/doc/2.0/")]
+        DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
     public sealed class FailA : BaseAction
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
@@ -36,7 +36,7 @@ namespace XTMF2.RuntimeModules
     }
 
     [Module(Name = "Fail", Description = "Crash the model run with a message.",
-        DocumentationLink = "http://tmg.utoronto.ca/doc/2.0/")]
+        DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
     public sealed class FailA<Context> : BaseAction<Context>
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
@@ -49,7 +49,7 @@ namespace XTMF2.RuntimeModules
     }
 
     [Module(Name = "Fail", Description = "Crash the model run with a message.",
-    DocumentationLink = "http://tmg.utoronto.ca/doc/2.0/")]
+    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
     public sealed class FailWithContextA<Context> : BaseAction<Context>
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
@@ -62,7 +62,7 @@ namespace XTMF2.RuntimeModules
     }
 
     [Module(Name = "Fail", Description = "Crash the model run with a message.",
-    DocumentationLink = "http://tmg.utoronto.ca/doc/2.0/")]
+    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
     public sealed class FailF<Return> : BaseFunction<Return>
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
@@ -75,7 +75,7 @@ namespace XTMF2.RuntimeModules
     }
 
     [Module(Name = "Fail", Description = "Crash the model run with a message.",
-        DocumentationLink = "http://tmg.utoronto.ca/doc/2.0/")]
+        DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
     public sealed class FailF<Context, Return> : BaseFunction<Context, Return>
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
@@ -88,7 +88,7 @@ namespace XTMF2.RuntimeModules
     }
 
     [Module(Name = "Fail", Description = "Crash the model run with a message.",
-    DocumentationLink = "http://tmg.utoronto.ca/doc/2.0/")]
+    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
     public sealed class FailWithContextF<Context, Return> : BaseFunction<Context, Return>
     {
         [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]

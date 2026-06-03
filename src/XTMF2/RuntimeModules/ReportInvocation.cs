@@ -23,7 +23,7 @@ using XTMF2.Configuration;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Report Invocation", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Report Invocation", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ReportInvocation.html",
 Description = "Reports to XTMF that the model system has run through this point.")]
     public sealed class ReportFunctionInvocation<Return> : BaseFunction<Return> 
     {
@@ -48,7 +48,7 @@ Description = "Reports to XTMF that the model system has run through this point.
         }
     }
 
-    [Module(Name = "Report Invocation", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Report Invocation", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ReportInvocation.html",
 Description = "Reports to XTMF that the model system has run through this point.")]
     public sealed class ReportFunctionInvocation<Context, Return> : BaseFunction<Context, Return>
     {
@@ -72,7 +72,7 @@ Description = "Reports to XTMF that the model system has run through this point.
         }
     }
 
-    [Module(Name = "Report Invocation", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Report Invocation", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ReportInvocation.html",
 Description = "Reports to XTMF that the model system has run through this point.")]
     public sealed class ReportActionInvocation : BaseAction
     {
@@ -96,7 +96,7 @@ Description = "Reports to XTMF that the model system has run through this point.
         }
     }
 
-    [Module(Name = "Report Invocation", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Report Invocation", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ReportInvocation.html",
 Description = "Reports to XTMF that the model system has run through this point.")]
     public sealed class ReportActionInvocation<Context> : BaseAction<Context>
     {
@@ -120,7 +120,7 @@ Description = "Reports to XTMF that the model system has run through this point.
         }
     }
 
-    [Module(Name = "Report Invocation", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Report Invocation", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ReportInvocation.html",
 Description = "Reports to XTMF that the model system has run through this point.")]
     public sealed class ReportActionInvocationWithContext<Context> : BaseAction<Context>
     {

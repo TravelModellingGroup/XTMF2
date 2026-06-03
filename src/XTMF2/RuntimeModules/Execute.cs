@@ -23,7 +23,7 @@ using System.Threading.Tasks;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Execute", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Execute", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Execute.html",
 Description = "Provides a way to execute a series of actions in order, optionally in parallel or with multiple iterations.")]
     public class Execute : BaseAction
     {
@@ -68,7 +68,7 @@ Description = "Provides a way to execute a series of actions in order, optionall
         }
     }
 
-    [Module(Name = "Execute", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Execute", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Execute.html",
 Description = "Provides a way to execute a series of actions in order, optionally in parallel or with multiple iterations.")]
     public class Execute<Context> : BaseAction<Context>
     {

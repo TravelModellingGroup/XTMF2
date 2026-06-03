@@ -22,7 +22,7 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Directory Path", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Directory Path", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/DirectoryPath.html",
 Description = "Provides the ability to specify a directory path recursively.")]
     public sealed class DirectoryPath : BaseFunction<string>
     {

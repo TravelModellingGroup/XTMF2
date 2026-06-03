@@ -22,7 +22,7 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules
 {
-    [Module(Name = "Step Return Up", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Step Return Up", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/StepReturnUp.html",
 Description = "Converts the result of a function to the expected type from the calling module.")]
     public sealed class StepReturnUp<Original, ConvertTo> : BaseFunction<ConvertTo> 
         where Original : ConvertTo
@@ -36,7 +36,7 @@ Description = "Converts the result of a function to the expected type from the c
         }
     }
 
-    [Module(Name = "Step Return Up", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Step Return Up", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/StepReturnUp.html",
 Description = "Converts the result of a function to the expected type from the calling module.")]
     public sealed class StepReturnUp<Original, ConvertTo, Context> : BaseFunction<Context, ConvertTo> 
         where Original : ConvertTo
@@ -50,7 +50,7 @@ Description = "Converts the result of a function to the expected type from the c
         }
     }
 
-    [Module(Name = "Step Return Up", DocumentationLink = "http://tmg.utoronto.ca/doc/2.0",
+    [Module(Name = "Step Return Up", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/StepReturnUp.html",
 Description = "Converts the result of a function to the expected type from the calling module.")]
     public sealed class StepActionUp<Original, ConvertTo> : BaseAction<Original>
         where Original : ConvertTo
