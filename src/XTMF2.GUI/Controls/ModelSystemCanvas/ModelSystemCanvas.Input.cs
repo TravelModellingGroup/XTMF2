@@ -260,11 +260,20 @@ partial class ModelSystemCanvas
         var resizeHit = HitTestResizeHandle(mpos);
         if (resizeHit is null) return;
 
-        // Commit any open editor so its LostFocus handler doesn't fire after
-        // we capture the pointer, which would interfere with the resize drag.
-        if (_editingParamNode is not null) CommitParamEdit();
-        if (_editingCommentBlock is not null) CommitCommentEdit();
-        if (_editingNameElement is not null) CommitNameEdit();
+        // Don't commit open editors if we're resizing the element being edited.
+        // The _inDragOrResize flag will prevent LostFocus handlers from closing them,
+        // and SyncEditingElementPositions() will keep them synchronized during the resize.
+        bool isResizingEditedElement =
+            ReferenceEquals(resizeHit, _editingParamNode) ||
+            ReferenceEquals(resizeHit, _editingNameElement) ||
+            ReferenceEquals(resizeHit, _editingCommentBlock);
+        
+        if (!isResizingEditedElement)
+        {
+            if (_editingParamNode is not null) CommitParamEdit();
+            if (_editingCommentBlock is not null) CommitCommentEdit();
+            if (_editingNameElement is not null) CommitNameEdit();
+        }
 
         ClearMultiSelection();
         _resizing = resizeHit;
@@ -307,9 +316,18 @@ partial class ModelSystemCanvas
             var resizeHit = HitTestResizeHandle(mpos);
             if (resizeHit is not null)
             {
-                if (_editingParamNode is not null) CommitParamEdit();
-                if (_editingCommentBlock is not null) CommitCommentEdit();
-                if (_editingNameElement is not null) CommitNameEdit();
+                // Don't commit editors if we're resizing the element being edited.
+                bool isResizingEditedElement =
+                    ReferenceEquals(resizeHit, _editingParamNode) ||
+                    ReferenceEquals(resizeHit, _editingNameElement) ||
+                    ReferenceEquals(resizeHit, _editingCommentBlock);
+                
+                if (!isResizingEditedElement)
+                {
+                    if (_editingParamNode is not null) CommitParamEdit();
+                    if (_editingCommentBlock is not null) CommitCommentEdit();
+                    if (_editingNameElement is not null) CommitNameEdit();
+                }
                 ClearMultiSelection();
                 _resizing = resizeHit;
                 _resizeStartPos = mpos;
@@ -365,11 +383,26 @@ partial class ModelSystemCanvas
             // Clicking elsewhere commits any open edit.
             // Guard: if the click was already handled by a child (e.g. the variable
             // autocomplete dropdown's TextBlock items), do not commit the edit.
+            // Also: if we're about to drag one of the edited elements, keep the editor open.
             if (!e.Handled)
             {
-                if (_editingParamNode is not null) CommitParamEdit();
-                if (_editingCommentBlock is not null) CommitCommentEdit();
-                if (_editingNameElement is not null) CommitNameEdit();
+                var clickedElement = HitTest(mpos, testComments: false);
+                bool isDraggingEditedElement = 
+                    ReferenceEquals(clickedElement, _editingParamNode) ||
+                    ReferenceEquals(clickedElement, _editingNameElement) ||
+                    ReferenceEquals(clickedElement, _editingCommentBlock) ||
+                    (clickedElement is not null && _multiSelection.Contains(clickedElement) &&
+                     ((_editingParamNode is not null && _multiSelection.Contains(_editingParamNode)) || 
+                      (_editingNameElement is not null && _multiSelection.Contains(_editingNameElement)) ||
+                      (_editingCommentBlock is not null && _multiSelection.Contains(_editingCommentBlock))));
+                
+                // Only commit if we're not about to drag one of the edited elements.
+                if (!isDraggingEditedElement)
+                {
+                    if (_editingParamNode is not null) CommitParamEdit();
+                    if (_editingCommentBlock is not null) CommitCommentEdit();
+                    if (_editingNameElement is not null) CommitNameEdit();
+                }
             }
         }
 
@@ -632,9 +665,17 @@ partial class ModelSystemCanvas
         // ── Resize drag ───────────────────────────────────────────────────
         if (_resizing is not null)
         {
+            _inDragOrResize = true;
             var dw = mpos.X - _resizeStartPos.X;
             var dh = mpos.Y - _resizeStartPos.Y;
             _resizing.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
+            // Only sync inline editor if it's the element being resized
+            if (ReferenceEquals(_resizing, _editingParamNode) || 
+                ReferenceEquals(_resizing, _editingNameElement) || 
+                ReferenceEquals(_resizing, _editingCommentBlock))
+            {
+                SyncEditingElementPositions();
+            }
             InvalidateAndMeasure();
             e.Handled = true;
             return;
@@ -675,6 +716,7 @@ partial class ModelSystemCanvas
         if (_dragging is null) return;
 
         // ── Element drag (single or group) ────────────────────────────────
+        _inDragOrResize = true;
         if (_multiSelection.Count > 1 && _multiSelection.Contains(_dragging))
         {
             // Group drag: preview every element in the multi-selection by the per-frame delta.
@@ -696,6 +738,22 @@ partial class ModelSystemCanvas
             _dragging.MoveToPreview(newX, newY);
         }
 
+        // Only sync inline editor if it's being dragged as part of the current drag operation
+        if (_multiSelection.Count > 1)
+        {
+            if ((_editingParamNode is not null && _multiSelection.Contains(_editingParamNode)) || 
+                (_editingNameElement is not null && _multiSelection.Contains(_editingNameElement)) || 
+                (_editingCommentBlock is not null && _multiSelection.Contains(_editingCommentBlock)))
+            {
+                SyncEditingElementPositions();
+            }
+        }
+        else if (ReferenceEquals(_dragging, _editingParamNode) || 
+                 ReferenceEquals(_dragging, _editingNameElement) || 
+                 ReferenceEquals(_dragging, _editingCommentBlock))
+        {
+            SyncEditingElementPositions();
+        }
         InvalidateAndMeasure();
         TryAutoScrollForDrag(svPos);
         e.Handled = true;
@@ -732,6 +790,9 @@ partial class ModelSystemCanvas
                 return;
             }
         }
+
+        // ── Drag/resize release ──────────────────────────────────────────────
+        _inDragOrResize = false;
 
         // ── Right-drag release: complete link creation ────────────────────
         if (_linkOrigin is not null)
