@@ -144,7 +144,13 @@ public sealed partial class ModelSystemCanvas : Control
     private CommentBlockViewModel? _editingCommentBlock;
     /// <summary>Model-space position and size of the comment editor overlay.</summary>
     private double _editingCommentEditorX, _editingCommentEditorY, _editingCommentEditorW, _editingCommentEditorH;
-
+    // ── Inline comment header editor ───────────────────────────────
+    /// <summary>Overlay single-line TextBox used for editing the comment block header.</summary>
+    private readonly TextBox _commentHeaderEditor;
+    /// <summary>The comment block whose header is being edited, or <c>null</c> when idle.</summary>
+    private CommentBlockViewModel? _editingCommentHeaderBlock;
+    /// <summary>Model-space position and size of the comment header editor overlay.</summary>
+    private double _editingCommentHeaderEditorX, _editingCommentHeaderEditorY, _editingCommentHeaderEditorW, _editingCommentHeaderEditorH;
     // ── Inline name editor ───────────────────────────────────────────────────
     /// <summary>Overlay single-line TextBox used for renaming nodes and starts.</summary>
     private readonly TextBox _nameEditor;
@@ -166,6 +172,11 @@ public sealed partial class ModelSystemCanvas : Control
     /// </summary>
     private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), NodeViewModel>
         _fiHookInlinedParam = new();
+    /// <summary>
+    /// Stores the maximum scroll offset (model-space px) for each comment block, computed during
+    /// render. Used by the wheel handler to clamp scroll without recomputing the text layout.
+    /// </summary>
+    private readonly Dictionary<CommentBlockViewModel, double> _commentMaxScrollOffsets = new();
     /// <summary>
     /// BasicParameter nodes that are visible on the canvas AND connected via a Single (or
     /// FunctionParameterHook) hook, so they can offer a "minimize to inline" button.
@@ -265,6 +276,26 @@ public sealed partial class ModelSystemCanvas : Control
                                   Avalonia.Interactivity.RoutingStrategies.Tunnel);
         LogicalChildren.Add(_commentEditor);
         VisualChildren.Add(_commentEditor);
+
+        // Build the single-line comment header editor; Enter commits, Escape cancels.
+        _commentHeaderEditor = new TextBox
+        {
+            FontFamily = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize = CommentHeaderFontSize,
+            FontWeight = Avalonia.Media.FontWeight.Bold,
+            Foreground = CommentTextBrush,
+            Background = new SolidColorBrush(Color.FromArgb(0xF2, 0xFF, 0xD5, 0x1A)),
+            BorderThickness = new Thickness(1),
+            BorderBrush = CommentBorderBrush,
+            Padding = new Thickness(6, 2, 6, 2),
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            IsVisible = false,
+        };
+        _commentHeaderEditor.LostFocus += OnCommentHeaderEditorLostFocus;
+        _commentHeaderEditor.AddHandler(InputElement.KeyDownEvent, OnCommentHeaderEditorKeyDown,
+                                        Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        LogicalChildren.Add(_commentHeaderEditor);
+        VisualChildren.Add(_commentHeaderEditor);
 
         // Build the single-line name editor; Enter commits, Escape cancels.
         _nameEditor = new TextBox
@@ -634,6 +665,11 @@ public sealed partial class ModelSystemCanvas : Control
         {
             _commentEditor.Measure(new Size(_editingCommentEditorW * _scale, _editingCommentEditorH * _scale));
         }
+        // Measure the comment header editor.
+        if (_editingCommentHeaderBlock is not null)
+        {
+            _commentHeaderEditor.Measure(new Size(_editingCommentHeaderEditorW * _scale, _editingCommentHeaderEditorH * _scale));
+        }
         // Measure the name editor.
         if (_editingNameElement is not null)
         {
@@ -703,6 +739,16 @@ public sealed partial class ModelSystemCanvas : Control
                 _editingCommentEditorY * _scale,
                 _editingCommentEditorW * _scale,
                 _editingCommentEditorH * _scale));
+        }
+        // Position the comment header editor over the header band of the block being edited.
+        if (_editingCommentHeaderBlock is not null)
+        {
+            _commentHeaderEditor.FontSize = CommentHeaderFontSize * _scale;
+            _commentHeaderEditor.Arrange(new Rect(
+                _editingCommentHeaderEditorX * _scale,
+                _editingCommentHeaderEditorY * _scale,
+                _editingCommentHeaderEditorW * _scale,
+                _editingCommentHeaderEditorH * _scale));
         }
         // Position the name editor over the element header being renamed.
         if (_editingNameElement is not null)

@@ -64,6 +64,9 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
     /// <inheritdoc/>
     public string Name => UnderlyingBlock.Comment;
 
+    /// <summary>The header text displayed in bold above the comment body.</summary>
+    public string Header => UnderlyingBlock.Header;
+
     /// <inheritdoc/>
     public double CenterX => X + Width  / 2.0;
 
@@ -71,6 +74,21 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
     public double CenterY => Y + Height / 2.0;
 
     [ObservableProperty] private bool _isSelected;
+
+    /// <summary>
+    /// Vertical scroll offset (in model-space pixels) applied when rendering the comment body.
+    /// Not persisted — resets to zero when the comment block is re-created.
+    /// </summary>
+    private double _commentScrollOffset;
+    public double CommentScrollOffset
+    {
+        get => _commentScrollOffset;
+        set
+        {
+            _commentScrollOffset = Math.Max(0.0, value);
+            OnPropertyChanged(nameof(CommentScrollOffset));
+        }
+    }
 
     public CommentBlockViewModel(CommentBlock block, ModelSystemSession session, User user)
     {
@@ -87,6 +105,9 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
         {
             case nameof(CommentBlock.Comment):
                 OnPropertyChanged(nameof(Name));
+                break;
+            case nameof(CommentBlock.Header):
+                OnPropertyChanged(nameof(Header));
                 break;
             case nameof(CommentBlock.Location):
                 OnPropertyChanged(nameof(X));
@@ -166,6 +187,15 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
     {
         if (string.IsNullOrWhiteSpace(text)) return;
         _session.SetCommentBlockText(_user, UnderlyingBlock, text, out _);
+    }
+
+    /// <summary>
+    /// Update the header text, persisting the change via the session (supports undo/redo).
+    /// An empty header is allowed and will hide the header display.
+    /// </summary>
+    public void SetHeader(string header)
+    {
+        _session.SetCommentBlockHeader(_user, UnderlyingBlock, header, out _);
     }
 
     /// <summary>

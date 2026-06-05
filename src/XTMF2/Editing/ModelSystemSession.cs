@@ -457,6 +457,37 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Set the header text of a comment block, supporting undo/redo.
+        /// An empty header is allowed (it simply removes the header display).
+        /// </summary>
+        public bool SetCommentBlockHeader(User user, CommentBlock commentBlock, string newHeader, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(commentBlock);
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var oldHeader = commentBlock.Header;
+                commentBlock.Header = newHeader;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    commentBlock.Header = oldHeader;
+                    return (true, null);
+                }, () =>
+                {
+                    commentBlock.Header = newHeader;
+                    return (true, null);
+                }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Remove a boundary from a model system
         /// </summary>
         /// <param name="user">The user that removed the boundary</param>

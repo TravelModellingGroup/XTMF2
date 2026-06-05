@@ -71,6 +71,12 @@ partial class ModelSystemCanvas
     private static readonly IBrush CommentShadowBrush = new SolidColorBrush(Color.FromArgb(0x55, 0x00, 0x00, 0x00));
     /// <summary>Faint pen for horizontal ruled lines on the note body.</summary>
     private static readonly Pen CommentRulePen = new Pen(new SolidColorBrush(Color.FromArgb(0x50, 0xA0, 0x8A, 0x00)), 0.6);
+    /// <summary>Semi-transparent track for the comment body scroll indicator.</summary>
+    private static readonly IBrush CommentScrollTrackBrush = new SolidColorBrush(Color.FromArgb(0x30, 0xA0, 0x80, 0x00));
+    /// <summary>Thumb for the comment body scroll indicator.</summary>
+    private static readonly IBrush CommentScrollThumbBrush = new SolidColorBrush(Color.FromArgb(0xA0, 0xA0, 0x70, 0x00));
+    /// <summary>Width of the virtual scroll-indicator strip drawn on the right of the comment body.</summary>
+    private const double CommentScrollBarWidth = 4.0;
     // Hook colours
     private static readonly IBrush HookConnectedBrush = new SolidColorBrush(Color.FromRgb(0x2E, 0xCC, 0x71));
     private static readonly IBrush HookUnconnectedBrush = new SolidColorBrush(Color.FromRgb(0x55, 0x66, 0x77));
@@ -259,6 +265,7 @@ partial class ModelSystemCanvas
     private const double NodeFontSize = 12.0;
     private const double StartFontSize = 11.0;
     private const double CommentFontSize = 11.5;
+    private const double CommentHeaderFontSize = 13.0;
     private const double CommentPadding = 6.0;
     /// <summary>Size of the dog-ear fold cut at the top-right corner of a sticky note.</summary>
     private const double CommentFoldSize = 22.0;
@@ -291,6 +298,8 @@ partial class ModelSystemCanvas
     private const double AutoScrollSpeed = 14.0 / 2.0;
 
     private static readonly Typeface DefaultTypeface = new Typeface("Segoe UI, Arial, sans-serif");
+    private static readonly Typeface CommentHeaderTypeface = new Typeface(
+        "Segoe UI, Arial, sans-serif", Avalonia.Media.FontStyle.Normal, Avalonia.Media.FontWeight.Bold);
 
     // ── Dark-mode FunctionParameter brushes (promoted from per-frame allocations) ──
     private static readonly IBrush FpBodyFill    = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x8C, 0x00));
