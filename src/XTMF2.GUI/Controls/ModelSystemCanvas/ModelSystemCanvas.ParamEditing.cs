@@ -751,9 +751,18 @@ partial class ModelSystemCanvas
         if (_editingCommentBlock is not null)
         {
             _editingCommentEditorX = _editingCommentBlock.X;
-            _editingCommentEditorY = _editingCommentBlock.Y;
+            _editingCommentEditorY = _editingCommentBlock.Y + CommentHeaderHeight;
             _editingCommentEditorW = _editingCommentBlock.Width;
-            _editingCommentEditorH = _editingCommentBlock.Height;
+            _editingCommentEditorH = _editingCommentBlock.Height - CommentHeaderHeight;
+        }
+
+        // Sync comment header editor position/size if editing
+        if (_editingCommentHeaderBlock is not null)
+        {
+            _editingCommentHeaderEditorX = _editingCommentHeaderBlock.X;
+            _editingCommentHeaderEditorY = _editingCommentHeaderBlock.Y;
+            _editingCommentHeaderEditorW = _editingCommentHeaderBlock.Width - CommentFoldSize;
+            _editingCommentHeaderEditorH = CommentHeaderHeight;
         }
     }
 

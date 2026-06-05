@@ -160,6 +160,30 @@ partial class ModelSystemCanvas
                 // Header Rectangle: full width but tab stops short of the fold on top row.
                 ctx.DrawRectangle(CommentHeaderBrush, null,
                     new Rect(x, y, w, CommentHeaderHeight));
+                // Render header text in bold if present.
+                string headerText = comment.Header;
+                if (!string.IsNullOrEmpty(headerText))
+                {
+                    var headerTextArea = new Rect(
+                        x + CommentPadding,
+                        y + 2,
+                        w - CommentPadding * 2 - fold,
+                        CommentHeaderHeight - 4);
+                    if (headerTextArea.Width > 4)
+                    {
+                        using var clipPush = ctx.PushClip(headerTextArea);
+                        var headerLayout = new TextLayout(
+                            headerText,
+                            CommentHeaderTypeface,
+                            CommentHeaderFontSize,
+                            CommentTextBrush,
+                            textAlignment: TextAlignment.Left,
+                            textWrapping: TextWrapping.NoWrap,
+                            maxWidth: headerTextArea.Width,
+                            maxHeight: headerTextArea.Height);
+                        headerLayout.Draw(ctx, new Point(headerTextArea.X, headerTextArea.Y));
+                    }
+                }
             }
 
             // ── 5. Faint ruled lines ──────────────────────────────────────
@@ -191,7 +215,7 @@ partial class ModelSystemCanvas
                          new Point(x + w - fold, y),
                          new Point(x + w, y + fold));
 
-            // ── 8. Comment text ───────────────────────────────────────────
+            // ── 8. Comment text (with scroll indicator) ───────────────────
             var textArea = new Rect(
                 x + CommentPadding,
                 y + CommentHeaderHeight + 2,
@@ -199,6 +223,24 @@ partial class ModelSystemCanvas
                 h - CommentHeaderHeight - CommentPadding - 2);
             if (textArea.Width > 4 && textArea.Height > 4)
             {
+                // Reserve space on the right for the scroll indicator.
+                double textW = textArea.Width - CommentScrollBarWidth - 2;
+                // Measure the full (unconstrained) text height to compute max scroll.
+                var measureLayout = new TextLayout(
+                    comment.Name,
+                    DefaultTypeface,
+                    CommentFontSize,
+                    CommentTextBrush,
+                    textAlignment: TextAlignment.Left,
+                    textWrapping: TextWrapping.Wrap,
+                    maxWidth: textW,
+                    maxHeight: double.MaxValue);
+                double totalTextHeight = measureLayout.Height;
+                double maxScroll = Math.Max(0.0, totalTextHeight - textArea.Height);
+                _commentMaxScrollOffsets[comment] = maxScroll;
+
+                double scrollOffset = Math.Min(comment.CommentScrollOffset, maxScroll);
+
                 using var clipPush = ctx.PushClip(textArea);
                 var layout = new TextLayout(
                     comment.Name,
@@ -207,9 +249,24 @@ partial class ModelSystemCanvas
                     CommentTextBrush,
                     textAlignment: TextAlignment.Left,
                     textWrapping: TextWrapping.Wrap,
-                    maxWidth: textArea.Width,
-                    maxHeight: textArea.Height);
-                layout.Draw(ctx, new Point(textArea.X, textArea.Y));
+                    maxWidth: textW,
+                    maxHeight: textArea.Height + scrollOffset);
+                layout.Draw(ctx, new Point(textArea.X, textArea.Y - scrollOffset));
+
+                // Draw scroll indicator when content overflows.
+                if (totalTextHeight > textArea.Height)
+                {
+                    double trackX = textArea.Right - CommentScrollBarWidth;
+                    double trackH = textArea.Height;
+                    ctx.DrawRectangle(CommentScrollTrackBrush, null,
+                        new Rect(trackX, textArea.Y, CommentScrollBarWidth, trackH));
+                    double thumbH = Math.Max(8.0, (textArea.Height / totalTextHeight) * trackH);
+                    double thumbY = maxScroll > 0
+                        ? textArea.Y + (scrollOffset / maxScroll) * (trackH - thumbH)
+                        : textArea.Y;
+                    ctx.DrawRectangle(CommentScrollThumbBrush, null,
+                        new Rect(trackX, thumbY, CommentScrollBarWidth, thumbH), 2, 2);
+                }
             }
 
             // ── 9. Resize grip dots (bottom-right) ────────────────────────

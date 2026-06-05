@@ -34,6 +34,7 @@ partial class ModelSystemCanvas
     {
         CommitParamEdit();
         CommitCommentEdit();
+        CommitCommentHeaderEdit();
 
         bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
         _nameEditor.Foreground = isLight ? Brushes.Black : Brushes.White;
@@ -179,14 +180,15 @@ partial class ModelSystemCanvas
         }
     }
 
-    /// <summary>Shows the multi-line comment editor over <paramref name="comment"/>.</summary>
+    /// <summary>Shows the multi-line comment editor over <paramref name="comment"/>, positioned below the header band.</summary>
     private void BeginCommentEdit(CommentBlockViewModel comment)
     {
+        CommitCommentHeaderEdit();
         _editingCommentBlock = comment;
         _editingCommentEditorX = comment.X;
-        _editingCommentEditorY = comment.Y;
+        _editingCommentEditorY = comment.Y + CommentHeaderHeight;
         _editingCommentEditorW = comment.Width;
-        _editingCommentEditorH = comment.Height;
+        _editingCommentEditorH = comment.Height - CommentHeaderHeight;
         _commentEditor.Text = comment.Name;   // Name returns the underlying Comment text.
         // Pick colours based on the active theme.
         bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
@@ -252,4 +254,75 @@ partial class ModelSystemCanvas
         }
     }
 
+    // ── Inline comment header editor helpers ────────────────────────────
+
+    /// <summary>Shows the single-line header editor over the header band of <paramref name="comment"/>.</summary>
+    internal void BeginCommentHeaderEdit(CommentBlockViewModel comment)
+    {
+        CommitCommentEdit();
+        _editingCommentHeaderBlock = comment;
+        _editingCommentHeaderEditorX = comment.X;
+        _editingCommentHeaderEditorY = comment.Y;
+        // Leave room for the fold corner at the top-right.
+        _editingCommentHeaderEditorW = comment.Width - CommentFoldSize;
+        _editingCommentHeaderEditorH = CommentHeaderHeight;
+        _commentHeaderEditor.Text = comment.Header;
+        bool isLight = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        _commentHeaderEditor.Foreground = isLight ? CommentTextBrush : Brushes.White;
+        _commentHeaderEditor.Background = isLight
+            ? new SolidColorBrush(Color.FromArgb(0xF2, 0xFF, 0xD5, 0x1A))
+            : new SolidColorBrush(Color.FromRgb(0x2A, 0x20, 0x00));
+        _commentHeaderEditor.IsVisible = true;
+        InvalidateMeasure();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _commentHeaderEditor.Focus();
+            _commentHeaderEditor.SelectAll();
+        }, Avalonia.Threading.DispatcherPriority.Render);
+    }
+
+    /// <summary>Saves the header editor text and closes the editor.</summary>
+    internal void CommitCommentHeaderEdit()
+    {
+        if (_editingCommentHeaderBlock is null) return;
+        var comment = _editingCommentHeaderBlock;
+        var text = (_commentHeaderEditor.Text ?? string.Empty).Trim();
+        _editingCommentHeaderBlock = null;
+        _commentHeaderEditor.IsVisible = false;
+        comment.SetHeader(text);
+        InvalidateAndMeasure();
+    }
+
+    /// <summary>Discards the header edit without saving.</summary>
+    private void CancelCommentHeaderEdit()
+    {
+        _editingCommentHeaderBlock = null;
+        _commentHeaderEditor.IsVisible = false;
+        InvalidateAndMeasure();
+        Focus();
+    }
+
+    private void OnCommentHeaderEditorKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Return or Key.Enter)
+        {
+            CommitCommentHeaderEdit();
+            Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CancelCommentHeaderEdit();
+            e.Handled = true;
+        }
+    }
+
+    private void OnCommentHeaderEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_inDragOrResize) return;
+        if (_editingCommentHeaderBlock is not null)
+        {
+            CommitCommentHeaderEdit();
+        }
+    }
 }

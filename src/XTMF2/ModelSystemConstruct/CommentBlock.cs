@@ -37,6 +37,7 @@ namespace XTMF2.ModelSystemConstruct
         private const string WidthProperty = "Width";
         private const string HeightProperty = "Height";
         private const string CommentProperty = "Comment";
+        private const string HeaderProperty = "Header";
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -50,10 +51,13 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         /// <param name="comment"></param>
         /// <param name="location"></param>
-        public CommentBlock(string comment, Rectangle location, Guid id = default)
+        /// <param name="id"></param>
+        /// <param name="header"></param>
+        public CommentBlock(string comment, Rectangle location, Guid id = default, string header = "")
         {
             Id = id == default ? Guid.NewGuid() : id;
             _comment = comment;
+            _header = header;
             _location = location;
         }
 
@@ -68,6 +72,7 @@ namespace XTMF2.ModelSystemConstruct
 
         private Rectangle _location;
         private string _comment;
+        private string _header;
 
         /// <summary>
         /// The location to place the Comment Block within the boundary
@@ -95,6 +100,19 @@ namespace XTMF2.ModelSystemConstruct
             }
         }
 
+        /// <summary>
+        /// The header string displayed above the comment in bold
+        /// </summary>
+        public string Header
+        {
+            get => _header;
+            internal set
+            {
+                _header = value;
+                Notify(nameof(Header));
+            }
+        }
+
         internal void Save(Utf8JsonWriter writer)
         {
             writer.WriteStartObject();
@@ -104,6 +122,7 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteNumber(WidthProperty, Location.Width);
             writer.WriteNumber(HeightProperty, Location.Height);
             writer.WriteString(CommentProperty, Comment);
+            writer.WriteString(HeaderProperty, Header);
             writer.WriteEndObject();
         }
 
@@ -111,6 +130,7 @@ namespace XTMF2.ModelSystemConstruct
         {
             float x = 0, y = 0, width = 0, height = 0;
             string comment = "No comment";
+            string header = string.Empty;
             Guid id = Guid.Empty;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
@@ -171,9 +191,17 @@ namespace XTMF2.ModelSystemConstruct
                         }
                         comment = temp;
                     }
+                    else if (reader.ValueTextEquals(HeaderProperty))
+                    {
+                        if (!reader.Read() || reader.TokenType != JsonTokenType.String)
+                        {
+                            return FailWith(out block, out error, $"The header of the comment block was not a string!");
+                        }
+                        header = reader.GetString() ?? string.Empty;
+                    }
                 }
             }
-            block = new CommentBlock(comment, new Rectangle(x, y, width, height), id);
+            block = new CommentBlock(comment, new Rectangle(x, y, width, height), id, header);
             return true;
         }
 

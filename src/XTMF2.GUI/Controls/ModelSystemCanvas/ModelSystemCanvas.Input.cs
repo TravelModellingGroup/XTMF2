@@ -238,6 +238,23 @@ partial class ModelSystemCanvas
             e.Handled = true;
             return;
         }
+        // If the pointer is over a comment block, scroll its comment body text.
+        if (_vm is not null)
+        {
+            var mpos = ToCanvasPos(e.GetPosition(this));
+            var commentHit = HitTest(mpos, testComments: true) as CommentBlockViewModel;
+            if (commentHit is not null)
+            {
+                const double scrollStep = 24.0;
+                double newOffset = commentHit.CommentScrollOffset - e.Delta.Y * scrollStep;
+                // Clamp to [0, maxScroll] using the last-rendered max (0 if not yet rendered).
+                _commentMaxScrollOffsets.TryGetValue(commentHit, out double maxScroll);
+                commentHit.CommentScrollOffset = Math.Min(Math.Max(0.0, newOffset), maxScroll);
+                InvalidateVisual();
+                e.Handled = true;
+                return;
+            }
+        }
         base.OnPointerWheelChanged(e);
     }
 
@@ -266,12 +283,14 @@ partial class ModelSystemCanvas
         bool isResizingEditedElement =
             ReferenceEquals(resizeHit, _editingParamNode) ||
             ReferenceEquals(resizeHit, _editingNameElement) ||
-            ReferenceEquals(resizeHit, _editingCommentBlock);
+            ReferenceEquals(resizeHit, _editingCommentBlock) ||
+            ReferenceEquals(resizeHit, _editingCommentHeaderBlock);
         
         if (!isResizingEditedElement)
         {
             if (_editingParamNode is not null) CommitParamEdit();
             if (_editingCommentBlock is not null) CommitCommentEdit();
+            if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
             if (_editingNameElement is not null) CommitNameEdit();
         }
 
@@ -320,12 +339,14 @@ partial class ModelSystemCanvas
                 bool isResizingEditedElement =
                     ReferenceEquals(resizeHit, _editingParamNode) ||
                     ReferenceEquals(resizeHit, _editingNameElement) ||
-                    ReferenceEquals(resizeHit, _editingCommentBlock);
+                    ReferenceEquals(resizeHit, _editingCommentBlock) ||
+                    ReferenceEquals(resizeHit, _editingCommentHeaderBlock);
                 
                 if (!isResizingEditedElement)
                 {
                     if (_editingParamNode is not null) CommitParamEdit();
                     if (_editingCommentBlock is not null) CommitCommentEdit();
+                    if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
                     if (_editingNameElement is not null) CommitNameEdit();
                 }
                 ClearMultiSelection();
@@ -349,6 +370,7 @@ partial class ModelSystemCanvas
             {
                 if (_editingParamNode is not null) CommitParamEdit();
                 if (_editingCommentBlock is not null) CommitCommentEdit();
+                if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
                 if (_editingNameElement is not null) CommitNameEdit();
                 minimizeHit.InlineBasicParameter();
                 InvalidateAndMeasure();
@@ -391,6 +413,7 @@ partial class ModelSystemCanvas
                     ReferenceEquals(clickedElement, _editingParamNode) ||
                     ReferenceEquals(clickedElement, _editingNameElement) ||
                     ReferenceEquals(clickedElement, _editingCommentBlock) ||
+                    ReferenceEquals(clickedElement, _editingCommentHeaderBlock) ||
                     (clickedElement is not null && _multiSelection.Contains(clickedElement) &&
                      ((_editingParamNode is not null && _multiSelection.Contains(_editingParamNode)) || 
                       (_editingNameElement is not null && _multiSelection.Contains(_editingNameElement)) ||
@@ -401,6 +424,7 @@ partial class ModelSystemCanvas
                 {
                     if (_editingParamNode is not null) CommitParamEdit();
                     if (_editingCommentBlock is not null) CommitCommentEdit();
+                    if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
                     if (_editingNameElement is not null) CommitNameEdit();
                 }
             }
@@ -466,12 +490,16 @@ partial class ModelSystemCanvas
                 return;
             }
 
-            // ── Double-click on a comment block: open the inline comment editor ──
+            // ── Double-click on a comment block: open the inline comment or header editor ──
             var commentHit = HitTest(mpos, testComments: true) as CommentBlockViewModel;
             if (commentHit is not null)
             {
                 _vm.SelectElementCommand.Execute(commentHit);
-                BeginCommentEdit(commentHit);
+                // Open the header editor when the click lands in the header band; otherwise the comment editor.
+                if (mpos.Y < commentHit.Y + CommentHeaderHeight)
+                    BeginCommentHeaderEdit(commentHit);
+                else
+                    BeginCommentEdit(commentHit);
                 e.Handled = true;
                 return;
             }
@@ -554,6 +582,7 @@ partial class ModelSystemCanvas
             // Always commit any open inline edit first.
             if (_editingParamNode is not null) CommitParamEdit();
             if (_editingCommentBlock is not null) CommitCommentEdit();
+            if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
             if (_editingNameElement is not null) CommitNameEdit();
 
             if (hit is not null)
@@ -672,7 +701,8 @@ partial class ModelSystemCanvas
             // Only sync inline editor if it's the element being resized
             if (ReferenceEquals(_resizing, _editingParamNode) || 
                 ReferenceEquals(_resizing, _editingNameElement) || 
-                ReferenceEquals(_resizing, _editingCommentBlock))
+                ReferenceEquals(_resizing, _editingCommentBlock) ||
+                ReferenceEquals(_resizing, _editingCommentHeaderBlock))
             {
                 SyncEditingElementPositions();
             }
@@ -743,14 +773,16 @@ partial class ModelSystemCanvas
         {
             if ((_editingParamNode is not null && _multiSelection.Contains(_editingParamNode)) || 
                 (_editingNameElement is not null && _multiSelection.Contains(_editingNameElement)) || 
-                (_editingCommentBlock is not null && _multiSelection.Contains(_editingCommentBlock)))
+                (_editingCommentBlock is not null && _multiSelection.Contains(_editingCommentBlock)) ||
+                (_editingCommentHeaderBlock is not null && _multiSelection.Contains(_editingCommentHeaderBlock)))
             {
                 SyncEditingElementPositions();
             }
         }
         else if (ReferenceEquals(_dragging, _editingParamNode) || 
                  ReferenceEquals(_dragging, _editingNameElement) || 
-                 ReferenceEquals(_dragging, _editingCommentBlock))
+                 ReferenceEquals(_dragging, _editingCommentBlock) ||
+                 ReferenceEquals(_dragging, _editingCommentHeaderBlock))
         {
             SyncEditingElementPositions();
         }
