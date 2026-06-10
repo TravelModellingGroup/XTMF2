@@ -10,6 +10,9 @@
     <Description>eXtensible Travel Modelling Framework</Description>
     <RepositoryType>https://github.com/TravelModellingGroup/XTMF2.git</RepositoryType>
     <Nullable>enable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <OutputPath>..\..\..\XTMF2-Dev\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>
