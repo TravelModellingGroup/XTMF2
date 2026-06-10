@@ -7,6 +7,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <OutputPath>..\..\..\XTMF2-Dev\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -33,7 +36,8 @@
     </EmbeddedResource>
   </ItemGroup>
 
-  <ItemGroup>    <AvaloniaResource Include="Resources\XTMF_icon.png"/>
+  <ItemGroup>    
+    <AvaloniaResource Include="Resources\XTMF_icon.png"/>
   </ItemGroup>
 
   <ItemGroup>

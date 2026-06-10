@@ -8,6 +8,9 @@
     <OutputTypeEx>exe</OutputTypeEx>
     <StartupObject></StartupObject>
     <Nullable>enable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <OutputPath>..\..\..\XTMF2-Dev\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>
