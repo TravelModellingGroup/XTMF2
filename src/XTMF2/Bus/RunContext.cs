@@ -151,7 +151,8 @@ namespace XTMF2.Bus
                 {
                     FileName = "dotnet",
                     Arguments = $"\"{Path.Combine(path, "XTMF2.Run.dll")}\" -runID \"{ID}\" {GetExtraDlls(clientBus)}-namedPipe \"{pipeName}\"",
-                    CreateNoWindow = false,
+                    UseShellExecute = false,
+                    CreateNoWindow = OperatingSystem.IsWindows(),
                     WorkingDirectory = path
                 };
                 runProcess = new Process()
