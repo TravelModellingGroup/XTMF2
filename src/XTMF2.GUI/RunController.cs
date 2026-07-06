@@ -134,7 +134,8 @@ public class RunController : IDisposable
                 {
                     FileName = "dotnet",
                     Arguments = $"\"{xtmfClientFileName}\" -namedPipe \"{id}\"",
-                    CreateNoWindow = false,
+                    UseShellExecute = false,
+                    CreateNoWindow = OperatingSystem.IsWindows(),
                     WorkingDirectory = Environment.CurrentDirectory
                 };
                 client = new()
