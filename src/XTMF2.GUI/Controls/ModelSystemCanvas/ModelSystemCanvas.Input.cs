@@ -949,6 +949,17 @@ partial class ModelSystemCanvas
             return;
         }
 
+        // ── Left-button release: end element resize ──────────────────────
+        if (_resizing is not null)
+        {
+            _resizing.CommitResize();
+            _resizing = null;
+            e.Pointer.Capture(null);
+            InvalidateAndMeasure();
+            e.Handled = true;
+            return;
+        }
+
         // ── Left-button release: end element drag ─────────────────────────
         if (_dragging is null) return;
         if (_vm is null) return;

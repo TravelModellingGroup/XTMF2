@@ -676,6 +676,22 @@ partial class ModelSystemCanvas
             // or whose destination node is inlined (value shown in hook row instead).
             if (link.Destination is null) continue;
             if (link.Destination is NodeViewModel destNvm && destNvm.IsInlined) continue;
+            
+            // Check if the destination's underlying model belongs to the current boundary.
+            // Using ContainedWithin (rather than collection membership) keeps undo working:
+            // after an undo the boundary manager creates a fresh ViewModel for the returned
+            // node, so the stale VM in link.Destination is no longer in the Nodes collection
+            // but its UnderlyingNode.ContainedWithin is updated back to the current boundary.
+            bool destinationInCurrentView = link.Destination switch
+            {
+                NodeViewModel nvm            => nvm.UnderlyingNode.ContainedWithin            == _vm.CurrentBoundary,
+                StartViewModel svm           => svm.UnderlyingStart.ContainedWithin           == _vm.CurrentBoundary,
+                GhostNodeViewModel gvm       => gvm.UnderlyingGhostNode.ContainedWithin       == _vm.CurrentBoundary,
+                FunctionInstanceViewModel fivm => fivm.UnderlyingInstance.ContainedWithin     == _vm.CurrentBoundary,
+                FunctionParameterViewModel fpvm => fpvm.UnderlyingParameter.ContainedWithin   == _vm.CurrentBoundary,
+                _ => false
+            };
+            if (!destinationInCurrentView) continue;
 
             bool isDisabled = link.UnderlyingLink.IsDisabled;
             var brush = link.IsSelected
