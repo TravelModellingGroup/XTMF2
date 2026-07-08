@@ -276,6 +276,10 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
                 {
                     TypeListBox.SelectedIndex = idx;
                     TypeListBox.ScrollIntoView(TypeListBox.SelectedItem!);
+                    // Explicitly call OnListSelectionChanged to ensure CanOK is updated.
+                    // This is needed because if the item is already at the selected index,
+                    // SelectionChanged won't fire.
+                    OnListSelectionChanged();
                 }
             }
         };
@@ -357,6 +361,7 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
 
         FilteredTypes = new ObservableCollection<Type>(source);
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasNoResults)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanOK)));
 
         // Keep the list box in sync — auto-select first match.
         if (FilteredTypes.Count > 0)
