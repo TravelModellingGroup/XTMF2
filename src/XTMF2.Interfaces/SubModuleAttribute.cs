@@ -31,12 +31,29 @@ namespace XTMF2
             Index = -1;
         }
 
+        /// <summary>
+        /// The name of the submodule / Parameter.
+        /// </summary>
         public string? Name { get; set; }
 
+        /// <summary>
+        /// The description of the submodule / Parameter.
+        /// </summary>
         public string? Description { get; set; }
 
+        /// <summary>
+        /// Whether the submodule / Parameter is required.
+        /// </summary>
         public bool Required { get; set; }
 
+        /// <summary>
+        /// Whether the submodule / Parameter passes execution if false then the submodule is considered input, if true then we either pass execution to the submodule or it is output.
+        /// </summary>
+        public bool PassesExecution { get; set; }
+
+        /// <summary>
+        /// The index of the submodule / Parameter within the module.  This must be unique within the module.
+        /// </summary>
         public int Index { get; set; }
     }
 }

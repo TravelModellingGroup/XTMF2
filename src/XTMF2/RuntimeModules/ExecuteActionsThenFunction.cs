@@ -27,13 +27,13 @@ namespace XTMF2.RuntimeModules
 Description = "Allows you to execute actions before calling a function.  This allows you to ")]
     public class ExecuteActionsThenFunction<Return> : BaseFunction<Return>
     {
-        [SubModule(Index = 0, Name = "Invoke First", Description = "Actions to invoke before invoking the function.")]
+        [SubModule(Index = 0, Name = "Invoke First", Description = "Actions to invoke before invoking the function.", PassesExecution = true)]
         public IAction[]? InvokeFirst;
 
         [Parameter(Index = 1, Name = "Invoke Actions in Parallel", Description = "Should the actions be invoked in parallel?", DefaultValue = "false")]
         public IFunction<bool>? InvokeActionsInParallel;
 
-        [SubModule(Index = 2, Required = true, Name = "End With", Description = "The function to invoke and return the value of.")]
+        [SubModule(Index = 2, Required = true, Name = "End With", Description = "The function to invoke and return the value of.", PassesExecution = true)]
         public IFunction<Return>? EndWith;
 
         public override Return Invoke()

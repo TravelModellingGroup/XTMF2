@@ -379,7 +379,7 @@ namespace XTMF2.Repository
                                 throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {field.Name}!");
                             }
                             // all parameters are required
-                            hooks.Add(new FieldHook(parameter.Name!, field, true, parameter.Index, true, parameter.DefaultValue));
+                            hooks.Add(new FieldHook(parameter.Name!, field, true, parameter.Index, true, parameter.DefaultValue, parameter.PassesExecution));
                         }
                         else if (attributes.First() is SubModuleAttribute subModule)
                         {
@@ -387,7 +387,7 @@ namespace XTMF2.Repository
                             {
                                 throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {field.Name}!");
                             }
-                            hooks.Add(new FieldHook(subModule.Name!, field, subModule.Required, subModule.Index, false, null));
+                            hooks.Add(new FieldHook(subModule.Name!, field, subModule.Required, subModule.Index, false, null, subModule.PassesExecution));
                         }
                         else
                         {
@@ -448,7 +448,7 @@ namespace XTMF2.Repository
                                 throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {property.Name}!");
                             }
                             // all parameters are required
-                            hooks.Add(new PropertyHook(parameter.Name!, property, true, parameter.Index, true, parameter.DefaultValue));
+                            hooks.Add(new PropertyHook(parameter.Name!, property, true, parameter.Index, true, parameter.DefaultValue, parameter.PassesExecution));
                         }
                         else if (attributes.First() is SubModuleAttribute subModule)
                         {
@@ -456,7 +456,7 @@ namespace XTMF2.Repository
                             {
                                 throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {property.Name}!");
                             }
-                            hooks.Add(new PropertyHook(subModule.Name!, property, subModule.Required, subModule.Index, false, null));
+                            hooks.Add(new PropertyHook(subModule.Name!, property, subModule.Required, subModule.Index, false, null, subModule.PassesExecution));
                         }
                         else
                         {

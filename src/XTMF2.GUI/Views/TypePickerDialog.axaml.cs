@@ -25,6 +25,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using XTMF2.GUI.Controls;
 
 namespace XTMF2.GUI.Views;
@@ -265,23 +266,29 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
         }, RoutingStrategies.Tunnel);
         UpdateFilter();
 
-        // Focus the filter box and honour an initial selection once the window is shown.
+        // Focus the filter box and honour an initial selection once the list is loaded.
         Opened += (_, _) =>
         {
             FilterBox.FocusSearchBox();
-            if (_initialType is not null)
+        };
+
+        TypeListBox.Loaded += (_, _) =>
+        {
+            Dispatcher.UIThread.Post(() =>
             {
-                var idx = FilteredTypes.IndexOf(_initialType);
-                if (idx >= 0)
+                if (_initialType is not null)
                 {
-                    TypeListBox.SelectedIndex = idx;
-                    TypeListBox.ScrollIntoView(TypeListBox.SelectedItem!);
-                    // Explicitly call OnListSelectionChanged to ensure CanOK is updated.
-                    // This is needed because if the item is already at the selected index,
-                    // SelectionChanged won't fire.
-                    OnListSelectionChanged();
+                    var idx = FilteredTypes.IndexOf(_initialType);
+                    if (idx >= 0)
+                    {
+                        TypeListBox.SelectedIndex = idx;
+                        TypeListBox.ScrollIntoView(TypeListBox.SelectedItem!);
+                    }
                 }
-            }
+
+                // Ensure the OK binding reflects the realized ListBox selection.
+                OnListSelectionChanged();
+            });
         };
 
         TypeListBox.DoubleTapped += (_, _) =>

@@ -712,8 +712,11 @@ partial class ModelSystemCanvas
             else if (_isLight)   { glowOuter = LinkGlowOuterPenL;   glowInner = LinkGlowInnerPenL; }
             else                 { glowOuter = LinkGlowOuterPen;     glowInner = LinkGlowInnerPen; }
 
+            bool passesExecution = link.UnderlyingLink.OriginHook.PassesExecution;
+
             Point bp2, arrowFrom;
             Point shaftEnd;
+            Point labelFrom;
 
             if (link.UnderlyingLink.IsOrthogonal)
             {
@@ -724,55 +727,72 @@ partial class ModelSystemCanvas
                 var pts = ComputeOrthogonalPath(link, hasSharedSpine ? spineX : (double?)null);
                 // pts = [p1, corner1, corner2, p2]  (always 4 points)
                 bp2 = pts[^1];
-                arrowFrom = BorderArrivalFrom(link.Destination, bp2);
-                shaftEnd = DrawArrow(ctx, brush, arrowFrom, bp2);
-
-                if (hasSharedSpine)
+                if (passesExecution)
                 {
-                    // For multi-link groups the trunk is identical for every sibling.
-                    // Draw trunk glow + stroke only once to avoid stacking alpha.
-                    if (_orthogonalTrunkDrawn.Add(link.UnderlyingLink))
+                    arrowFrom = BorderArrivalFrom(link.Destination, bp2);
+                    shaftEnd = DrawArrow(ctx, brush, arrowFrom, bp2);
+                    labelFrom = pts[^2];
+
+                    if (hasSharedSpine)
                     {
-                        // Build the full-extent trunk from the precomputed range.
-                        // The trunk is two segments that share the junction at (spineX, p1.Y):
-                        //   1. Horizontal exit:  p1 → (spineX, p1.Y)
-                        //   2. Full vertical:    (spineX, topY) → (spineX, bottomY)
-                        // Drawing them as one polyline works when p1.Y is at one extreme;
-                        // for the mixed case (branches above AND below) we draw two
-                        // segments so the spine covers the complete range.
-                        var p1Trunk = pts[0];   // hook anchor
-                        var corner1 = pts[1];   // (spineX, p1.Y)
-                        _orthogonalTrunkRange.TryGetValue(link.UnderlyingLink, out var range);
-                        var spineTop = new Point(spineX, range.TopY);
-                        var spineBot = new Point(spineX, range.BottomY);
-
-                        // Horizontal exit + vertical spine as a joined polyline.
-                        // The vertical goes from spineTop down to spineBot; corner1 is
-                        // somewhere along it, so we route: p1 → corner1 → spineTop
-                        // then a separate segment corner1 → spineBot (the other direction).
-                        // This draws the T/L shape correctly with a single extra segment.
-                        var mainTrunkGeo = MakePolyGeo([p1Trunk, corner1, spineTop]);
-                        var extGeo = MakeSegGeo(corner1, spineBot);
-
-                        foreach (var trunkPen in new[] { glowOuter, glowInner, pen })
+                        // For multi-link groups the trunk is identical for every sibling.
+                        // Draw trunk glow + stroke only once to avoid stacking alpha.
+                        if (_orthogonalTrunkDrawn.Add(link.UnderlyingLink))
                         {
-                            ctx.DrawGeometry(null, trunkPen, mainTrunkGeo);
-                            ctx.DrawGeometry(null, trunkPen, extGeo);
-                        }
-                    }
+                            // Build the full-extent trunk from the precomputed range.
+                            // The trunk is two segments that share the junction at (spineX, p1.Y):
+                            //   1. Horizontal exit:  p1 → (spineX, p1.Y)
+                            //   2. Full vertical:    (spineX, topY) → (spineX, bottomY)
+                            // Drawing them as one polyline works when p1.Y is at one extreme;
+                            // for the mixed case (branches above AND below) we draw two
+                            // segments so the spine covers the complete range.
+                            var p1Trunk = pts[0];   // hook anchor
+                            var corner1 = pts[1];   // (spineX, p1.Y)
+                            _orthogonalTrunkRange.TryGetValue(link.UnderlyingLink, out var range);
+                            var spineTop = new Point(spineX, range.TopY);
+                            var spineBot = new Point(spineX, range.BottomY);
 
-                    // Branch segment: corner2 → p2  (glow) and corner2 → shaftEnd (stroke).
-                    var branchGlowGeo = MakeSegGeo(pts[^2], pts[^1]);          // corner2 → bp2
-                    var branchShaftGeo = MakeSegGeo(pts[^2], shaftEnd);         // corner2 → shaftEnd
-                    ctx.DrawGeometry(null, glowOuter, branchGlowGeo);
-                    ctx.DrawGeometry(null, glowInner, branchGlowGeo);
-                    ctx.DrawGeometry(null, pen, branchShaftGeo);
+                            // Horizontal exit + vertical spine as a joined polyline.
+                            // The vertical goes from spineTop down to spineBot; corner1 is
+                            // somewhere along it, so we route: p1 → corner1 → spineTop
+                            // then a separate segment corner1 → spineBot (the other direction).
+                            // This draws the T/L shape correctly with a single extra segment.
+                            var mainTrunkGeo = MakePolyGeo([p1Trunk, corner1, spineTop]);
+                            var extGeo = MakeSegGeo(corner1, spineBot);
+
+                            foreach (var trunkPen in new[] { glowOuter, glowInner, pen })
+                            {
+                                ctx.DrawGeometry(null, trunkPen, mainTrunkGeo);
+                                ctx.DrawGeometry(null, trunkPen, extGeo);
+                            }
+                        }
+
+                        // Branch segment: corner2 → p2  (glow) and corner2 → shaftEnd (stroke).
+                        var branchGlowGeo = MakeSegGeo(pts[^2], pts[^1]);
+                        var branchShaftGeo = MakeSegGeo(pts[^2], shaftEnd);
+                        ctx.DrawGeometry(null, glowOuter, branchGlowGeo);
+                        ctx.DrawGeometry(null, glowInner, branchGlowGeo);
+                        ctx.DrawGeometry(null, pen, branchShaftGeo);
+                    }
+                    else
+                    {
+                        // Single-destination orthogonal link: draw the full path normally.
+                        var glowGeo = MakePolyGeo(pts);
+                        var shaftGeo = ReplacePolyGeoLastPoint(pts, shaftEnd);
+                        ctx.DrawGeometry(null, glowOuter, glowGeo);
+                        ctx.DrawGeometry(null, glowInner, glowGeo);
+                        ctx.DrawGeometry(null, pen, shaftGeo);
+                    }
                 }
                 else
                 {
-                    // Single-destination orthogonal link: draw the full path normally.
-                    var glowGeo = MakePolyGeo(pts);
-                    var shaftGeo = ReplacePolyGeoLastPoint(pts, shaftEnd);
+                    var revPts = new[] { pts[^1], pts[^2], pts[1], pts[0] };
+                    arrowFrom = BorderArrivalFrom(link.Origin, revPts[^1]);
+                    shaftEnd = DrawArrow(ctx, brush, arrowFrom, revPts[^1]);
+                    labelFrom = revPts[1];
+
+                    var glowGeo = MakePolyGeo(revPts);
+                    var shaftGeo = ReplacePolyGeoLastPoint(revPts, shaftEnd);
                     ctx.DrawGeometry(null, glowOuter, glowGeo);
                     ctx.DrawGeometry(null, glowInner, glowGeo);
                     ctx.DrawGeometry(null, pen, shaftGeo);
@@ -784,9 +804,6 @@ partial class ModelSystemCanvas
                 // links curve gently and long ones sweep broadly, with no elbow kinks.
                 var (bp1, bc1, bc2, bp2c) = ComputeSCurve(link);
                 bp2 = bp2c;
-                arrowFrom = BorderArrivalFrom(link.Destination, bp2);
-                shaftEnd = DrawArrow(ctx, brush, arrowFrom, bp2);
-
                 // Build the geometry once; reuse for glow and main stroke.
                 static StreamGeometry MakeCurveGeo(Point p1, Point c1, Point c2, Point end)
                 {
@@ -798,12 +815,32 @@ partial class ModelSystemCanvas
                     return g;
                 }
 
-                var glowGeo = MakeCurveGeo(bp1, bc1, bc2, bp2);
-                var shaftGeo = MakeCurveGeo(bp1, bc1, bc2, shaftEnd);
+                if (passesExecution)
+                {
+                    arrowFrom = BorderArrivalFrom(link.Destination, bp2);
+                    shaftEnd = DrawArrow(ctx, brush, arrowFrom, bp2);
+                    labelFrom = SampleCubicBezier(bp1, bc1, bc2, bp2, 0.97);
 
-                ctx.DrawGeometry(null, glowOuter, glowGeo);
-                ctx.DrawGeometry(null, glowInner, glowGeo);
-                ctx.DrawGeometry(null, pen, shaftGeo);
+                    var glowGeo = MakeCurveGeo(bp1, bc1, bc2, bp2);
+                    var shaftGeo = MakeCurveGeo(bp1, bc1, bc2, shaftEnd);
+
+                    ctx.DrawGeometry(null, glowOuter, glowGeo);
+                    ctx.DrawGeometry(null, glowInner, glowGeo);
+                    ctx.DrawGeometry(null, pen, shaftGeo);
+                }
+                else
+                {
+                    arrowFrom = BorderArrivalFrom(link.Origin, bp1);
+                    shaftEnd = DrawArrow(ctx, brush, arrowFrom, bp1);
+                    labelFrom = SampleCubicBezier(bp2, bc2, bc1, bp1, 0.03);
+
+                    var glowGeo = MakeCurveGeo(bp2, bc2, bc1, bp1);
+                    var shaftGeo = MakeCurveGeo(bp2, bc2, bc1, shaftEnd);
+
+                    ctx.DrawGeometry(null, glowOuter, glowGeo);
+                    ctx.DrawGeometry(null, glowInner, glowGeo);
+                    ctx.DrawGeometry(null, pen, shaftGeo);
+                }
             }
 
             // For multi-link destinations draw a small 1-based index number
@@ -819,18 +856,44 @@ partial class ModelSystemCanvas
                 if (idx >= 0)
                 {
                     var ft = MakeText((idx + 1).ToString(), LinkIndexFontSize, brush);
-                    double adx = bp2.X - arrowFrom.X;
-                    double ady = bp2.Y - arrowFrom.Y;
+                    // Keep ordering badges outside the destination element regardless
+                    // of curve direction by offsetting along the destination's outward normal.
+                    // Also shift laterally (alternating above/below) so the badge does not
+                    // sit on top of the arrow shaft near the destination.
+                    var inward = BorderInwardNormal(link.Destination, bp2);
+                    double ox = -inward.X;
+                    double oy = -inward.Y;
+
+                    double adx = bp2.X - labelFrom.X;
+                    double ady = bp2.Y - labelFrom.Y;
                     double dlen = Math.Sqrt(adx * adx + ady * ady);
+                    double ux, uy;
                     if (dlen >= 1)
                     {
-                        double ux = adx / dlen, uy = ady / dlen;
-                        double nx = -uy, ny = ux; // 90° CCW perpendicular unit vector
-                        double offset = ft.Height * 0.5 + 3;
-                        double lx = shaftEnd.X - ft.Width * 0.5 + nx * offset;
-                        double ly = shaftEnd.Y - ft.Height * 0.5 + ny * offset;
-                        ctx.DrawText(ft, new Point(lx, ly));
+                        ux = adx / dlen;
+                        uy = ady / dlen;
                     }
+                    else
+                    {
+                        // Fallback direction when the local segment is near-degenerate.
+                        ux = ox;
+                        uy = oy;
+                    }
+
+                    // Lateral offset direction (90° CCW from arrow direction).
+                    double nx = -uy;
+                    double ny = ux;
+                    double sideSign = (idx & 1) == 0 ? 1.0 : -1.0;
+
+                    double outwardOffset = Math.Max(ft.Height * 0.6 + 6.0, ArrowSize + 4.0);
+                    double lateralOffset = ft.Height * 0.5 + 3.0;
+
+                    double anchorX = bp2.X + ox * outwardOffset + nx * lateralOffset * sideSign;
+                    double anchorY = bp2.Y + oy * outwardOffset + ny * lateralOffset * sideSign;
+
+                    double lx = anchorX - ft.Width * 0.5;
+                    double ly = anchorY - ft.Height * 0.5;
+                    ctx.DrawText(ft, new Point(lx, ly));
                 }
             }
         }
