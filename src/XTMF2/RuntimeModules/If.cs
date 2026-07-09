@@ -30,10 +30,10 @@ Description = "Provides a way to conditionally execute.  If the condition is tru
     Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
         public IFunction<bool>? Condition;
 
-        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1)]
+        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
         public IFunction<Return>? ToInvokeIfTrue;
 
-        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2)]
+        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
         public IFunction<Return>? ToInvokeIfFalse;
 
         public override Return Invoke()
@@ -57,10 +57,10 @@ Description = "Provides a way to conditionally execute.  If the condition is tru
             Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
         public IFunction<bool>? Condition;
 
-        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1)]
+        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
         public IFunction<Context, Return>? ToInvokeIfTrue;
 
-        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2)]
+        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
         public IFunction<Context, Return>? ToInvokeIfFalse;
 
         public override Return Invoke(Context context)
@@ -84,10 +84,10 @@ Description = "Provides a way to conditionally execute.  If the condition is tru
     Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
         public IFunction<Context, bool>? Condition;
 
-        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1)]
+        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
         public IFunction<Context, Return>? ToInvokeIfTrue;
 
-        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2)]
+        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
         public IFunction<Context, Return>? ToInvokeIfFalse;
 
         public override Return Invoke(Context context)
@@ -111,10 +111,10 @@ Description = "Provides a way to conditionally execute.  If the condition is tru
     Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
         public IFunction<bool>? Condition;
 
-        [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1)]
+        [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
         public IAction? ToInvokeIfTrue;
 
-        [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2)]
+        [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
         public IAction? ToInvokeIfFalse;
 
         public override void Invoke()
@@ -138,10 +138,10 @@ Description = "Provides a way to conditionally execute.  If the condition is tru
     Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
         public IFunction<bool>? Condition;
 
-        [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1)]
+        [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
         public IAction<Context>? ToInvokeIfTrue;
 
-        [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2)]
+        [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
         public IAction<Context>? ToInvokeIfFalse;
 
         public override void Invoke(Context context)
@@ -165,10 +165,10 @@ Description = "Provides a way to conditionally execute.  If the condition is tru
     Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
         public IFunction<Context, bool>? Condition;
 
-        [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1)]
+        [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
         public IAction<Context>? ToInvokeIfTrue;
 
-        [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2)]
+        [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
         public IAction<Context>? ToInvokeIfFalse;
 
         public override void Invoke(Context context)

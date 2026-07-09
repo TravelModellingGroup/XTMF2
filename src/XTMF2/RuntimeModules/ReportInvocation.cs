@@ -37,7 +37,7 @@ Description = "Reports to XTMF that the model system has run through this point.
             _runtime = runtime;
         }
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1, PassesExecution = true)]
         public IFunction<Return>? ToInvoke;
         
 
@@ -62,7 +62,7 @@ Description = "Reports to XTMF that the model system has run through this point.
             _runtime = runtime;
         }
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1, PassesExecution = true)]
         public IFunction<Context, Return>? ToInvoke;
 
         public override Return Invoke(Context context)
@@ -86,7 +86,7 @@ Description = "Reports to XTMF that the model system has run through this point.
             _runtime = runtime;
         }
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1, PassesExecution = true)]
         public IAction? ToInvoke;
 
         public override void Invoke()
@@ -110,7 +110,7 @@ Description = "Reports to XTMF that the model system has run through this point.
             _runtime = runtime;
         }
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1, PassesExecution = true)]
         public IAction<Context>? ToInvoke;
 
         public override void Invoke(Context context)
@@ -134,7 +134,7 @@ Description = "Reports to XTMF that the model system has run through this point.
             _runtime = runtime;
         }
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "Invoke after signalling context", Index = 1, PassesExecution = true)]
         public IAction<Context>? ToInvoke;
 
         public override void Invoke(Context context)

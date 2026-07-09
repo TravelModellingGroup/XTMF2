@@ -29,7 +29,7 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IFunction<Log> Log = null!;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
         public IFunction<Return> ToInvoke = null!;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
@@ -50,7 +50,7 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IFunction<Log> Log = null!;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
         public IFunction<Context, Return> ToInvoke = null!;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
@@ -71,7 +71,7 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IFunction<Log> Log = null!;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
         public IFunction<Context, Return> ToInvoke = null!;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
@@ -92,7 +92,7 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IFunction<Log> Log = null!;
 
-        [SubModule(Required = false, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
+        [SubModule(Required = false, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
         public IAction? ToInvoke;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
@@ -113,7 +113,7 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IFunction<Log> Log = null!;
 
-        [SubModule(Required = false, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
+        [SubModule(Required = false, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
         public IAction<Context>? ToInvoke;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
@@ -134,7 +134,7 @@ namespace XTMF2.RuntimeModules
         [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
         public IFunction<Log> Log = null!;
 
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1)]
+        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
         public IAction<Context> ToInvoke = null!;
 
         [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]

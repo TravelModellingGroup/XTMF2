@@ -26,7 +26,7 @@ public sealed class ExecuteWithContext<Context> : BaseAction
     [SubModule(Required = true, Name = "Get Context", Description = "The function to get the context to execute with.", Index = 0)]
     public IFunction<Context> GetContext = null!;
 
-    [SubModule(Required = true, Name = "To Execute", Description = "The actions to execute with the context.", Index = 1)]
+    [SubModule(Required = true, Name = "To Execute", Description = "The actions to execute with the context.", Index = 1, PassesExecution = true)]
     public IAction<Context>[] ToInvoke = null!;
 
     override public void Invoke()
@@ -43,7 +43,7 @@ public sealed class ExecuteWithContext<Context> : BaseAction
     Description = "Provides a way to execute a series of actions using a context provided to it.")]
 public sealed class ExecuteWithForwardedContext<Context> : BaseAction<Context>
 {
-    [SubModule(Required = true, Name = "To Execute", Description = "The actions to execute with the context.", Index = 0)]
+    [SubModule(Required = true, Name = "To Execute", Description = "The actions to execute with the context.", Index = 0, PassesExecution = true)]
     public IAction<Context>[] ToInvoke = null!;
 
     override public void Invoke(Context context)

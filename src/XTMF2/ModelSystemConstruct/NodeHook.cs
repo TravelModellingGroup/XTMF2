@@ -50,13 +50,19 @@ namespace XTMF2
         /// </summary>
         public string? DefaultValue;
 
-        public NodeHook(string name, HookCardinality cardinality, int index, bool isParameter, string? defaultValue)
+        /// <summary>
+        /// True when this hook passes execution context to its destination.
+        /// </summary>
+        public bool PassesExecution { get; private set; }
+
+        public NodeHook(string name, HookCardinality cardinality, int index, bool isParameter, string? defaultValue, bool passesExecution = false)
         {
             Name = name;
             Cardinality = cardinality;
             Index = index;
             IsParameter = isParameter;
             DefaultValue = defaultValue;
+            PassesExecution = passesExecution;
         }
 
         protected static HookCardinality GetCardinality(Type type, bool required)
@@ -115,8 +121,8 @@ namespace XTMF2
     sealed class PropertyHook : NodeHook
     {
         readonly PropertyInfo Property;
-        public PropertyHook(string name, PropertyInfo property, bool required, int index, bool isParameter, string? defaultValue)
-            : base(name, GetCardinality(property, required), index, isParameter, defaultValue)
+        public PropertyHook(string name, PropertyInfo property, bool required, int index, bool isParameter, string? defaultValue, bool passesExecution = false)
+            : base(name, GetCardinality(property, required), index, isParameter, defaultValue, passesExecution)
         {
             Property = property;
         }
@@ -200,8 +206,8 @@ namespace XTMF2
     sealed class FieldHook : NodeHook
     {
         readonly FieldInfo Field;
-        public FieldHook(string name, FieldInfo field, bool required, int index, bool isParameter, string? defaultValue)
-            : base(name, GetCardinality(field, required), index, isParameter, defaultValue)
+        public FieldHook(string name, FieldInfo field, bool required, int index, bool isParameter, string? defaultValue, bool passesExecution = false)
+            : base(name, GetCardinality(field, required), index, isParameter, defaultValue, passesExecution)
         {
             Field = field;
         }
@@ -296,7 +302,7 @@ namespace XTMF2
         /// <param name="parameter">The function-parameter slot this hook exposes.</param>
         /// <param name="index">Ordinal position among the template's FunctionParameters.</param>
         public FunctionParameterHook(ModelSystemConstruct.FunctionParameter parameter, int index)
-            : base(parameter.Name, HookCardinality.SingleOptional, index, isParameter: false, defaultValue: null)
+            : base(parameter.Name, HookCardinality.SingleOptional, index, isParameter: false, defaultValue: null, passesExecution: false)
         {
             Parameter = parameter;
         }

@@ -33,10 +33,10 @@ Description = "Provides a way to execute a series of actions in order, optionall
         [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
         public IFunction<int>? Iterations;
 
-        [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2)]
+        [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2, PassesExecution = true)]
         public ISetableValue<int>? CurrentIteration;
 
-        [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 3)]
+        [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 3, PassesExecution = true)]
         public IAction[]? ToInvoke;
 
         public override void Invoke()
@@ -78,10 +78,10 @@ Description = "Provides a way to execute a series of actions in order, optionall
         [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
         public IFunction<int>? Iterations;
 
-        [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2)]
+        [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2, PassesExecution = true)]
         public ISetableValue<int>? CurrentIteration;
 
-        [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 3)]
+        [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 3, PassesExecution = true)]
         public IAction<Context>[]? ToInvoke;
 
         public override void Invoke(Context context)
