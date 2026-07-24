@@ -79,9 +79,9 @@ partial class ModelSystemCanvas
                 e.Handled = true;
             }
         }
-        else if (e.Key == Key.Left && (e.KeyModifiers & KeyModifiers.Alt) != 0)
+        else if (e.Key == Key.Up && (e.KeyModifiers & KeyModifiers.Alt) != 0)
         {
-            // Alt+Left: navigate to parent boundary / exit function template.
+            // Alt+Up: navigate to parent boundary / exit function template.
             _vm?.NavigateUpCommand.Execute(null);
             e.Handled = true;
         }
@@ -92,75 +92,13 @@ partial class ModelSystemCanvas
         }
         else if (e.Key == Key.D && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
-            bool didToggle = false;
-            int failed = 0;
+            bool didToggle = TryToggleSelectedModulesDisabled();
+            if (didToggle) InvalidateVisual();
 
-            if (_multiSelection.Count > 1)
+            if (!didToggle)
             {
-                foreach (var element in _multiSelection)
-                {
-                    Node? target = element switch
-                    {
-                        NodeViewModel nvm => nvm.UnderlyingNode,
-                        FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
-                        _ => null,
-                    };
-                    if (target is null) continue;
-
-                    didToggle = true;
-                    bool nextDisabled = !target.IsDisabled;
-                    if (_vm?.Session is not null && _vm?.User is not null)
-                    {
-                        if (!_vm.Session.SetNodeDisabled(_vm.User, target, nextDisabled, out var err))
-                        {
-                            failed++;
-                            _vm.ShowToast(err?.Message ?? "Unable to change disabled state.",
-                                isError: true, durationMs: 6000);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                Node? target = _vm?.SelectedElement switch
-                {
-                    NodeViewModel nvm => nvm.UnderlyingNode,
-                    FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
-                    _ => null,
-                };
-
-                if (target is not null && _vm?.Session is not null && _vm?.User is not null)
-                {
-                    didToggle = true;
-                    bool nextDisabled = !target.IsDisabled;
-                    if (!_vm.Session.SetNodeDisabled(_vm.User, target, nextDisabled, out var err))
-                    {
-                        failed++;
-                        _vm.ShowToast(err?.Message ?? "Unable to change disabled state.",
-                            isError: true, durationMs: 6000);
-                    }
-                }
-            }
-
-            if (didToggle && failed == 0)
-            {
-                InvalidateVisual();
-            }
-
-            if (!didToggle && _vm?.SelectedLink is { } selectedLink && _vm?.Session is not null && _vm?.User is not null)
-            {
-                didToggle = true;
-                bool nextDisabled = !selectedLink.UnderlyingLink.IsDisabled;
-                if (!_vm.Session.SetLinkDisabled(_vm.User, selectedLink.UnderlyingLink, nextDisabled, out var err))
-                {
-                    failed++;
-                    _vm.ShowToast(err?.Message ?? "Unable to change link disabled state.",
-                        isError: true, durationMs: 6000);
-                }
-                else
-                {
-                    InvalidateVisual();
-                }
+                didToggle = TryToggleSelectedLinkDisabled();
+                if (didToggle) InvalidateVisual();
             }
 
             e.Handled = didToggle;

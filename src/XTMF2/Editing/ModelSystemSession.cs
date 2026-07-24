@@ -2327,6 +2327,97 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Set multiple nodes to the same disabled state as a single undoable action.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="nodes">Nodes to update. Duplicate entries are ignored.</param>
+        /// <param name="disabled">If nodes should be disabled (true) or enabled (false).</param>
+        /// <param name="error">An error message explaining why the operation failed.</param>
+        /// <returns>True if the operation completed successfully, false otherwise.</returns>
+        public bool SetNodesDisabled(User user, IEnumerable<Node> nodes, bool disabled,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(nodes);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var uniqueTargets = nodes
+                    .Where(n => n is not null)
+                    .Distinct()
+                    .ToList();
+
+                // No-op for empty input to simplify caller logic.
+                if (uniqueTargets.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var nodesToChange = uniqueTargets
+                    .Where(n => n.IsDisabled != disabled)
+                    .ToList();
+
+                if (nodesToChange.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                if (disabled)
+                {
+                    foreach (var node in nodesToChange)
+                    {
+                        if (IsNodeUsedAsVariable(node, out var variableUsage))
+                        {
+                            error = new CommandError($"Unable to disable '{node.Name}' because {variableUsage}.");
+                            return false;
+                        }
+
+                        if (IsNodeRequiredByEnabledLink(node, out var requiredReason))
+                        {
+                            error = new CommandError($"Unable to disable '{node.Name}' because {requiredReason}.");
+                            return false;
+                        }
+                    }
+                }
+
+                var changedNodes = new List<Node>(nodesToChange.Count);
+                var batch = new CommandBatch();
+
+                foreach (var node in nodesToChange)
+                {
+                    if (!node.SetDisabled(disabled, out error))
+                    {
+                        // Best-effort rollback for nodes already changed in this operation.
+                        foreach (var changed in changedNodes)
+                            _ = changed.SetDisabled(!disabled, out _);
+                        return false;
+                    }
+
+                    changedNodes.Add(node);
+                    batch.Add(new Command(() =>
+                    {
+                        return (node.SetDisabled(!disabled, out var undoError), undoError);
+                    }, () =>
+                    {
+                        return (node.SetDisabled(disabled, out var redoError), redoError);
+                    }));
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Set if the given link should be disabled.
         /// </summary>
         /// <param name="user">The user issuing the command</param>

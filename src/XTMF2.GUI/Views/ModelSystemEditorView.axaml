@@ -66,7 +66,7 @@
         <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}"/>
         <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoCommand}"/>
         <KeyBinding Gesture="Ctrl+B" Command="{Binding BrowseBoundariesCommand}"/>
-        <KeyBinding Gesture="Alt+Left" Command="{Binding NavigateUpCommand}"/>
+        <KeyBinding Gesture="Alt+Up" Command="{Binding NavigateUpCommand}"/>
     </UserControl.KeyBindings>
 
     <Grid RowDefinitions="Auto,*" Margin="10">
@@ -171,7 +171,7 @@
 
                     <!-- Step Out: exit function template or ascend to parent boundary -->
                     <Button Command="{Binding NavigateUpCommand}"
-                            ToolTip.Tip="Step out to parent scope  (Alt+← / Mouse Back)">
+                            ToolTip.Tip="Step out to parent scope  (Alt+↑ / Mouse Back)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Arrow shaft + head -->

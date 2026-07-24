@@ -28,6 +28,93 @@ namespace XTMF2.GUI.Controls;
 
 partial class ModelSystemCanvas
 {
+    private static Node? GetModuleTargetFromElement(ICanvasElement? element)
+        => element switch
+        {
+            NodeViewModel nvm => nvm.UnderlyingNode,
+            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+            _ => null,
+        };
+
+    private List<Node> GetDisableTargetsForClickedElement(ICanvasElement clickedElement, Node clickedNode)
+    {
+        if (_multiSelection.Count <= 1 || !_multiSelection.Contains(clickedElement))
+            return new List<Node> { clickedNode };
+
+        var targets = _multiSelection
+            .Select(GetModuleTargetFromElement)
+            .Where(n => n is not null)
+            .Distinct()
+            .Cast<Node>()
+            .ToList();
+
+        if (targets.Count == 0)
+            targets.Add(clickedNode);
+
+        return targets;
+    }
+
+    private bool TrySetDisabledForModules(IReadOnlyList<Node> targets, bool nextDisabled, string defaultError)
+    {
+        if (_vm?.Session is null || _vm?.User is null || targets.Count == 0)
+            return false;
+
+        if (!_vm.Session.SetNodesDisabled(_vm.User, targets, nextDisabled, out var err))
+        {
+            _vm.ShowToast(err?.Message ?? defaultError, isError: true, durationMs: 6000);
+        }
+
+        return true;
+    }
+
+    private bool TryToggleSelectedModulesDisabled()
+    {
+        Node? selectedTarget = GetModuleTargetFromElement(_vm?.SelectedElement);
+
+        List<Node> targets = _multiSelection.Count > 1
+            ? _multiSelection.Select(GetModuleTargetFromElement)
+                .Where(n => n is not null)
+                .Distinct()
+                .Cast<Node>()
+                .ToList()
+            : selectedTarget is not null
+                ? new List<Node> { selectedTarget }
+                : new List<Node>();
+
+        if (targets.Count == 0)
+            return false;
+
+        Node anchor = selectedTarget is not null && targets.Contains(selectedTarget)
+            ? selectedTarget
+            : targets[0];
+
+        bool nextDisabled = !anchor.IsDisabled;
+        return TrySetDisabledForModules(targets, nextDisabled, "Unable to change disabled state.");
+    }
+
+    private bool TrySetDisabledForLink(Link target, bool nextDisabled, string defaultError)
+    {
+        if (_vm?.Session is null || _vm?.User is null)
+            return false;
+
+        if (!_vm.Session.SetLinkDisabled(_vm.User, target, nextDisabled, out var err))
+        {
+            _vm.ShowToast(err?.Message ?? defaultError, isError: true, durationMs: 6000);
+        }
+
+        return true;
+    }
+
+    private bool TryToggleSelectedLinkDisabled()
+    {
+        if (_vm?.SelectedLink is not { } selectedLink)
+            return false;
+
+        bool nextDisabled = !selectedLink.UnderlyingLink.IsDisabled;
+        return TrySetDisabledForLink(selectedLink.UnderlyingLink, nextDisabled,
+            "Unable to change link disabled state.");
+    }
+
     private void ShowContextMenu(ICanvasElement? element, LinkViewModel? link)
     {
         if (_vm is null) return;
@@ -236,11 +323,8 @@ partial class ModelSystemCanvas
             };
             toggleDisableItem.Click += (_, _) =>
             {
-                if (!vm.Session.SetLinkDisabled(vm.User, link.UnderlyingLink, nextDisabled, out var err))
-                {
-                    vm.ShowToast(err?.Message ?? "Unable to change link disabled state.",
-                        isError: true, durationMs: 6000);
-                }
+                TrySetDisabledForLink(link.UnderlyingLink, nextDisabled,
+                    "Unable to change link disabled state.");
                 InvalidateVisual();
             };
             menu.Items.Add(toggleDisableItem);
@@ -271,18 +355,17 @@ partial class ModelSystemCanvas
         // ── Enable/Disable regular nodes ─────────────────────────────────
         if (element is NodeViewModel disableNodeVm)
         {
+            var disableTargets = GetDisableTargetsForClickedElement(disableNodeVm, disableNodeVm.UnderlyingNode);
             bool nextDisabled = !disableNodeVm.UnderlyingNode.IsDisabled;
             var disableNodeItem = new MenuItem
             {
-                Header = nextDisabled ? "Disable Node" : "Enable Node"
+                Header = disableTargets.Count > 1
+                    ? (nextDisabled ? $"Disable {disableTargets.Count} Modules" : $"Enable {disableTargets.Count} Modules")
+                    : (nextDisabled ? "Disable Node" : "Enable Node")
             };
             disableNodeItem.Click += (_, _) =>
             {
-                if (!vm.Session.SetNodeDisabled(vm.User, disableNodeVm.UnderlyingNode, nextDisabled, out var err))
-                {
-                    vm.ShowToast(err?.Message ?? "Unable to change node disabled state.",
-                        isError: true, durationMs: 6000);
-                }
+                TrySetDisabledForModules(disableTargets, nextDisabled, "Unable to change node disabled state.");
                 InvalidateVisual();
             };
             menu.Items.Add(disableNodeItem);
@@ -569,18 +652,17 @@ partial class ModelSystemCanvas
                 InvalidateAndMeasure();
             };
 
+            var disableTargets = GetDisableTargetsForClickedElement(capturedFi, capturedFi.UnderlyingInstance);
             bool nextDisabled = !capturedFi.UnderlyingInstance.IsDisabled;
             var disableFiItem = new MenuItem
             {
-                Header = nextDisabled ? "Disable Function Instance" : "Enable Function Instance"
+                Header = disableTargets.Count > 1
+                    ? (nextDisabled ? $"Disable {disableTargets.Count} Modules" : $"Enable {disableTargets.Count} Modules")
+                    : (nextDisabled ? "Disable Function Instance" : "Enable Function Instance")
             };
             disableFiItem.Click += (_, _) =>
             {
-                if (!vm.Session.SetNodeDisabled(vm.User, capturedFi.UnderlyingInstance, nextDisabled, out var err))
-                {
-                    vm.ShowToast(err?.Message ?? "Unable to change function instance disabled state.",
-                        isError: true, durationMs: 6000);
-                }
+                TrySetDisabledForModules(disableTargets, nextDisabled, "Unable to change function instance disabled state.");
                 InvalidateVisual();
             };
 
