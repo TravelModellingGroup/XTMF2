@@ -13,12 +13,14 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.ComponentModel;
@@ -66,12 +68,429 @@ namespace XTMF2.Editing
         /// </summary>
         public void CommitBatch() => Buffer.CommitAggregateBatch();
 
+        private const string FunctionTemplateSnapshotSource = "XTMF2FunctionTemplate";
+        private const int FunctionTemplateSnapshotVersion = 1;
+
         public ModelSystemSession(ProjectSession session, ModelSystem modelSystem)
         {
             ModelSystem = modelSystem;
             ModelSystemHeader = modelSystem.Header;
             _session = session.AddReference();
             ((INotifyPropertyChanged)Buffer).PropertyChanged += OnBufferPropertyChanged;
+        }
+
+        /// <summary>
+        /// Exports <paramref name="template"/> as a portable JSON snapshot that includes
+        /// all internal modules, links, parameters, entry-node designation, and local variables.
+        /// </summary>
+        public bool ExportFunctionTemplateSnapshot(FunctionTemplate template,
+            [NotNullWhen(true)] out string? snapshot,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(template);
+            try
+            {
+                lock (_sessionLock)
+                {
+                    var moduleTypes = new Dictionary<Type, int>();
+                    var nodeIndices = new Dictionary<Node, int>();
+                    int index = 0;
+
+                    CollectTypesForFunctionTemplateSnapshot(template, moduleTypes);
+
+                    var buffer = new ArrayBufferWriter<byte>();
+                    using var writer = new Utf8JsonWriter(buffer);
+                    writer.WriteStartObject();
+                    writer.WriteString("source", FunctionTemplateSnapshotSource);
+                    writer.WriteNumber("version", FunctionTemplateSnapshotVersion);
+                    writer.WritePropertyName("template");
+                    template.Save(ref index, nodeIndices, moduleTypes, writer);
+
+                    var typeByIndex = new string?[moduleTypes.Count];
+                    foreach (var kvp in moduleTypes)
+                    {
+                        // AssemblyQualifiedName can be null for some runtime-generated/generic type forms.
+                        // Persist the strongest stable token we can resolve on import.
+                        typeByIndex[kvp.Value] = kvp.Key.AssemblyQualifiedName
+                            ?? kvp.Key.FullName
+                            ?? kvp.Key.Name;
+                    }
+
+                    writer.WritePropertyName("types");
+                    writer.WriteStartArray();
+                    foreach (var aqn in typeByIndex)
+                        writer.WriteStringValue(aqn);
+                    writer.WriteEndArray();
+                    writer.WriteEndObject();
+                    writer.Flush();
+
+                    snapshot = Encoding.UTF8.GetString(buffer.WrittenSpan);
+                    error = null;
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                snapshot = null;
+                error = new CommandError($"Failed to export function-template snapshot: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static void CollectTypesForFunctionTemplateSnapshot(
+            FunctionTemplate template,
+            Dictionary<Type, int> types)
+        {
+            foreach (var fp in template.FunctionParameters)
+                EnsureSnapshotType(types, fp.Type);
+
+            CollectTypesForBoundarySnapshot(template.InternalModules, types);
+        }
+
+        private static void CollectTypesForBoundarySnapshot(
+            Boundary boundary,
+            Dictionary<Type, int> types)
+        {
+            foreach (var node in boundary.Modules)
+                EnsureSnapshotType(types, node.Type);
+
+            foreach (var child in boundary.Boundaries)
+                CollectTypesForBoundarySnapshot(child, types);
+
+            foreach (var ft in boundary.FunctionTemplates)
+                CollectTypesForFunctionTemplateSnapshot(ft, types);
+        }
+
+        private static void EnsureSnapshotType(Dictionary<Type, int> types, Type? type)
+        {
+            if (type is null) return;
+            if (!types.ContainsKey(type))
+                types[type] = types.Count;
+        }
+
+        /// <summary>
+        /// Imports a function-template snapshot into <paramref name="targetBoundary"/> as a new
+        /// template, optionally overriding its name and location.
+        /// </summary>
+        public bool ImportFunctionTemplateSnapshot(
+            User user,
+            Boundary targetBoundary,
+            string snapshot,
+            string? nameOverride,
+            Rectangle? locationOverride,
+            [NotNullWhen(true)] out FunctionTemplate? template,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(targetBoundary);
+            ArgumentNullException.ThrowIfNull(snapshot);
+            template = null;
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                if (!TryLoadFunctionTemplateFromSnapshot(targetBoundary, snapshot, out var loadedTemplate, out var loadError))
+                {
+                    error = loadError;
+                    return false;
+                }
+
+                var desiredName = string.IsNullOrWhiteSpace(nameOverride)
+                    ? loadedTemplate!.Name
+                    : nameOverride!.Trim();
+                if (string.IsNullOrWhiteSpace(desiredName))
+                    desiredName = "Function Template";
+
+                desiredName = MakeUniqueFunctionTemplateName(desiredName);
+                loadedTemplate!.Name = desiredName;
+                loadedTemplate.SetParent(targetBoundary);
+                if (locationOverride.HasValue)
+                    loadedTemplate.SetLocation(locationOverride.Value);
+
+                if (!targetBoundary.AddFunctionTemplate(loadedTemplate, out error))
+                    return false;
+
+                template = loadedTemplate;
+                var captured = loadedTemplate;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    return (targetBoundary.RemoveFunctionTemplate(captured, out var e), e);
+                }, () =>
+                {
+                    return (targetBoundary.AddFunctionTemplate(captured, out var e), e);
+                }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Finds a function template in the current model system that is equivalent to the
+        /// supplied snapshot, ignoring layout coordinates and persisted identifiers.
+        /// </summary>
+        public bool TryFindEquivalentFunctionTemplateSnapshot(
+            string snapshot,
+            out FunctionTemplate? template,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(snapshot);
+            template = null;
+            lock (_sessionLock)
+            {
+                if (!TryCanonicalizeFunctionTemplateSnapshot(snapshot, out var targetCanonical, out error))
+                    return false;
+
+                foreach (var candidate in EnumerateAllFunctionTemplates())
+                {
+                    if (!ExportFunctionTemplateSnapshot(candidate, out var candidateSnapshot, out error))
+                        return false;
+
+                    if (!TryCanonicalizeFunctionTemplateSnapshot(candidateSnapshot!, out var candidateCanonical, out error))
+                        return false;
+
+                    if (string.Equals(targetCanonical, candidateCanonical, StringComparison.Ordinal))
+                    {
+                        template = candidate;
+                        error = null;
+                        return true;
+                    }
+                }
+
+                error = null;
+                return true;
+            }
+        }
+
+        private string MakeUniqueFunctionTemplateName(string baseName)
+        {
+            var name = baseName;
+            int suffix = 2;
+            while (ModelSystem.GlobalBoundary.ContainsFunctionTemplateName(name))
+                name = $"{baseName} ({suffix++})";
+            return name;
+        }
+
+        private IEnumerable<FunctionTemplate> EnumerateAllFunctionTemplates()
+        {
+            var stack = new Stack<Boundary>();
+            stack.Push(ModelSystem.GlobalBoundary);
+            while (stack.Count > 0)
+            {
+                var boundary = stack.Pop();
+                foreach (var template in boundary.FunctionTemplates)
+                {
+                    yield return template;
+                    stack.Push(template.InternalModules);
+                }
+                foreach (var child in boundary.Boundaries)
+                    stack.Push(child);
+            }
+        }
+
+        private bool TryLoadFunctionTemplateFromSnapshot(
+            Boundary targetBoundary,
+            string snapshot,
+            [NotNullWhen(true)] out FunctionTemplate? template,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            template = null;
+            try
+            {
+                using var document = JsonDocument.Parse(snapshot);
+                var root = document.RootElement;
+                if (!root.TryGetProperty("source", out var sourceEl)
+                    || sourceEl.GetString() != FunctionTemplateSnapshotSource)
+                {
+                    error = new CommandError("Invalid function-template snapshot source.");
+                    return false;
+                }
+                if (!root.TryGetProperty("template", out var templateEl)
+                    || !root.TryGetProperty("types", out var typesEl)
+                    || typesEl.ValueKind != JsonValueKind.Array)
+                {
+                    error = new CommandError("The function-template snapshot is missing required fields.");
+                    return false;
+                }
+
+                var typeLookup = new Dictionary<int, Type>();
+                int typeIndex = 0;
+                foreach (var typeNameEl in typesEl.EnumerateArray())
+                {
+                    var aqn = typeNameEl.GetString();
+                    if (string.IsNullOrWhiteSpace(aqn))
+                    {
+                        error = new CommandError($"Invalid type entry at index {typeIndex} in function-template snapshot.");
+                        return false;
+                    }
+                    var type = ResolveSnapshotTypeToken(aqn);
+                    if (type is null)
+                    {
+                        error = new CommandError($"Unable to resolve type '{aqn}' while importing a function-template snapshot.");
+                        return false;
+                    }
+                    typeLookup[typeIndex++] = type;
+                }
+
+                var nodeLookup = new Dictionary<int, Node>();
+                var scriptedParameters = new List<(Node toAssignTo, string parameterExpression)>();
+                var deferredGhostNodes = new List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)>();
+
+                var templateJson = templateEl.GetRawText();
+                var utf8 = Encoding.UTF8.GetBytes(templateJson);
+                var reader = new Utf8JsonReader(utf8);
+                if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                {
+                    error = new CommandError("Invalid function-template payload in snapshot.");
+                    return false;
+                }
+
+                string? loadError = null;
+                if (!FunctionTemplate.Load(GetModuleRepository(), typeLookup, nodeLookup, scriptedParameters,
+                    deferredGhostNodes, ref reader, targetBoundary, out template, ref loadError))
+                {
+                    error = new CommandError(loadError ?? "Unable to load function-template snapshot.");
+                    return false;
+                }
+
+                foreach (var (containedIn, refIndex, selfIndex, location, id) in deferredGhostNodes)
+                {
+                    if (!GhostNode.Resolve(nodeLookup, containedIn, refIndex, selfIndex, location, id, out var ghost, ref loadError))
+                    {
+                        continue;
+                    }
+                    containedIn.AddGhostNode(ghost!, out _);
+                }
+
+                foreach (var (toAssignTo, parameterExpression) in scriptedParameters)
+                {
+                    var localVars = toAssignTo.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+                    IList<Node> allVars = localVars is { Count: > 0 }
+                        ? localVars.Concat(ModelSystem.Variables).ToList()
+                        : (IList<Node>)ModelSystem.Variables;
+                    _ = toAssignTo.SetParameterExpression(allVars, parameterExpression, out _);
+                }
+
+                error = null;
+                return true;
+            }
+            catch (JsonException ex)
+            {
+                error = new CommandError($"Invalid function-template snapshot JSON: {ex.Message}");
+                return false;
+            }
+        }
+
+        private Type? ResolveSnapshotTypeToken(string token)
+        {
+            // First try runtime resolution (works for assembly-qualified names and many core types).
+            var direct = Type.GetType(token, throwOnError: false);
+            if (direct is not null)
+                return direct;
+
+            // Fallback: search known loaded module types and all discovered types.
+            foreach (var t in GetModuleRepository().LoadedModuleTypes)
+            {
+                if (string.Equals(t.AssemblyQualifiedName, token, StringComparison.Ordinal)
+                    || string.Equals(t.FullName, token, StringComparison.Ordinal)
+                    || string.Equals(t.Name, token, StringComparison.Ordinal))
+                {
+                    return t;
+                }
+            }
+
+            foreach (var t in _session.GetTypeRepository().Store)
+            {
+                if (string.Equals(t.AssemblyQualifiedName, token, StringComparison.Ordinal)
+                    || string.Equals(t.FullName, token, StringComparison.Ordinal)
+                    || string.Equals(t.Name, token, StringComparison.Ordinal))
+                {
+                    return t;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool TryCanonicalizeFunctionTemplateSnapshot(
+            string snapshot,
+            [NotNullWhen(true)] out string? canonical,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            canonical = null;
+            try
+            {
+                using var document = JsonDocument.Parse(snapshot);
+                var root = document.RootElement;
+                if (!root.TryGetProperty("source", out var sourceEl)
+                    || sourceEl.GetString() != FunctionTemplateSnapshotSource
+                    || !root.TryGetProperty("template", out var templateEl))
+                {
+                    error = new CommandError("Invalid function-template snapshot source.");
+                    return false;
+                }
+
+                var buffer = new ArrayBufferWriter<byte>();
+                using (var writer = new Utf8JsonWriter(buffer))
+                {
+                    WriteCanonicalJson(writer, templateEl);
+                    writer.Flush();
+                }
+
+                canonical = Encoding.UTF8.GetString(buffer.WrittenSpan);
+                error = null;
+                return true;
+            }
+            catch (JsonException ex)
+            {
+                error = new CommandError($"Invalid function-template snapshot JSON: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static void WriteCanonicalJson(Utf8JsonWriter writer, JsonElement element)
+        {
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    writer.WriteStartObject();
+                    var properties = element.EnumerateObject()
+                        .Where(p => !ShouldSkipCanonicalProperty(p.Name))
+                        .OrderBy(p => p.Name, StringComparer.Ordinal)
+                        .ToList();
+                    foreach (var property in properties)
+                    {
+                        writer.WritePropertyName(property.Name);
+                        WriteCanonicalJson(writer, property.Value);
+                    }
+                    writer.WriteEndObject();
+                    break;
+
+                case JsonValueKind.Array:
+                    writer.WriteStartArray();
+                    foreach (var item in element.EnumerateArray())
+                        WriteCanonicalJson(writer, item);
+                    writer.WriteEndArray();
+                    break;
+
+                default:
+                    element.WriteTo(writer);
+                    break;
+            }
+        }
+
+        private static bool ShouldSkipCanonicalProperty(string propertyName)
+        {
+            return propertyName is "Id"
+                or "X"
+                or "Y"
+                or "Width"
+                or "Height"
+                or "Location";
         }
 
         private void OnBufferPropertyChanged(object? sender, PropertyChangedEventArgs e)

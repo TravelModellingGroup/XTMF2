@@ -471,6 +471,12 @@ public sealed partial class ModelSystemCanvas : Control
     /// <summary>Cursor model-coordinate recorded at the start of each group-drag frame, used to compute per-frame deltas.</summary>
     private Point _groupDragLastPos;
 
+    /// <summary>
+    /// Last observed pointer position in model coordinates while the mouse is over this canvas.
+    /// Used to anchor paste operations near the cursor.
+    /// </summary>
+    private Point? _lastCanvasMousePos;
+
     // ── Copy / Paste clipboard ────────────────────────────────────────────
     // System clipboard is used — no in-memory clipboard field needed.
 

@@ -101,11 +101,18 @@ partial class ModelSystemCanvas
         }
         else if (e.Key == Key.V && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
-            // Paste at the centre of the current viewport.
-            var sv = GetScrollViewer();
-            double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width ?? Bounds.Width) / 2.0) / _scale;
-            double vy = ((sv?.Offset.Y ?? 0) + (sv?.Viewport.Height ?? Bounds.Height) / 2.0) / _scale;
-            _ = PasteElementsAsync(vx, vy);
+            if (_lastCanvasMousePos is { } mousePos)
+            {
+                _ = PasteElementsAsync(mousePos.X, mousePos.Y);
+            }
+            else
+            {
+                // Fallback: paste at the centre of the current viewport.
+                var sv = GetScrollViewer();
+                double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width ?? Bounds.Width) / 2.0) / _scale;
+                double vy = ((sv?.Offset.Y ?? 0) + (sv?.Viewport.Height ?? Bounds.Height) / 2.0) / _scale;
+                _ = PasteElementsAsync(vx, vy);
+            }
             e.Handled = true;
         }
         else if (e.Key == Key.M
@@ -255,6 +262,7 @@ partial class ModelSystemCanvas
         var point = e.GetCurrentPoint(this);
         var pos = point.Position;           // screen coords
         var mpos = ToCanvasPos(pos);         // model coords
+        _lastCanvasMousePos = mpos;
         bool isRightButton = point.Properties.IsRightButtonPressed;
         bool isCtrlLeft = !isRightButton
                              && point.Properties.IsLeftButtonPressed
@@ -640,6 +648,7 @@ partial class ModelSystemCanvas
         base.OnPointerMoved(e);
         var pos = e.GetCurrentPoint(this).Position;  // screen coords
         var mpos = ToCanvasPos(pos);                  // model coords
+        _lastCanvasMousePos = mpos;
 
         // Capture ScrollViewer-local position now for auto-scroll use later.
         var svForScroll = GetScrollViewer();

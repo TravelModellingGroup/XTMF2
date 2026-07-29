@@ -84,9 +84,21 @@ partial class ModelSystemCanvas
         if (_vm is null) return;
 
         // Build the set of top-level elements to copy.
-        IEnumerable<ICanvasElement> source = _multiSelection.Count > 0
-            ? _multiSelection
-            : (_vm.SelectedElement is { } sel ? [sel] : []);
+        // Prefer explicit selected element when it is not part of the current multi-selection;
+        // this avoids stale multi-select state causing an unexpected copy target.
+        IEnumerable<ICanvasElement> source;
+        if (_vm.SelectedElement is { } selected
+            && _multiSelection.Count > 0
+            && !_multiSelection.Contains(selected))
+        {
+            source = [selected];
+        }
+        else
+        {
+            source = _multiSelection.Count > 0
+                ? _multiSelection
+                : (_vm.SelectedElement is { } sel ? [sel] : []);
+        }
 
         var dtos = new List<CanvasElementDto>();
         // Tracks which selected real node maps to which index in dtos, so we can add cross-links.
@@ -94,58 +106,89 @@ partial class ModelSystemCanvas
 
         foreach (var el in source)
         {
-            CanvasElementDto dto;
-            switch (el)
+            try
             {
-                case NodeViewModel nvm when !nvm.IsInlined:
-                    nodeToDtoIndex[nvm.UnderlyingNode] = dtos.Count;
-                    dto = BuildNodeDto(nvm);
-                    break;
+                CanvasElementDto dto;
+                switch (el)
+                {
+                    case NodeViewModel nvm when !nvm.IsInlined:
+                        nodeToDtoIndex[nvm.UnderlyingNode] = dtos.Count;
+                        dto = BuildNodeDto(nvm);
+                        break;
 
-                case CommentBlockViewModel cb:
-                    dto = new CanvasElementDto(
-                        CanvasElementKind.CommentBlock,
-                        cb.Name,
-                        (float)cb.X, (float)cb.Y,
-                        (float)cb.Width, (float)cb.Height);
-                    break;
+                    case CommentBlockViewModel cb:
+                        dto = new CanvasElementDto(
+                            CanvasElementKind.CommentBlock,
+                            cb.Name,
+                            (float)cb.X, (float)cb.Y,
+                            (float)cb.Width, (float)cb.Height);
+                        break;
 
-                case FunctionTemplateViewModel ft:
-                    var fpDtos = ft.FunctionParameters
-                        .Select(fp => new FunctionParameterDto(
-                            fp.Name,
-                            fp.Type?.AssemblyQualifiedName))
-                        .ToList();
-                    dto = new CanvasElementDto(
+                    case FunctionTemplateViewModel ft:
+                        _vm.TryExportFunctionTemplateSnapshot(ft.UnderlyingTemplate, out var templateSnapshot);
+                        var fpDtos = ft.FunctionParameters
+                            .Select(fp => new FunctionParameterDto(
+                                fp.Name,
+                                fp.Type?.AssemblyQualifiedName))
+                            .ToList();
+                        dto = new CanvasElementDto(
+                            CanvasElementKind.FunctionTemplate,
+                            ft.Name,
+                            (float)ft.X, (float)ft.Y,
+                            (float)ft.Width, (float)ft.Height,
+                            EmbeddedTemplateSnapshot: templateSnapshot,
+                            FunctionParameters: fpDtos.Count > 0 ? fpDtos : null);
+                        break;
+
+                    case FunctionInstanceViewModel fi:
+                        _vm.TryExportFunctionTemplateSnapshot(fi.UnderlyingInstance.Template, out var instanceTemplateSnapshot);
+                        dto = new CanvasElementDto(
+                            CanvasElementKind.FunctionInstance,
+                            fi.Name,
+                            (float)fi.X, (float)fi.Y,
+                            (float)fi.Width, (float)fi.Height,
+                            TemplateName: fi.TemplateName,
+                            EmbeddedTemplateSnapshot: instanceTemplateSnapshot);
+                        break;
+
+                    case GhostNodeViewModel ghost:
+                        dto = new CanvasElementDto(
+                            CanvasElementKind.GhostNode,
+                            ghost.Name,
+                            (float)ghost.X, (float)ghost.Y,
+                            (float)ghost.Width, (float)ghost.Height,
+                            ReferencedNodeName: ghost.UnderlyingGhostNode.ReferencedNode.Name);
+                        break;
+
+                    default:
+                        continue; // StartViewModel and others are not copyable.
+                }
+                dtos.Add(dto);
+
+                // Ensure cross-model-system paste has a concrete FunctionTemplate element to materialize
+                // before FunctionInstance resolution. This carries full internals via the snapshot.
+                if (el is FunctionInstanceViewModel fivm
+                    && !string.IsNullOrWhiteSpace(dto.EmbeddedTemplateSnapshot)
+                    && !dtos.Any(existing => existing.Kind == CanvasElementKind.FunctionTemplate
+                        && string.Equals(existing.EmbeddedTemplateSnapshot, dto.EmbeddedTemplateSnapshot, System.StringComparison.Ordinal)))
+                {
+                    var t = fivm.UnderlyingInstance.Template;
+                    dtos.Add(new CanvasElementDto(
                         CanvasElementKind.FunctionTemplate,
-                        ft.Name,
-                        (float)ft.X, (float)ft.Y,
-                        (float)ft.Width, (float)ft.Height,
-                        FunctionParameters: fpDtos.Count > 0 ? fpDtos : null);
-                    break;
-
-                case FunctionInstanceViewModel fi:
-                    dto = new CanvasElementDto(
-                        CanvasElementKind.FunctionInstance,
-                        fi.Name,
-                        (float)fi.X, (float)fi.Y,
-                        (float)fi.Width, (float)fi.Height,
-                        TemplateName: fi.TemplateName);
-                    break;
-
-                case GhostNodeViewModel ghost:
-                    dto = new CanvasElementDto(
-                        CanvasElementKind.GhostNode,
-                        ghost.Name,
-                        (float)ghost.X, (float)ghost.Y,
-                        (float)ghost.Width, (float)ghost.Height,
-                        ReferencedNodeName: ghost.UnderlyingGhostNode.ReferencedNode.Name);
-                    break;
-
-                default:
-                    continue; // StartViewModel and others are not copyable.
+                        t.Name,
+                        t.Location.X,
+                        t.Location.Y,
+                        t.Location.Width,
+                        t.Location.Height,
+                        EmbeddedTemplateSnapshot: dto.EmbeddedTemplateSnapshot,
+                        IsTemplateCompanion: true));
+                }
             }
-            dtos.Add(dto);
+            catch
+            {
+                // Best-effort copy: skip malformed elements rather than aborting the whole copy action.
+                continue;
+            }
         }
 
         // Second pass: detect links where both origin and destination are in the copied set
