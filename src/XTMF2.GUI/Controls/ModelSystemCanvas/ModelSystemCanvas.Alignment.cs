@@ -241,22 +241,8 @@ partial class ModelSystemCanvas
     /// </summary>
     private void ClearMultiSelection()
     {
-        foreach (var el in _multiSelection)
-        {
-            el.IsSelected = false;
-        }
-        _multiSelection.Clear();
-        // Also clear IsSelected on the primary selected element (which may not be in
-        // _multiSelection when using single-select).  This must happen before zeroing
-        // SelectedElement so callers that immediately invoke SelectElementCommand or
-        // SelectLinkCommand don't skip the IsSelected reset (those commands guard on
-        // SelectedElement being non-null, but it will already be null after this method).
-        if (_vm?.SelectedElement is { } primary)
-        {
-            primary.IsSelected = false;
-        }
-        
-        _vm?.SelectedElement = null;
+        ClearElementMultiSelectionOnly();
+        ClearLinkMultiSelectionOnly();
     }
 
     /// <summary>Returns a <see cref="Rect"/> that always has non-negative width and height,

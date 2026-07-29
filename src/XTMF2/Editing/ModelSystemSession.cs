@@ -2453,6 +2453,79 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Set multiple links to the same disabled state as a single undoable action.
+        /// </summary>
+        /// <param name="user">The user issuing the command.</param>
+        /// <param name="links">Links to update. Duplicate entries are ignored.</param>
+        /// <param name="disabled">If links should be disabled (true) or enabled (false).</param>
+        /// <param name="error">An error message explaining why the operation failed.</param>
+        /// <returns>True if the operation completed successfully, false otherwise.</returns>
+        public bool SetLinksDisabled(User user, IEnumerable<Link> links, bool disabled,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(links);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var uniqueTargets = links
+                    .Where(l => l is not null)
+                    .Distinct()
+                    .ToList();
+
+                // No-op for empty input to simplify caller logic.
+                if (uniqueTargets.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var linksToChange = uniqueTargets
+                    .Where(l => l.IsDisabled != disabled)
+                    .ToList();
+
+                if (linksToChange.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var changedLinks = new List<Link>(linksToChange.Count);
+                var batch = new CommandBatch();
+
+                foreach (var link in linksToChange)
+                {
+                    if (!link.SetDisabled(disabled, out error))
+                    {
+                        // Best-effort rollback for links already changed in this operation.
+                        foreach (var changed in changedLinks)
+                            _ = changed.SetDisabled(!disabled, out _);
+                        return false;
+                    }
+
+                    changedLinks.Add(link);
+                    batch.Add(new Command(() =>
+                    {
+                        return (link.SetDisabled(!disabled, out var undoError), undoError);
+                    }, () =>
+                    {
+                        return (link.SetDisabled(disabled, out var redoError), redoError);
+                    }));
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Sets the orthogonal-routing flag on a link and records the change in the undo buffer.
         /// </summary>
         public bool SetLinkOrthogonal(User user, Link link, bool orthogonal, [NotNullWhen(false)] out CommandError? error)

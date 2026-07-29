@@ -463,6 +463,11 @@ public sealed partial class ModelSystemCanvas : Control
     /// <see cref="ICanvasElement.IsSelected"/> = <c>true</c>).
     /// </summary>
     private readonly HashSet<ICanvasElement> _multiSelection = new();
+    /// <summary>
+    /// All underlying links currently in the extended multi-selection.
+    /// We track model links (not view models) so MultiLink groups are treated as one unit.
+    /// </summary>
+    private readonly HashSet<Link> _multiLinkSelection = new();
     /// <summary>Cursor model-coordinate recorded at the start of each group-drag frame, used to compute per-frame deltas.</summary>
     private Point _groupDragLastPos;
 

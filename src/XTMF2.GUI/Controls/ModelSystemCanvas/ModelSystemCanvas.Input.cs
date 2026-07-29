@@ -92,14 +92,10 @@ partial class ModelSystemCanvas
         }
         else if (e.Key == Key.D && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
-            bool didToggle = TryToggleSelectedModulesDisabled();
+            bool toggledModules = TryToggleSelectedModulesDisabled();
+            bool toggledLinks = TryToggleSelectedLinkDisabled();
+            bool didToggle = toggledModules || toggledLinks;
             if (didToggle) InvalidateVisual();
-
-            if (!didToggle)
-            {
-                didToggle = TryToggleSelectedLinkDisabled();
-                if (didToggle) InvalidateVisual();
-            }
 
             e.Handled = didToggle;
         }
@@ -554,12 +550,41 @@ partial class ModelSystemCanvas
             }
             else
             {
-                // Ctrl+drag on empty space → begin a rubber-band selection rectangle.
-                ClearMultiSelection();
-                _vm.SelectElementCommand.Execute(null);
-                _selRectStart = mpos;
-                _selRectCurrent = mpos;
-                e.Pointer.Capture(this);
+                var linkHit = HitTestLink(mpos);
+                if (linkHit is not null)
+                {
+                    if (_multiLinkSelection.Count == 0
+                        && _vm.SelectedLink is { } existingLink
+                        && existingLink.UnderlyingLink != linkHit.UnderlyingLink)
+                    {
+                        _multiLinkSelection.Add(existingLink.UnderlyingLink);
+                    }
+
+                    if (_multiLinkSelection.Contains(linkHit.UnderlyingLink))
+                    {
+                        _multiLinkSelection.Remove(linkHit.UnderlyingLink);
+                    }
+                    else
+                    {
+                        _multiLinkSelection.Add(linkHit.UnderlyingLink);
+                    }
+
+                    LinkViewModel? primary = _vm.Links
+                        .FirstOrDefault(l => _multiLinkSelection.Contains(l.UnderlyingLink));
+                    _vm.SelectLinkCommand.Execute(primary);
+                    RefreshMultiElementSelectionVisuals();
+                    RefreshMultiLinkSelectionVisuals();
+                    InvalidateVisual();
+                }
+                else
+                {
+                    // Ctrl+drag on empty space → begin a rubber-band selection rectangle.
+                    ClearMultiSelection();
+                    _vm.SelectElementCommand.Execute(null);
+                    _selRectStart = mpos;
+                    _selRectCurrent = mpos;
+                    e.Pointer.Capture(this);
+                }
             }
 
             Focus();

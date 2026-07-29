@@ -28,6 +28,71 @@ namespace XTMF2.GUI.Controls;
 
 partial class ModelSystemCanvas
 {
+    private void SetCanvasLinkGroupSelected(Link underlyingLink, bool selected)
+    {
+        if (_vm is null) return;
+        foreach (var lvm in _vm.Links)
+        {
+            if (lvm.UnderlyingLink == underlyingLink)
+            {
+                lvm.IsSelected = selected;
+            }
+        }
+    }
+
+    private void RefreshMultiLinkSelectionVisuals()
+    {
+        if (_vm is null) return;
+        foreach (var lvm in _vm.Links)
+        {
+            lvm.IsSelected = _multiLinkSelection.Contains(lvm.UnderlyingLink);
+        }
+    }
+
+    private void RefreshMultiElementSelectionVisuals()
+    {
+        foreach (var el in _multiSelection)
+        {
+            el.IsSelected = true;
+        }
+    }
+
+    private void ClearLinkMultiSelectionOnly()
+    {
+        if (_vm is null)
+        {
+            _multiLinkSelection.Clear();
+            return;
+        }
+
+        foreach (var link in _multiLinkSelection)
+        {
+            SetCanvasLinkGroupSelected(link, false);
+        }
+        
+        _multiLinkSelection.Clear();
+
+        if (_vm.SelectedLink is not null)
+        {
+            _vm.SelectLinkCommand.Execute(null);
+        }
+    }
+
+    private void ClearElementMultiSelectionOnly()
+    {
+        foreach (var el in _multiSelection)
+        {
+            el.IsSelected = false;
+        }
+        _multiSelection.Clear();
+
+        if (_vm?.SelectedElement is { } primary)
+        {
+            primary.IsSelected = false;
+            _vm.SelectedElement = null;
+        }
+    }
+
     private static Node? GetModuleTargetFromElement(ICanvasElement? element)
         => element switch
         {
@@ -35,6 +100,17 @@ partial class ModelSystemCanvas
             FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
             _ => null,
         };
+
+    private List<Link> GetDisableTargetsForClickedLink(LinkViewModel clickedLink)
+    {
+        if (_multiLinkSelection.Count <= 1 || !_multiLinkSelection.Contains(clickedLink.UnderlyingLink))
+            return new List<Link> { clickedLink.UnderlyingLink };
+
+        var targets = _multiLinkSelection.ToList();
+        if (targets.Count == 0)
+            targets.Add(clickedLink.UnderlyingLink);
+        return targets;
+    }
 
     private List<Node> GetDisableTargetsForClickedElement(ICanvasElement clickedElement, Node clickedNode)
     {
@@ -93,11 +169,14 @@ partial class ModelSystemCanvas
     }
 
     private bool TrySetDisabledForLink(Link target, bool nextDisabled, string defaultError)
+        => TrySetDisabledForLinks(new[] { target }, nextDisabled, defaultError);
+
+    private bool TrySetDisabledForLinks(IReadOnlyList<Link> targets, bool nextDisabled, string defaultError)
     {
-        if (_vm?.Session is null || _vm?.User is null)
+        if (_vm?.Session is null || _vm?.User is null || targets.Count == 0)
             return false;
 
-        if (!_vm.Session.SetLinkDisabled(_vm.User, target, nextDisabled, out var err))
+        if (!_vm.Session.SetLinksDisabled(_vm.User, targets, nextDisabled, out var err))
         {
             _vm.ShowToast(err?.Message ?? defaultError, isError: true, durationMs: 6000);
         }
@@ -107,11 +186,22 @@ partial class ModelSystemCanvas
 
     private bool TryToggleSelectedLinkDisabled()
     {
-        if (_vm?.SelectedLink is not { } selectedLink)
+        Link? selectedTarget = _vm?.SelectedLink?.UnderlyingLink;
+        var targets = _multiLinkSelection.Count > 0
+            ? _multiLinkSelection.ToList()
+            : selectedTarget is not null
+                ? new List<Link> { selectedTarget }
+                : new List<Link>();
+
+        if (targets.Count == 0)
             return false;
 
-        bool nextDisabled = !selectedLink.UnderlyingLink.IsDisabled;
-        return TrySetDisabledForLink(selectedLink.UnderlyingLink, nextDisabled,
+        Link anchor = selectedTarget is not null && targets.Contains(selectedTarget)
+            ? selectedTarget
+            : targets[0];
+
+        bool nextDisabled = !anchor.IsDisabled;
+        return TrySetDisabledForLinks(targets, nextDisabled,
             "Unable to change link disabled state.");
     }
 
@@ -316,14 +406,17 @@ partial class ModelSystemCanvas
             routingItem.Click += (_, _) => vm.ToggleLinkOrthogonal(capturedRoutingLink.UnderlyingLink);
             menu.Items.Add(routingItem);
 
+            var disableTargets = GetDisableTargetsForClickedLink(link);
             bool nextDisabled = !link.UnderlyingLink.IsDisabled;
             var toggleDisableItem = new MenuItem
             {
-                Header = nextDisabled ? "Disable Link" : "Enable Link"
+                Header = disableTargets.Count > 1
+                    ? (nextDisabled ? $"Disable {disableTargets.Count} Links" : $"Enable {disableTargets.Count} Links")
+                    : (nextDisabled ? "Disable Link" : "Enable Link")
             };
             toggleDisableItem.Click += (_, _) =>
             {
-                TrySetDisabledForLink(link.UnderlyingLink, nextDisabled,
+                TrySetDisabledForLinks(disableTargets, nextDisabled,
                     "Unable to change link disabled state.");
                 InvalidateVisual();
             };
