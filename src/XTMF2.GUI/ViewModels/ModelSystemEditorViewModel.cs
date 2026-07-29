@@ -3550,8 +3550,20 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Clear the primary selection so the property panel de-focuses immediately.
         SelectElement(null);
 
+        // Dependency-safe ordering: remove instances before templates so template
+        // removal is not blocked by still-referencing instances.
+        var orderedElements = elements
+            .OrderBy(el => el switch
+            {
+                FunctionInstanceViewModel => 0,
+                FunctionParameterViewModel => 1,
+                FunctionTemplateViewModel => 2,
+                _ => 3,
+            })
+            .ToList();
+
         CommandError? firstError = null;
-        foreach (var el in elements)
+        foreach (var el in orderedElements)
         {
             CommandError? err = null;
             bool ok = el switch
@@ -3559,6 +3571,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 NodeViewModel         nvm  => Session.RemoveNode(User, nvm.UnderlyingNode, out err),
                 StartViewModel        svm  => Session.RemoveStart(User, svm.UnderlyingStart, out err),
                 CommentBlockViewModel cvm  => Session.RemoveCommentBlock(User, _currentBoundary, cvm.UnderlyingBlock, out err),
+                FunctionInstanceViewModel fivm => Session.RemoveFunctionInstance(User, fivm.UnderlyingInstance, out err),
                 FunctionTemplateViewModel ftvm => Session.RemoveFunctionTemplate(User, _currentBoundary, ftvm.UnderlyingTemplate, out err),
                 FunctionParameterViewModel fpvm when _currentFunctionTemplate is not null
                     => Session.RemoveFunctionParameter(User, _currentFunctionTemplate.UnderlyingTemplate, fpvm.UnderlyingParameter, out err),
