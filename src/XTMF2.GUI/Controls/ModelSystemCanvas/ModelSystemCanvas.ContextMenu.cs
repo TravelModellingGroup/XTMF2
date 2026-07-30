@@ -28,6 +28,183 @@ namespace XTMF2.GUI.Controls;
 
 partial class ModelSystemCanvas
 {
+    private void SetCanvasLinkGroupSelected(Link underlyingLink, bool selected)
+    {
+        if (_vm is null) return;
+        foreach (var lvm in _vm.Links)
+        {
+            if (lvm.UnderlyingLink == underlyingLink)
+            {
+                lvm.IsSelected = selected;
+            }
+        }
+    }
+
+    private void RefreshMultiLinkSelectionVisuals()
+    {
+        if (_vm is null) return;
+        foreach (var lvm in _vm.Links)
+        {
+            lvm.IsSelected = _multiLinkSelection.Contains(lvm.UnderlyingLink);
+        }
+    }
+
+    private void RefreshMultiElementSelectionVisuals()
+    {
+        foreach (var el in _multiSelection)
+        {
+            el.IsSelected = true;
+        }
+    }
+
+    private void ClearLinkMultiSelectionOnly()
+    {
+        if (_vm is null)
+        {
+            _multiLinkSelection.Clear();
+            return;
+        }
+
+        foreach (var link in _multiLinkSelection)
+        {
+            SetCanvasLinkGroupSelected(link, false);
+        }
+        
+        _multiLinkSelection.Clear();
+
+        if (_vm.SelectedLink is not null)
+        {
+            _vm.SelectLinkCommand.Execute(null);
+        }
+    }
+
+    private void ClearElementMultiSelectionOnly()
+    {
+        foreach (var el in _multiSelection)
+        {
+            el.IsSelected = false;
+        }
+        _multiSelection.Clear();
+
+        if (_vm?.SelectedElement is { } primary)
+        {
+            primary.IsSelected = false;
+            _vm.SelectedElement = null;
+        }
+    }
+
+    private static Node? GetModuleTargetFromElement(ICanvasElement? element)
+        => element switch
+        {
+            NodeViewModel nvm => nvm.UnderlyingNode,
+            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+            _ => null,
+        };
+
+    private List<Link> GetDisableTargetsForClickedLink(LinkViewModel clickedLink)
+    {
+        if (_multiLinkSelection.Count <= 1 || !_multiLinkSelection.Contains(clickedLink.UnderlyingLink))
+            return new List<Link> { clickedLink.UnderlyingLink };
+
+        var targets = _multiLinkSelection.ToList();
+        if (targets.Count == 0)
+            targets.Add(clickedLink.UnderlyingLink);
+        return targets;
+    }
+
+    private List<Node> GetDisableTargetsForClickedElement(ICanvasElement clickedElement, Node clickedNode)
+    {
+        if (_multiSelection.Count <= 1 || !_multiSelection.Contains(clickedElement))
+            return new List<Node> { clickedNode };
+
+        var targets = _multiSelection
+            .Select(GetModuleTargetFromElement)
+            .Where(n => n is not null)
+            .Distinct()
+            .Cast<Node>()
+            .ToList();
+
+        if (targets.Count == 0)
+            targets.Add(clickedNode);
+
+        return targets;
+    }
+
+    private bool TrySetDisabledForModules(IReadOnlyList<Node> targets, bool nextDisabled, string defaultError)
+    {
+        if (_vm?.Session is null || _vm?.User is null || targets.Count == 0)
+            return false;
+
+        if (!_vm.Session.SetNodesDisabled(_vm.User, targets, nextDisabled, out var err))
+        {
+            _vm.ShowToast(err?.Message ?? defaultError, isError: true, durationMs: 6000);
+        }
+
+        return true;
+    }
+
+    private bool TryToggleSelectedModulesDisabled()
+    {
+        Node? selectedTarget = GetModuleTargetFromElement(_vm?.SelectedElement);
+
+        List<Node> targets = _multiSelection.Count > 1
+            ? _multiSelection.Select(GetModuleTargetFromElement)
+                .Where(n => n is not null)
+                .Distinct()
+                .Cast<Node>()
+                .ToList()
+            : selectedTarget is not null
+                ? new List<Node> { selectedTarget }
+                : new List<Node>();
+
+        if (targets.Count == 0)
+            return false;
+
+        Node anchor = selectedTarget is not null && targets.Contains(selectedTarget)
+            ? selectedTarget
+            : targets[0];
+
+        bool nextDisabled = !anchor.IsDisabled;
+        return TrySetDisabledForModules(targets, nextDisabled, "Unable to change disabled state.");
+    }
+
+    private bool TrySetDisabledForLink(Link target, bool nextDisabled, string defaultError)
+        => TrySetDisabledForLinks(new[] { target }, nextDisabled, defaultError);
+
+    private bool TrySetDisabledForLinks(IReadOnlyList<Link> targets, bool nextDisabled, string defaultError)
+    {
+        if (_vm?.Session is null || _vm?.User is null || targets.Count == 0)
+            return false;
+
+        if (!_vm.Session.SetLinksDisabled(_vm.User, targets, nextDisabled, out var err))
+        {
+            _vm.ShowToast(err?.Message ?? defaultError, isError: true, durationMs: 6000);
+        }
+
+        return true;
+    }
+
+    private bool TryToggleSelectedLinkDisabled()
+    {
+        Link? selectedTarget = _vm?.SelectedLink?.UnderlyingLink;
+        var targets = _multiLinkSelection.Count > 0
+            ? _multiLinkSelection.ToList()
+            : selectedTarget is not null
+                ? new List<Link> { selectedTarget }
+                : new List<Link>();
+
+        if (targets.Count == 0)
+            return false;
+
+        Link anchor = selectedTarget is not null && targets.Contains(selectedTarget)
+            ? selectedTarget
+            : targets[0];
+
+        bool nextDisabled = !anchor.IsDisabled;
+        return TrySetDisabledForLinks(targets, nextDisabled,
+            "Unable to change link disabled state.");
+    }
+
     private void ShowContextMenu(ICanvasElement? element, LinkViewModel? link)
     {
         if (_vm is null) return;
@@ -229,18 +406,18 @@ partial class ModelSystemCanvas
             routingItem.Click += (_, _) => vm.ToggleLinkOrthogonal(capturedRoutingLink.UnderlyingLink);
             menu.Items.Add(routingItem);
 
+            var disableTargets = GetDisableTargetsForClickedLink(link);
             bool nextDisabled = !link.UnderlyingLink.IsDisabled;
             var toggleDisableItem = new MenuItem
             {
-                Header = nextDisabled ? "Disable Link" : "Enable Link"
+                Header = disableTargets.Count > 1
+                    ? (nextDisabled ? $"Disable {disableTargets.Count} Links" : $"Enable {disableTargets.Count} Links")
+                    : (nextDisabled ? "Disable Link" : "Enable Link")
             };
             toggleDisableItem.Click += (_, _) =>
             {
-                if (!vm.Session.SetLinkDisabled(vm.User, link.UnderlyingLink, nextDisabled, out var err))
-                {
-                    vm.ShowToast(err?.Message ?? "Unable to change link disabled state.",
-                        isError: true, durationMs: 6000);
-                }
+                TrySetDisabledForLinks(disableTargets, nextDisabled,
+                    "Unable to change link disabled state.");
                 InvalidateVisual();
             };
             menu.Items.Add(toggleDisableItem);
@@ -271,18 +448,17 @@ partial class ModelSystemCanvas
         // ── Enable/Disable regular nodes ─────────────────────────────────
         if (element is NodeViewModel disableNodeVm)
         {
+            var disableTargets = GetDisableTargetsForClickedElement(disableNodeVm, disableNodeVm.UnderlyingNode);
             bool nextDisabled = !disableNodeVm.UnderlyingNode.IsDisabled;
             var disableNodeItem = new MenuItem
             {
-                Header = nextDisabled ? "Disable Node" : "Enable Node"
+                Header = disableTargets.Count > 1
+                    ? (nextDisabled ? $"Disable {disableTargets.Count} Modules" : $"Enable {disableTargets.Count} Modules")
+                    : (nextDisabled ? "Disable Node" : "Enable Node")
             };
             disableNodeItem.Click += (_, _) =>
             {
-                if (!vm.Session.SetNodeDisabled(vm.User, disableNodeVm.UnderlyingNode, nextDisabled, out var err))
-                {
-                    vm.ShowToast(err?.Message ?? "Unable to change node disabled state.",
-                        isError: true, durationMs: 6000);
-                }
+                TrySetDisabledForModules(disableTargets, nextDisabled, "Unable to change node disabled state.");
                 InvalidateVisual();
             };
             menu.Items.Add(disableNodeItem);
@@ -569,18 +745,17 @@ partial class ModelSystemCanvas
                 InvalidateAndMeasure();
             };
 
+            var disableTargets = GetDisableTargetsForClickedElement(capturedFi, capturedFi.UnderlyingInstance);
             bool nextDisabled = !capturedFi.UnderlyingInstance.IsDisabled;
             var disableFiItem = new MenuItem
             {
-                Header = nextDisabled ? "Disable Function Instance" : "Enable Function Instance"
+                Header = disableTargets.Count > 1
+                    ? (nextDisabled ? $"Disable {disableTargets.Count} Modules" : $"Enable {disableTargets.Count} Modules")
+                    : (nextDisabled ? "Disable Function Instance" : "Enable Function Instance")
             };
             disableFiItem.Click += (_, _) =>
             {
-                if (!vm.Session.SetNodeDisabled(vm.User, capturedFi.UnderlyingInstance, nextDisabled, out var err))
-                {
-                    vm.ShowToast(err?.Message ?? "Unable to change function instance disabled state.",
-                        isError: true, durationMs: 6000);
-                }
+                TrySetDisabledForModules(disableTargets, nextDisabled, "Unable to change function instance disabled state.");
                 InvalidateVisual();
             };
 

@@ -79,9 +79,9 @@ partial class ModelSystemCanvas
                 e.Handled = true;
             }
         }
-        else if (e.Key == Key.Left && (e.KeyModifiers & KeyModifiers.Alt) != 0)
+        else if (e.Key == Key.Up && (e.KeyModifiers & KeyModifiers.Alt) != 0)
         {
-            // Alt+Left: navigate to parent boundary / exit function template.
+            // Alt+Up: navigate to parent boundary / exit function template.
             _vm?.NavigateUpCommand.Execute(null);
             e.Handled = true;
         }
@@ -92,86 +92,27 @@ partial class ModelSystemCanvas
         }
         else if (e.Key == Key.D && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
-            bool didToggle = false;
-            int failed = 0;
-
-            if (_multiSelection.Count > 1)
-            {
-                foreach (var element in _multiSelection)
-                {
-                    Node? target = element switch
-                    {
-                        NodeViewModel nvm => nvm.UnderlyingNode,
-                        FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
-                        _ => null,
-                    };
-                    if (target is null) continue;
-
-                    didToggle = true;
-                    bool nextDisabled = !target.IsDisabled;
-                    if (_vm?.Session is not null && _vm?.User is not null)
-                    {
-                        if (!_vm.Session.SetNodeDisabled(_vm.User, target, nextDisabled, out var err))
-                        {
-                            failed++;
-                            _vm.ShowToast(err?.Message ?? "Unable to change disabled state.",
-                                isError: true, durationMs: 6000);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                Node? target = _vm?.SelectedElement switch
-                {
-                    NodeViewModel nvm => nvm.UnderlyingNode,
-                    FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
-                    _ => null,
-                };
-
-                if (target is not null && _vm?.Session is not null && _vm?.User is not null)
-                {
-                    didToggle = true;
-                    bool nextDisabled = !target.IsDisabled;
-                    if (!_vm.Session.SetNodeDisabled(_vm.User, target, nextDisabled, out var err))
-                    {
-                        failed++;
-                        _vm.ShowToast(err?.Message ?? "Unable to change disabled state.",
-                            isError: true, durationMs: 6000);
-                    }
-                }
-            }
-
-            if (didToggle && failed == 0)
-            {
-                InvalidateVisual();
-            }
-
-            if (!didToggle && _vm?.SelectedLink is { } selectedLink && _vm?.Session is not null && _vm?.User is not null)
-            {
-                didToggle = true;
-                bool nextDisabled = !selectedLink.UnderlyingLink.IsDisabled;
-                if (!_vm.Session.SetLinkDisabled(_vm.User, selectedLink.UnderlyingLink, nextDisabled, out var err))
-                {
-                    failed++;
-                    _vm.ShowToast(err?.Message ?? "Unable to change link disabled state.",
-                        isError: true, durationMs: 6000);
-                }
-                else
-                {
-                    InvalidateVisual();
-                }
-            }
+            bool toggledModules = TryToggleSelectedModulesDisabled();
+            bool toggledLinks = TryToggleSelectedLinkDisabled();
+            bool didToggle = toggledModules || toggledLinks;
+            if (didToggle) InvalidateVisual();
 
             e.Handled = didToggle;
         }
         else if (e.Key == Key.V && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
-            // Paste at the centre of the current viewport.
-            var sv = GetScrollViewer();
-            double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width ?? Bounds.Width) / 2.0) / _scale;
-            double vy = ((sv?.Offset.Y ?? 0) + (sv?.Viewport.Height ?? Bounds.Height) / 2.0) / _scale;
-            _ = PasteElementsAsync(vx, vy);
+            if (_lastCanvasMousePos is { } mousePos)
+            {
+                _ = PasteElementsAsync(mousePos.X, mousePos.Y);
+            }
+            else
+            {
+                // Fallback: paste at the centre of the current viewport.
+                var sv = GetScrollViewer();
+                double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width ?? Bounds.Width) / 2.0) / _scale;
+                double vy = ((sv?.Offset.Y ?? 0) + (sv?.Viewport.Height ?? Bounds.Height) / 2.0) / _scale;
+                _ = PasteElementsAsync(vx, vy);
+            }
             e.Handled = true;
         }
         else if (e.Key == Key.M
@@ -321,6 +262,7 @@ partial class ModelSystemCanvas
         var point = e.GetCurrentPoint(this);
         var pos = point.Position;           // screen coords
         var mpos = ToCanvasPos(pos);         // model coords
+        _lastCanvasMousePos = mpos;
         bool isRightButton = point.Properties.IsRightButtonPressed;
         bool isCtrlLeft = !isRightButton
                              && point.Properties.IsLeftButtonPressed
@@ -616,12 +558,41 @@ partial class ModelSystemCanvas
             }
             else
             {
-                // Ctrl+drag on empty space → begin a rubber-band selection rectangle.
-                ClearMultiSelection();
-                _vm.SelectElementCommand.Execute(null);
-                _selRectStart = mpos;
-                _selRectCurrent = mpos;
-                e.Pointer.Capture(this);
+                var linkHit = HitTestLink(mpos);
+                if (linkHit is not null)
+                {
+                    if (_multiLinkSelection.Count == 0
+                        && _vm.SelectedLink is { } existingLink
+                        && existingLink.UnderlyingLink != linkHit.UnderlyingLink)
+                    {
+                        _multiLinkSelection.Add(existingLink.UnderlyingLink);
+                    }
+
+                    if (_multiLinkSelection.Contains(linkHit.UnderlyingLink))
+                    {
+                        _multiLinkSelection.Remove(linkHit.UnderlyingLink);
+                    }
+                    else
+                    {
+                        _multiLinkSelection.Add(linkHit.UnderlyingLink);
+                    }
+
+                    LinkViewModel? primary = _vm.Links
+                        .FirstOrDefault(l => _multiLinkSelection.Contains(l.UnderlyingLink));
+                    _vm.SelectLinkCommand.Execute(primary);
+                    RefreshMultiElementSelectionVisuals();
+                    RefreshMultiLinkSelectionVisuals();
+                    InvalidateVisual();
+                }
+                else
+                {
+                    // Ctrl+drag on empty space → begin a rubber-band selection rectangle.
+                    ClearMultiSelection();
+                    _vm.SelectElementCommand.Execute(null);
+                    _selRectStart = mpos;
+                    _selRectCurrent = mpos;
+                    e.Pointer.Capture(this);
+                }
             }
 
             Focus();
@@ -677,6 +648,7 @@ partial class ModelSystemCanvas
         base.OnPointerMoved(e);
         var pos = e.GetCurrentPoint(this).Position;  // screen coords
         var mpos = ToCanvasPos(pos);                  // model coords
+        _lastCanvasMousePos = mpos;
 
         // Capture ScrollViewer-local position now for auto-scroll use later.
         var svForScroll = GetScrollViewer();

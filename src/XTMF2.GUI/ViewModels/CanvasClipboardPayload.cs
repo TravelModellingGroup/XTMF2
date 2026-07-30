@@ -73,6 +73,13 @@ internal sealed record CanvasClipboardPayload(
 /// Name of the referenced function template.
 /// Applies to <see cref="CanvasElementKind.FunctionInstance"/>.
 /// </param>
+/// <param name="EmbeddedTemplateSnapshot">
+/// Full snapshot of the referenced <see cref="CanvasElementKind.FunctionTemplate"/>,
+/// including internal nodes/links/entry-node/local variables. Used for cross-model-system
+/// paste and dedupe checks.
+/// Applies to <see cref="CanvasElementKind.FunctionTemplate"/> and
+/// <see cref="CanvasElementKind.FunctionInstance"/>.
+/// </param>
 /// <param name="ReferencedNodeName">
 /// Name of the real node that the ghost represents.
 /// Applies to <see cref="CanvasElementKind.GhostNode"/>.
@@ -86,6 +93,12 @@ internal sealed record CanvasClipboardPayload(
 /// part of the same copy operation.  Destination is identified by the element's
 /// <see cref="CanvasElementDto.Name"/> within the same payload.
 /// </param>
+/// <param name="IsTemplateCompanion">
+/// <c>true</c> when this <see cref="CanvasElementKind.FunctionTemplate"/> entry was
+/// auto-inserted as a companion payload for a copied
+/// <see cref="CanvasElementKind.FunctionInstance"/>, rather than explicitly copied by the user.
+/// Companion templates should prefer reusing an equivalent existing template on paste.
+/// </param>
 internal sealed record CanvasElementDto(
     [property: JsonPropertyName("kind")]               string  Kind,
     [property: JsonPropertyName("name")]               string  Name,
@@ -98,9 +111,11 @@ internal sealed record CanvasElementDto(
     [property: JsonPropertyName("isScriptedParam")]    bool                 IsScriptedParam     = false,
     [property: JsonPropertyName("inlinedChildren")]    List<InlinedChildDto>? InlinedChildren   = null,
     [property: JsonPropertyName("templateName")]       string?              TemplateName        = null,
+    [property: JsonPropertyName("embeddedTemplateSnapshot")] string?         EmbeddedTemplateSnapshot = null,
     [property: JsonPropertyName("referencedNodeName")] string?             ReferencedNodeName  = null,
     [property: JsonPropertyName("functionParameters")] List<FunctionParameterDto>? FunctionParameters = null,
-    [property: JsonPropertyName("crossLinks")]         List<CrossNodeLinkDto>? CrossLinks        = null
+    [property: JsonPropertyName("crossLinks")]         List<CrossNodeLinkDto>? CrossLinks        = null,
+    [property: JsonPropertyName("isTemplateCompanion")] bool               IsTemplateCompanion = false
 );
 
 /// <summary>

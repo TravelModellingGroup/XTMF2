@@ -318,6 +318,82 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void DisableMultipleLinksIsSingleUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("DisableMultipleLinksIsSingleUndoRedo", (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartA", Rectangle.Hidden,
+                    out Start startA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartB", Rectangle.Hidden,
+                    out Start startB, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SinkA", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sinkA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SinkB", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sinkB, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(user, startA, startA.Hooks[0], sinkA!, out var linkA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, startB, startB.Hooks[0], sinkB!, out var linkB, out error), error?.Message);
+
+                Assert.IsFalse(linkA!.IsDisabled);
+                Assert.IsFalse(linkB!.IsDisabled);
+
+                Assert.IsTrue(msSession.SetLinksDisabled(user, new[] { linkA, linkB }, true, out error), error?.Message);
+                Assert.IsTrue(linkA.IsDisabled, "LinkA was not disabled by the bulk operation.");
+                Assert.IsTrue(linkB.IsDisabled, "LinkB was not disabled by the bulk operation.");
+
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
+                Assert.IsFalse(linkA.IsDisabled, "LinkA was not restored by a single undo.");
+                Assert.IsFalse(linkB.IsDisabled, "LinkB was not restored by a single undo.");
+
+                Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
+                Assert.IsTrue(linkA.IsDisabled, "LinkA was not disabled by a single redo.");
+                Assert.IsTrue(linkB.IsDisabled, "LinkB was not disabled by a single redo.");
+            });
+        }
+
+        [TestMethod]
+        public void EnableMultipleLinksIsSingleUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("EnableMultipleLinksIsSingleUndoRedo", (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartA", Rectangle.Hidden,
+                    out Start startA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartB", Rectangle.Hidden,
+                    out Start startB, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SinkA", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sinkA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SinkB", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sinkB, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(user, startA, startA.Hooks[0], sinkA!, out var linkA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, startB, startB.Hooks[0], sinkB!, out var linkB, out error), error?.Message);
+
+                Assert.IsTrue(msSession.SetLinkDisabled(user, linkA!, true, out error), error?.Message);
+                Assert.IsTrue(msSession.SetLinkDisabled(user, linkB!, true, out error), error?.Message);
+                Assert.IsTrue(linkA.IsDisabled);
+                Assert.IsTrue(linkB.IsDisabled);
+
+                Assert.IsTrue(msSession.SetLinksDisabled(user, new[] { linkA, linkB }, false, out error), error?.Message);
+                Assert.IsFalse(linkA.IsDisabled, "LinkA was not enabled by the bulk operation.");
+                Assert.IsFalse(linkB.IsDisabled, "LinkB was not enabled by the bulk operation.");
+
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
+                Assert.IsTrue(linkA.IsDisabled, "LinkA disabled state was not restored by a single undo.");
+                Assert.IsTrue(linkB.IsDisabled, "LinkB disabled state was not restored by a single undo.");
+
+                Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
+                Assert.IsFalse(linkA.IsDisabled, "LinkA was not enabled by a single redo.");
+                Assert.IsFalse(linkB.IsDisabled, "LinkB was not enabled by a single redo.");
+            });
+        }
+
+        [TestMethod]
         public void DisableLinkWithBadUser()
         {
             TestHelper.RunInModelSystemContext("DisableLinkWithBadUser", (user, unauthorizedUser, pSession, msSession) =>

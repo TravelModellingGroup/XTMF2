@@ -3550,8 +3550,20 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Clear the primary selection so the property panel de-focuses immediately.
         SelectElement(null);
 
+        // Dependency-safe ordering: remove instances before templates so template
+        // removal is not blocked by still-referencing instances.
+        var orderedElements = elements
+            .OrderBy(el => el switch
+            {
+                FunctionInstanceViewModel => 0,
+                FunctionParameterViewModel => 1,
+                FunctionTemplateViewModel => 2,
+                _ => 3,
+            })
+            .ToList();
+
         CommandError? firstError = null;
-        foreach (var el in elements)
+        foreach (var el in orderedElements)
         {
             CommandError? err = null;
             bool ok = el switch
@@ -3559,6 +3571,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 NodeViewModel         nvm  => Session.RemoveNode(User, nvm.UnderlyingNode, out err),
                 StartViewModel        svm  => Session.RemoveStart(User, svm.UnderlyingStart, out err),
                 CommentBlockViewModel cvm  => Session.RemoveCommentBlock(User, _currentBoundary, cvm.UnderlyingBlock, out err),
+                FunctionInstanceViewModel fivm => Session.RemoveFunctionInstance(User, fivm.UnderlyingInstance, out err),
                 FunctionTemplateViewModel ftvm => Session.RemoveFunctionTemplate(User, _currentBoundary, ftvm.UnderlyingTemplate, out err),
                 FunctionParameterViewModel fpvm when _currentFunctionTemplate is not null
                     => Session.RemoveFunctionParameter(User, _currentFunctionTemplate.UnderlyingTemplate, fpvm.UnderlyingParameter, out err),
@@ -3980,11 +3993,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Session.BeginBatch();
         try
         {
+            var pastedTemplatesBySnapshot = new Dictionary<string, FunctionTemplate>(StringComparer.Ordinal);
+
             // Paste FunctionTemplates first so FunctionInstances that reference them can be resolved.
             foreach (var element in payload.Elements)
             {
                 if (element.Kind != CanvasElementKind.FunctionTemplate) continue;
-                PasteFunctionTemplate(element, dx, dy);
+                var pastedTemplate = PasteFunctionTemplate(element, dx, dy);
+                if (pastedTemplate is not null && !string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot))
+                    pastedTemplatesBySnapshot[element.EmbeddedTemplateSnapshot] = pastedTemplate;
             }
 
             // Pass 1: create all nodes (without linking inlined children yet).
@@ -4008,7 +4025,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                         break;
 
                     case CanvasElementKind.FunctionInstance:
-                        PasteFunctionInstance(element, dx, dy);
+                        PasteFunctionInstance(element, dx, dy, pastedTemplatesBySnapshot);
                         break;
 
                     case CanvasElementKind.GhostNode:
@@ -4048,6 +4065,20 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         finally
         {
             Session.CommitBatch();
+        }
+    }
+
+    internal bool TryExportFunctionTemplateSnapshot(FunctionTemplate template, out string? snapshot)
+    {
+        snapshot = null;
+        try
+        {
+            return Session.ExportFunctionTemplateSnapshot(template, out snapshot, out _);
+        }
+        catch
+        {
+            snapshot = null;
+            return false;
         }
     }
 
@@ -4131,20 +4162,45 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Session.AddCommentBlock(User, _currentBoundary, element.Name, loc, out _, out _);
     }
 
-    private void PasteFunctionTemplate(CanvasElementDto element, float dx, float dy)
+    private FunctionTemplate? PasteFunctionTemplate(CanvasElementDto element, float dx, float dy)
     {
-        // Generate a unique name to avoid collision in the target boundary.
+        float w = element.W > 0 ? element.W : 220f;
+        float h = element.H > 0 ? element.H : 140f;
+        var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+
+        if (!string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot))
+        {
+            // Companion template entries (auto-added when copying a FunctionInstance)
+            // should resolve to an equivalent existing template when available.
+            if (element.IsTemplateCompanion
+                && Session.TryFindEquivalentFunctionTemplateSnapshot(element.EmbeddedTemplateSnapshot, out var existingTemplate, out _)
+                && existingTemplate is not null)
+            {
+                return existingTemplate;
+            }
+
+            if (Session.ImportFunctionTemplateSnapshot(
+                    User,
+                    _currentBoundary,
+                    element.EmbeddedTemplateSnapshot,
+                    element.Name,
+                    loc,
+                    out var importedTemplate,
+                    out _))
+            {
+                return importedTemplate;
+            }
+            return null;
+        }
+
+        // Legacy fallback for payloads without embedded template snapshots.
         string name = element.Name;
         int suffix = 2;
         while (FunctionTemplates.Any(ft => string.Equals(ft.Name, name, StringComparison.OrdinalIgnoreCase)))
             name = $"{element.Name} ({suffix++})";
 
-        float w = element.W > 0 ? element.W : 220f;
-        float h = element.H > 0 ? element.H : 140f;
-        var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
-
         if (!Session.AddFunctionTemplate(User, _currentBoundary, name, out var ft, out _))
-            return;
+            return null;
 
         Session.SetFunctionTemplateLocation(User, ft!, loc, out _);
 
@@ -4156,23 +4212,23 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             if (fpType is null) continue;
             Session.AddFunctionParameter(User, ft!, fp.Name, fpType, Rectangle.Hidden, out _, out _);
         }
+
+        return ft;
     }
 
-    private void PasteFunctionInstance(CanvasElementDto element, float dx, float dy)
+    private void PasteFunctionInstance(
+        CanvasElementDto element,
+        float dx,
+        float dy,
+        IReadOnlyDictionary<string, FunctionTemplate> pastedTemplatesBySnapshot)
     {
-        if (element.TemplateName is null) return;
-
-        // Find an accessible function template by that name.
-        var candidates = new System.Collections.Generic.List<XTMF2.ModelSystemConstruct.FunctionTemplate>();
-        _currentBoundary.CollectAccessibleFunctionTemplates(candidates);
-        var template = candidates.FirstOrDefault(ft =>
-            string.Equals(ft.Name, element.TemplateName, StringComparison.OrdinalIgnoreCase));
+        var template = ResolveTemplateForPastedFunctionInstance(element, dx, dy, pastedTemplatesBySnapshot);
         if (template is null) return;
 
         // Generate a unique name if needed.
         string name = element.Name;
         int suffix = 2;
-        while (FunctionInstances.Any(fi => string.Equals(fi.Name, name, StringComparison.OrdinalIgnoreCase)))
+        while (_currentBoundary.FunctionInstances.Any(fi => string.Equals(fi.Name, name, StringComparison.OrdinalIgnoreCase)))
             name = $"{element.Name} ({suffix++})";
 
         float w = element.W > 0 ? element.W : 160f;
@@ -4180,6 +4236,56 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
 
         Session.AddFunctionInstance(User, _currentBoundary, template, name, loc, out _, out _);
+    }
+
+    private FunctionTemplate? ResolveTemplateForPastedFunctionInstance(
+        CanvasElementDto element,
+        float dx,
+        float dy,
+        IReadOnlyDictionary<string, FunctionTemplate> pastedTemplatesBySnapshot)
+    {
+        if (!string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot))
+        {
+            if (pastedTemplatesBySnapshot.TryGetValue(element.EmbeddedTemplateSnapshot, out var templateFromThisPaste))
+                return templateFromThisPaste;
+
+            if (Session.TryFindEquivalentFunctionTemplateSnapshot(element.EmbeddedTemplateSnapshot, out var existing, out _)
+                && existing is not null)
+            {
+                return existing;
+            }
+
+            var preferredName = string.IsNullOrWhiteSpace(element.TemplateName)
+                ? $"{element.Name} Template"
+                : element.TemplateName;
+
+            var importedLocation = new Rectangle(
+                element.X + dx + 36f,
+                element.Y + dy + 36f,
+                220f,
+                140f);
+
+            if (Session.ImportFunctionTemplateSnapshot(
+                    User,
+                    _currentBoundary,
+                    element.EmbeddedTemplateSnapshot,
+                    preferredName,
+                    importedLocation,
+                    out var imported,
+                    out _))
+            {
+                return imported;
+            }
+            // If import fails, fall through to TemplateName-based resolution.
+        }
+
+        if (element.TemplateName is null) return null;
+
+        // Legacy fallback for payloads without embedded template snapshots.
+        var candidates = new System.Collections.Generic.List<XTMF2.ModelSystemConstruct.FunctionTemplate>();
+        _currentBoundary.CollectAccessibleFunctionTemplates(candidates);
+        return candidates.FirstOrDefault(ft =>
+            string.Equals(ft.Name, element.TemplateName, StringComparison.OrdinalIgnoreCase));
     }
 
     private void PasteGhostNodeEntry(CanvasElementDto element, float dx, float dy)

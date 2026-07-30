@@ -522,8 +522,10 @@ partial class ModelSystemCanvas
                         ??  TestHitsElement(_vm.Nodes, pos)
                         ?? TestHitsElement(_vm.FunctionParameterVMs, pos)
                         ?? TestHitsElement(_vm.GhostNodes, pos)
-                        ?? TestHitsElement(_vm.FunctionTemplates, pos)
-                        ?? TestHitsElement(_vm.FunctionInstances, pos);
+                        // Function instances render above function-template boxes and must win
+                        // hit-testing when they overlap.
+                        ?? TestHitsElement(_vm.FunctionInstances, pos)
+                        ?? TestHitsElement(_vm.FunctionTemplates, pos);
 
         
         if (hit is not null)

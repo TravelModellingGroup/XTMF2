@@ -550,6 +550,140 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void DisablingMultipleNodesIsSingleUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("DisablingMultipleNodesIsSingleUndoRedo", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "NodeA", typeof(SimpleTestModule), Rectangle.Hidden,
+                    out var nodeA, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "NodeB", typeof(SimpleTestModule), Rectangle.Hidden,
+                    out var nodeB, out error), error?.Message);
+
+                Assert.IsFalse(nodeA.IsDisabled);
+                Assert.IsFalse(nodeB.IsDisabled);
+
+                Assert.IsTrue(mSession.SetNodesDisabled(user, new[] { nodeA, nodeB }, true, out error), error?.Message);
+                Assert.IsTrue(nodeA.IsDisabled, "NodeA was not disabled by the bulk operation.");
+                Assert.IsTrue(nodeB.IsDisabled, "NodeB was not disabled by the bulk operation.");
+
+                // One undo should revert both nodes because the bulk change is a single batch.
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.IsFalse(nodeA.IsDisabled, "NodeA was not restored by a single undo.");
+                Assert.IsFalse(nodeB.IsDisabled, "NodeB was not restored by a single undo.");
+
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.IsTrue(nodeA.IsDisabled, "NodeA was not disabled by a single redo.");
+                Assert.IsTrue(nodeB.IsDisabled, "NodeB was not disabled by a single redo.");
+            });
+        }
+
+        [TestMethod]
+        public void EnablingMultipleNodesIsSingleUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("EnablingMultipleNodesIsSingleUndoRedo", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "NodeA", typeof(SimpleTestModule), Rectangle.Hidden,
+                    out var nodeA, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "NodeB", typeof(SimpleTestModule), Rectangle.Hidden,
+                    out var nodeB, out error), error?.Message);
+
+                Assert.IsTrue(mSession.SetNodeDisabled(user, nodeA, true, out error), error?.Message);
+                Assert.IsTrue(mSession.SetNodeDisabled(user, nodeB, true, out error), error?.Message);
+                Assert.IsTrue(nodeA.IsDisabled);
+                Assert.IsTrue(nodeB.IsDisabled);
+
+                Assert.IsTrue(mSession.SetNodesDisabled(user, new[] { nodeA, nodeB }, false, out error), error?.Message);
+                Assert.IsFalse(nodeA.IsDisabled, "NodeA was not enabled by the bulk operation.");
+                Assert.IsFalse(nodeB.IsDisabled, "NodeB was not enabled by the bulk operation.");
+
+                // One undo should restore both disabled states because bulk-enable is one batch.
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.IsTrue(nodeA.IsDisabled, "NodeA disabled state was not restored by a single undo.");
+                Assert.IsTrue(nodeB.IsDisabled, "NodeB disabled state was not restored by a single undo.");
+
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.IsFalse(nodeA.IsDisabled, "NodeA was not enabled by a single redo.");
+                Assert.IsFalse(nodeB.IsDisabled, "NodeB was not enabled by a single redo.");
+            });
+        }
+
+        [TestMethod]
+        public void DisablingMultipleFunctionInstancesIsSingleUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("DisablingMultipleFunctionInstancesIsSingleUndoRedo", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                var gb = ms.GlobalBoundary;
+                CommandError error = null;
+
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, gb, "TemplateA", out var template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionInstance(user, gb, template!, "FI1", new Rectangle(10, 10, 160, 70),
+                    out var fi1, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionInstance(user, gb, template!, "FI2", new Rectangle(200, 10, 160, 70),
+                    out var fi2, out error), error?.Message);
+
+                Assert.IsTrue(mSession.SetNodesDisabled(user, new[] { fi1!, fi2! }, true, out error), error?.Message);
+                Assert.IsTrue(fi1!.IsDisabled, "FI1 was not disabled by the bulk operation.");
+                Assert.IsTrue(fi2!.IsDisabled, "FI2 was not disabled by the bulk operation.");
+
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.IsFalse(fi1.IsDisabled, "FI1 was not restored by a single undo.");
+                Assert.IsFalse(fi2.IsDisabled, "FI2 was not restored by a single undo.");
+
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.IsTrue(fi1.IsDisabled, "FI1 was not disabled by a single redo.");
+                Assert.IsTrue(fi2.IsDisabled, "FI2 was not disabled by a single redo.");
+            });
+        }
+
+        [TestMethod]
+        public void TogglingMixedNodeAndFunctionInstanceIsSingleUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("TogglingMixedNodeAndFunctionInstanceIsSingleUndoRedo", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                var gb = ms.GlobalBoundary;
+                CommandError error = null;
+
+                Assert.IsTrue(mSession.AddNode(user, gb, "RegularNode", typeof(SimpleTestModule), Rectangle.Hidden,
+                    out var node, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, gb, "TemplateMixed", out var template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionInstance(user, gb, template!, "MixedFI", new Rectangle(80, 80, 160, 70),
+                    out var fi, out error), error?.Message);
+
+                Assert.IsTrue(mSession.SetNodesDisabled(user, new Node[] { node!, fi! }, true, out error), error?.Message);
+                Assert.IsTrue(node!.IsDisabled, "Regular node was not disabled by mixed bulk operation.");
+                Assert.IsTrue(fi!.IsDisabled, "Function instance was not disabled by mixed bulk operation.");
+
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.IsFalse(node.IsDisabled, "Regular node was not restored by a single undo.");
+                Assert.IsFalse(fi.IsDisabled, "Function instance was not restored by a single undo.");
+
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.IsTrue(node.IsDisabled, "Regular node was not disabled by a single redo.");
+                Assert.IsTrue(fi.IsDisabled, "Function instance was not disabled by a single redo.");
+
+                Assert.IsTrue(mSession.SetNodesDisabled(user, new Node[] { node, fi }, false, out error), error?.Message);
+                Assert.IsFalse(node.IsDisabled, "Regular node was not enabled by mixed bulk operation.");
+                Assert.IsFalse(fi.IsDisabled, "Function instance was not enabled by mixed bulk operation.");
+
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.IsTrue(node.IsDisabled, "Regular node disabled state was not restored by undo of bulk-enable.");
+                Assert.IsTrue(fi.IsDisabled, "Function instance disabled state was not restored by undo of bulk-enable.");
+
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.IsFalse(node.IsDisabled, "Regular node was not re-enabled by redo of bulk-enable.");
+                Assert.IsFalse(fi.IsDisabled, "Function instance was not re-enabled by redo of bulk-enable.");
+            });
+        }
+
+        [TestMethod]
         public void DisablingNodeWithBadUser()
         {
             TestHelper.RunInModelSystemContext("DisablingNodeWithBadUser", (user, unauthroizedUser, pSession, mSession) =>
