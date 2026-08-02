@@ -2945,6 +2945,295 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Sets visibility state for one destination branch on a link.
+        /// For <see cref="SingleLink"/> the only valid index is 0.
+        /// For <see cref="MultiLink"/>, index maps to the destination slot.
+        /// </summary>
+        public bool SetLinkDestinationHidden(User user, Link link, int destinationIndex, bool hidden,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(link);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                if (destinationIndex < 0 || destinationIndex >= link.DestinationCount)
+                {
+                    error = new CommandError("Destination index is out of range.");
+                    return false;
+                }
+
+                bool previous = link.IsDestinationHidden(destinationIndex);
+                if (previous == hidden)
+                {
+                    error = null;
+                    return true;
+                }
+
+                if (!link.SetDestinationHidden(destinationIndex, hidden, out error))
+                    return false;
+
+                Buffer.AddUndo(new Command(() =>
+                {
+                    return (link.SetDestinationHidden(destinationIndex, previous, out var undoErr), undoErr);
+                }, () =>
+                {
+                    return (link.SetDestinationHidden(destinationIndex, hidden, out var redoErr), redoErr);
+                }));
+
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Sets visibility state for specific destination branches (link + destination index)
+        /// as one undoable action.
+        /// </summary>
+        public bool SetLinkDestinationBranchesHidden(User user,
+            IEnumerable<(Link Link, int DestinationIndex)> branches, bool hidden,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(branches);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var normalized = branches
+                    .Where(b => b.Link is not null)
+                    .Distinct()
+                    .ToList();
+
+                if (normalized.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var snapshots = new List<(Link Link, int DestinationIndex, bool Previous)>();
+                foreach (var (link, destinationIndex) in normalized)
+                {
+                    if (destinationIndex < 0 || destinationIndex >= link.DestinationCount)
+                    {
+                        error = new CommandError("Destination index is out of range.");
+                        return false;
+                    }
+
+                    bool previous = link.IsDestinationHidden(destinationIndex);
+                    if (previous != hidden)
+                        snapshots.Add((link, destinationIndex, previous));
+                }
+
+                if (snapshots.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var applied = new List<(Link Link, int DestinationIndex, bool Previous)>(snapshots.Count);
+                foreach (var snap in snapshots)
+                {
+                    if (!snap.Link.SetDestinationHidden(snap.DestinationIndex, hidden, out error))
+                    {
+                        foreach (var rollback in applied)
+                            _ = rollback.Link.SetDestinationHidden(rollback.DestinationIndex, rollback.Previous, out _);
+                        return false;
+                    }
+                    applied.Add(snap);
+                }
+
+                var batch = new CommandBatch();
+                foreach (var snap in snapshots)
+                {
+                    var captured = snap;
+                    batch.Add(new Command(() =>
+                    {
+                        return (captured.Link.SetDestinationHidden(captured.DestinationIndex, captured.Previous, out var undoErr), undoErr);
+                    }, () =>
+                    {
+                        return (captured.Link.SetDestinationHidden(captured.DestinationIndex, hidden, out var redoErr), redoErr);
+                    }));
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Sets visibility state for every destination branch on one link as a single undoable action.
+        /// </summary>
+        public bool SetLinkDestinationsHidden(User user, Link link, bool hidden,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(link);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                if (link.DestinationCount == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var previous = new bool[link.DestinationCount];
+                bool hasChange = false;
+                for (int i = 0; i < previous.Length; i++)
+                {
+                    previous[i] = link.IsDestinationHidden(i);
+                    if (previous[i] != hidden) hasChange = true;
+                }
+
+                if (!hasChange)
+                {
+                    error = null;
+                    return true;
+                }
+
+                if (!link.SetAllDestinationsHidden(hidden, out error))
+                    return false;
+
+                Buffer.AddUndo(new Command(() =>
+                {
+                    for (int i = 0; i < previous.Length; i++)
+                    {
+                        if (!link.SetDestinationHidden(i, previous[i], out var e))
+                            return (false, e);
+                    }
+                    return (true, null);
+                }, () =>
+                {
+                    return (link.SetAllDestinationsHidden(hidden, out var redoErr), redoErr);
+                }));
+
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Sets visibility state for all destination branches of every provided link as one undoable action.
+        /// </summary>
+        public bool SetLinksDestinationsHidden(User user, IEnumerable<Link> links, bool hidden,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(links);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var uniqueTargets = links
+                    .Where(l => l is not null)
+                    .Distinct()
+                    .ToList();
+
+                if (uniqueTargets.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var snapshots = new List<(Link Link, bool[] Previous)>(uniqueTargets.Count);
+                foreach (var link in uniqueTargets)
+                {
+                    var previous = new bool[link.DestinationCount];
+                    bool hasChange = false;
+                    for (int i = 0; i < previous.Length; i++)
+                    {
+                        previous[i] = link.IsDestinationHidden(i);
+                        if (previous[i] != hidden) hasChange = true;
+                    }
+
+                    if (hasChange)
+                        snapshots.Add((link, previous));
+                }
+
+                if (snapshots.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var applied = new List<(Link Link, bool[] Previous)>(snapshots.Count);
+                foreach (var (targetLink, previous) in snapshots)
+                {
+                    if (!targetLink.SetAllDestinationsHidden(hidden, out error))
+                    {
+                        foreach (var (rollbackLink, rollbackPrevious) in applied)
+                        {
+                            for (int i = 0; i < rollbackPrevious.Length; i++)
+                                _ = rollbackLink.SetDestinationHidden(i, rollbackPrevious[i], out _);
+                        }
+                        return false;
+                    }
+                    applied.Add((targetLink, previous));
+                }
+
+                var batch = new CommandBatch();
+                foreach (var (targetLink, previous) in snapshots)
+                {
+                    batch.Add(new Command(() =>
+                    {
+                        for (int i = 0; i < previous.Length; i++)
+                        {
+                            if (!targetLink.SetDestinationHidden(i, previous[i], out var e))
+                                return (false, e);
+                        }
+                        return (true, null);
+                    }, () =>
+                    {
+                        return (targetLink.SetAllDestinationsHidden(hidden, out var redoErr), redoErr);
+                    }));
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Sets destination-link visibility for all links in the model system as a single undoable action.
+        /// </summary>
+        public bool SetAllLinkDestinationsHidden(User user, bool hidden, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+
+            var allLinks = EnumerateAllBoundaries()
+                .SelectMany(b => b.Links)
+                .Distinct()
+                .ToList();
+
+            return SetLinksDestinationsHidden(user, allLinks, hidden, out error);
+        }
+
+        /// <summary>
         /// Sets the orthogonal-routing flag on a link and records the change in the undo buffer.
         /// </summary>
         public bool SetLinkOrthogonal(User user, Link link, bool orthogonal, [NotNullWhen(false)] out CommandError? error)
@@ -4331,10 +4620,11 @@ namespace XTMF2.Editing
                         return false;
                     }
                     var toRemove = dests[index];
+                    bool wasHidden = ml.IsDestinationHidden(index);
                     ml.RemoveDestination(index);
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (ml.AddDestination(toRemove, index, out var e), e);
+                        return (ml.AddDestination(toRemove, index, wasHidden, out var e), e);
                     }, () =>
                     {
                         ml.RemoveDestination(index);

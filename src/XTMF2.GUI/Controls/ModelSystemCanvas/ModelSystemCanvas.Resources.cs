@@ -36,9 +36,11 @@ partial class ModelSystemCanvas
     private static readonly IBrush LinkBrush = new SolidColorBrush(Color.FromRgb(0x22, 0xBB, 0xDD)); // teal-cyan
     private static readonly IBrush LinkSelBrush = Brushes.OrangeRed;
     private static readonly IBrush LinkDisabledBrush = new SolidColorBrush(Color.FromRgb(0x7A, 0x80, 0x8A));
+    private static readonly IBrush LinkTempRevealBrush = new SolidColorBrush(Color.FromArgb(0xC0, 0x88, 0x93, 0xA3));
     private static readonly IBrush PendingLinkBrush = new SolidColorBrush(Color.FromRgb(0x2E, 0xCC, 0x71));
     private static readonly DashStyle PendingLinkDash = new DashStyle([6, 4], 0);
     private static readonly DashStyle LinkDisabledDash = new DashStyle([7, 5], 0);
+    private static readonly DashStyle LinkTempRevealDash = new DashStyle([2, 4], 0);
     // Ghost node styling
     private static readonly IBrush GhostNodeFill = new SolidColorBrush(Color.FromArgb(0x50, 0x0E, 0x22, 0x38));
     private static readonly IBrush GhostNodeBorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x99, 0xDD)); // steel-blue neon
@@ -116,6 +118,7 @@ partial class ModelSystemCanvas
     private static readonly IBrush GhostNodeBorderBrushL = new SolidColorBrush(Color.FromRgb(0x33, 0x77, 0xBB));
     private static readonly IBrush LinkBrushL = new SolidColorBrush(Color.FromRgb(0x00, 0x55, 0xAA));
     private static readonly IBrush LinkDisabledBrushL = new SolidColorBrush(Color.FromRgb(0x98, 0xA0, 0xAB));
+    private static readonly IBrush LinkTempRevealBrushL = new SolidColorBrush(Color.FromArgb(0xD0, 0x7F, 0x8A, 0x99));
     private static readonly IBrush PendingLinkBrushL = new SolidColorBrush(Color.FromRgb(0x1A, 0x7A, 0x40));
     // Script syntax highlight (light)
     private static readonly IBrush ScriptVarKnownBrushL = new SolidColorBrush(Color.FromRgb(0x1A, 0x7A, 0x40));
@@ -331,6 +334,8 @@ partial class ModelSystemCanvas
     private static readonly Pen LinkStrokePenL   = new(LinkBrushL,   LinkThickness);
     private static readonly Pen LinkDisabledStrokePen = new(LinkDisabledBrush, LinkThickness, dashStyle: LinkDisabledDash);
     private static readonly Pen LinkDisabledStrokePenL = new(LinkDisabledBrushL, LinkThickness, dashStyle: LinkDisabledDash);
+    private static readonly Pen LinkTempRevealStrokePen = new(LinkTempRevealBrush, LinkThickness, dashStyle: LinkTempRevealDash);
+    private static readonly Pen LinkTempRevealStrokePenL = new(LinkTempRevealBrushL, LinkThickness, dashStyle: LinkTempRevealDash);
     private static readonly Pen LinkSelDisabledStrokePen = new(LinkSelBrush, LinkThickness, dashStyle: LinkDisabledDash);
     private static readonly Pen LinkSelStrokePen = new(LinkSelBrush, LinkThickness);
     // Link glow (outer α=0x10, inner α=0x26 — three colour variants)
@@ -342,6 +347,10 @@ partial class ModelSystemCanvas
     private static readonly Pen LinkDisabledGlowInnerPen = new(new SolidColorBrush(Color.FromArgb(0x26, LinkDisabledGlowColor.R, LinkDisabledGlowColor.G, LinkDisabledGlowColor.B)), LinkThickness + 3);
     private static readonly Pen LinkDisabledGlowOuterPenL = new(new SolidColorBrush(Color.FromArgb(0x10, LinkDisabledGlowColorL.R, LinkDisabledGlowColorL.G, LinkDisabledGlowColorL.B)), LinkThickness + 8);
     private static readonly Pen LinkDisabledGlowInnerPenL = new(new SolidColorBrush(Color.FromArgb(0x26, LinkDisabledGlowColorL.R, LinkDisabledGlowColorL.G, LinkDisabledGlowColorL.B)), LinkThickness + 3);
+    private static readonly Pen LinkTempRevealGlowOuterPen = new(new SolidColorBrush(Color.FromArgb(0x08, LinkDisabledGlowColor.R, LinkDisabledGlowColor.G, LinkDisabledGlowColor.B)), LinkThickness + 8);
+    private static readonly Pen LinkTempRevealGlowInnerPen = new(new SolidColorBrush(Color.FromArgb(0x14, LinkDisabledGlowColor.R, LinkDisabledGlowColor.G, LinkDisabledGlowColor.B)), LinkThickness + 3);
+    private static readonly Pen LinkTempRevealGlowOuterPenL = new(new SolidColorBrush(Color.FromArgb(0x08, LinkDisabledGlowColorL.R, LinkDisabledGlowColorL.G, LinkDisabledGlowColorL.B)), LinkThickness + 8);
+    private static readonly Pen LinkTempRevealGlowInnerPenL = new(new SolidColorBrush(Color.FromArgb(0x14, LinkDisabledGlowColorL.R, LinkDisabledGlowColorL.G, LinkDisabledGlowColorL.B)), LinkThickness + 3);
     private static readonly Pen LinkSelGlowOuterPen = new(new SolidColorBrush(Color.FromArgb(0x10, LinkSelGlowColor.R, LinkSelGlowColor.G, LinkSelGlowColor.B)), LinkThickness + 8);
     private static readonly Pen LinkSelGlowInnerPen = new(new SolidColorBrush(Color.FromArgb(0x26, LinkSelGlowColor.R, LinkSelGlowColor.G, LinkSelGlowColor.B)), LinkThickness + 3);
     // Pending link

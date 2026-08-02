@@ -582,7 +582,8 @@ public sealed partial class ModelSystemCanvas : Control
     {
         if (e.PropertyName is nameof(ModelSystemEditorViewModel.SelectedElement)
                            or nameof(ModelSystemEditorViewModel.SelectedLink)
-                           or nameof(ModelSystemEditorViewModel.ShowAllHooks))
+                           or nameof(ModelSystemEditorViewModel.ShowAllHooks)
+                           or nameof(ModelSystemEditorViewModel.RenderAllHiddenDestinationLinks))
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateAndMeasure);
         }

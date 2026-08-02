@@ -632,7 +632,8 @@ partial class ModelSystemCanvas
         _orthogonalTrunkDrawn.Clear();
         _orthogonalTrunkRange.Clear();
         var orthogonalGroups = _vm!.Links
-            .Where(l => l.UnderlyingLink.IsOrthogonal && l.Destination is not null
+            .Where(l => (!l.IsDestinationBranchHidden || _vm.RenderAllHiddenDestinationLinks)
+                        && l.UnderlyingLink.IsOrthogonal && l.Destination is not null
                         && l.UnderlyingLink is MultiLink)
             .GroupBy(l => l.UnderlyingLink, ReferenceEqualityComparer.Instance);
 
@@ -672,6 +673,9 @@ partial class ModelSystemCanvas
 
         foreach (var link in _vm!.Links)
         {
+            bool isTempRevealedHiddenBranch = link.IsDestinationBranchHidden && _vm.RenderAllHiddenDestinationLinks;
+            if (link.IsDestinationBranchHidden && !_vm.RenderAllHiddenDestinationLinks) continue;
+
             // Don't render links whose destination is in a different boundary
             // or whose destination node is inlined (value shown in hook row instead).
             if (link.Destination is null) continue;
@@ -696,11 +700,15 @@ partial class ModelSystemCanvas
             bool isDisabled = link.UnderlyingLink.IsDisabled;
             var brush = link.IsSelected
                 ? LinkSelBrush
+                : isTempRevealedHiddenBranch
+                    ? (_isLight ? LinkTempRevealBrushL : LinkTempRevealBrush)
                 : isDisabled
                     ? (_isLight ? LinkDisabledBrushL : LinkDisabledBrush)
                     : (_isLight ? LinkBrushL : LinkBrush);
             var pen = link.IsSelected
                 ? isDisabled ? LinkSelDisabledStrokePen : LinkSelStrokePen
+                : isTempRevealedHiddenBranch
+                    ? (_isLight ? LinkTempRevealStrokePenL : LinkTempRevealStrokePen)
                 : isDisabled
                     ? (_isLight ? LinkDisabledStrokePenL : LinkDisabledStrokePen)
                     : (_isLight ? LinkStrokePenL : LinkStrokePen);
@@ -708,6 +716,7 @@ partial class ModelSystemCanvas
             // Neon glow: two wider transparent halos drawn beneath the main link line.
             Pen glowOuter, glowInner;
             if (link.IsSelected) { glowOuter = LinkSelGlowOuterPen; glowInner = LinkSelGlowInnerPen; }
+            else if (isTempRevealedHiddenBranch) { glowOuter = _isLight ? LinkTempRevealGlowOuterPenL : LinkTempRevealGlowOuterPen; glowInner = _isLight ? LinkTempRevealGlowInnerPenL : LinkTempRevealGlowInnerPen; }
             else if (isDisabled) { glowOuter = _isLight ? LinkDisabledGlowOuterPenL : LinkDisabledGlowOuterPen; glowInner = _isLight ? LinkDisabledGlowInnerPenL : LinkDisabledGlowInnerPen; }
             else if (_isLight)   { glowOuter = LinkGlowOuterPenL;   glowInner = LinkGlowInnerPenL; }
             else                 { glowOuter = LinkGlowOuterPen;     glowInner = LinkGlowInnerPen; }
@@ -847,11 +856,9 @@ partial class ModelSystemCanvas
             // beside the arrowhead so the user can see the hook slot ordering.
             if (link.UnderlyingLink is MultiLink ml)
             {
-                int idx = -1;
-                if (link.Destination is NodeViewModel indexDestNode)
-                    idx = ml.Destinations.IndexOf(indexDestNode.UnderlyingNode);
-                else if (link.Destination is FunctionInstanceViewModel indexDestFi)
-                    idx = ml.Destinations.IndexOf(indexDestFi.UnderlyingInstance);
+                int idx = link.DestinationIndex >= 0 && link.DestinationIndex < ml.Destinations.Count
+                    ? link.DestinationIndex
+                    : -1;
 
                 if (idx >= 0)
                 {

@@ -545,6 +545,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     [ObservableProperty]
     private bool _showAllHooks;
 
+    /// <summary>
+    /// When <c>true</c>, destination branches that are hidden in the model are
+    /// temporarily rendered and can be selected on the canvas.
+    /// This is a view-only toggle and does not modify model hidden state.
+    /// </summary>
+    [ObservableProperty]
+    private bool _renderAllHiddenDestinationLinks;
+
     // ── Undo / Redo state ─────────────────────────────────────────────────
     /// <summary>True when there is at least one undoable command.</summary>
     [ObservableProperty]
@@ -1103,9 +1111,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         if (link is MultiLink ml)
         {
-            // One LinkViewModel per destination so all arrows are drawn.
-            foreach (var dest in ml.Destinations)
-                Links.Add(new LinkViewModel(link, originElement, ResolveElement(dest)));
+            RebuildMultiLinkViewModels(ml, originElement);
 
             // Subscribe so future AddDestination / RemoveDestination calls update the canvas.
             ((System.Collections.Specialized.INotifyCollectionChanged)ml.Destinations).CollectionChanged += (_, e) =>
@@ -1145,32 +1151,29 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Links.Add(new LinkViewModel(sl, originElement, ResolveElement(sl.Destination)));
     }
 
+    private void RebuildMultiLinkViewModels(MultiLink ml, ICanvasElement originElement)
+    {
+        for (int i = Links.Count - 1; i >= 0; i--)
+        {
+            if (Links[i].UnderlyingLink == ml)
+            {
+                Links[i].Detach();
+                Links.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < ml.Destinations.Count; i++)
+        {
+            var dest = ml.Destinations[i];
+            Links.Add(new LinkViewModel(ml, originElement, ResolveElement(dest), i));
+        }
+    }
+
     private void OnMultiLinkDestinationsChanged(
         MultiLink ml, ICanvasElement originElement,
         NotifyCollectionChangedEventArgs e)
     {
-        if (e.NewItems is not null)
-        {
-            foreach (Node newDest in e.NewItems)
-            {
-                var destElement = ResolveElement(newDest);
-                Links.Add(new LinkViewModel(ml, originElement, destElement));
-            }
-        }
-        if (e.OldItems is not null)
-        {
-            foreach (Node removedDest in e.OldItems)
-            {
-                var destElement = ResolveElement(removedDest);
-                var toRemove = Links.FirstOrDefault(lvm =>
-                    lvm.UnderlyingLink == ml && lvm.Destination == destElement);
-                if (toRemove is not null)
-                {
-                    toRemove.Detach();
-                    Links.Remove(toRemove);
-                }
-            }
-        }
+        RebuildMultiLinkViewModels(ml, originElement);
     }
 
     private ICanvasElement? ResolveElement(Node? node)

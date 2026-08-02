@@ -38,6 +38,8 @@ partial class ModelSystemCanvas
         if (_vm is null) return null;
         foreach (var link in _vm.Links)
         {
+            if (link.IsDestinationBranchHidden && !_vm.RenderAllHiddenDestinationLinks) continue;
+
             // Skip inter-boundary links — they are not rendered.
             if (link.Destination is null) continue;
             // Skip links to inlined nodes — no line is drawn for them.
@@ -177,7 +179,8 @@ partial class ModelSystemCanvas
 
                 // Track hooks whose link destination lies to the left of the origin node.
                 // Such links will exit from the node's left face rather than the right.
-                if (link.Destination is not null && link.X2 < originVm.X)
+                if ((!link.IsDestinationBranchHidden || _vm.RenderAllHiddenDestinationLinks)
+                    && link.Destination is not null && link.X2 < originVm.X)
                     _leftGoingHooks.Add((originVm, link.UnderlyingLink.OriginHook));
             }
             // Which FunctionParameterHooks on each FI have a live link?
@@ -189,7 +192,8 @@ partial class ModelSystemCanvas
                 fiSet.Add(fphConnected);
 
                 // Same leftward check for FunctionInstance hooks.
-                if (link.Destination is not null && link.X2 < fiOriginVm.X)
+                if ((!link.IsDestinationBranchHidden || _vm.RenderAllHiddenDestinationLinks)
+                    && link.Destination is not null && link.X2 < fiOriginVm.X)
                     _leftGoingFiHooks.Add((fiOriginVm, fphConnected));
             }
         }
