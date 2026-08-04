@@ -205,6 +205,91 @@ partial class ModelSystemCanvas
             "Unable to change link disabled state.");
     }
 
+    private static bool IsDestinationBranchForElement(LinkViewModel link, ICanvasElement destinationElement)
+        => (destinationElement, link.Destination) switch
+        {
+            (NodeViewModel targetNode, NodeViewModel destNode)
+                => ReferenceEquals(targetNode.UnderlyingNode, destNode.UnderlyingNode),
+            (FunctionInstanceViewModel targetFi, FunctionInstanceViewModel destFi)
+                => ReferenceEquals(targetFi.UnderlyingInstance, destFi.UnderlyingInstance),
+            _ => false,
+        };
+
+    private List<LinkViewModel> GetIncomingDestinationBranchTargetsForClickedElement(ICanvasElement clickedElement)
+    {
+        if (_vm is null)
+            return new List<LinkViewModel>();
+
+        var destinationTargets = _multiSelection.Count > 1 && _multiSelection.Contains(clickedElement)
+            ? _multiSelection.Where(el => el is NodeViewModel or FunctionInstanceViewModel).ToList()
+            : new List<ICanvasElement> { clickedElement };
+
+        var incoming = _vm.Links
+            .Where(lvm => destinationTargets.Any(dest => IsDestinationBranchForElement(lvm, dest)))
+            .GroupBy(lvm => (lvm.UnderlyingLink, lvm.DestinationIndex))
+            .Select(g => g.First())
+            .ToList();
+
+        return incoming;
+    }
+
+    private static bool AreAllDestinationBranchesHidden(IReadOnlyList<LinkViewModel> branches)
+        => branches.Count > 0 && branches.All(b => b.IsDestinationBranchHidden);
+
+    private bool TrySetDestinationBranchesHidden(IReadOnlyList<LinkViewModel> branches, bool hidden, string defaultError)
+    {
+        if (_vm?.Session is null || _vm?.User is null || branches.Count == 0)
+            return false;
+
+        var targets = branches.Select(b => (b.UnderlyingLink, b.DestinationIndex)).ToList();
+        if (!_vm.Session.SetLinkDestinationBranchesHidden(_vm.User, targets, hidden, out var err))
+        {
+            _vm.ShowToast(err?.Message ?? defaultError, isError: true, durationMs: 6000);
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool AreAllDestinationsHidden(Link link)
+    {
+        for (int i = 0; i < link.DestinationCount; i++)
+        {
+            if (!link.IsDestinationHidden(i))
+                return false;
+        }
+        return true;
+    }
+
+    private bool TrySetLinkDestinationHidden(LinkViewModel linkVm, bool hidden, string defaultError)
+    {
+        if (_vm?.Session is null || _vm?.User is null)
+            return false;
+
+        if (!_vm.Session.SetLinkDestinationHidden(_vm.User, linkVm.UnderlyingLink,
+                linkVm.DestinationIndex, hidden, out var err))
+        {
+            _vm.ShowToast(err?.Message ?? defaultError, isError: true, durationMs: 6000);
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TrySetDestinationsHiddenForLinks(IReadOnlyList<Link> targets, bool hidden, string defaultError)
+    {
+        if (_vm?.Session is null || _vm?.User is null || targets.Count == 0)
+            return false;
+
+        if (!_vm.Session.SetLinksDestinationsHidden(_vm.User, targets, hidden, out var err))
+        {
+            _vm.ShowToast(err?.Message ?? defaultError, isError: true, durationMs: 6000);
+            return false;
+        }
+
+        return true;
+    }
+
     private void ShowContextMenu(ICanvasElement? element, LinkViewModel? link)
     {
         if (_vm is null) return;
@@ -248,6 +333,20 @@ partial class ModelSystemCanvas
             var pasteItem = new MenuItem { Header = "Paste\tCtrl+V" };
             pasteItem.Click += (_, _) => _ = PasteElementsAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(pasteItem);
+
+            bgMenu.Items.Add(new Separator());
+            var showHiddenTempItem = new MenuItem
+            {
+                Header = "Show Hidden Destination Links (Temporary)",
+                ToggleType = MenuItemToggleType.CheckBox,
+                IsChecked = _vm.RenderAllHiddenDestinationLinks
+            };
+            showHiddenTempItem.Click += (_, _) =>
+            {
+                _vm.RenderAllHiddenDestinationLinks = showHiddenTempItem.IsChecked;
+                InvalidateVisual();
+            };
+            bgMenu.Items.Add(showHiddenTempItem);
 
             ContextMenu = bgMenu;
             ContextMenu.Open(this);
@@ -406,6 +505,39 @@ partial class ModelSystemCanvas
             routingItem.Click += (_, _) => vm.ToggleLinkOrthogonal(capturedRoutingLink.UnderlyingLink);
             menu.Items.Add(routingItem);
 
+            bool nextDestinationHidden = !link.IsDestinationBranchHidden;
+            var toggleDestinationItem = new MenuItem
+            {
+                Header = nextDestinationHidden ? "Hide This Destination Branch" : "Show This Destination Branch"
+            };
+            toggleDestinationItem.Click += (_, _) =>
+            {
+                TrySetLinkDestinationHidden(link, nextDestinationHidden,
+                    "Unable to change destination branch visibility.");
+                InvalidateVisual();
+            };
+            menu.Items.Add(toggleDestinationItem);
+
+            var visibilityTargets = GetDisableTargetsForClickedLink(link);
+            bool nextHideAllDestinations = !AreAllDestinationsHidden(link.UnderlyingLink);
+            var toggleAllDestinationsItem = new MenuItem
+            {
+                Header = visibilityTargets.Count > 1
+                    ? (nextHideAllDestinations
+                        ? $"Hide All Destinations For {visibilityTargets.Count} Links"
+                        : $"Show All Destinations For {visibilityTargets.Count} Links")
+                    : (nextHideAllDestinations
+                        ? "Hide All Destinations For This Link"
+                        : "Show All Destinations For This Link")
+            };
+            toggleAllDestinationsItem.Click += (_, _) =>
+            {
+                TrySetDestinationsHiddenForLinks(visibilityTargets, nextHideAllDestinations,
+                    "Unable to change destination visibility.");
+                InvalidateVisual();
+            };
+            menu.Items.Add(toggleAllDestinationsItem);
+
             var disableTargets = GetDisableTargetsForClickedLink(link);
             bool nextDisabled = !link.UnderlyingLink.IsDisabled;
             var toggleDisableItem = new MenuItem
@@ -448,6 +580,26 @@ partial class ModelSystemCanvas
         // ── Enable/Disable regular nodes ─────────────────────────────────
         if (element is NodeViewModel disableNodeVm)
         {
+            var incomingDestinationBranches = GetIncomingDestinationBranchTargetsForClickedElement(disableNodeVm);
+            if (incomingDestinationBranches.Count > 0)
+            {
+                bool nextIncomingHidden = !AreAllDestinationBranchesHidden(incomingDestinationBranches);
+                var toggleIncomingItem = new MenuItem
+                {
+                    Header = nextIncomingHidden
+                        ? "Hide Incoming Links"
+                        : "Show Incoming Links"
+                };
+                toggleIncomingItem.Click += (_, _) =>
+                {
+                    TrySetDestinationBranchesHidden(incomingDestinationBranches, nextIncomingHidden,
+                        "Unable to change incoming link visibility.");
+                    InvalidateVisual();
+                };
+                menu.Items.Add(toggleIncomingItem);
+                menu.Items.Add(new Separator());
+            }
+
             var disableTargets = GetDisableTargetsForClickedElement(disableNodeVm, disableNodeVm.UnderlyingNode);
             bool nextDisabled = !disableNodeVm.UnderlyingNode.IsDisabled;
             var disableNodeItem = new MenuItem
@@ -717,6 +869,26 @@ partial class ModelSystemCanvas
         // ── Function instance – specific items ─────────────────────────────
         if (element is FunctionInstanceViewModel capturedFi)
         {
+            var incomingDestinationBranches = GetIncomingDestinationBranchTargetsForClickedElement(capturedFi);
+            if (incomingDestinationBranches.Count > 0)
+            {
+                bool nextIncomingHidden = !AreAllDestinationBranchesHidden(incomingDestinationBranches);
+                var toggleIncomingItem = new MenuItem
+                {
+                    Header = nextIncomingHidden
+                        ? "Hide Incoming Links"
+                        : "Show Incoming Links"
+                };
+                toggleIncomingItem.Click += (_, _) =>
+                {
+                    TrySetDestinationBranchesHidden(incomingDestinationBranches, nextIncomingHidden,
+                        "Unable to change incoming link visibility.");
+                    InvalidateVisual();
+                };
+                menu.Items.Add(new Separator());
+                menu.Items.Add(toggleIncomingItem);
+            }
+
             var openTemplateItem = new MenuItem { Header = "Open Template" };
             openTemplateItem.Click += (_, _) =>
             {

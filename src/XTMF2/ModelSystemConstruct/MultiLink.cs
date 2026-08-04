@@ -30,13 +30,28 @@ namespace XTMF2.ModelSystemConstruct
     public sealed class MultiLink : Link
     {
         private readonly ObservableCollection<Node> _Destinations;
+        private readonly List<bool> _hiddenDestinations;
         private readonly ReadOnlyObservableCollection<Node> _destinationsView;
 
-        public MultiLink(Node origin, NodeHook hook, List<Node> destinations, bool disabled, bool orthogonal = false, Guid id = default)
+        public MultiLink(Node origin, NodeHook hook, List<Node> destinations, bool disabled, bool orthogonal = false,
+            List<bool>? hiddenDestinations = null, Guid id = default)
             : base(origin, hook, disabled, orthogonal, id)
         {
             _Destinations     = new ObservableCollection<Node>(destinations);
             _destinationsView = new ReadOnlyObservableCollection<Node>(_Destinations);
+            _hiddenDestinations = hiddenDestinations is null
+                ? Enumerable.Repeat(false, destinations.Count).ToList()
+                : NormalizeHiddenDestinations(hiddenDestinations, destinations.Count);
+        }
+
+        private static List<bool> NormalizeHiddenDestinations(IReadOnlyList<bool> source, int requiredCount)
+        {
+            var normalized = new List<bool>(requiredCount);
+            for (int i = 0; i < requiredCount; i++)
+            {
+                normalized.Add(i < source.Count && source[i]);
+            }
+            return normalized;
         }
 
         /// <summary>
@@ -47,15 +62,20 @@ namespace XTMF2.ModelSystemConstruct
         public ReadOnlyObservableCollection<Node> Destinations => _destinationsView;
 
         internal bool AddDestination(Node destination, [NotNullWhen(false)] out CommandError? error)
-        {
-            _Destinations.Add(destination);
-            error = null;
-            return true;
-        }
+            => AddDestination(destination, _Destinations.Count, false, out error);
 
         internal bool AddDestination(Node destination, int index, [NotNullWhen(false)] out CommandError? error)
+            => AddDestination(destination, index, false, out error);
+
+        internal bool AddDestination(Node destination, int index, bool hidden, [NotNullWhen(false)] out CommandError? error)
         {
+            if (index < 0 || index > _Destinations.Count)
+            {
+                error = new CommandError("Destination index out of range for MultiLink insert.");
+                return false;
+            }
             _Destinations.Insert(index, destination);
+            _hiddenDestinations.Insert(index, hidden);
             error = null;   
             return true;
         }
@@ -81,7 +101,53 @@ namespace XTMF2.ModelSystemConstruct
             {
                 writer.WriteBoolean(OrthogonalProperty, true);
             }
+            if (_hiddenDestinations.Any(h => h))
+            {
+                writer.WritePropertyName(HiddenDestinationsProperty);
+                writer.WriteStartArray();
+                for (int i = 0; i < _Destinations.Count; i++)
+                {
+                    writer.WriteBooleanValue(i < _hiddenDestinations.Count && _hiddenDestinations[i]);
+                }
+                writer.WriteEndArray();
+            }
             writer.WriteEndObject();
+        }
+
+        public override int DestinationCount => _Destinations.Count;
+
+        public override bool IsDestinationHidden(int destinationIndex)
+        {
+            if (destinationIndex < 0 || destinationIndex >= _hiddenDestinations.Count)
+            {
+                return false;
+            }
+            return _hiddenDestinations[destinationIndex];
+        }
+
+        internal override bool SetDestinationHidden(int destinationIndex, bool hidden, [NotNullWhen(false)] out CommandError? error)
+        {
+            if (destinationIndex < 0 || destinationIndex >= _Destinations.Count)
+            {
+                error = new CommandError("Destination index out of range for MultiLink.");
+                return false;
+            }
+
+            _hiddenDestinations[destinationIndex] = hidden;
+            Notify(nameof(Destinations));
+            error = null;
+            return true;
+        }
+
+        internal override bool SetAllDestinationsHidden(bool hidden, [NotNullWhen(false)] out CommandError? error)
+        {
+            for (int i = 0; i < _hiddenDestinations.Count; i++)
+            {
+                _hiddenDestinations[i] = hidden;
+            }
+            Notify(nameof(Destinations));
+            error = null;
+            return true;
         }
 
         internal override bool Construct(ref string? error)
@@ -152,6 +218,7 @@ namespace XTMF2.ModelSystemConstruct
         internal void RemoveDestination(int i)
         {
             _Destinations.RemoveAt(i);
+            _hiddenDestinations.RemoveAt(i);
         }
 
         /// <summary>Moves the destination at <paramref name="fromIndex"/> to <paramref name="toIndex"/>.</summary>
@@ -159,8 +226,11 @@ namespace XTMF2.ModelSystemConstruct
         {
             if (fromIndex == toIndex) return;
             var node = _Destinations[fromIndex];
+            var hidden = _hiddenDestinations[fromIndex];
             _Destinations.RemoveAt(fromIndex);
+            _hiddenDestinations.RemoveAt(fromIndex);
             _Destinations.Insert(toIndex, node);
+            _hiddenDestinations.Insert(toIndex, hidden);
         }
 
         internal override bool HasDestination(Node destNode)

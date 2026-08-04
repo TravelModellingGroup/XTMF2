@@ -413,6 +413,276 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void HideSingleDestinationBranchPersistsAndUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("HideSingleDestinationBranchPersistsAndUndoRedo", (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden,
+                    out Start start, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Sink", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sink, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], sink!, out var link, out error), error?.Message);
+
+                Assert.IsFalse(link!.IsDestinationHidden(0));
+                Assert.IsTrue(msSession.SetLinkDestinationHidden(user, link, 0, true, out error), error?.Message);
+                Assert.IsTrue(link.IsDestinationHidden(0));
+
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
+                Assert.IsFalse(link.IsDestinationHidden(0));
+
+                Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
+                Assert.IsTrue(link.IsDestinationHidden(0));
+            }, (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                var link = ms.GlobalBoundary.Links.Single();
+                Assert.IsTrue(link.IsDestinationHidden(0), "Destination hidden state did not persist after reload.");
+            });
+        }
+
+        [TestMethod]
+        public void HideAllDestinationsGlobalUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("HideAllDestinationsGlobalUndoRedo", (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartA", Rectangle.Hidden,
+                    out Start startA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartB", Rectangle.Hidden,
+                    out Start startB, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SinkA", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sinkA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SinkB", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sinkB, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(user, startA, startA.Hooks[0], sinkA!, out var linkA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, startB, startB.Hooks[0], sinkB!, out var linkB, out error), error?.Message);
+
+                Assert.IsTrue(msSession.SetAllLinkDestinationsHidden(user, true, out error), error?.Message);
+                Assert.IsTrue(linkA!.IsDestinationHidden(0));
+                Assert.IsTrue(linkB!.IsDestinationHidden(0));
+
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
+                Assert.IsFalse(linkA.IsDestinationHidden(0));
+                Assert.IsFalse(linkB.IsDestinationHidden(0));
+
+                Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
+                Assert.IsTrue(linkA.IsDestinationHidden(0));
+                Assert.IsTrue(linkB.IsDestinationHidden(0));
+            });
+        }
+
+        [TestMethod]
+        public void HideAllDestinationsGlobalPersistsAfterReload()
+        {
+            TestHelper.RunInModelSystemContext("HideAllDestinationsGlobalPersistsAfterReload", (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartA", Rectangle.Hidden,
+                    out Start startA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartB", Rectangle.Hidden,
+                    out Start startB, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SinkA", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sinkA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SinkB", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sinkB, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(user, startA, startA.Hooks[0], sinkA!, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, startB, startB.Hooks[0], sinkB!, out _, out error), error?.Message);
+
+                Assert.IsTrue(msSession.SetAllLinkDestinationsHidden(user, true, out error), error?.Message);
+            }, (user, pSession, msSession) =>
+            {
+                var links = msSession.ModelSystem.GlobalBoundary.Links;
+                Assert.HasCount(2, links, "Unexpected number of links after reload.");
+                foreach (var l in links)
+                {
+                    Assert.AreEqual(1, l.DestinationCount, "Expected single-destination links in this test setup.");
+                    Assert.IsTrue(l.IsDestinationHidden(0), "Global destination-hidden state did not persist after reload.");
+                }
+            });
+        }
+
+        [TestMethod]
+        public void HiddenMultiDestinationStateSurvivesRemoveUndo()
+        {
+            TestHelper.RunInModelSystemContext("HiddenMultiDestinationStateSurvivesRemoveUndo", (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden,
+                    out Start start, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Execute", typeof(Execute), Rectangle.Hidden,
+                    out var execute, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SinkA", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sinkA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "SinkB", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sinkB, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], execute!, out _, out error), error?.Message);
+                var hook = TestHelper.GetHook(execute!.Hooks, "To Execute");
+                Assert.IsTrue(msSession.AddLink(user, execute, hook, sinkA!, out var multiLinkBase, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, execute, hook, sinkB!, out _, out error), error?.Message);
+
+                Assert.IsTrue(multiLinkBase is MultiLink);
+                var multiLink = (MultiLink)multiLinkBase!;
+                Assert.AreEqual(2, multiLink.DestinationCount);
+
+                Assert.IsTrue(msSession.SetLinkDestinationHidden(user, multiLink, 1, true, out error), error?.Message);
+                Assert.IsTrue(multiLink.IsDestinationHidden(1));
+
+                Assert.IsTrue(msSession.RemoveLinkDestination(user, multiLink, 1, out error), error?.Message);
+                Assert.AreEqual(1, multiLink.DestinationCount);
+
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
+                Assert.AreEqual(2, multiLink.DestinationCount);
+                Assert.IsTrue(multiLink.IsDestinationHidden(1), "Removed destination hidden state was not restored on undo.");
+            });
+        }
+
+        [TestMethod]
+        public void HideDestinationBranchWithBadUserFails()
+        {
+            TestHelper.RunInModelSystemContext("HideDestinationBranchWithBadUserFails", (user, unauthorizedUser, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden,
+                    out Start start, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Sink", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var sink, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], sink!, out var link, out error), error?.Message);
+
+                Assert.IsFalse(msSession.SetLinkDestinationHidden(unauthorizedUser, link!, 0, true, out error), error?.Message);
+                Assert.IsFalse(link.IsDestinationHidden(0), "Unauthorized user changed destination-hidden state.");
+            });
+        }
+
+        [TestMethod]
+        public void MultiLinkDestinationHiddenStateStaysConsistentAcrossMoveRemoveAndReload()
+        {
+            TestHelper.RunInModelSystemContext("MultiLinkDestinationHiddenStateStaysConsistentAcrossMoveRemoveAndReload", (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start", Rectangle.Hidden,
+                    out Start start, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Execute", typeof(Execute), Rectangle.Hidden,
+                    out var execute, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "DestA", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var destA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "DestB", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var destB, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "DestC", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var destC, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], execute!, out _, out error), error?.Message);
+                var hook = TestHelper.GetHook(execute!.Hooks, "To Execute");
+                Assert.IsTrue(msSession.AddLink(user, execute, hook, destA!, out var mlBase, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, execute, hook, destB!, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, execute, hook, destC!, out _, out error), error?.Message);
+
+                Assert.IsTrue(mlBase is MultiLink, "Expected a MultiLink from repeated hook connections.");
+                var ml = (MultiLink)mlBase!;
+                Assert.AreEqual(3, ml.DestinationCount);
+
+                // Initial order: [DestA, DestB, DestC]
+                // Mark DestB and DestC as hidden.
+                Assert.IsTrue(msSession.SetLinkDestinationHidden(user, ml, 1, true, out error), error?.Message);
+                Assert.IsTrue(msSession.SetLinkDestinationHidden(user, ml, 2, true, out error), error?.Message);
+
+                // Move DestC to front -> [DestC, DestA, DestB]
+                // Hidden flags should move with destination identity -> [true, false, true]
+                Assert.IsTrue(msSession.MoveLinkDestination(user, ml, 2, 0, out error), error?.Message);
+                Assert.AreEqual("DestC", ml.Destinations[0].Name);
+                Assert.AreEqual("DestA", ml.Destinations[1].Name);
+                Assert.AreEqual("DestB", ml.Destinations[2].Name);
+                Assert.IsTrue(ml.IsDestinationHidden(0));
+                Assert.IsFalse(ml.IsDestinationHidden(1));
+                Assert.IsTrue(ml.IsDestinationHidden(2));
+
+                // Remove middle entry (DestA) -> [DestC, DestB]
+                // Hidden flags must remain [true, true].
+                Assert.IsTrue(msSession.RemoveLinkDestination(user, ml, 1, out error), error?.Message);
+                Assert.AreEqual(2, ml.DestinationCount);
+                Assert.AreEqual("DestC", ml.Destinations[0].Name);
+                Assert.AreEqual("DestB", ml.Destinations[1].Name);
+                Assert.IsTrue(ml.IsDestinationHidden(0));
+                Assert.IsTrue(ml.IsDestinationHidden(1));
+            }, (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                var execute = ms.GlobalBoundary.Modules.First(m => m.Name == "Execute");
+                var ml = ms.GlobalBoundary.Links
+                    .OfType<MultiLink>()
+                    .First(l => ReferenceEquals(l.Origin, execute));
+
+                Assert.AreEqual(2, ml.DestinationCount, "Unexpected number of destinations after reload.");
+                Assert.AreEqual("DestC", ml.Destinations[0].Name, "Destination order lost across save/load.");
+                Assert.AreEqual("DestB", ml.Destinations[1].Name, "Destination order lost across save/load.");
+                Assert.IsTrue(ml.IsDestinationHidden(0), "Hidden-state mapping for DestC was not persisted correctly.");
+                Assert.IsTrue(ml.IsDestinationHidden(1), "Hidden-state mapping for DestB was not persisted correctly.");
+            });
+        }
+
+        [TestMethod]
+        public void HideIncomingBranchesByDestinationTargetIsSingleUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("HideIncomingBranchesByDestinationTargetIsSingleUndoRedo", (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                CommandError error = null;
+
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartA", Rectangle.Hidden,
+                    out Start startA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartB", Rectangle.Hidden,
+                    out Start startB, out error), error?.Message);
+                Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "StartC", Rectangle.Hidden,
+                    out Start startC, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "DestA", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var destA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "DestB", typeof(IgnoreResult<string>), Rectangle.Hidden,
+                    out var destB, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(user, startA, startA.Hooks[0], destA!, out var linkA, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, startB, startB.Hooks[0], destA!, out var linkB, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, startC, startC.Hooks[0], destB!, out var linkC, out error), error?.Message);
+
+                var targets = new[]
+                {
+                    (linkA!, 0),
+                    (linkB!, 0),
+                };
+
+                Assert.IsTrue(msSession.SetLinkDestinationBranchesHidden(user, targets, true, out error), error?.Message);
+                Assert.IsTrue(linkA!.IsDestinationHidden(0));
+                Assert.IsTrue(linkB!.IsDestinationHidden(0));
+                Assert.IsFalse(linkC!.IsDestinationHidden(0));
+
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
+                Assert.IsFalse(linkA.IsDestinationHidden(0));
+                Assert.IsFalse(linkB.IsDestinationHidden(0));
+                Assert.IsFalse(linkC.IsDestinationHidden(0));
+
+                Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
+                Assert.IsTrue(linkA.IsDestinationHidden(0));
+                Assert.IsTrue(linkB.IsDestinationHidden(0));
+                Assert.IsFalse(linkC.IsDestinationHidden(0));
+            });
+        }
+
+        [TestMethod]
         public void DisabledLinkRunValidationFailure()
         {
             TestHelper.RunInModelSystemContext("DisabledLinkRunValidationFailure", (user, pSession, msSession) =>

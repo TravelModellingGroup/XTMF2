@@ -565,6 +565,68 @@ public sealed partial class ModelSystemCanvas : Control
             {
                 item.PropertyChanged -= OnElementPropertyChanged;
             }
+
+            bool cancelParamEdit = false;
+            bool cancelNameEdit = false;
+            bool cancelCommentEdit = false;
+            bool cancelCommentHeaderEdit = false;
+
+            foreach (var removed in e.OldItems)
+            {
+                if (!cancelParamEdit &&
+                    (ReferenceEquals(removed, _editingParamNode)
+                    || ReferenceEquals(removed, _editingParamParentElement)))
+                {
+                    cancelParamEdit = true;
+                }
+
+                if (!cancelNameEdit && ReferenceEquals(removed, _editingNameElement))
+                {
+                    cancelNameEdit = true;
+                }
+
+                if (!cancelCommentEdit && ReferenceEquals(removed, _editingCommentBlock))
+                {
+                    cancelCommentEdit = true;
+                }
+
+                if (!cancelCommentHeaderEdit && ReferenceEquals(removed, _editingCommentHeaderBlock))
+                {
+                    cancelCommentHeaderEdit = true;
+                }
+            }
+
+            if (cancelParamEdit) CancelParamEdit();
+            if (cancelNameEdit) CancelNameEdit();
+            if (cancelCommentEdit) CancelCommentEdit();
+            if (cancelCommentHeaderEdit) CancelCommentHeaderEdit();
+        }
+
+        // Reset can remove many elements without populating OldItems.
+        if (e.Action == NotifyCollectionChangedAction.Reset && _vm is not null)
+        {
+            bool ShouldCancel(ICanvasElement? element) => element switch
+            {
+                NodeViewModel nvm => !_vm.Nodes.Contains(nvm),
+                StartViewModel svm => !_vm.Starts.Contains(svm),
+                CommentBlockViewModel cvm => !_vm.CommentBlocks.Contains(cvm),
+                GhostNodeViewModel gvm => !_vm.GhostNodes.Contains(gvm),
+                FunctionTemplateViewModel ftvm => !_vm.FunctionTemplates.Contains(ftvm),
+                FunctionInstanceViewModel fivm => !_vm.FunctionInstances.Contains(fivm),
+                FunctionParameterViewModel fpvm => !_vm.FunctionParameterVMs.Contains(fpvm),
+                null => false,
+                _ => false,
+            };
+
+            if (_editingParamNode is not null
+                && (ShouldCancel(_editingParamNode)
+                    || ShouldCancel(_editingParamParentElement)))
+            {
+                CancelParamEdit();
+            }
+            if (ShouldCancel(_editingNameElement)) CancelNameEdit();
+            if (ShouldCancel(_editingCommentBlock)) CancelCommentEdit();
+            if (ShouldCancel(_editingCommentHeaderBlock)) CancelCommentHeaderEdit();
         }
 
         Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateAndMeasure);
@@ -582,7 +644,8 @@ public sealed partial class ModelSystemCanvas : Control
     {
         if (e.PropertyName is nameof(ModelSystemEditorViewModel.SelectedElement)
                            or nameof(ModelSystemEditorViewModel.SelectedLink)
-                           or nameof(ModelSystemEditorViewModel.ShowAllHooks))
+                           or nameof(ModelSystemEditorViewModel.ShowAllHooks)
+                           or nameof(ModelSystemEditorViewModel.RenderAllHiddenDestinationLinks))
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateAndMeasure);
         }

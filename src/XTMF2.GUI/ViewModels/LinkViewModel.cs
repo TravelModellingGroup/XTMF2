@@ -39,6 +39,12 @@ public sealed partial class LinkViewModel : ObservableObject
     /// </summary>
     public ICanvasElement? Destination { get; }
 
+    /// <summary>
+    /// Destination slot index for this rendered branch. For <see cref="SingleLink"/> this is always 0.
+    /// For <see cref="MultiLink"/> this maps to the destination index in <see cref="MultiLink.Destinations"/>.
+    /// </summary>
+    public int DestinationIndex { get; }
+
     [ObservableProperty] private double _x1;
     [ObservableProperty] private double _y1;
     [ObservableProperty] private double _x2;
@@ -52,11 +58,17 @@ public sealed partial class LinkViewModel : ObservableObject
     /// </summary>
     public bool IsOrthogonal => UnderlyingLink.IsOrthogonal;
 
-    public LinkViewModel(XTMF2.Link link, ICanvasElement origin, ICanvasElement? destination)
+    /// <summary>
+    /// Whether this rendered destination branch should be hidden on the canvas.
+    /// </summary>
+    public bool IsDestinationBranchHidden => UnderlyingLink.IsDestinationHidden(DestinationIndex);
+
+    public LinkViewModel(XTMF2.Link link, ICanvasElement origin, ICanvasElement? destination, int destinationIndex = 0)
     {
         UnderlyingLink  = link;
         Origin          = origin;
         Destination     = destination;
+        DestinationIndex = destinationIndex;
 
         // Compute initial endpoints
         RefreshEndpoints();
@@ -74,6 +86,10 @@ public sealed partial class LinkViewModel : ObservableObject
     {
         if (e.PropertyName is nameof(XTMF2.Link.IsOrthogonal))
             OnPropertyChanged(nameof(IsOrthogonal));
+
+        if (e.PropertyName is nameof(XTMF2.ModelSystemConstruct.SingleLink.DestinationHidden)
+            or nameof(XTMF2.ModelSystemConstruct.MultiLink.Destinations))
+            OnPropertyChanged(nameof(IsDestinationBranchHidden));
     }
 
     private void OnConnectedElementChanged(object? sender, PropertyChangedEventArgs e)

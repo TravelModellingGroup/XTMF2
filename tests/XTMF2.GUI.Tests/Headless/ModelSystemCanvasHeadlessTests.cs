@@ -18,8 +18,14 @@
 */
 
 using Avalonia.Headless;
+using Avalonia.Controls;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.GUI.Controls;
+using XTMF2.GUI.Tests.Modules;
+using XTMF2.GUI.ViewModels;
+using XTMF2.ModelSystemConstruct;
+using System.Linq;
+using System.Reflection;
 
 namespace XTMF2.GUI.Tests.Headless;
 
@@ -62,5 +68,68 @@ public class ModelSystemCanvasHeadlessTests
             // Without setting DataContext, the canvas VM is null.
             Assert.IsNull(canvas.DataContext);
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_NameEdit_IsCanceledWhenEditedNodeIsDeleted()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_NameEdit_IsCanceledWhenEditedNodeIsDeleted),
+            (user, projectSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "EditableNode",
+                    typeof(SimpleGuiTestModule),
+                    new Rectangle(20, 20, 160, 60),
+                    out var node,
+                    out var error),
+                    error?.Message);
+                Assert.IsNotNull(node);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var nodeVm = vm.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, node));
+                Assert.IsNotNull(nodeVm);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas
+                    {
+                        DataContext = vm
+                    };
+
+                    var beginNameEdit = typeof(ModelSystemCanvas).GetMethod(
+                        "BeginNameEdit",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(beginNameEdit);
+                    beginNameEdit!.Invoke(canvas, new object[] { nodeVm! });
+
+                    var nameEditorField = typeof(ModelSystemCanvas).GetField(
+                        "_nameEditor",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(nameEditorField);
+                    var nameEditor = (TextBox?)nameEditorField!.GetValue(canvas);
+                    Assert.IsNotNull(nameEditor);
+                    Assert.IsTrue(nameEditor!.IsVisible, "Name editor should be visible before deletion.");
+
+                    nameEditor.Text = "ShouldNotCommit";
+
+                    vm.DeleteMultipleAsync(new ICanvasElement[] { nodeVm! })
+                        .GetAwaiter().GetResult();
+
+                    var editingNameElementField = typeof(ModelSystemCanvas).GetField(
+                        "_editingNameElement",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(editingNameElementField);
+                    Assert.IsNull(editingNameElementField!.GetValue(canvas),
+                        "Active name edit should be canceled when the edited element is deleted.");
+                    Assert.IsFalse(nameEditor.IsVisible, "Name editor should be hidden after cancellation.");
+
+                    Assert.IsEmpty(boundary.Modules,
+                        "The edited node should be deleted from the model.");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
     }
 }

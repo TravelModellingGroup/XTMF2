@@ -41,6 +41,7 @@ namespace XTMF2
         protected const string IdProperty = "Id";
         protected const string DisabledProperty = "Disabled";
         protected const string OrthogonalProperty = "Orthogonal";
+        protected const string HiddenDestinationsProperty = "HiddenDestinations";
 
         public Node Origin { get; }
         public NodeHook OriginHook { get; }
@@ -108,6 +109,8 @@ namespace XTMF2
             string? hookName = null;
             bool disabled = false;
             bool orthogonal = false;
+            bool singleHiddenDestination = false;
+            List<bool>? hiddenDestinations = null;
             Guid linkId = Guid.Empty;
             int listIndex = 0;
             // read in the values
@@ -179,6 +182,34 @@ namespace XTMF2
                     reader.Read();
                     orthogonal = reader.GetBoolean();
                 }
+                else if(reader.ValueTextEquals(HiddenDestinationsProperty))
+                {
+                    if (!reader.Read())
+                    {
+                        return FailWith(out link, out error, "Invalid hidden-destinations payload when loading a link.");
+                    }
+
+                    if (reader.TokenType == JsonTokenType.True || reader.TokenType == JsonTokenType.False)
+                    {
+                        singleHiddenDestination = reader.GetBoolean();
+                    }
+                    else if (reader.TokenType == JsonTokenType.StartArray)
+                    {
+                        hiddenDestinations = new List<bool>();
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                        {
+                            if (reader.TokenType != JsonTokenType.True && reader.TokenType != JsonTokenType.False)
+                            {
+                                return FailWith(out link, out error, "Invalid hidden-destinations array entry when loading a link.");
+                            }
+                            hiddenDestinations.Add(reader.GetBoolean());
+                        }
+                    }
+                    else
+                    {
+                        return FailWith(out link, out error, "Invalid hidden-destinations token when loading a link.");
+                    }
+                }
                 else
                 {
                     return FailWith(out link, out error, "Unknown parameter type when loading link " + reader.GetString());
@@ -214,12 +245,16 @@ namespace XTMF2
             }
             if (destination != null)
             {
-                link = new SingleLink(origin, hook, destination, disabled, orthogonal, linkId);
+                if (hiddenDestinations is { Count: > 0 })
+                {
+                    singleHiddenDestination = hiddenDestinations[0];
+                }
+                link = new SingleLink(origin, hook, destination, disabled, orthogonal, singleHiddenDestination, linkId);
             }
             else
             {
                 // destinations can not be null if destination was.
-                link = new MultiLink(origin, hook, destinations!, disabled, orthogonal, linkId);
+                link = new MultiLink(origin, hook, destinations!, disabled, orthogonal, hiddenDestinations, linkId);
             }
             return true;
         }
@@ -241,6 +276,14 @@ namespace XTMF2
             error = null;
             return true;
         }
+
+        public abstract int DestinationCount { get; }
+
+        public abstract bool IsDestinationHidden(int destinationIndex);
+
+        internal abstract bool SetDestinationHidden(int destinationIndex, bool hidden, [NotNullWhen(false)] out CommandError? error);
+
+        internal abstract bool SetAllDestinationsHidden(bool hidden, [NotNullWhen(false)] out CommandError? error);
 
         internal abstract bool HasDestination(Node destNode);
     }

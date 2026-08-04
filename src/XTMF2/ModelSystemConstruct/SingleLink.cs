@@ -22,17 +22,21 @@ using System.Text;
 using System.Text.Json;
 using XTMF2.Editing;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.ModelSystemConstruct
 {
     public sealed class SingleLink : Link
     {
         public Node Destination { get; private set; }
+        public bool DestinationHidden { get; private set; }
 
-        public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled, bool orthogonal = false, Guid id = default)
+        public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled, bool orthogonal = false,
+            bool destinationHidden = false, Guid id = default)
             : base(origin, hook, disabled, orthogonal, id)
         {
             Destination = destination;
+            DestinationHidden = destinationHidden;
         }
 
         internal bool SetDestination(Node destination, out CommandError? error)
@@ -58,8 +62,34 @@ namespace XTMF2.ModelSystemConstruct
             {
                 writer.WriteBoolean(OrthogonalProperty, true);
             }
+            if (DestinationHidden)
+            {
+                writer.WriteBoolean(HiddenDestinationsProperty, true);
+            }
             writer.WriteEndObject();
         }
+
+        public override int DestinationCount => 1;
+
+        public override bool IsDestinationHidden(int destinationIndex)
+            => destinationIndex == 0 && DestinationHidden;
+
+        internal override bool SetDestinationHidden(int destinationIndex, bool hidden, [NotNullWhen(false)] out CommandError? error)
+        {
+            if (destinationIndex != 0)
+            {
+                error = new CommandError("Destination index out of range for SingleLink.");
+                return false;
+            }
+
+            DestinationHidden = hidden;
+            Notify(nameof(DestinationHidden));
+            error = null;
+            return true;
+        }
+
+        internal override bool SetAllDestinationsHidden(bool hidden, [NotNullWhen(false)] out CommandError? error)
+            => SetDestinationHidden(0, hidden, out error);
 
         internal override bool Construct(ref string? error)
         {
