@@ -37,8 +37,9 @@ namespace XTMF2.GUI.Views;
 /// <para>
 /// Phase 1: the user selects the target boundary from a flat, indented list of all
 ///          boundaries in the model system.
-/// Phase 2: the user selects a compatible module from that boundary. Only modules
-///          whose type is assignable to the hook's element type are shown.
+/// Phase 2: the user selects a compatible module from that boundary. Both regular
+///          nodes and function instances are considered; only targets whose type is
+///          assignable to the hook's element type are shown.
 /// </para>
 /// </summary>
 public partial class InterBoundaryLinkDialog : Window, INotifyPropertyChanged
@@ -306,7 +307,17 @@ public partial class InterBoundaryLinkDialog : Window, INotifyPropertyChanged
         foreach (var node in _selectedBoundaryItem.Boundary.Modules)
         {
             if (node.Type is not null && _hookElementType.IsAssignableFrom(node.Type))
+            {
                 CompatibleNodes.Add(new NodePickEntry(node));
+            }
+        }
+
+        foreach (var functionInstance in _selectedBoundaryItem.Boundary.FunctionInstances)
+        {
+            if (functionInstance.Type is not null && _hookElementType.IsAssignableFrom(functionInstance.Type))
+            {
+                CompatibleNodes.Add(new NodePickEntry(functionInstance));
+            }
         }
 
         // Start with no search text so all compatible nodes are visible.
