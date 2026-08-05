@@ -730,6 +730,28 @@ partial class ModelSystemCanvas
             }
         }
 
+        // ── Variable management for FunctionInstances ────────────────────
+        if (!_vm.IsInsideFunctionTemplate
+            && element is FunctionInstanceViewModel fiVarCandidate
+            && FunctionTemplate.ExtractFunctionInstanceVariableType(fiVarCandidate.UnderlyingInstance) is not null)
+        {
+            bool alreadyFiVar = vm.IsFunctionInstanceInVariables(fiVarCandidate);
+            var fiVarHeader = alreadyFiVar
+                ? "Remove from Model System Variables"
+                : "Add to Model System Variables";
+            var capturedFiVar = fiVarCandidate;
+            var fiVarItem = new MenuItem { Header = fiVarHeader };
+            fiVarItem.Click += (_, _) =>
+            {
+                if (vm.IsFunctionInstanceInVariables(capturedFiVar))
+                    _ = vm.RemoveFunctionInstanceFromVariablesAsync(capturedFiVar);
+                else
+                    _ = vm.AddFunctionInstanceToVariablesAsync(capturedFiVar);
+            };
+            menu.Items.Add(fiVarItem);
+            menu.Items.Add(new Separator());
+        }
+
         // ── IFunction<T> → Create linked ExecuteWithContext ───────────────
         if (element is NodeViewModel funcNode)
         {

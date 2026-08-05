@@ -30,6 +30,27 @@ internal abstract class Variable : Expression
 
     internal static Variable CreateVariableForNode(Node node, ReadOnlyMemory<char> text, int offset)
     {
+            // A FunctionInstance whose template entry-node type is IFunction<T> for a supported
+            // basic type can be used as a variable; its runtime value is obtained by invoking the
+            // per-instance cloned entry-node module.
+            if (node is ModelSystemConstruct.FunctionInstance fi)
+            {
+                var inner = ModelSystemConstruct.FunctionTemplate.ExtractFunctionInstanceVariableType(fi);
+                if (inner is null)
+                    throw new CompilerException(
+                        $"FunctionInstance '{node.Name}' type '{fi.Type?.FullName}' is not IFunction<T> of a supported basic type.",
+                        offset);
+                return inner.FullName switch
+                {
+                    "System.Boolean" => new FunctionInstanceVariable<bool>(text, offset, fi),
+                    "System.Int32"   => new FunctionInstanceVariable<int>(text, offset, fi),
+                    "System.Single"  => new FunctionInstanceVariable<float>(text, offset, fi),
+                    "System.String"  => new FunctionInstanceVariable<string>(text, offset, fi),
+                    _ => throw new CompilerException(
+                        $"Unsupported IFunction inner type '{inner.FullName}' for FunctionInstance '{node.Name}'.", offset)
+                };
+            }
+
             // FunctionParameter nodes expose IFunction<T> for a basic type; handle them specially
             // because they don't have a ParameterValue — their value arrives via the FunctionInstance
             // hook binding at runtime.

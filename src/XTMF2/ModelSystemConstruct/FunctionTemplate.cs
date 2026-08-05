@@ -327,6 +327,37 @@ namespace XTMF2.ModelSystemConstruct
         }
 
         /// <summary>
+        /// Returns the supported basic inner type T (bool, int, float, or string) that
+        /// <paramref name="fi"/> exposes as a variable, or <c>null</c> if it cannot be used
+        /// as a model system variable.
+        /// <para>
+        /// Unlike <see cref="ExtractIFunctionInnerType"/>, this method also handles entry-node
+        /// types such as <see cref="RuntimeModules.BasicParameter{T}"/> and
+        /// <see cref="RuntimeModules.SetableParameter{T}"/> that merely <em>implement</em>
+        /// <c>IFunction&lt;T&gt;</c> rather than being <c>IFunction&lt;T&gt;</c> directly.
+        /// </para>
+        /// </summary>
+        public static Type? ExtractFunctionInstanceVariableType(FunctionInstance fi)
+        {
+            var entryType = fi.Template.EntryNode?.Type;
+            if (entryType is null) return null;
+            // Fast path: the type IS IFunction<T>.
+            var direct = ExtractIFunctionInnerType(entryType);
+            if (direct is not null) return direct;
+            // Slow path: scan implemented interfaces for IFunction<T>.
+            foreach (var iface in entryType.GetInterfaces())
+            {
+                if (!iface.IsGenericType) continue;
+                if (iface.GetGenericTypeDefinition() != typeof(IFunction<>)) continue;
+                var inner = iface.GetGenericArguments()[0];
+                if (inner == typeof(bool) || inner == typeof(int)
+                 || inner == typeof(float) || inner == typeof(string))
+                    return inner;
+            }
+            return null;
+        }
+
+        /// <summary>
         /// If <paramref name="nodeType"/> is the closed generic form of
         /// <see cref="RuntimeModules.BasicParameter{T}"/> or
         /// <see cref="RuntimeModules.ScriptedParameter{T}"/> for a supported basic T,
@@ -449,7 +480,7 @@ namespace XTMF2.ModelSystemConstruct
             ref Utf8JsonReader reader, Boundary parent, [NotNullWhen(true)] out FunctionTemplate? template, [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
         {
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes = new();
-            return Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, parent, out template, ref error, warnings);
+            return Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, parent, out template, ref error, warnings, deferredLinks: null);
         }
 
         internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
@@ -457,7 +488,8 @@ namespace XTMF2.ModelSystemConstruct
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
             ref Utf8JsonReader reader, Boundary parent,
             [NotNullWhen(true)] out FunctionTemplate? template,
-            [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
+            [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
+            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId)>? deferredLinks = null)
         {
             template = null;
             Guid? id = null;
@@ -527,7 +559,7 @@ namespace XTMF2.ModelSystemConstruct
                 else if (reader.ValueTextEquals(nameof(InternalModules)))
                 {
                     reader.Read();
-                    if (!innerModules.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings))
+                    if (!innerModules.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings, deferredLinks))
                         return false;
                 }
                 else if (reader.ValueTextEquals(EntryNodeProperty))

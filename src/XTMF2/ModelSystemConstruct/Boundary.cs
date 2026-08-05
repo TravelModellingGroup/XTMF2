@@ -945,7 +945,8 @@ namespace XTMF2.ModelSystemConstruct
 
         internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
-            ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
+            ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
+            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId)>? deferredLinks = null)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
             {
@@ -1036,7 +1037,7 @@ namespace XTMF2.ModelSystemConstruct
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
                             var boundary = new Boundary(this);
-                            if (!boundary.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings))
+                            if (!boundary.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings, deferredLinks))
                             {
                                 return false;
                             }
@@ -1054,7 +1055,8 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!Link.Create(modules, node, ref reader, out var link, ref error, warnings))
+                            if (!Link.Create(modules, node, ref reader, out var link, ref error, warnings,
+                                    deferredLinks: deferredLinks, containedIn: this))
                             {
                                 return false;
                             }
@@ -1091,7 +1093,7 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!FunctionTemplate.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, this, out var template, ref error, warnings))
+                            if (!FunctionTemplate.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, this, out var template, ref error, warnings, deferredLinks))
                                 return false;
                             _functionTemplates.Add(template!);
                         }
