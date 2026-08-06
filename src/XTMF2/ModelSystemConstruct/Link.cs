@@ -97,8 +97,12 @@ namespace XTMF2
         /// <param name="link">The created link, null if there is a warning!</param>
         /// <param name="error">The error message if creation fails.</param>
         /// <param name="warnings">Optional list of warnings.</param>
+        /// <param name="deferredLinks">When provided, links whose destination index is not yet in <paramref name="nodes"/> are added here instead of being dropped. Resolved after all nodes are loaded.</param>
+        /// <param name="containedIn">The boundary that owns this link; required when <paramref name="deferredLinks"/> is provided.</param>
         /// <returns>True if the link was created successfully or if there was only a warning; otherwise, false.</returns>
-        internal static bool Create(ModuleRepository modules, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, out Link? link, [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
+        internal static bool Create(ModuleRepository modules, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, out Link? link, [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
+            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId)>? deferredLinks = null,
+            Boundary? containedIn = null)
         {
             if(reader.TokenType != JsonTokenType.StartObject)
             {
@@ -108,6 +112,7 @@ namespace XTMF2
             List<Node>? destinations = null;
             string? hookName = null;
             bool disabled = false;
+            int rawDestinationIndex = -1;
             bool orthogonal = false;
             bool singleHiddenDestination = false;
             List<bool>? hiddenDestinations = null;
@@ -151,6 +156,7 @@ namespace XTMF2
                         case JsonTokenType.Number:
                             {
                                 var index = reader.GetInt32();
+                                rawDestinationIndex = index;
                                 nodes.TryGetValue(index, out destination);
                             }
                             break;
@@ -229,9 +235,20 @@ namespace XTMF2
             }
             if (destination == null && (destinations == null || destinations.Count == 0))
             {
+                // If we have a deferred-links list and the origin was found, the destination may be
+                // a FunctionInstance that hasn't been added to the node dictionary yet (they are
+                // loaded after FunctionTemplates). Defer rather than drop.
+                if (deferredLinks is not null && containedIn is not null
+                    && origin is not null && hookName is not null && rawDestinationIndex >= 0)
+                {
+                    deferredLinks.Add((containedIn, origin, hookName, rawDestinationIndex,
+                        disabled, orthogonal, singleHiddenDestination, linkId));
+                    link = null;
+                    return true;
+                }
                 // Destination node(s) not found – likely skipped because their type was missing.
                 link = null;
-                warnings?.Add($"A link from '{origin.Name}' via hook '{hookName}' could not be loaded because its destination node(s) were not found (possibly skipped due to a missing type) and will be skipped.");
+                warnings?.Add($"A link from '{origin!.Name}' via hook '{hookName}' could not be loaded because its destination node(s) were not found (possibly skipped due to a missing type) and will be skipped.");
                 return true;
             }
             var hook = origin is FunctionInstance fi

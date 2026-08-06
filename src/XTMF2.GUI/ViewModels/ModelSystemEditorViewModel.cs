@@ -2024,6 +2024,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public bool IsNodeInVariables(NodeViewModel nvm) =>
         Session.ModelSystem.Variables.Contains(nvm.UnderlyingNode);
 
+    /// <summary>Returns true when the <see cref="FunctionInstance"/> backing <paramref name="fivm"/> is in the model system variable list.</summary>
+    public bool IsFunctionInstanceInVariables(FunctionInstanceViewModel fivm) =>
+        Session.ModelSystem.Variables.Contains(fivm.UnderlyingInstance);
+
     /// <summary>Returns true when <paramref name="nvm"/> is in the current FunctionTemplate's local variable list.</summary>
     public bool IsNodeInLocalVariables(NodeViewModel nvm) =>
         _currentFunctionTemplate?.UnderlyingTemplate.LocalVariables.Contains(nvm.UnderlyingNode) ?? false;
@@ -2048,6 +2052,26 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public async Task RemoveNodeFromVariablesAsync(NodeViewModel nvm)
     {
         if (!Session.RemoveVariable(User, nvm.UnderlyingNode, out var error))
+            await ShowError("Remove Variable Failed", error);
+    }
+
+    /// <summary>
+    /// Adds the given <see cref="FunctionInstance"/> to the model system's variable list.
+    /// Called from the canvas context menu.
+    /// </summary>
+    public async Task AddFunctionInstanceToVariablesAsync(FunctionInstanceViewModel fivm)
+    {
+        if (!Session.AddVariable(User, fivm.UnderlyingInstance, out var error))
+            await ShowError("Add Variable Failed", error);
+    }
+
+    /// <summary>
+    /// Removes the given <see cref="FunctionInstance"/> from the model system's variable list.
+    /// Called from the canvas context menu.
+    /// </summary>
+    public async Task RemoveFunctionInstanceFromVariablesAsync(FunctionInstanceViewModel fivm)
+    {
+        if (!Session.RemoveVariable(User, fivm.UnderlyingInstance, out var error))
             await ShowError("Remove Variable Failed", error);
     }
 

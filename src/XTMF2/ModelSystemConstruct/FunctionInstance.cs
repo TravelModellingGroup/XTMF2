@@ -404,6 +404,13 @@ namespace XTMF2.ModelSystemConstruct
         private IModule? ResolveRuntimeDestModule(Node dest)
         {
             var r = dest is GhostNode gn ? gn.ReferencedNode : dest;
+            // A FunctionInstance on the outer boundary is not in _runtimeModules (those only
+            // contain clones of nodes inside this template).  Node.Module is never set for
+            // FunctionInstances, so we must call GetRuntimeModule on the target instance.
+            if (r is FunctionInstance fi)
+                return fi.Template.EntryNode is not null
+                    ? fi.GetRuntimeModule(fi.Template.EntryNode)
+                    : null;
             return _runtimeModules!.TryGetValue(r, out var m) ? m : r.Module;
         }
 
