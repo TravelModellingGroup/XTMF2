@@ -167,16 +167,22 @@ namespace XTMF2.ModelSystemConstruct
 
         internal bool Validate(ref string? moduleName, ref string? error)
         {
+            Guid? elementId = null;
+            return Validate(ref moduleName, ref error, ref elementId);
+        }
+
+        internal bool Validate(ref string? moduleName, ref string? error, ref Guid? elementId)
+        {
             foreach (var module in _modules)
             {
-                if (!module.Validate(ref moduleName, ref error))
+                if (!module.Validate(ref moduleName, ref error, ref elementId))
                 {
                     return false;
                 }
             }
             foreach (var children in _boundaries)
             {
-                if (!children.Validate(ref moduleName, ref error))
+                if (!children.Validate(ref moduleName, ref error, ref elementId))
                 {
                     return false;
                 }
@@ -184,7 +190,7 @@ namespace XTMF2.ModelSystemConstruct
             // Validate the internal structure of each FunctionTemplate once (shared across all instances).
             foreach (var ft in _functionTemplates)
             {
-                if (!ft.InternalModules.Validate(ref moduleName, ref error))
+                if (!ft.InternalModules.Validate(ref moduleName, ref error, ref elementId))
                     return false;
             }
             return true;

@@ -211,6 +211,12 @@ namespace XTMF2.ModelSystemConstruct
 
         internal bool Validate(ref string? moduleName, ref string? error)
         {
+            Guid? elementId = null;
+            return Validate(ref moduleName, ref error, ref elementId);
+        }
+
+        internal bool Validate(ref string? moduleName, ref string? error, ref Guid? elementId)
+        {
             if (IsDisabled)
             {
                 return true;
@@ -224,6 +230,7 @@ namespace XTMF2.ModelSystemConstruct
                     if (!ContainedWithin.Links.Any(l => l.Origin == this && l.OriginHook == hook))
                     {
                         moduleName = Name;
+                        elementId = Id;
                         error = $"A required link was not assigned for the hook {hook.Name}!";
                         return false;
                     }

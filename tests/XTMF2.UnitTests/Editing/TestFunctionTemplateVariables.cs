@@ -464,7 +464,7 @@ public class TestFunctionTemplateVariables
                     bool success = false;
                     using var sem = new SemaphoreSlim(0);
                     runBus.ClientFinishedModelSystem += (_, _) => { success = true; sem.Release(); };
-                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack, moduleName, elementId) =>
                     {
                         runError = new CommandError(e + "\r\n" + stack);
                         sem.Release();
@@ -528,7 +528,7 @@ public class TestFunctionTemplateVariables
                     bool success = false;
                     using var sem = new SemaphoreSlim(0);
                     runBus.ClientFinishedModelSystem += (_, _) => { success = true; sem.Release(); };
-                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack, moduleName, elementId) =>
                     {
                         runError = new CommandError(e + "\r\n" + stack);
                         sem.Release();
@@ -598,7 +598,7 @@ public class TestFunctionTemplateVariables
                     bool success = false;
                     using var sem = new SemaphoreSlim(0);
                     runBus.ClientFinishedModelSystem += (_, _) => { success = true; sem.Release(); };
-                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack, moduleName, elementId) =>
                     {
                         runError = new CommandError(e + "\r\n" + stack);
                         sem.Release();

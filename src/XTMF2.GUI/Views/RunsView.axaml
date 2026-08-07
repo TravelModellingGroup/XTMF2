@@ -104,6 +104,13 @@
                                        Opacity="0.7"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
+                        <Button Content="{Binding SelectedRun.ErrorNavigationLinkText}"
+                            IsVisible="{Binding SelectedRun.HasErrorNavigationTarget}"
+                            Classes="dlg-primary"
+                            Margin="0,6,0,0"
+                            HorizontalAlignment="Left"
+                            Click="OpenErrorTargetButton_Click"
+                            ToolTip.Tip="Open this run's model system and focus the element that raised the error."/>
                         <!-- Apply optimization results button — only visible after estimation/calibration runs -->
                         <Button Content="⬇  Apply Optimization Results to Model System"
                                 Command="{Binding SelectedRun.ApplyOptimizationResultsCommand}"

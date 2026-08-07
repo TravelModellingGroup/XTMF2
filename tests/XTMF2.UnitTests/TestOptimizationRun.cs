@@ -86,7 +86,7 @@ public class TestOptimizationRun
                     success = true;
                     sim.Release();
                 };
-                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                 {
                     error = new CommandError(e + "\r\n" + stack);
                     sim.Release();
@@ -157,7 +157,7 @@ public class TestOptimizationRun
                     success = true;
                     sim.Release();
                 };
-                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                 {
                     error = new CommandError(e + "\r\n" + stack);
                     sim.Release();
@@ -223,7 +223,7 @@ public class TestOptimizationRun
                     finished = true;
                     sim.Release();
                 };
-                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                 {
                     error = new CommandError(e + "\r\n" + stack);
                     sim.Release();
@@ -293,7 +293,7 @@ public class TestOptimizationRun
                     finished = true;
                     sim.Release();
                 };
-                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                 {
                     error = new CommandError(e + "\r\n" + stack);
                     sim.Release();
@@ -370,7 +370,7 @@ public class TestOptimizationRun
                     finished = true;
                     sim.Release();
                 };
-                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                 {
                     error = new CommandError(e + "\r\n" + stack);
                     sim.Release();
@@ -439,7 +439,7 @@ public class TestOptimizationRun
                     finished = true;
                     sim.Release();
                 };
-                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                 {
                     error = new CommandError(e + "\r\n" + stack);
                     sim.Release();
@@ -511,7 +511,7 @@ public class TestOptimizationRun
                         success = true;
                         sim.Release();
                     };
-                    HostBus.RunError onError = (sender, runId, e, stack) =>
+                    HostBus.RunError onError = (sender, runId, e, stack, moduleName, elementId) =>
                     {
                         error = new CommandError(e + "\r\n" + stack);
                         sim.Release();

@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2020 University of Toronto
+    Copyright 2020-2026 University of Toronto
 
     This file is part of XTMF2.
 
@@ -56,6 +56,8 @@ namespace XTMF2
         public string? ErrorStackTrace { get; private set; }
 
         public string? ErrorModuleName { get; private set; }
+
+        public string? ErrorElementId { get; private set; }
 
         public string RunDirectory { get; private set; }
 
@@ -167,6 +169,8 @@ namespace XTMF2
             {
                 writer.WriteString(nameof(ErrorModuleName),
                     xtmfError.FailingModule?.Name ?? String.Empty);
+                
+                writer.WriteString(nameof(ErrorElementId), (xtmfError.FailingModule?.ToString()) ?? string.Empty);
             }
             writer.WriteEndObject();
         }
@@ -177,7 +181,7 @@ namespace XTMF2
         /// <param name="runDirectory">The directory that the run was executed in.</param>
         /// <param name="moduleName">The name of the module that had the error.</param>
         /// <param name="errorMessage">A description of the error.</param>
-        internal static void WriteValidationError(string runDirectory, string? moduleName, string? errorMessage)
+        internal static void WriteValidationError(string runDirectory, string? moduleName, string? errorMessage, Guid? elementId = null)
         {
             using var stream = File.OpenWrite(Path.Combine(runDirectory, ResultsFile));
             using var writer = new Utf8JsonWriter(stream);
@@ -186,6 +190,7 @@ namespace XTMF2
             writer.WriteString(nameof(ErrorMessage), errorMessage ?? string.Empty);           
             writer.WriteString(nameof(ErrorModuleName),
                 moduleName ?? string.Empty);
+            writer.WriteString(nameof(ErrorElementId), (elementId?.ToString()) ?? string.Empty);
             writer.WriteEndObject();
         }
     }

@@ -112,7 +112,15 @@ public sealed class HostBus : IDisposable
     /// <param name="runID">The ID of the run that failed.</param>
     /// <param name="errorMessage">The error message from the error.</param>
     /// <param name="stack">The stack trace at the point of the error.</param>
-    public delegate void RunError(object sender, string runID, string errorMessage, string stack);
+    /// <param name="moduleName">The name of the module that caused the error, if known.</param>
+    /// <param name="elementId">The model element ID (Node/FunctionInstance/etc.) associated with the failure, if it could be resolved from the failing runtime module.</param>
+    public delegate void RunError(object sender, string runID, string errorMessage, string stack, string? moduleName, Guid? elementId);
+
+    /// <summary>
+    /// Used to report that a model system has had a run error, including optional
+    /// module metadata for UI navigation.
+    /// </summary>
+    public delegate void RunErrorWithTarget(object sender, string runID, string errorMessage, string stack, string? moduleName, Guid? elementId);
 
     /// <summary>
     /// Used to trigger a status update from a model system.
@@ -126,6 +134,12 @@ public sealed class HostBus : IDisposable
     /// This event is signalled when a client runs into an error.
     /// </summary>
     public event RunError? ClientErrorWhenRunningModelSystem;
+
+    /// <summary>
+    /// This event is signalled when a client runs into an error and includes
+    /// optional model-element metadata.
+    /// </summary>
+    public event RunErrorWithTarget? ClientErrorWhenRunningModelSystemWithTarget;
 
     /// <summary>
     /// This event is triggered when the client has sent an update for the run's status message.
@@ -209,7 +223,10 @@ public sealed class HostBus : IDisposable
                             {
                                 var runId = reader.ReadString();
                                 var errMsg = reader.ReadString();
-                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, String.Empty));
+                                var moduleName = reader.ReadString();
+                                var elementId = Guid.TryParse(reader.ReadString(), out var parsedId) ? (Guid?)parsedId : null;
+                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, String.Empty, moduleName, elementId));
+                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystemWithTarget?.Invoke(this, runId, errMsg, String.Empty, moduleName, elementId));
                             }
                             break;
                         case In.ClientFinishedModelSystem:
@@ -223,7 +240,13 @@ public sealed class HostBus : IDisposable
                                 var runId = reader.ReadString();
                                 var errMsg = reader.ReadString();
                                 var stack = reader.ReadString();
-                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, stack));
+                                var moduleName = reader.ReadString();
+                                var elementIdText = reader.ReadString();
+                                var elementId = Guid.TryParse(elementIdText, out var parsedId)
+                                    ? (Guid?)parsedId
+                                    : null;
+                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, stack, moduleName, elementId));
+                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystemWithTarget?.Invoke(this, runId, errMsg, stack, moduleName, elementId));
                             }
                             break;
                         case In.ClientReportedStatus:

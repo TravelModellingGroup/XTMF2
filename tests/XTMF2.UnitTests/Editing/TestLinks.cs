@@ -708,7 +708,7 @@ namespace XTMF2.UnitTests.Editing
                         success = true;
                         sim.Release();
                     };
-                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                     {
                         error = new CommandError(e + "\r\n" + stack);
                         sim.Release();

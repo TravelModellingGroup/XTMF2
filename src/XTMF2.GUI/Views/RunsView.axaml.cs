@@ -20,6 +20,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using XTMF2.GUI;
 using XTMF2.GUI.ViewModels;
 
 namespace XTMF2.GUI.Views;
@@ -71,5 +72,19 @@ public partial class RunsView : UserControl
             window.Show(owner);
         else
             window.Show();
+    }
+
+    private void OpenErrorTargetButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm?.SelectedRun is not { } run) return;
+        if (!run.TryGetErrorNavigationTarget(out var session, out var user, out var elementId))
+            return;
+
+        if (TopLevel.GetTopLevel(this) is not MainWindow mainWindow)
+            return;
+
+        var editor = mainWindow.OpenModelSystemTabAndGet(session, user);
+        mainWindow.FocusEditorTab(editor);
+        editor.NavigateToElementById(elementId);
     }
 }

@@ -76,7 +76,7 @@ namespace XTMF2.Bus
                             }
                             catch (Exception e)
                             {
-                                _Bus.ModelRunFailed(context.ID, e.Message, e.StackTrace);
+                                _Bus.ModelRunFailed(context.ID, e.Message, e.StackTrace, null, null);
                             }
                         }
                     }
