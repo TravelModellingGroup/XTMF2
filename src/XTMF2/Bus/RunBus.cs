@@ -109,13 +109,15 @@ namespace XTMF2.Bus
         /// Signal to the host that the run failed in the validation step.
         /// </summary>
         /// <param name="error">The error message.</param>
-        internal void ModelRunFailedValidation(string? error)
+        internal void ModelRunFailedValidation(string? error, string? moduleName, Guid? elementId)
         {
             Write((writer) =>
             {
                 writer.Write((int)Out.ClientErrorValidatingModelSystem);
                 writer.Write(_id);
                 writer.Write(error ?? "No error message!");
+                writer.Write(moduleName ?? String.Empty);
+                writer.Write(elementId?.ToString() ?? String.Empty);
             });
         }
 
@@ -124,7 +126,9 @@ namespace XTMF2.Bus
         /// </summary>
         /// <param name="message">The message containing the error.</param>
         /// <param name="stackTrace">The stack trace from the time of the error.</param>
-        internal void ModelRunFailed(string? message, string? stackTrace)
+        /// <param name="moduleName">The resolved module name, when available.</param>
+        /// <param name="elementId">The resolved model element ID, when available.</param>
+        internal void ModelRunFailed(string? message, string? stackTrace, string? moduleName = null, Guid? elementId = null)
         {
             Write((writer) =>
             {
@@ -132,6 +136,8 @@ namespace XTMF2.Bus
                 writer.Write(_id);
                 writer.Write(message ?? String.Empty);
                 writer.Write(stackTrace ?? String.Empty);
+                writer.Write(moduleName ?? String.Empty);
+                writer.Write(elementId?.ToString() ?? String.Empty);
             });
         }
 
@@ -207,13 +213,13 @@ namespace XTMF2.Bus
                                     switch (error?.Type)
                                     {
                                         case RunErrorType.Validation:
-                                            ModelRunFailedValidation(error.Message);
+                                            ModelRunFailedValidation(error.Message, error.ModuleName, error.ElementId);
                                             break;
                                         case RunErrorType.RuntimeValidation:
-                                            ModelRunFailedValidation(error.Message);
+                                            ModelRunFailedValidation(error.Message, error.ModuleName, error.ElementId);
                                             break;
                                         case RunErrorType.Runtime:
-                                            ModelRunFailed(error.Message, error.StackTrace);
+                                            ModelRunFailed(error.Message, error.StackTrace, error.ModuleName, error.ElementId);
                                             break;
                                         default:
                                             ModelRunComplete();

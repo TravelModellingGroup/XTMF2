@@ -255,6 +255,15 @@ namespace XTMF2
         }
 
         /// <summary>
+        /// Check that all requirements have been met when constructing the model system,
+        /// returning the failing element ID when available.
+        /// </summary>
+        internal bool Validate(ref string? moduleName, ref string? error, ref Guid? elementId)
+        {
+            return GlobalBoundary.Validate(ref moduleName, ref error, ref elementId);
+        }
+
+        /// <summary>
         /// Generate the concrete model system for execution.
         /// </summary>
         /// <param name="runtime">The XTMF run time that we are executing within.</param>

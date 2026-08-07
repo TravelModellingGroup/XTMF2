@@ -529,6 +529,12 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         internal bool ValidateRuntimeModules(ref string? moduleName, ref string? error)
         {
+            Guid? elementId = null;
+            return ValidateRuntimeModules(ref moduleName, ref error, ref elementId);
+        }
+
+        internal bool ValidateRuntimeModules(ref string? moduleName, ref string? error, ref Guid? elementId)
+        {
             if (_runtimeModules is null) { error = null; return true; }
             foreach (var (node, module) in _runtimeModules)
             {
@@ -537,12 +543,16 @@ namespace XTMF2.ModelSystemConstruct
                     if (!module.RuntimeValidation(ref error))
                     {
                         moduleName = Name + "." + node.Name;
+                        // Internal template nodes are not directly visible from the boundary;
+                        // navigate to the owning FunctionInstance on the canvas.
+                        elementId = Id;
                         return false;
                     }
                 }
                 catch (Exception e)
                 {
                     moduleName = Name + "." + node.Name;
+                    elementId = Id;
                     error = e.Message;
                     return false;
                 }

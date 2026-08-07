@@ -77,7 +77,7 @@ namespace XTMF2.UnitTests
                         success = true;
                         sim.Release();
                     };
-                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                     {
                         error = new CommandError(e + "\r\n" + stack);
                         sim.Release();
@@ -118,7 +118,7 @@ namespace XTMF2.UnitTests
                         success = true;
                         sim.Release();
                     };
-                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                     {
                         error = new CommandError(e + "\r\n" + stack);
                         sim.Release();
@@ -175,7 +175,7 @@ namespace XTMF2.UnitTests
                         success = true;
                         sim.Release();
                     };
-                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                     {
                         error2 = new CommandError(e + "\r\n" + stack);
                         sim.Release();
@@ -221,7 +221,7 @@ namespace XTMF2.UnitTests
                         success = true;
                         sim.Release();
                     };
-                    clientBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    clientBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                     {
                         error = new CommandError(e + "\r\n" + stack);
                         sim.Release();
@@ -266,7 +266,7 @@ namespace XTMF2.UnitTests
                         success = true;
                         sim.Release();
                     };
-                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                     {
                         error = new CommandError(e + "\r\n" + stack);
                         sim.Release();
@@ -314,7 +314,7 @@ namespace XTMF2.UnitTests
                         success = true;
                         sim.Release();
                     };
-                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                     {
                         error = new CommandError(e + "\r\n" + stack);
                         sim.Release();
@@ -362,7 +362,7 @@ namespace XTMF2.UnitTests
                         success = true;
                         sim.Release();
                     };
-                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                     {
                         error = new CommandError(e + "\r\n" + stack);
                         sim.Release();
@@ -410,7 +410,7 @@ namespace XTMF2.UnitTests
                         success = true;
                         sim.Release();
                     };
-                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (sender, runId, e, stack, moduleName, elementId) =>
                     {
                         error = new CommandError(e + "\r\n" + stack);
                         sim.Release();

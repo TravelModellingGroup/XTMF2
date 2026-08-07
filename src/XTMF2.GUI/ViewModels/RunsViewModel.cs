@@ -57,9 +57,9 @@ public sealed partial class RunsViewModel : ObservableObject
     /// <param name="runId">The ID assigned by the host bus.</param>
     /// <param name="runName">The human-readable run name.</param>
     /// <returns>The newly created <see cref="RunViewModel"/>.</returns>
-    internal RunViewModel AddRun(string runId, string runName)
+    internal RunViewModel AddRun(string runId, string runName, ModelSystemSession session, User user)
     {
-        var vm = new RunViewModel(runId, runName);
+        var vm = new RunViewModel(runId, runName, session, user);
         Dispatcher.UIThread.Post(() =>
         {
             Runs.Add(vm);
@@ -85,13 +85,13 @@ public sealed partial class RunsViewModel : ObservableObject
     /// <summary>
     /// Marks the run with <paramref name="runId"/> as failed.  Safe to call from any thread.
     /// </summary>
-    internal void NotifyError(string runId, string errorMessage, string stack)
+    internal void NotifyError(string runId, string errorMessage, string stack, string? moduleName, Guid? elementId)
     {
         var vm = FindRun(runId);
         if (vm is null) return;
         Dispatcher.UIThread.Post(() =>
         {
-            vm.MarkError(errorMessage, stack);
+            vm.MarkError(errorMessage, stack, moduleName, elementId);
             SystemAlert.ShowRunFailed(vm.RunName);
         });
     }

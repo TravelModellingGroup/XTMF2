@@ -146,10 +146,21 @@ namespace XTMF2.Bus
                                 WriteHeartbeat(reader.ReadString());
                                 break;
                             case Out.ClientErrorValidatingModelSystem:
-                                ModelRunFailedValidation(reader.ReadString(), reader.ReadString());
+                            {
+                                var runId = reader.ReadString();
+                                var error = reader.ReadString();
+                                var moduleName = reader.ReadString();
+                                var elementId = reader.ReadString();
+                                ModelRunFailedValidation(runId,error, moduleName, elementId);
                                 return;
+                            }
                             case Out.ClientErrorWhenRunningModelSystem:
-                                ModelRunFailed(reader.ReadString(), reader.ReadString(), reader.ReadString());
+                                ModelRunFailed(
+                                    reader.ReadString(),
+                                    reader.ReadString(),
+                                    reader.ReadString(),
+                                    reader.ReadString(),
+                                    reader.ReadString());
                                 return;
                             case Out.ClientReportedStatus:
                                 SendStatusMessage(reader.ReadString(), reader.ReadString());
@@ -221,13 +232,15 @@ namespace XTMF2.Bus
         /// </summary>
         /// <param name="context">The run that failed.</param>
         /// <param name="error">The error message.</param>
-        internal void ModelRunFailedValidation(string runId, string error)
+        internal void ModelRunFailedValidation(string runId, string? error, string? moduleName = null, string? elementId = null)
         {
             Write((writer) =>
             {
                 writer.Write((int)Out.ClientErrorValidatingModelSystem);
                 writer.Write(runId);
                 writer.Write(error ?? "No error message!");
+                writer.Write(moduleName ?? String.Empty);
+                writer.Write(elementId ?? String.Empty);
             });
         }
 
@@ -237,7 +250,9 @@ namespace XTMF2.Bus
         /// <param name="context">The run that failed.</param>
         /// <param name="message">The message containing the error.</param>
         /// <param name="stackTrace">The stack trace from the time of the error.</param>
-        internal void ModelRunFailed(string runId, string? message, string? stackTrace)
+        /// <param name="moduleName">The resolved module name, when available.</param>
+        /// <param name="elementId">The resolved model element ID, when available.</param>
+        internal void ModelRunFailed(string runId, string? message, string? stackTrace, string? moduleName = null, string? elementId = null)
         {
             Write((writer) =>
             {
@@ -245,6 +260,8 @@ namespace XTMF2.Bus
                 writer.Write(runId);
                 writer.Write(message ?? String.Empty);
                 writer.Write(stackTrace ?? String.Empty);
+                writer.Write(moduleName ?? String.Empty);
+                writer.Write(elementId ?? String.Empty);
             });
         }
 

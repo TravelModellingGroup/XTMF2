@@ -106,7 +106,7 @@ public class RunController : IDisposable
         };
         hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
         hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
-        hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
+        hostBus.ClientErrorWhenRunningModelSystemWithTarget += controller.OnClientErrorWhenRunningModelSystem;
         hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
         hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
         // Start the client processing in a separate thread to avoid blocking the GUI
@@ -153,7 +153,7 @@ public class RunController : IDisposable
             controller = new RunController(runtime, hostBus);
             hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
             hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
-            hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
+            hostBus.ClientErrorWhenRunningModelSystemWithTarget += controller.OnClientErrorWhenRunningModelSystem;
             hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
             hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
             return true;
@@ -166,9 +166,9 @@ public class RunController : IDisposable
         }
     }
 
-    private void OnClientErrorWhenRunningModelSystem(object sender, string runID, string errorMessage, string stack)
+    private void OnClientErrorWhenRunningModelSystem(object sender, string runID, string errorMessage, string stack, string? moduleName, Guid? elementId)
     {
-        RunsViewModel.NotifyError(runID, errorMessage, stack);
+        RunsViewModel.NotifyError(runID, errorMessage, stack, moduleName, elementId);
     }
 
     private void OnClientFinishedModelSystem(object? sender, string runID)
@@ -271,7 +271,7 @@ public class RunController : IDisposable
         {
             _sessionsByRunId[id] = (msSession, user);
         }
-        var vm = RunsViewModel.AddRun(id, runName);
+        var vm = RunsViewModel.AddRun(id, runName, msSession, user);
         if (runMode != RunMode.Normal)
         {
             // Extract parameter metadata so the progress dialog can show names/bounds.

@@ -119,9 +119,8 @@ namespace XTMF2.Bus
         /// </summary>
         /// <param name="error">An error message if the model system is invalid.</param>
         /// <returns>True if the model system is valid, false otherwise with an error message.</returns>
-        private bool ValidateModelSystem(ref string? error)
+        private bool ValidateModelSystem(ref string? error, ref string? moduleName, ref Guid? elementId)
         {
-            string? moduleName = null;
             // Make sure that we are able to actually construct the directory
             try
             {
@@ -140,7 +139,7 @@ namespace XTMF2.Bus
             }
             if (!ModelSystem.Load(modelSystemAsString, _runtime, out var ms, ref error)
                 || !ms!.Construct(_runtime, ref error)
-                || !ms!.Validate(ref moduleName, ref error))
+                || !ms!.Validate(ref moduleName, ref error, ref elementId))
             {
                 RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, "Failed when validating the model system! " + error + "\r\n" + modelSystemAsString);
                 return false;
@@ -222,20 +221,21 @@ namespace XTMF2.Bus
         public RunError? StartRun()
         {
             string? error = null, moduleName = null, stackTrace = string.Empty;
+            Guid? elementId = null;
             var runBus = _runtime.RunBus;
             if (runBus is not null)
                 runBus.CurrentRun = this;
-            if (!ValidateModelSystem(ref error))
+            if (!ValidateModelSystem(ref error, ref moduleName, ref elementId))
             {
-                return new RunError(RunErrorType.Validation, $"Failed when validating the model system! {error}", moduleName, stackTrace);
+                return new RunError(RunErrorType.Validation, $"Failed when validating the model system! {error}", moduleName, stackTrace, elementId);
             }
             if(!GetStart(Start.ParseStartString(StartToExecute), out var startingMss, ref error))
             {
-                return new RunError(RunErrorType.Validation, $"Failed when getting the start point! {error}", moduleName, stackTrace);
+                return new RunError(RunErrorType.Validation, $"Failed when getting the start point! {error}", moduleName, stackTrace, elementId);
             }
             if(startingMss == null)
             {
-                return new RunError(RunErrorType.Validation, "Unable to find the starting point for this run!", moduleName, stackTrace);
+                return new RunError(RunErrorType.Validation, "Unable to find the starting point for this run!", moduleName, stackTrace, elementId);
             }
             var originalDir = Directory.GetCurrentDirectory();
             try
@@ -268,8 +268,17 @@ namespace XTMF2.Bus
                 error = e.Message;
                 stackTrace = e.StackTrace;
                 RunResults.WriteError(_currentWorkingDirectory, e);
-                return new RunError(RunErrorType.Runtime, error, 
-                    e is XTMFRuntimeException xtmfError ? xtmfError.FailingModule?.Name ?? "Unknown module" : null, stackTrace);
+                elementId = null;
+                string? failingModuleName = null;
+                if (e is XTMFRuntimeException xtmfError)
+                {
+                    if (!TryResolveModelElementForRuntimeModule(_modelSystem, xtmfError.FailingModule,
+                        out failingModuleName, out elementId))
+                    {
+                        failingModuleName = xtmfError.FailingModule?.Name ?? "Unknown module";
+                    }
+                }
+                return new RunError(RunErrorType.Runtime, error, failingModuleName, stackTrace, elementId);
             }
             finally
             {
@@ -279,6 +288,84 @@ namespace XTMF2.Bus
             }
             // success for now
             return null;
+        }
+
+        /// <summary>
+        /// Attempts to map a failing runtime module instance back to a model element
+        /// that is visible on the canvas.
+        /// </summary>
+        internal static bool TryResolveModelElementForRuntimeModule(
+            ModelSystem? modelSystem,
+            IModule? failingModule,
+            out string? moduleName,
+            out Guid? elementId)
+        {
+            moduleName = null;
+            elementId = null;
+            if (modelSystem is null || failingModule is null)
+                return false;
+
+            var toProcess = new Stack<Boundary>();
+            toProcess.Push(modelSystem.GlobalBoundary);
+            while (toProcess.TryPop(out var boundary))
+            {
+                foreach (var child in boundary.Boundaries)
+                    toProcess.Push(child);
+
+                foreach (var start in boundary.Starts)
+                {
+                    if (ReferenceEquals(start.Module, failingModule))
+                    {
+                        moduleName = start.Name;
+                        elementId = start.Id;
+                        return true;
+                    }
+                }
+
+                foreach (var node in boundary.Modules)
+                {
+                    if (ReferenceEquals(node.Module, failingModule))
+                    {
+                        moduleName = node.Name;
+                        elementId = node.Id;
+                        return true;
+                    }
+                }
+
+                foreach (var fi in boundary.FunctionInstances)
+                {
+                    if (ReferenceEquals(fi.Module, failingModule))
+                    {
+                        moduleName = fi.Name;
+                        elementId = fi.Id;
+                        return true;
+                    }
+
+                    // Runtime failures from internal template modules are surfaced on the
+                    // function-instance canvas element because internals are not visible at
+                    // the boundary scope where the instance is placed.
+                    foreach (var internalStart in fi.Template.InternalModules.Starts)
+                    {
+                        if (ReferenceEquals(fi.GetRuntimeModule(internalStart), failingModule))
+                        {
+                            moduleName = fi.Name;
+                            elementId = fi.Id;
+                            return true;
+                        }
+                    }
+                    foreach (var internalNode in fi.Template.InternalModules.Modules)
+                    {
+                        if (ReferenceEquals(fi.GetRuntimeModule(internalNode), failingModule))
+                        {
+                            moduleName = fi.Name;
+                            elementId = fi.Id;
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
         }
 
         private bool RuntimeValidation(ref string? moduleName, ref string? errorMessage)

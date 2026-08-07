@@ -27,12 +27,13 @@ namespace XTMF2.Bus
     /// </summary>
     public sealed class RunError
     {
-        public RunError(RunErrorType type, string? message, string? moduleName, string? stackTrace)
+        public RunError(RunErrorType type, string? message, string? moduleName, string? stackTrace, Guid? elementId = null)
         {
             Type = type;
             Message = message;
             ModuleName = moduleName;
             StackTrace = stackTrace;
+            ElementId = elementId;
         }
 
         /// <summary>
@@ -50,6 +51,12 @@ namespace XTMF2.Bus
         /// A description of the error that occurred.
         /// </summary>
         public string? Message {get; private set;}
+
+        /// <summary>
+        /// The model element ID (Node/FunctionInstance/etc.) associated with the failure,
+        /// if it could be resolved from the failing runtime module.
+        /// </summary>
+        public Guid? ElementId { get; private set; }
 
         /// <summary>
         /// The stack trace for the error.

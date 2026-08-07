@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using XTMF2.Configuration;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XTMF2.Bus;
@@ -76,11 +77,42 @@ public sealed partial class RunViewModel : ObservableObject
         _                  => "?"
     };
 
-    public RunViewModel(string runId, string runName)
+    private readonly ModelSystemSession _session;
+    private readonly User _user;
+
+    public RunViewModel(string runId, string runName, ModelSystemSession session, User user)
     {
         RunId   = runId;
         RunName = runName;
+        _session = session;
+        _user = user;
     }
+
+    /// <summary>
+    /// The resolved failing module name for the current error, if available.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ErrorNavigationLinkText))]
+    private string? _errorModuleName;
+
+    /// <summary>
+    /// The canvas element ID (node/function instance/etc.) associated with the current error.
+    /// </summary>
+    private Guid? _errorElementId;
+
+    /// <summary>
+    /// True when this run error includes a navigable model element target.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasErrorNavigationTarget;
+
+    /// <summary>
+    /// Link text shown in the Runs view for navigating to the failing module.
+    /// </summary>
+    public string ErrorNavigationLinkText =>
+        string.IsNullOrWhiteSpace(ErrorModuleName)
+            ? "Open failing module"
+            : $"Open failing module: {ErrorModuleName}";
 
     // ── Optimization run support ──────────────────────────────────────────
 
@@ -236,16 +268,35 @@ public sealed partial class RunViewModel : ObservableObject
     }
 
     /// <summary>Marks the run as failed with an error message.</summary>
-    internal void MarkError(string errorMessage, string stack)
+    internal void MarkError(string errorMessage, string stack, string? moduleName, Guid? elementId)
     {
         Status     = RunStatus.Error;
         StatusText = errorMessage;
+        ErrorModuleName = moduleName;
+        _errorElementId = elementId;
+        HasErrorNavigationTarget = elementId.HasValue;
         if (!string.IsNullOrEmpty(stack))
             Messages.Add($"Stack trace:\n{stack}");
         Messages.Add($"Error: {errorMessage}");
+        if (!string.IsNullOrWhiteSpace(moduleName))
+            Messages.Add($"Failing module: {moduleName}");
         OnPropertyChanged(nameof(StatusBadge));
         OnPropertyChanged(nameof(IsCompleted));
         CancelRunCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Returns navigation context for the current failing element, when available.
+    /// </summary>
+    internal bool TryGetErrorNavigationTarget(out ModelSystemSession session, out User user, out Guid elementId)
+    {
+        session = _session;
+        user = _user;
+        elementId = Guid.Empty;
+        if (!_errorElementId.HasValue)
+            return false;
+        elementId = _errorElementId.Value;
+        return true;
     }
 
     /// <summary>True when the run has finished or errored (i.e. it is safe to remove).</summary>

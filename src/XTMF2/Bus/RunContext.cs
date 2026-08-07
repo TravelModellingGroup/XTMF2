@@ -225,10 +225,10 @@ namespace XTMF2.Bus
                 {
                     case RunErrorType.Validation:
                     case RunErrorType.RuntimeValidation:
-                        runBus.ModelRunFailedValidation(error.Message);
+                        runBus.ModelRunFailedValidation(error.Message, error.ModuleName, error.ElementId);
                         break;
                     case RunErrorType.Runtime:
-                        runBus.ModelRunFailed(error.Message, error.StackTrace);
+                        runBus.ModelRunFailed(error.Message, error.StackTrace, error.ModuleName, error.ElementId);
                         break;
                     default:
                         runBus.ModelRunComplete();
@@ -261,7 +261,7 @@ namespace XTMF2.Bus
                 if (buildError!.Type is RunErrorType.Validation or RunErrorType.RuntimeValidation)
                     client.ModelRunFailedValidation(ID, buildError.Message ?? "Estimation setup failed");
                 else
-                    client.ModelRunFailed(ID, buildError.Message, buildError.StackTrace);
+                    client.ModelRunFailed(ID, buildError.Message, buildError.StackTrace, buildError.ModuleName, buildError.ElementId?.ToString());
                 return;
             }
 
@@ -341,8 +341,14 @@ namespace XTMF2.Bus
                         catch (Exception e)
                         {
                             while (e.InnerException is Exception inner) e = inner;
-                            firstRunError = new RunError(RunErrorType.Runtime, e.Message,
-                                e is XTMFRuntimeException xe ? xe.FailingModule?.Name : null, e.StackTrace);
+                            Guid? elementId = null;
+                            string? moduleName = null;
+                            if (e is XTMFRuntimeException xe)
+                            {
+                                if (!Run.TryResolveModelElementForRuntimeModule(ms, xe.FailingModule, out moduleName, out elementId))
+                                    moduleName = xe.FailingModule?.Name;
+                            }
+                            firstRunError = new RunError(RunErrorType.Runtime, e.Message, moduleName, e.StackTrace, elementId);
                             return double.MaxValue;
                         }
                         latestValues = (double[])values.Clone();
@@ -363,7 +369,15 @@ namespace XTMF2.Bus
             }
             catch (Exception ex)
             {
-                client.ModelRunFailed(ID, ex.Message, ex.StackTrace);
+                string? moduleName = null;
+                string? elementId = null;
+                if (ex is XTMFRuntimeException xe)
+                {
+                    if (!Run.TryResolveModelElementForRuntimeModule(ms, xe.FailingModule, out moduleName, out var resolvedElementId))
+                        moduleName = xe.FailingModule?.Name;
+                    elementId = resolvedElementId?.ToString();
+                }
+                client.ModelRunFailed(ID, ex.Message, ex.StackTrace, moduleName, elementId);
                 return;
             }
             finally
@@ -378,7 +392,7 @@ namespace XTMF2.Bus
                 if (firstRunError.Type is RunErrorType.Validation or RunErrorType.RuntimeValidation)
                     client.ModelRunFailedValidation(ID, firstRunError.Message ?? "Unknown validation error");
                 else
-                    client.ModelRunFailed(ID, firstRunError.Message, firstRunError.StackTrace);
+                    client.ModelRunFailed(ID, firstRunError.Message, firstRunError.StackTrace, firstRunError.ModuleName, firstRunError.ElementId?.ToString());
                 return;
             }
 
@@ -407,7 +421,7 @@ namespace XTMF2.Bus
                 if (buildError!.Type is RunErrorType.Validation or RunErrorType.RuntimeValidation)
                     client.ModelRunFailedValidation(ID, buildError.Message ?? "Calibration setup failed");
                 else
-                    client.ModelRunFailed(ID, buildError.Message, buildError.StackTrace);
+                    client.ModelRunFailed(ID, buildError.Message, buildError.StackTrace, buildError.ModuleName, buildError.ElementId?.ToString());
                 return;
             }
 
@@ -472,7 +486,15 @@ namespace XTMF2.Bus
                     catch (Exception e)
                     {
                         while (e.InnerException is Exception inner) e = inner;
-                        client.ModelRunFailed(ID, e.Message, e.StackTrace);
+                        string? moduleName = null;
+                        string? elementId = null;
+                        if (e is XTMFRuntimeException xe)
+                        {
+                            if (!Run.TryResolveModelElementForRuntimeModule(ms, xe.FailingModule, out moduleName, out var resolvedElementId))
+                                moduleName = xe.FailingModule?.Name;
+                            elementId = resolvedElementId?.ToString();
+                        }
+                        client.ModelRunFailed(ID, e.Message, e.StackTrace, moduleName, elementId);
                         return;
                     }
 
@@ -542,6 +564,7 @@ namespace XTMF2.Bus
         {
             ms = null; start = null;
             string? errorMsg = null, moduleName = null;
+            Guid? elementId = null;
 
             try { Directory.CreateDirectory(_currentWorkingDirectory); }
             catch (IOException e)
@@ -559,10 +582,10 @@ namespace XTMF2.Bus
 
             if (!ModelSystem.Load(msString, _runtime, out ms, ref errorMsg)
                 || !ms!.Construct(_runtime, ref errorMsg)
-                || !ms!.Validate(ref moduleName, ref errorMsg))
+                || !ms!.Validate(ref moduleName, ref errorMsg, ref elementId))
             {
                 error = new RunError(RunErrorType.Validation,
-                    errorMsg ?? "Failed to build model system.", moduleName, string.Empty);
+                    errorMsg ?? "Failed to build model system.", moduleName, string.Empty, elementId);
                 return false;
             }
 
@@ -573,11 +596,11 @@ namespace XTMF2.Bus
                 return false;
             }
 
-            if (!RuntimeValidateAll(ms, ref moduleName, ref errorMsg))
+            if (!RuntimeValidateAll(ms, ref moduleName, ref errorMsg, ref elementId))
             {
                 RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, errorMsg);
                 error = new RunError(RunErrorType.RuntimeValidation,
-                    errorMsg ?? "Runtime validation failed.", moduleName, string.Empty);
+                    errorMsg ?? "Runtime validation failed.", moduleName, string.Empty, elementId);
                 return false;
             }
 
@@ -618,7 +641,7 @@ namespace XTMF2.Bus
         }
 
         private static bool RuntimeValidateAll(
-            ModelSystem ms, ref string? moduleName, ref string? errorMessage)
+            ModelSystem ms, ref string? moduleName, ref string? errorMessage, ref Guid? elementId)
         {
             var toProcess = new Stack<Boundary>();
             toProcess.Push(ms.GlobalBoundary);
@@ -633,15 +656,15 @@ namespace XTMF2.Bus
                         try
                         {
                             if (!realModule.RuntimeValidation(ref errorMessage))
-                            { moduleName = module.Name; return false; }
+                            { moduleName = module.Name; elementId = module.Id; return false; }
                         }
                         catch (Exception e)
-                        { moduleName = module.Name; errorMessage = e.Message; return false; }
+                        { moduleName = module.Name; elementId = module.Id; errorMessage = e.Message; return false; }
                     }
                 }
                 foreach (var fi in current.FunctionInstances)
                 {
-                    if (!fi.ValidateRuntimeModules(ref moduleName, ref errorMessage))
+                    if (!fi.ValidateRuntimeModules(ref moduleName, ref errorMessage, ref elementId))
                         return false;
                 }
             }

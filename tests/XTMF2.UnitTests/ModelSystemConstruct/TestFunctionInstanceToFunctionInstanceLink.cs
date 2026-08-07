@@ -115,7 +115,7 @@ public class TestFunctionInstanceToFunctionInstanceLink
                         success = true;
                         sem.Release();
                     };
-                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack) =>
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack, moduleName, elementId) =>
                     {
                         runError = new CommandError(e + "\r\n" + stack);
                         sem.Release();
