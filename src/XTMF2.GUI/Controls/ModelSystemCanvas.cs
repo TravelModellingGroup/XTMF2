@@ -650,6 +650,13 @@ public sealed partial class ModelSystemCanvas : Control
             Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateAndMeasure);
         }
 
+        // Boundary switches can leave the last cursor anchor in an unrelated coordinate space.
+        // Clearing it forces Ctrl+V to use the viewport-centre fallback in the new boundary.
+        if (e.PropertyName is nameof(ModelSystemEditorViewModel.CurrentBoundary))
+        {
+            _lastCanvasMousePos = null;
+        }
+
 
         // When we navigate into or out of a FunctionTemplate, maintain a direct subscription
         // to the template VM so that property changes (e.g. EntryNode after undo) still

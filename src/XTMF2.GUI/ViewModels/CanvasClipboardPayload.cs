@@ -54,7 +54,12 @@ internal sealed record CanvasClipboardPayload(
 /// All element types share this record; unused fields are omitted from JSON.
 /// </summary>
 /// <param name="Kind">Discriminator — one of the <see cref="CanvasElementKind"/> constants.</param>
-/// <param name="Name">Display name of the element.</param>
+/// <param name="Name">
+/// Display name of the element. For <see cref="CanvasElementKind.CommentBlock"/>,
+/// this is treated as a legacy fallback for older payloads.
+/// </param>
+/// <param name="CommentBody">Body text for <see cref="CanvasElementKind.CommentBlock"/>.</param>
+/// <param name="CommentHeader">Header text for <see cref="CanvasElementKind.CommentBlock"/>.</param>
 /// <param name="X">Canvas X coordinate.</param>
 /// <param name="Y">Canvas Y coordinate.</param>
 /// <param name="W">Canvas width.</param>
@@ -101,11 +106,11 @@ internal sealed record CanvasClipboardPayload(
 /// </param>
 internal sealed record CanvasElementDto(
     [property: JsonPropertyName("kind")]               string  Kind,
-    [property: JsonPropertyName("name")]               string  Name,
     [property: JsonPropertyName("x")]                  float   X,
     [property: JsonPropertyName("y")]                  float   Y,
     [property: JsonPropertyName("w")]                  float   W,
     [property: JsonPropertyName("h")]                  float   H,
+    [property: JsonPropertyName("name")]               string?             Name                = null,
     [property: JsonPropertyName("typeName")]           string?              TypeName            = null,
     [property: JsonPropertyName("paramValue")]         string?              ParameterValue      = null,
     [property: JsonPropertyName("isScriptedParam")]    bool                 IsScriptedParam     = false,
@@ -115,7 +120,9 @@ internal sealed record CanvasElementDto(
     [property: JsonPropertyName("referencedNodeName")] string?             ReferencedNodeName  = null,
     [property: JsonPropertyName("functionParameters")] List<FunctionParameterDto>? FunctionParameters = null,
     [property: JsonPropertyName("crossLinks")]         List<CrossNodeLinkDto>? CrossLinks        = null,
-    [property: JsonPropertyName("isTemplateCompanion")] bool               IsTemplateCompanion = false
+    [property: JsonPropertyName("isTemplateCompanion")] bool               IsTemplateCompanion = false,
+    [property: JsonPropertyName("body")]               string?             CommentBody         = null,
+    [property: JsonPropertyName("commentHeader")]      string?             CommentHeader       = null
 );
 
 /// <summary>

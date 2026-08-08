@@ -181,11 +181,10 @@ public sealed partial class CommentBlockViewModel : ObservableObject, ICanvasEle
 
     /// <summary>
     /// Update the comment text, persisting the change via the session (supports undo/redo).
-    /// Whitespace-only text is ignored.
+    /// Empty text is valid.
     /// </summary>
     public void SetText(string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return;
         _session.SetCommentBlockText(_user, UnderlyingBlock, text, out _);
     }
 

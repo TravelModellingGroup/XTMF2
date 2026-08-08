@@ -726,11 +726,7 @@ namespace XTMF2.Editing
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
 
-            if (String.IsNullOrWhiteSpace(comment))
-            {
-                error = new CommandError("There was no comment to store.");
-                return false;
-            }
+            comment ??= string.Empty;
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -847,11 +843,7 @@ namespace XTMF2.Editing
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(commentBlock);
 
-            if (string.IsNullOrEmpty(newText))
-            {
-                error = new CommandError("A comment block must have text!");
-                return false;
-            }
+            newText ??= string.Empty;
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
