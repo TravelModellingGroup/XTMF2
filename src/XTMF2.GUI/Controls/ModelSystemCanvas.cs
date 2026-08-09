@@ -496,6 +496,8 @@ public sealed partial class ModelSystemCanvas : Control
         InvalidateAndMeasure();
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            if (!IsKeyboardFocusWithin)
+                Focus();
             EnsureCanvasFocusAndSelection();
         }, Avalonia.Threading.DispatcherPriority.Render);
     }
@@ -503,15 +505,18 @@ public sealed partial class ModelSystemCanvas : Control
     protected override void OnGotFocus(GotFocusEventArgs e)
     {
         base.OnGotFocus(e);
+
+        // Ignore bubbled focus from child controls (inline editors), otherwise
+        // the canvas can immediately steal focus back from the textbox.
+        if (!ReferenceEquals(e.Source, this))
+            return;
+
         EnsureCanvasFocusAndSelection();
     }
 
     private void EnsureCanvasFocusAndSelection()
     {
         if (_vm is null) return;
-
-        if (!IsFocused)
-            Focus();
 
         if (_vm.SelectedElement is not null || _vm.SelectedLink is not null)
             return;
@@ -689,6 +694,8 @@ public sealed partial class ModelSystemCanvas : Control
             _lastCanvasMousePos = null;
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
+                if (!IsKeyboardFocusWithin)
+                    Focus();
                 EnsureCanvasFocusAndSelection();
                 InvalidateAndMeasure();
             }, Avalonia.Threading.DispatcherPriority.Render);
