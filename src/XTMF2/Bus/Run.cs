@@ -241,10 +241,10 @@ namespace XTMF2.Bus
             try
             {
                 Directory.SetCurrentDirectory(_currentWorkingDirectory);
-                if (!RuntimeValidation(ref moduleName, ref error))
+                if (!RuntimeValidation(ref moduleName, ref error, ref elementId))
                 {
-                    RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, error);
-                    return new RunError(RunErrorType.Runtime, error, moduleName, stackTrace);
+                    RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, error, elementId);
+                    return new RunError(RunErrorType.Runtime, error, moduleName, stackTrace, elementId);
                 }
                 if(startingMss.Module is IAction modelStart)
                 {
@@ -368,7 +368,7 @@ namespace XTMF2.Bus
             return false;
         }
 
-        private bool RuntimeValidation(ref string? moduleName, ref string? errorMessage)
+        private bool RuntimeValidation(ref string? moduleName, ref string? errorMessage, ref Guid? elementId)
         {
             Stack<Boundary> toProcess = new Stack<Boundary>();
             toProcess.Push(_modelSystem!.GlobalBoundary);
@@ -387,6 +387,7 @@ namespace XTMF2.Bus
                             if (!realModule.RuntimeValidation(ref errorMessage))
                             {
                                 moduleName = module.Name;
+                                elementId = module.Id;
                                 return false;
                             }
                         }
@@ -394,6 +395,7 @@ namespace XTMF2.Bus
                         {
                             moduleName = module.Name;
                             errorMessage = e.Message;
+                            elementId = module.Id;
                             return false;
                         }
                     }
@@ -401,7 +403,10 @@ namespace XTMF2.Bus
                 foreach (var fi in current.FunctionInstances)
                 {
                     if (!fi.ValidateRuntimeModules(ref moduleName, ref errorMessage))
+                    {
+                        elementId = fi.Id;
                         return false;
+                    }
                 }
             }
             return true;
