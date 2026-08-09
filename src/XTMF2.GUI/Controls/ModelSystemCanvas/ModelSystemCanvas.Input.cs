@@ -77,6 +77,19 @@ partial class ModelSystemCanvas
             ClearMultiSelection();
             e.Handled = true;
         }
+        else if ((e.Key is Key.Return or Key.Enter) && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            if (_vm.SelectedElement is FunctionTemplateViewModel ftvm)
+            {
+                _vm.NavigateIntoFunctionTemplate(ftvm);
+                e.Handled = true;
+            }
+            else if (_vm.SelectedElement is FunctionInstanceViewModel fivm)
+            {
+                _vm.OpenFunctionTemplateOfInstance(fivm);
+                e.Handled = true;
+            }
+        }
         else if (e.Key == Key.F2 && _vm?.SelectedElement is not null)
         {
             var sel = _vm.SelectedElement;
