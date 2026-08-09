@@ -30,12 +30,26 @@ namespace XTMF2.GUI.Controls;
 
 partial class ModelSystemCanvas
 {
+
+    private bool AltCommendIssued = false;
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        if (AltCommendIssued && (e.Key == Key.LeftAlt || e.Key == Key.RightAlt))
+        {
+            AltCommendIssued = false;
+            Focus();
+            e.Handled = true;
+        }
+        base.OnKeyUp(e);
+    }
+
     // ── Hit testing / mouse interaction ──────────────────────────────────
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        base.OnKeyDown(e);
         if (_vm is null)
         {
+            base.OnKeyDown(e);
             return;
         }
         else if (e.Key is Key.Delete or Key.Back)
@@ -82,7 +96,12 @@ partial class ModelSystemCanvas
         else if (e.Key == Key.Up && (e.KeyModifiers & KeyModifiers.Alt) != 0)
         {
             // Alt+Up: navigate to parent boundary / exit function template.
+            AltCommendIssued = true;
             _vm?.NavigateUpCommand.Execute(null);
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                Focus();
+            }, Avalonia.Threading.DispatcherPriority.Render);
             e.Handled = true;
         }
         else if (e.Key == Key.C && (e.KeyModifiers & KeyModifiers.Control) != 0)
@@ -168,7 +187,9 @@ partial class ModelSystemCanvas
                 e.Handled = true;
             }
         }
+        base.OnKeyDown(e);
     }
+    
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
         if ((e.KeyModifiers & KeyModifiers.Control) != 0)

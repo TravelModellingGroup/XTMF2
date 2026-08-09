@@ -494,6 +494,38 @@ public sealed partial class ModelSystemCanvas : Control
         _vm = DataContext as ModelSystemEditorViewModel;
         Attach();
         InvalidateAndMeasure();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            EnsureCanvasFocusAndSelection();
+        }, Avalonia.Threading.DispatcherPriority.Render);
+    }
+
+    protected override void OnGotFocus(GotFocusEventArgs e)
+    {
+        base.OnGotFocus(e);
+        EnsureCanvasFocusAndSelection();
+    }
+
+    private void EnsureCanvasFocusAndSelection()
+    {
+        if (_vm is null) return;
+
+        if (!IsFocused)
+            Focus();
+
+        if (_vm.SelectedElement is not null || _vm.SelectedLink is not null)
+            return;
+
+        ICanvasElement? first = _vm.Nodes.FirstOrDefault();
+        first ??= _vm.Starts.FirstOrDefault();
+        first ??= _vm.CommentBlocks.FirstOrDefault();
+        first ??= _vm.GhostNodes.FirstOrDefault();
+        first ??= _vm.FunctionTemplates.FirstOrDefault();
+        first ??= _vm.FunctionInstances.FirstOrDefault();
+        first ??= _vm.FunctionParameterVMs.FirstOrDefault();
+
+        if (first is not null)
+            _vm.SelectElementCommand.Execute(first);
     }
 
     private void Attach()
@@ -655,6 +687,11 @@ public sealed partial class ModelSystemCanvas : Control
         if (e.PropertyName is nameof(ModelSystemEditorViewModel.CurrentBoundary))
         {
             _lastCanvasMousePos = null;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                EnsureCanvasFocusAndSelection();
+                InvalidateAndMeasure();
+            }, Avalonia.Threading.DispatcherPriority.Render);
         }
 
 
