@@ -180,6 +180,47 @@ partial class ModelSystemCanvas
         }
     }
 
+    /// <summary>
+    /// Handles Tab/Shift+Tab behavior for comment blocks.
+    /// If not currently editing, starts with header edit.
+    /// If already editing header/body, toggles to the other field.
+    /// </summary>
+    private bool TryCycleCommentEditOnTab()
+    {
+        // Never hijack Tab while other inline editors are active.
+        if (_editingParamNode is not null || _editingNameElement is not null)
+            return false;
+
+        var selectedComment = _vm?.SelectedElement as CommentBlockViewModel;
+
+        // If not currently editing a comment, only start the cycle when a comment is selected.
+        if (_editingCommentHeaderBlock is null && _editingCommentBlock is null && selectedComment is null)
+            return false;
+
+        var activeComment = _editingCommentHeaderBlock
+            ?? _editingCommentBlock
+            ?? selectedComment;
+
+        if (activeComment is null)
+            return false;
+
+        if (_editingCommentHeaderBlock is not null)
+        {
+            BeginCommentEdit(activeComment);
+            return true;
+        }
+
+        if (_editingCommentBlock is not null)
+        {
+            BeginCommentHeaderEdit(activeComment);
+            return true;
+        }
+
+        // Selected but not currently editing: start with header first.
+        BeginCommentHeaderEdit(activeComment);
+        return true;
+    }
+
     /// <summary>Shows the multi-line comment editor over <paramref name="comment"/>, positioned below the header band.</summary>
     private void BeginCommentEdit(CommentBlockViewModel comment)
     {
@@ -229,6 +270,14 @@ partial class ModelSystemCanvas
 
     private void OnCommentEditorKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Tab && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0)
+        {
+            if (TryCycleCommentEditOnTab())
+            {
+                e.Handled = true;
+                return;
+            }
+        }
         if ((e.Key is Key.Return or Key.Enter) && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
             // Ctrl+Enter commits; plain Enter inserts a newline (default).
@@ -304,6 +353,14 @@ partial class ModelSystemCanvas
 
     private void OnCommentHeaderEditorKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Tab && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0)
+        {
+            if (TryCycleCommentEditOnTab())
+            {
+                e.Handled = true;
+                return;
+            }
+        }
         if (e.Key is Key.Return or Key.Enter)
         {
             CommitCommentHeaderEdit();

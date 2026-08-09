@@ -180,10 +180,26 @@ partial class ModelSystemCanvas
         }
         else if (e.Key == Key.Tab && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0)
         {
-            // Tab or Shift+Tab: navigate between parameters within a node or function instance.
+            // For comment blocks, Tab toggles header/body editing.
+            bool commentTabContext = _editingCommentBlock is not null
+                                  || _editingCommentHeaderBlock is not null
+                                  || _vm?.SelectedElement is CommentBlockViewModel;
+            if (commentTabContext && TryCycleCommentEditOnTab())
+            {
+                e.Handled = true;
+                return;
+            }
+
+            // Otherwise, Tab or Shift+Tab: navigate between parameters within a node or function instance.
             bool isShiftTab = (e.KeyModifiers & KeyModifiers.Shift) != 0;
             if (NavigateToNextParameter(isShiftTab))
             {
+                e.Handled = true;
+            }
+            else if (_vm?.SelectedElement is not null)
+            {
+                // Keep focus on the canvas when an element is selected even if
+                // there is no editable target for this Tab key press.
                 e.Handled = true;
             }
         }
