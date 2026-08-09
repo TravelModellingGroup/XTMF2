@@ -67,6 +67,23 @@ internal class BasicParameter : ParameterExpression
         return false;
     }
 
+    public override bool GetValueAtEditingTime(Type outputType, 
+        [NotNullWhen(true)] out object? convertedValue,
+        [NotNullWhen(false)] out string? errorString)
+    {
+        string? error = null;
+        var (success, value) = ArbitraryParameterParser.ArbitraryParameterParse(outputType, _value, ref error);
+        if (success)
+        {
+            convertedValue = value!;
+            errorString = null;
+            return true;
+        }
+        convertedValue = null;
+        errorString = error ?? $"The parameter value {_value} is not compatible with the output type {outputType}.";
+        return false;
+    }
+
     public override Type Type => _type;
 
     internal override void Save(Utf8JsonWriter writer)

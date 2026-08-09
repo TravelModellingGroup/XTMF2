@@ -51,6 +51,28 @@ internal class ScriptedParameter : ParameterExpression
         return null;
     }
 
+    public override bool GetValueAtEditingTime(Type outputType, 
+        [NotNullWhen(true)] out object? convertedValue,
+        [NotNullWhen(false)] out string? errorString)
+    {
+        string? error = null;
+        if(_expression.Type != outputType)
+        {
+            errorString = ThrowInvalidTypes(outputType, _expression.Type);
+            convertedValue = null;
+            return false;
+        }
+        if (ParameterCompiler.Evaluate(null!, _expression, out var ret, ref error))
+        {
+            convertedValue = ret;
+            errorString = null;
+            return true;
+        }
+        convertedValue = null;
+        errorString = error;
+        return false;
+    }
+
     public override bool IsCompatible(Type type, [NotNullWhen(false)] ref string? errorString)
     {
         return type.IsAssignableFrom(_expression.Type);

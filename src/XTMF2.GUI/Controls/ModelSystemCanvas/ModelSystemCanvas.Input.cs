@@ -163,6 +163,24 @@ partial class ModelSystemCanvas
                 e.Handled = true;
             }
         }
+        else if ((e.Key is Key.O) && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            if (_vm?.SelectedElement is NodeViewModel nvm
+                && (nvm.IsParameterNode || nvm.UnderlyingNode.Type == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile)))
+            {
+                _ = TryOpenOpenReadStreamFromFileParameterAsync();
+                e.Handled = true;
+            }
+        }
+        else if( e.Key == Key.F && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            if (_vm?.SelectedElement is NodeViewModel nvm
+                && (nvm.IsParameterNode || nvm.UnderlyingNode.Type == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile)))
+            {
+                _ = TryUpdateOpenReadStreamFromFileParameterAsync();
+                e.Handled = true;
+            }
+        }
         else if (e.Key == Key.Up
             && _editingParamNode is null
             && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)

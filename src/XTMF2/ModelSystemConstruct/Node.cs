@@ -599,5 +599,11 @@ namespace XTMF2.ModelSystemConstruct
             }
             return new Node(name, type, boundary, hooks, location);
         }
+
+        public Node? GetParameter(ModelSystemSession session, string parameterName)
+        {
+            session.GetParameterForNode(this, parameterName, out var parameterNode, out var error);
+            return parameterNode;
+        }
     }
 }

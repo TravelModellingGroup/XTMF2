@@ -29,12 +29,12 @@ internal sealed class AddOperator : Expression
     /// <summary>
     /// The left hand side expression
     /// </summary>
-    private readonly Expression _lhs;
+    internal readonly Expression _lhs;
 
     /// <summary>
     /// The right hand side expression.
     /// </summary>
-    private readonly Expression _rhs;
+    internal readonly Expression _rhs;
 
     /// <summary>
     /// Create a new add operation.

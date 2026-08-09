@@ -135,5 +135,23 @@ public class TestEditingParameterExpressions
             Assert.AreEqual("Hello World3", childNode.ParameterValue.GetValue(null, typeof(string), ref errorStr));
         });
     }
+
+    [TestMethod]
+    public void EvaluateParameterExpression_ReturnsScriptedValue()
+    {
+        TestHelper.RunInModelSystemContext("EvaluateParameterExpression_ReturnsScriptedValue", (user, pSession, mSession) =>
+        {
+            CommandError error = null;
+            var ms = mSession.ModelSystem;
+            Assert.IsTrue(mSession.AddNodeGenerateParameters(user, ms.GlobalBoundary, "Test",
+                typeof(SimpleParameterModule), Rectangle.Hidden, out var node, out var children, out error), error?.Message);
+            Assert.IsNotNull(children);
+            var childNode = children.FirstOrDefault(n => n.Name == "Real Function");
+            Assert.IsNotNull(childNode);
+            Assert.IsTrue(mSession.SetParameterExpression(user, childNode, "\"Hello World\" + (1 + 2)", out error), error?.Message);
+            Assert.IsTrue(mSession.EvaluateParameterExpression(childNode, out object value), "Expression should evaluate.");
+            Assert.AreEqual("Hello World3", value);
+        });
+    }
 }
 

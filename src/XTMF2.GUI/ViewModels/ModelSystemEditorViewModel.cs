@@ -38,6 +38,7 @@ using XTMF2.GUI.Resources;
 using XTMF2.GUI.Views;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -4354,6 +4355,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Session.AddGhostNode(User, _currentBoundary, referencedNvm.UnderlyingNode, loc, out _, out _);
     }
 
+    internal bool UpdateCurrentParameterValueFromFilePath(NodeViewModel nvm, string newFilePath, 
+        [NotNullWhen(false) ]out CommandError? error)
+    {
+        return Session.SetParameterValueFromFilePath(User, nvm.UnderlyingNode, newFilePath, out error);
+    }
+
     // ── IDisposable ───────────────────────────────────────────────────────
     /// <inheritdoc />
     public void Dispose()
@@ -4384,4 +4391,5 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         Session.Dispose();
     }
+
 }

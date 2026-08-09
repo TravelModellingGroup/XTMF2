@@ -303,5 +303,8 @@ namespace XTMF2
         internal abstract bool SetAllDestinationsHidden(bool hidden, [NotNullWhen(false)] out CommandError? error);
 
         internal abstract bool HasDestination(Node destNode);
+
+        internal abstract bool TryGetFirstDestination([NotNullWhen(true)] out object? dest);
+        
     }
 }

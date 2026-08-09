@@ -71,6 +71,132 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void ModelSystemCanvas_BuildUpdatedFilePathValue_RewritesRightHandStringLiteral()
+    {
+        var method = typeof(ModelSystemCanvas).GetMethods(BindingFlags.Static | BindingFlags.NonPublic)
+            .Single(m => m.Name == "BuildUpdatedFilePathValue" && m.GetParameters().Length == 3);
+        Assert.IsNotNull(method, "BuildUpdatedFilePathValue helper should exist.");
+
+        var updated = (string)method!.Invoke(null, new object?[]
+        {
+            "\"C:/old/file.txt\" + \"suffix.txt\"",
+            "/tmp/new-file.txt",
+            null
+        })!;
+
+        Assert.AreEqual("\"C:/old/file.txt\" + \"/tmp/new-file.txt\"", updated);
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_ResolveFilePathTargetNode_TargetsParameterNodeFromHook()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ResolveFilePathTargetNode_TargetsParameterNodeFromHook),
+            (user, projectSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "OpenReadStreamModule",
+                    typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile),
+                    new Rectangle(20, 20, 160, 60),
+                    out var sourceNode,
+                    out var error), error?.Message);
+                Assert.IsNotNull(sourceNode);
+
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "FilePathParameter",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>),
+                    new Rectangle(220, 20, 160, 60),
+                    out var parameterNode,
+                    out var error2), error2?.Message);
+                Assert.IsNotNull(parameterNode);
+
+                var filePathHook = sourceNode!.Hooks.First(h => h.Name == "File Path");
+                Assert.IsTrue(msSession.AddLink(user, sourceNode, filePathHook, parameterNode!, out _, out var linkError), linkError?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var sourceVm = vm.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, sourceNode));
+                Assert.IsNotNull(sourceVm);
+
+                var canvas = new ModelSystemCanvas();
+                var method = typeof(ModelSystemCanvas).GetMethod(
+                    "ResolveFilePathTargetNode",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.IsNotNull(method);
+
+                var result = (Node?)method!.Invoke(canvas, new object[] { sourceVm! });
+                Assert.AreSame(parameterNode, result);
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_BuildUpdatedFilePathValue_PreservesDirectoryVariableWhenDirectoryMatches()
+    {
+        var method = typeof(ModelSystemCanvas).GetMethod(
+            "BuildUpdatedFilePathValue",
+            BindingFlags.Static | BindingFlags.NonPublic,
+            binder: null,
+            types: [typeof(string), typeof(string), typeof(string)],
+            modifiers: null);
+        Assert.IsNotNull(method, "BuildUpdatedFilePathValue overload for scripted expressions should exist.");
+
+        var updated = (string)method!.Invoke(null, new object[]
+        {
+            "\"/tmp\" + \"localFilePath.csv\"",
+            "/tmp/newFile.csv",
+            "/tmp/localFilePath.csv"
+        })!;
+
+        Assert.AreEqual("\"/tmp\" + \"newFile.csv\"", updated);
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_BuildUpdatedFilePathValue_PreservesSharedPrefixForSubdirectorySelection()
+    {
+        var method = typeof(ModelSystemCanvas).GetMethod(
+            "BuildUpdatedFilePathValue",
+            BindingFlags.Static | BindingFlags.NonPublic,
+            binder: null,
+            types: [typeof(string), typeof(string), typeof(string)],
+            modifiers: null);
+        Assert.IsNotNull(method, "BuildUpdatedFilePathValue overload for scripted expressions should exist.");
+
+        var updated = (string)method!.Invoke(null, new object[]
+        {
+            "\"/tmp/shared\" + \"oldFile.csv\"",
+            "/tmp/shared/sub/newFile.csv",
+            "/tmp/shared/oldFile.csv"
+        })!;
+
+        Assert.AreEqual("\"/tmp/shared\" + \"sub/newFile.csv\"", updated);
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_BuildUpdatedFilePathValue_UsesFullValueWhenDirectoryDoesNotMatchSelection()
+    {
+        var method = typeof(ModelSystemCanvas).GetMethod(
+            "BuildUpdatedFilePathValue",
+            BindingFlags.Static | BindingFlags.NonPublic,
+            binder: null,
+            types: [typeof(string), typeof(string), typeof(string)],
+            modifiers: null);
+        Assert.IsNotNull(method, "BuildUpdatedFilePathValue overload for scripted expressions should exist.");
+
+        var updated = (string)method!.Invoke(null, new object[]
+        {
+            "InputDirectory + \"oldFile.csv\"",
+            "/tmp/other/newFile.csv",
+            "/tmp/shared/oldFile.csv"
+        })!;
+
+        Assert.AreEqual("\"/tmp/other/newFile.csv\"", updated);
+    }
+
+    [TestMethod]
     public void ModelSystemCanvas_NameEdit_IsCanceledWhenEditedNodeIsDeleted()
     {
         TestGuiHelper.RunInModelSystemContext(
