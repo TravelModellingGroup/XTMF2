@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2017-2021 University of Toronto
+    Copyright 2017-2026 University of Toronto
     This file is part of XTMF2.
     XTMF2 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ using System.Threading;
 using System.ComponentModel;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.ModelSystemConstruct.Parameters;
+using XTMF2.ModelSystemConstruct.Parameters.Compiler;
 using XTMF2.Repository;
 using XTMF2.Bus.Optimization;
 
@@ -493,6 +494,19 @@ namespace XTMF2.Editing
                 or "Location";
         }
 
+        private sealed class DesignTimeModule : IModule
+        {
+            public string? Name { get; set; }
+
+            public DesignTimeModule(string? name) => Name = name;
+
+            public bool RuntimeValidation(ref string? error)
+            {
+                error = null;
+                return true;
+            }
+        }
+
         private void OnBufferPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName is nameof(CanUndo) or nameof(CanRedo))
@@ -726,11 +740,7 @@ namespace XTMF2.Editing
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
 
-            if (String.IsNullOrWhiteSpace(comment))
-            {
-                error = new CommandError("There was no comment to store.");
-                return false;
-            }
+            comment ??= string.Empty;
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -847,11 +857,7 @@ namespace XTMF2.Editing
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(commentBlock);
 
-            if (string.IsNullOrEmpty(newText))
-            {
-                error = new CommandError("A comment block must have text!");
-                return false;
-            }
+            newText ??= string.Empty;
             lock (_sessionLock)
             {
                 if (!_session.HasAccess(user))
@@ -2259,6 +2265,51 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Evaluates a node's current parameter expression using the same expression engine
+        /// that the runtime uses, without mutating the model system.
+        /// </summary>
+        /// <param name="node">The parameter-bearing node whose expression should be evaluated.</param>
+        /// <param name="value">The evaluated value, or <c>null</c> when evaluation fails.</param>
+        /// <returns><c>true</c> when the expression evaluates successfully.</returns>
+        public bool EvaluateParameterExpression(Node node, out object? value)
+        {
+            ArgumentNullException.ThrowIfNull(node);
+            value = null;
+
+            lock (_sessionLock)
+            {
+                if (node.ParameterValue is null)
+                    return false;
+
+                var designTimeModule = new DesignTimeModule(node.Name ?? "DesignTimeModule");
+                var expectedType = node.ParameterValue.Type;
+                if (node.ParameterValue is ScriptedParameter scripted)
+                {
+                    string? error = null;
+                    var localVars = node.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+                    IList<Node> allVars = localVars is { Count: > 0 }
+                        ? localVars.Concat(ModelSystem.Variables).ToList()
+                        : (IList<Node>)ModelSystem.Variables;
+                    if (!ParameterCompiler.CreateExpression(allVars, scripted.Representation, out var expression, ref error))
+                        return false;
+
+                    if (!ParameterCompiler.Evaluate(designTimeModule, expression, out value, ref error))
+                        return false;
+
+                    return true;
+                }
+
+                string? parseError = null;
+                var result = node.ParameterValue.GetValue(designTimeModule, expectedType, ref parseError);
+                if (parseError is not null)
+                    return false;
+
+                value = result;
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Set the value of a parameter
         /// </summary>
         /// <param name="user">The user issuing the command</param>
@@ -2278,20 +2329,197 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
-                var previousValue = basicParameter.ParameterValue;
-                var newValue = ParameterExpression.CreateParameter(value, basicParameter.Type.GetGenericArguments()[0]);
-                if (basicParameter.SetParameterValue(newValue, out error))
+                return InnerSetBasicParameter(basicParameter, value, out error);
+            }
+        }
+
+        /// <summary>
+        /// Set the value of a parameter without checking user access (for internal use only)
+        /// <b>Must already own the session lock.</b>
+        /// </summary>
+        /// <param name="basicParameter">The parameter to set.</param>
+        /// <param name="value">The value to set the parameter to.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns
+        private bool InnerSetBasicParameter(Node basicParameter, string value, out CommandError? error)
+        {
+            var previousValue = basicParameter.ParameterValue;
+            var newValue = ParameterExpression.CreateParameter(value, basicParameter.Type.GetGenericArguments()[0]);
+            if (basicParameter.SetParameterValue(newValue, out error))
+            {
+                Buffer.AddUndo(new Command(() =>
                 {
-                    Buffer.AddUndo(new Command(() =>
+                    return (basicParameter.SetParameterValue(previousValue!, out var e), e);
+                }, () =>
+                {
+                    return (basicParameter.SetParameterValue(newValue, out var e), e);
+                }));
+                return true;
+            }
+            return false;
+        }
+
+
+
+        /// <summary>
+        /// Set the value of a parameter from a file path
+        /// </summary>
+        /// <param name="user">The user issuing the command</param>
+        /// <param name="nodeToAssign">The parameter to set.</param>
+        /// <param name="filePath">The file path to set the parameter to.</param
+        /// <param name="isDirectory">Whether the file path is a directory or not.</param>
+        /// <param name="error">An error message if the operation fails.</param>
+        /// <returns>True if the operation succeeds, false otherwise with an error message.</returns
+        public bool SetParameterValueFromFilePath(User user, Node nodeToAssign, string filePath, bool isDirectory, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(nodeToAssign);
+            if(isDirectory)
+            {
+                if (filePath is null || !Directory.Exists(filePath))
+                {
+                    error = new CommandError($"The directory path '{filePath}' does not exist.", false);
+                    return false;
+                }
+            }
+            else
+            {
+                if (filePath is null || !File.Exists(filePath))
+                {
+                    error = new CommandError($"The file path '{filePath}' does not exist.", false);
+                    return false;
+                }
+            }
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                // Check the type of the current node:
+                // InnerType == typeof(OpenReadStream), then we need to get the node referenced by the hook "File Path" and set the value of that node to the file path.
+                // BasicParameter, we can set the value from the file path
+                // ScriptedParaemeter, we need to explore its AST and see if we can update the right hand side addition and then only update that script's constant.
+                if (nodeToAssign.Type == typeof(RuntimeModules.OpenReadStreamFromFile))
+                {
+                    var links = nodeToAssign.ContainedWithin?.Links;
+                    var link = links?.FirstOrDefault(l => l.Origin == nodeToAssign && l.OriginHook?.Name == "File Path");
+                    // link is null if there is no BasicParameter or ScriptedParameter to save the value to.
+                    // TODO: resolve this by creating a new BasicParameter and linking it to the OpenReadStreamFromFile node.
+                    if (link is null)
                     {
-                        return (basicParameter.SetParameterValue(previousValue!, out var e), e);
-                    }, () =>
+                        error = new CommandError("There is no link for the OpenReadStreamFromFile to set the file path to.", false);
+                        return false;
+                    }
+
+                    if(!link.TryGetFirstDestination(out var destination))
                     {
-                        return (basicParameter.SetParameterValue(newValue, out var e), e);
-                    }));
+                        error = new CommandError("The link for the OpenReadStreamFromFile does not have a valid destination.", false);
+                        return false;
+                    }
+
+                    if (destination is Node destNode)
+                    {
+                        nodeToAssign = destNode;                        
+                    }
+                    else
+                    {
+                        error = new CommandError("Only Nodes are currently supported for storing the file path to.", false);
+                        return false;
+                    }
+                }
+                // At this point nodeToAssign should be a BasicParameter or ScriptedParameter that we can set the value of.
+                if ((nodeToAssign?.Type?.IsAssignableFrom(typeof(RuntimeModules.ScriptedParameter<string>)) ?? false) == true)
+                {
+                    var parameterValue = nodeToAssign.ParameterValue;
+
+                    List<Node> availableVariables = [];
+                    // Put the local variables first so they get resolved first.
+                    var localVariables = nodeToAssign.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+                    if(localVariables is not null && localVariables.Count > 0)
+                    {
+                        availableVariables = [.. availableVariables, .. localVariables];
+                    }
+                    // append the higher order model system variables second so they get resolved last.
+                    availableVariables = [.. availableVariables, .. this.ModelSystem.Variables];
+                    string? e = null;
+                    if (!ParameterCompiler.CreateExpression(availableVariables, parameterValue?.Representation!, out var expression, ref e))
+                    {
+                        error = new CommandError($"Failed to parse the ScriptedParameter expression: {e}", false);
+                        return false;
+                    }
+                    // MAke sure it resolves to a string before we try to explore it.
+                    if (expression.Type != typeof(string))
+                    {
+                        error = new CommandError($"The ScriptedParameter expression did not evaluate to a string.", false);
+                        return false;
+                    }
+                    // Check if we have the pattern where the LHS are variables and the RHS is a string literal.
+                    if (expression is AddOperator add)
+                    {
+                        var lhs = add._lhs as StringVariable;
+                        var rhs = add._rhs as StringLiteral;
+                        // If we have this pattern then we can try to solve it
+                        if (lhs is not null && rhs is not null)
+                        {
+                            var lhsResult = lhs.GetResult(null!);
+                            if (lhsResult.ReturnType == typeof(string))
+                            {
+                                if (lhsResult.TryGetResult(out var lhsr2, ref e) && lhsr2 is string lhsPath)
+                                {
+                                    // Check if the lhsPath is a subset of the current path
+                                    if (filePath.StartsWith(lhsPath))
+                                    {
+                                        filePath = filePath[lhsPath.Length..];
+                                        StringBuilder sb = new ();
+                                        sb.Append(lhs.AsString());
+                                        sb.Append(" + \"");
+                                        sb.Append(filePath);
+                                        sb.Append("\"");
+                                        var optimizedExpression = ParameterExpression.CreateParameter(sb.ToString(), typeof(string));
+                                        if (nodeToAssign.SetParameterValue(optimizedExpression, out error))
+                                        {
+                                            Buffer.AddUndo(new Command(() =>
+                                            {
+                                                return (nodeToAssign.SetParameterValue(parameterValue!, out var e), e);
+                                            }, () =>
+                                            {
+                                                return (nodeToAssign.SetParameterValue(optimizedExpression, out var e), e);
+                                            }));
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // If we get here then we were not able to match a pattern that we can solve, so we will just assign the scriped parameter as a literal.
+                    var newExpression = ParameterExpression.CreateParameter($"\"{filePath}\"", typeof(string));
+                    if (nodeToAssign.SetParameterValue(newExpression, out error))
+                    {
+                        Buffer.AddUndo(new Command(() =>
+                        {
+                            return (nodeToAssign.SetParameterValue(parameterValue!, out var e), e);
+                        }, () =>
+                        {
+                            return (nodeToAssign.SetParameterValue(newExpression, out var e), e);
+                        }));
+                        return true;
+                    }
                     return true;
                 }
-                return false;
+                else if(nodeToAssign?.Type?.IsAssignableFrom(typeof(RuntimeModules.BasicParameter<string>)) ?? false)
+                {
+                    return InnerSetBasicParameter(nodeToAssign, filePath, out error);
+                }
+                else
+                {
+                    error = new CommandError($"The node type '{nodeToAssign?.Type}' is not supported for setting a file path.", false);
+                    return false;
+                }
             }
         }
 
@@ -5868,6 +6096,49 @@ namespace XTMF2.Editing
                     () => { entry.TargetOutputNode = targetOutputNode; return (true, null); }));
                 error = null;
                 return true;
+            }
+        }
+
+        /// <summary>
+        /// Gets the parameter node for a given node and parameter name.
+        /// </summary>
+        /// <param name="node"></param>
+        /// <param name="parameterName"></param>
+        /// <param name="parameterNode"></param>
+        /// <param name="error"></param>
+        /// <returns></returns>
+        internal bool GetParameterForNode(Node node, string parameterName,
+         [NotNullWhen(true)] out Node? parameterNode, [NotNullWhen(false)] out string? error)
+        {
+            ArgumentNullException.ThrowIfNull(node);
+            ArgumentNullException.ThrowIfNull(parameterName);
+            lock (_sessionLock)
+            {
+                var containingBoundary = node.ContainedWithin ?? throw new InvalidOperationException("Node is not contained within a boundary.");
+                var link = containingBoundary.Links.FirstOrDefault(lk => lk.Origin == node && lk.OriginHook?.Name == parameterName);
+                if(link is null)
+                {
+                    parameterNode = null;
+                    error = $"No parameter named '{parameterName}' was found for node '{node.Name}'.";
+                    return false;
+                }
+                if(link.TryGetFirstDestination(out var dest))
+                {
+                    parameterNode = dest as Node;
+                    if (parameterNode is null)
+                    {
+                        error = $"The parameter '{parameterName}' either has no destination or one that is not a node.";
+                        return false;
+                    }
+                    error = null;
+                    return true;
+                }
+                else
+                {
+                    parameterNode = null;
+                    error = $"The parameter link for '{parameterName}' on node '{node.Name}' has no destination.";
+                    return false;
+                }
             }
         }
     }

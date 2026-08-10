@@ -24,160 +24,166 @@ using XTMF2.Editing;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 
-namespace XTMF2.ModelSystemConstruct
+namespace XTMF2.ModelSystemConstruct;
+
+public sealed class SingleLink : Link
 {
-    public sealed class SingleLink : Link
+    public Node Destination { get; private set; }
+    public bool DestinationHidden { get; private set; }
+
+    public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled, bool orthogonal = false,
+        bool destinationHidden = false, Guid id = default)
+        : base(origin, hook, disabled, orthogonal, id)
     {
-        public Node Destination { get; private set; }
-        public bool DestinationHidden { get; private set; }
+        Destination = destination;
+        DestinationHidden = destinationHidden;
+    }
 
-        public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled, bool orthogonal = false,
-            bool destinationHidden = false, Guid id = default)
-            : base(origin, hook, disabled, orthogonal, id)
+    internal bool SetDestination(Node destination, out CommandError? error)
+    {
+        Destination = destination;
+        Notify(nameof(Destination));
+        error = null;
+        return true;
+    }
+
+    internal override void Save(Dictionary<Node, int> moduleDictionary, Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject();
+        writer.WriteString(IdProperty, Id);
+        writer.WriteNumber(OriginProperty, moduleDictionary[Origin!]);
+        writer.WriteString(HookProperty, OriginHook.Name);
+        writer.WriteNumber(DestinationProperty, moduleDictionary[Destination!]);
+        if (IsDisabled)
         {
-            Destination = destination;
-            DestinationHidden = destinationHidden;
+            writer.WriteBoolean(DisabledProperty, true);
+        }
+        if (IsOrthogonal)
+        {
+            writer.WriteBoolean(OrthogonalProperty, true);
+        }
+        if (DestinationHidden)
+        {
+            writer.WriteBoolean(HiddenDestinationsProperty, true);
+        }
+        writer.WriteEndObject();
+    }
+
+    public override int DestinationCount => 1;
+
+    public override bool IsDestinationHidden(int destinationIndex)
+        => destinationIndex == 0 && DestinationHidden;
+
+    internal override bool SetDestinationHidden(int destinationIndex, bool hidden, [NotNullWhen(false)] out CommandError? error)
+    {
+        if (destinationIndex != 0)
+        {
+            error = new CommandError("Destination index out of range for SingleLink.");
+            return false;
         }
 
-        internal bool SetDestination(Node destination, out CommandError? error)
+        DestinationHidden = hidden;
+        Notify(nameof(DestinationHidden));
+        error = null;
+        return true;
+    }
+
+    internal override bool SetAllDestinationsHidden(bool hidden, [NotNullWhen(false)] out CommandError? error)
+        => SetDestinationHidden(0, hidden, out error);
+
+    internal override bool Construct(ref string? error)
+    {
+        if (Origin.IsDisabled)
         {
-            Destination = destination;
-            Notify(nameof(Destination));
             error = null;
             return true;
         }
 
-        internal override void Save(Dictionary<Node, int> moduleDictionary, Utf8JsonWriter writer)
+        // FunctionParameter destinations are resolved transitively at runtime by
+        // FunctionInstance.ConstructRuntimeLink(); no static wiring is needed here.
+        if (Destination is FunctionParameter)
         {
-            writer.WriteStartObject();
-            writer.WriteString(IdProperty, Id);
-            writer.WriteNumber(OriginProperty, moduleDictionary[Origin!]);
-            writer.WriteString(HookProperty, OriginHook.Name);
-            writer.WriteNumber(DestinationProperty, moduleDictionary[Destination!]);
-            if (IsDisabled)
-            {
-                writer.WriteBoolean(DisabledProperty, true);
-            }
-            if (IsOrthogonal)
-            {
-                writer.WriteBoolean(OrthogonalProperty, true);
-            }
-            if (DestinationHidden)
-            {
-                writer.WriteBoolean(HiddenDestinationsProperty, true);
-            }
-            writer.WriteEndObject();
-        }
-
-        public override int DestinationCount => 1;
-
-        public override bool IsDestinationHidden(int destinationIndex)
-            => destinationIndex == 0 && DestinationHidden;
-
-        internal override bool SetDestinationHidden(int destinationIndex, bool hidden, [NotNullWhen(false)] out CommandError? error)
-        {
-            if (destinationIndex != 0)
-            {
-                error = new CommandError("Destination index out of range for SingleLink.");
-                return false;
-            }
-
-            DestinationHidden = hidden;
-            Notify(nameof(DestinationHidden));
             error = null;
             return true;
         }
 
-        internal override bool SetAllDestinationsHidden(bool hidden, [NotNullWhen(false)] out CommandError? error)
-            => SetDestinationHidden(0, hidden, out error);
-
-        internal override bool Construct(ref string? error)
+        // If the origin is a FunctionInstance wired through a FunctionParameterHook,
+        // record the parameter binding so FunctionInstance can route internal links
+        // to the actual external module at runtime.
+        if (Origin is FunctionInstance fiBinder && OriginHook is FunctionParameterHook fph)
         {
-            if (Origin.IsDisabled)
+            var resolvedFiDest = Destination is GhostNode gnFi
+                ? gnFi.ReferencedNode
+                : Destination!;
+            IModule? bindModule;
+            if (resolvedFiDest is FunctionInstance destFiBinder)
             {
-                error = null;
-                return true;
-            }
-
-            // FunctionParameter destinations are resolved transitively at runtime by
-            // FunctionInstance.ConstructRuntimeLink(); no static wiring is needed here.
-            if (Destination is FunctionParameter)
-            {
-                error = null;
-                return true;
-            }
-
-            // If the origin is a FunctionInstance wired through a FunctionParameterHook,
-            // record the parameter binding so FunctionInstance can route internal links
-            // to the actual external module at runtime.
-            if (Origin is FunctionInstance fiBinder && OriginHook is FunctionParameterHook fph)
-            {
-                var resolvedFiDest = Destination is GhostNode gnFi
-                    ? gnFi.ReferencedNode
-                    : Destination!;
-                IModule? bindModule;
-                if (resolvedFiDest is FunctionInstance destFiBinder)
-                {
-                    bindModule = destFiBinder.Template.EntryNode is not null
-                        ? destFiBinder.GetRuntimeModule(destFiBinder.Template.EntryNode)
-                        : null;
-                }
-                else
-                {
-                    bindModule = resolvedFiDest.Module;
-                }
-                fiBinder.BindParameter(fph.Parameter, bindModule);
-                error = null;
-                return true;
-            }
-
-            // Resolve ghost-node destinations to their real node.
-            var resolved = Destination is GhostNode gn ? gn.ReferencedNode : Destination!;
-
-            // Determine the effective destination node (for cardinality/disabled checks)
-            // and the actual IModule to wire (per-instance clone for FunctionInstances).
-            Node effectiveDest;
-            IModule? destModule;
-            bool destinationIsDisabled;
-            if (resolved is FunctionInstance fi)
-            {
-                effectiveDest = fi.Template.EntryNode ?? resolved;
-                destModule    = fi.Template.EntryNode is not null
-                    ? fi.GetRuntimeModule(fi.Template.EntryNode)
+                bindModule = destFiBinder.Template.EntryNode is not null
+                    ? destFiBinder.GetRuntimeModule(destFiBinder.Template.EntryNode)
                     : null;
-                destinationIsDisabled = fi.IsDisabled || effectiveDest.IsDisabled;
             }
             else
             {
-                effectiveDest = resolved;
-                destModule    = resolved.Module;
-                destinationIsDisabled = effectiveDest.IsDisabled;
+                bindModule = resolvedFiDest.Module;
             }
-
-            // if not optional
-            if (OriginHook!.Cardinality == HookCardinality.Single)
-            {
-                if (destinationIsDisabled)
-                {
-                    error = "A link destined for a disabled module was not optional.";
-                    return false;
-                }
-                if (IsDisabled)
-                {
-                    error = "A non optional link is disabled!";
-                    return false;
-                }
-            }
-            if (!IsDisabled && !destinationIsDisabled && destModule is not null)
-            {
-                OriginHook.Install(Origin!.Module!, destModule, 0);
-            }
+            fiBinder.BindParameter(fph.Parameter, bindModule);
+            error = null;
             return true;
         }
 
-        internal override bool HasDestination(Node destNode)
+        // Resolve ghost-node destinations to their real node.
+        var resolved = Destination is GhostNode gn ? gn.ReferencedNode : Destination!;
+
+        // Determine the effective destination node (for cardinality/disabled checks)
+        // and the actual IModule to wire (per-instance clone for FunctionInstances).
+        Node effectiveDest;
+        IModule? destModule;
+        bool destinationIsDisabled;
+        if (resolved is FunctionInstance fi)
         {
-            return Destination == destNode;
+            effectiveDest = fi.Template.EntryNode ?? resolved;
+            destModule    = fi.Template.EntryNode is not null
+                ? fi.GetRuntimeModule(fi.Template.EntryNode)
+                : null;
+            destinationIsDisabled = fi.IsDisabled || effectiveDest.IsDisabled;
         }
+        else
+        {
+            effectiveDest = resolved;
+            destModule    = resolved.Module;
+            destinationIsDisabled = effectiveDest.IsDisabled;
+        }
+
+        // if not optional
+        if (OriginHook!.Cardinality == HookCardinality.Single)
+        {
+            if (destinationIsDisabled)
+            {
+                error = "A link destined for a disabled module was not optional.";
+                return false;
+            }
+            if (IsDisabled)
+            {
+                error = "A non optional link is disabled!";
+                return false;
+            }
+        }
+        if (!IsDisabled && !destinationIsDisabled && destModule is not null)
+        {
+            OriginHook.Install(Origin!.Module!, destModule, 0);
+        }
+        return true;
+    }
+
+    internal override bool HasDestination(Node destNode)
+    {
+        return Destination == destNode;
+    }
+
+    override internal bool TryGetFirstDestination([NotNullWhen(true)] out object? dest)
+    {
+        dest = Destination;
+        return dest is not null;
     }
 }
+

@@ -18,11 +18,16 @@
 */
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using XTMF2.GUI.ViewModels;
@@ -256,6 +261,221 @@ partial class ModelSystemCanvas
         _scriptOverlay.IsVisible = false;
         InvalidateAndMeasure();
         Focus();
+    }
+
+    private XTMF2.ModelSystemConstruct.Node? ResolveFilePathTargetNode(NodeViewModel node)
+    {
+        var sourceNode = node.UnderlyingNode;
+        if (sourceNode.ContainedWithin is null)
+            return null;
+
+        foreach (var link in sourceNode.ContainedWithin.Links)
+        {
+            if (!ReferenceEquals(link.Origin, sourceNode))
+                continue;
+            if (link.OriginHook?.Name != "File Path")
+                continue;
+
+            if (link is XTMF2.ModelSystemConstruct.SingleLink singleLink
+                && singleLink.Destination is XTMF2.ModelSystemConstruct.Node destinationNode)
+                return destinationNode;
+
+            if (link is XTMF2.ModelSystemConstruct.MultiLink multiLink
+                && multiLink.Destinations.FirstOrDefault() is XTMF2.ModelSystemConstruct.Node multiDestination)
+                return multiDestination;
+        }
+
+        return null;
+    }
+
+    private static bool IsFilePathTargetNode(NodeViewModel? node)
+    {
+        return node is not null && (node.ModuleType switch
+        {
+            Type t when t == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile) => true,
+            Type t when t == typeof(XTMF2.RuntimeModules.BasicParameter<string>) => true,
+            Type t when t == typeof(XTMF2.RuntimeModules.ScriptedParameter<string>) => true,
+            _ => false
+        });
+    }
+
+    private async Task TryOpenOpenReadStreamFromFileParameterAsync(NodeViewModel? targetNodeModel = null)
+    {
+        var nvm = targetNodeModel ?? _vm?.SelectedElement as NodeViewModel;
+        if (_vm is null)
+        {
+            return;
+        }
+        if (nvm is null)
+        {
+            _vm.ShowToast("Select a file-path parameter node to update.", isError: true, durationMs: 3000);
+            return;
+        }
+
+        if (!IsFilePathTargetNode(nvm))
+        {
+            _vm.ShowToast("Select a file-path parameter node or an OpenReadStreamFromFile node.", isError: true, durationMs: 3000);
+            return;
+        }
+
+        string GetExpression(NodeViewModel node)
+        {
+            if (node.IsScriptedParameter)
+            {
+                return node.ParameterValueRepresentation ?? string.Empty;
+            }
+            else if(node.ModuleType == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile))
+            {
+                // For OpenReadStreamFromFile nodes, the file path is stored in the "FilePath" parameter.
+                var filePathParam = node.GetParameter("File Path");
+                if (filePathParam is null)
+                {
+                    return string.Empty;
+                }
+                if (filePathParam.ParameterValue?.GetValueAtEditingTime(typeof(string), out var value, out string? conversionError) ?? false)
+                {
+                    return value as string ?? string.Empty;
+                }
+                return string.Empty;
+            }
+            else
+            {
+                return node.ParameterValueRepresentation ?? string.Empty;
+            }
+        }
+
+        string GetResolvedValue(NodeViewModel node)
+        {
+            if (node.IsScriptedParameter)
+            {
+                return node.EvaluateParameterValue() ?? string.Empty;
+            }
+            else if(node.ModuleType == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile))
+            {
+                var filePathParam = node.GetParameter("File Path");
+                if (filePathParam is null)
+                {
+                    return string.Empty;
+                }
+                if (filePathParam.ParameterValue?.GetValueAtEditingTime(typeof(string), out var value, out string? conversionError) ?? false)
+                {
+                    return value as string ?? string.Empty;
+                }
+                return string.Empty;
+            }
+            else
+            {
+                return node.ParameterValueRepresentation ?? string.Empty;
+            }
+        }
+
+        var targetNode = ResolveFilePathTargetNode(nvm) ?? nvm.UnderlyingNode;
+        var targetVm = ReferenceEquals(targetNode, nvm.UnderlyingNode)
+            ? nvm
+            : new NodeViewModel(targetNode, _vm.Session, _vm.User);
+        var currentExpression = GetExpression(targetVm);
+        var currentValue = GetResolvedValue(targetVm);
+
+        if (string.IsNullOrWhiteSpace(currentValue))
+        {
+            _vm?.ShowToast("No file path is currently set.", isError: true, durationMs: 3000);
+            return;
+        }
+        // We need to check to see if it was a directory or if it was a file
+        var directoryInfo = new DirectoryInfo(currentValue);
+        var fileInfo = new FileInfo(currentValue);
+        ;
+        if (!directoryInfo.Exists && !fileInfo.Exists)
+        {
+            _vm.ShowToast($"The file '{currentValue}' does not exist.", isError: true, durationMs: 4000);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = currentValue, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _vm.ShowToast($"Unable to open '{currentValue}': {ex.Message}", isError: true, durationMs: 4000);
+        }
+    }
+
+    private async Task TryUpdateOpenReadStreamFromFileParameterAsync(bool directory, NodeViewModel? targetNode = null)
+    {
+        targetNode ??= _vm?.SelectedElement as NodeViewModel;
+        if (_vm is null)
+        {
+            return;
+        }
+        if (targetNode is not NodeViewModel nvm)
+        {
+            _vm.ShowToast("Select a file-path parameter node to update.", isError: true, durationMs: 3000);
+            return;
+        }
+
+        if (!IsFilePathTargetNode(nvm))
+        {
+            _vm.ShowToast("Select a file-path parameter node or an OpenReadStreamFromFile node.", isError: true, durationMs: 3000);
+            return;
+        }
+
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel?.StorageProvider is null)
+        {
+            _vm.ShowToast("Unable to access the file system.", isError: true, durationMs: 3000);
+            return;
+        }
+
+        try
+        {
+            if(directory)
+            {
+                var directories = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
+                {
+                    Title = "Select Folder",
+                    AllowMultiple = false
+                });
+
+                if (directories.Count == 0) return;
+
+                var directoryPath = directories[0].TryGetLocalPath();
+                if (string.IsNullOrEmpty(directoryPath)) return;
+
+                if(!_vm.UpdateCurrentParameterValueFromFilePath(nvm, directoryPath, true, out var error))
+                {
+                    _vm.ShowToast(error?.Message ?? "Failed to update the directory path.", isError: true, durationMs: 4000);
+                }
+            }
+            else
+            {
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Select File",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (files.Count == 0) return;
+
+                var filePath = files[0].TryGetLocalPath();
+                if (string.IsNullOrEmpty(filePath)) return;
+
+                if(!_vm.UpdateCurrentParameterValueFromFilePath(nvm, filePath, false, out var error))
+                {
+                    _vm.ShowToast(error?.Message ?? "Failed to update the file path.", isError: true, durationMs: 4000);
+                }
+            }
+            
+            InvalidateVisual();
+        }
+        catch (Exception ex)
+        {
+            _vm.ShowToast($"Error opening file picker: {ex.Message}", isError: true, durationMs: 4000);
+        }
     }
 
     // ── Inline enum editor handlers ───────────────────────────────────────

@@ -64,11 +64,11 @@ partial class ModelSystemCanvas
 
         return new CanvasElementDto(
             CanvasElementKind.Node,
-            node.Name,
             node.Location.X,
             node.Location.Y,
             (float)NodeRenderWidth(nvm),
             (float)NodeRenderHeight(nvm),
+            Name:            node.Name,
             TypeName:        node.Type?.AssemblyQualifiedName,
             ParameterValue:  paramValue,
             IsScriptedParam: isScriptedParam,
@@ -119,9 +119,11 @@ partial class ModelSystemCanvas
                     case CommentBlockViewModel cb:
                         dto = new CanvasElementDto(
                             CanvasElementKind.CommentBlock,
-                            cb.Name,
                             (float)cb.X, (float)cb.Y,
-                            (float)cb.Width, (float)cb.Height);
+                            (float)cb.Width, (float)cb.Height,
+                            Name: null,
+                            CommentBody: cb.Name,
+                            CommentHeader: cb.Header);
                         break;
 
                     case FunctionTemplateViewModel ft:
@@ -133,9 +135,9 @@ partial class ModelSystemCanvas
                             .ToList();
                         dto = new CanvasElementDto(
                             CanvasElementKind.FunctionTemplate,
-                            ft.Name,
                             (float)ft.X, (float)ft.Y,
                             (float)ft.Width, (float)ft.Height,
+                            Name: ft.Name,
                             EmbeddedTemplateSnapshot: templateSnapshot,
                             FunctionParameters: fpDtos.Count > 0 ? fpDtos : null);
                         break;
@@ -144,9 +146,9 @@ partial class ModelSystemCanvas
                         _vm.TryExportFunctionTemplateSnapshot(fi.UnderlyingInstance.Template, out var instanceTemplateSnapshot);
                         dto = new CanvasElementDto(
                             CanvasElementKind.FunctionInstance,
-                            fi.Name,
                             (float)fi.X, (float)fi.Y,
                             (float)fi.Width, (float)fi.Height,
+                            Name: fi.Name,
                             TemplateName: fi.TemplateName,
                             EmbeddedTemplateSnapshot: instanceTemplateSnapshot);
                         break;
@@ -154,9 +156,9 @@ partial class ModelSystemCanvas
                     case GhostNodeViewModel ghost:
                         dto = new CanvasElementDto(
                             CanvasElementKind.GhostNode,
-                            ghost.Name,
                             (float)ghost.X, (float)ghost.Y,
                             (float)ghost.Width, (float)ghost.Height,
+                            Name: ghost.Name,
                             ReferencedNodeName: ghost.UnderlyingGhostNode.ReferencedNode.Name);
                         break;
 
@@ -175,11 +177,11 @@ partial class ModelSystemCanvas
                     var t = fivm.UnderlyingInstance.Template;
                     dtos.Add(new CanvasElementDto(
                         CanvasElementKind.FunctionTemplate,
-                        t.Name,
                         t.Location.X,
                         t.Location.Y,
                         t.Location.Width,
                         t.Location.Height,
+                        Name: t.Name,
                         EmbeddedTemplateSnapshot: dto.EmbeddedTemplateSnapshot,
                         IsTemplateCompanion: true));
                 }

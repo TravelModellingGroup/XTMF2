@@ -237,5 +237,16 @@ namespace XTMF2.ModelSystemConstruct
         {
             return _Destinations.Contains(destNode);
         }
+
+        override internal bool TryGetFirstDestination([NotNullWhen(true)] out object? dest)
+        {
+            if (_Destinations.Count > 0)
+            {
+                dest = _Destinations[0];
+                return true;
+            }
+            dest = null;
+            return false;
+        }
     }
 }

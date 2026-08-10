@@ -66,7 +66,6 @@
         <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}"/>
         <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoCommand}"/>
         <KeyBinding Gesture="Ctrl+B" Command="{Binding BrowseBoundariesCommand}"/>
-        <KeyBinding Gesture="Alt+Up" Command="{Binding NavigateUpCommand}"/>
     </UserControl.KeyBindings>
 
     <Grid RowDefinitions="Auto,*" Margin="10">

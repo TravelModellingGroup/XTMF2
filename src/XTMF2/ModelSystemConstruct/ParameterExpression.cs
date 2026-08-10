@@ -45,6 +45,17 @@ public abstract class ParameterExpression : INotifyPropertyChanged
     public abstract object? GetValue(IModule caller, Type type, ref string? errorString);
 
     /// <summary>
+    /// Tries to convert the parameter expression to the given type at editing time.
+    /// This is used for modules that need to evaluate the parameter expression at editing time.
+    /// </summary>
+    /// <param name="outputType">The expected output type.</param>
+    /// <param name="errorString">An error message if we are unable to get the value.</param>
+    /// <returns>True if the value was successfully obtained, false otherwise.</returns>
+    public abstract bool GetValueAtEditingTime(Type outputType, 
+        [NotNullWhen(true)] out object? convertedValue,
+        [NotNullWhen(false)] out string? errorString);
+
+    /// <summary>
     /// Gets a string based representation of the parameter
     /// </summary>
     public abstract string Representation { get; }

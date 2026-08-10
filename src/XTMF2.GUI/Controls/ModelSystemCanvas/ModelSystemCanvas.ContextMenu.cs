@@ -566,6 +566,26 @@ partial class ModelSystemCanvas
             menu.Items.Add(new Separator());
         }
 
+        if (element is NodeViewModel fileNodeVm && IsFilePathTargetNode(fileNodeVm))
+        {
+            var fileMenu = new MenuItem { Header = "File" };
+
+            var openFileItem = new MenuItem { Header = "Open" };
+            openFileItem.Click += async (_, _) => await TryOpenOpenReadStreamFromFileParameterAsync(fileNodeVm);
+            fileMenu.Items.Add(openFileItem);
+
+            var setFileItem = new MenuItem { Header = "Set File…" };
+            setFileItem.Click += async (_, _) => await TryUpdateOpenReadStreamFromFileParameterAsync(false, fileNodeVm);
+            fileMenu.Items.Add(setFileItem);
+
+            var setDirectoryItem = new MenuItem { Header = "Set Directory…" };
+            setDirectoryItem.Click += async (_, _) => await TryUpdateOpenReadStreamFromFileParameterAsync(true, fileNodeVm);
+            fileMenu.Items.Add(setDirectoryItem);
+
+            menu.Items.Add(fileMenu);
+            menu.Items.Add(new Separator());
+        }
+
         // ── Standard Delete ───────────────────────────────────────────────
         var deleteItem = new MenuItem { Header = "Delete" };
         deleteItem.Click += (_, _) =>

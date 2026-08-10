@@ -494,6 +494,43 @@ public sealed partial class ModelSystemCanvas : Control
         _vm = DataContext as ModelSystemEditorViewModel;
         Attach();
         InvalidateAndMeasure();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (!IsKeyboardFocusWithin)
+                Focus();
+            EnsureCanvasFocusAndSelection();
+        }, Avalonia.Threading.DispatcherPriority.Render);
+    }
+
+    protected override void OnGotFocus(GotFocusEventArgs e)
+    {
+        base.OnGotFocus(e);
+
+        // Ignore bubbled focus from child controls (inline editors), otherwise
+        // the canvas can immediately steal focus back from the textbox.
+        if (!ReferenceEquals(e.Source, this))
+            return;
+
+        EnsureCanvasFocusAndSelection();
+    }
+
+    private void EnsureCanvasFocusAndSelection()
+    {
+        if (_vm is null) return;
+
+        if (_vm.SelectedElement is not null || _vm.SelectedLink is not null)
+            return;
+
+        ICanvasElement? first = _vm.Nodes.FirstOrDefault();
+        first ??= _vm.Starts.FirstOrDefault();
+        first ??= _vm.CommentBlocks.FirstOrDefault();
+        first ??= _vm.GhostNodes.FirstOrDefault();
+        first ??= _vm.FunctionTemplates.FirstOrDefault();
+        first ??= _vm.FunctionInstances.FirstOrDefault();
+        first ??= _vm.FunctionParameterVMs.FirstOrDefault();
+
+        if (first is not null)
+            _vm.SelectElementCommand.Execute(first);
     }
 
     private void Attach()
@@ -648,6 +685,20 @@ public sealed partial class ModelSystemCanvas : Control
                            or nameof(ModelSystemEditorViewModel.RenderAllHiddenDestinationLinks))
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateAndMeasure);
+        }
+
+        // Boundary switches can leave the last cursor anchor in an unrelated coordinate space.
+        // Clearing it forces Ctrl+V to use the viewport-centre fallback in the new boundary.
+        if (e.PropertyName is nameof(ModelSystemEditorViewModel.CurrentBoundary))
+        {
+            _lastCanvasMousePos = null;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!IsKeyboardFocusWithin)
+                    Focus();
+                EnsureCanvasFocusAndSelection();
+                InvalidateAndMeasure();
+            }, Avalonia.Threading.DispatcherPriority.Render);
         }
 
 

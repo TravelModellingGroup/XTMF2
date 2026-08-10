@@ -45,6 +45,23 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void TestCreatingEmptyCommentBlock()
+        {
+            TestHelper.RunInModelSystemContext("TestCreatingEmptyCommentBlock", (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var ms = mSession.ModelSystem;
+                var location = new Rectangle(100, 100);
+                var comBlocks = ms.GlobalBoundary.CommentBlocks;
+                Assert.IsEmpty(comBlocks);
+                Assert.IsTrue(mSession.AddCommentBlock(user, ms.GlobalBoundary, string.Empty, location, out CommentBlock block, out error), error?.Message);
+                Assert.HasCount(1, comBlocks);
+                Assert.AreEqual(string.Empty, comBlocks[0].Comment);
+                Assert.AreEqual(location, comBlocks[0].Location);
+            });
+        }
+
+        [TestMethod]
         public void TestCreatingCommentBlockWithBadUser()
         {
             TestHelper.RunInModelSystemContext("TestCreatingCommentBlockWithBadUser", (user, unauthorizedUser, pSession, mSession) =>
@@ -196,6 +213,31 @@ namespace XTMF2.UnitTests.Editing
                 Assert.AreEqual(comment, block.Comment, "The comment block's text was not undone!");
                 Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
                 Assert.AreEqual(newComment, block.Comment);
+            });
+        }
+
+        [TestMethod]
+        public void TestChangingCommentBlockTextToEmpty()
+        {
+            TestHelper.RunInModelSystemContext("TestChangingCommentBlockTextToEmpty", (user, pSession, msSession) =>
+            {
+                CommandError error = null;
+                var ms = msSession.ModelSystem;
+                var comment = "My Comment";
+                var location = new Rectangle(100, 100);
+                var comBlocks = ms.GlobalBoundary.CommentBlocks;
+                Assert.IsEmpty(comBlocks);
+                Assert.IsTrue(msSession.AddCommentBlock(user, ms.GlobalBoundary, comment, location, out CommentBlock block, out error), error?.Message);
+                Assert.HasCount(1, comBlocks);
+
+                Assert.IsTrue(msSession.SetCommentBlockText(user, block, string.Empty, out error), error?.Message);
+                Assert.AreEqual(string.Empty, block.Comment, "The comment block text should allow empty values.");
+
+                Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
+                Assert.AreEqual(comment, block.Comment, "Undo should restore the original comment text.");
+
+                Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
+                Assert.AreEqual(string.Empty, block.Comment, "Redo should reapply the empty comment text.");
             });
         }
 

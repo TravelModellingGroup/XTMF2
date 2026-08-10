@@ -30,12 +30,26 @@ namespace XTMF2.GUI.Controls;
 
 partial class ModelSystemCanvas
 {
+
+    private bool AltCommendIssued = false;
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        if (AltCommendIssued && (e.Key == Key.LeftAlt || e.Key == Key.RightAlt))
+        {
+            AltCommendIssued = false;
+            Focus();
+            e.Handled = true;
+        }
+        base.OnKeyUp(e);
+    }
+
     // ── Hit testing / mouse interaction ──────────────────────────────────
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        base.OnKeyDown(e);
         if (_vm is null)
         {
+            base.OnKeyDown(e);
             return;
         }
         else if (e.Key is Key.Delete or Key.Back)
@@ -63,6 +77,19 @@ partial class ModelSystemCanvas
             ClearMultiSelection();
             e.Handled = true;
         }
+        else if ((e.Key is Key.Return or Key.Enter) && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            if (_vm.SelectedElement is FunctionTemplateViewModel ftvm)
+            {
+                _vm.NavigateIntoFunctionTemplate(ftvm);
+                e.Handled = true;
+            }
+            else if (_vm.SelectedElement is FunctionInstanceViewModel fivm)
+            {
+                _vm.OpenFunctionTemplateOfInstance(fivm);
+                e.Handled = true;
+            }
+        }
         else if (e.Key == Key.F2 && _vm?.SelectedElement is not null)
         {
             var sel = _vm.SelectedElement;
@@ -82,7 +109,12 @@ partial class ModelSystemCanvas
         else if (e.Key == Key.Up && (e.KeyModifiers & KeyModifiers.Alt) != 0)
         {
             // Alt+Up: navigate to parent boundary / exit function template.
+            AltCommendIssued = true;
             _vm?.NavigateUpCommand.Execute(null);
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                Focus();
+            }, Avalonia.Threading.DispatcherPriority.Render);
             e.Handled = true;
         }
         else if (e.Key == Key.C && (e.KeyModifiers & KeyModifiers.Control) != 0)
@@ -131,6 +163,24 @@ partial class ModelSystemCanvas
                 e.Handled = true;
             }
         }
+        else if ((e.Key is Key.O) && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            if (_vm?.SelectedElement is NodeViewModel nvm
+                && (nvm.IsParameterNode || nvm.UnderlyingNode.Type == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile)))
+            {
+                _ = TryOpenOpenReadStreamFromFileParameterAsync();
+                e.Handled = true;
+            }
+        }
+        else if( e.Key == Key.F && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            if (_vm?.SelectedElement is NodeViewModel nvm
+                && (nvm.IsParameterNode || nvm.UnderlyingNode.Type == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile)))
+            {
+                _ = TryUpdateOpenReadStreamFromFileParameterAsync(false);
+                e.Handled = true;
+            }
+        }
         else if (e.Key == Key.Up
             && _editingParamNode is null
             && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
@@ -161,14 +211,32 @@ partial class ModelSystemCanvas
         }
         else if (e.Key == Key.Tab && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0)
         {
-            // Tab or Shift+Tab: navigate between parameters within a node or function instance.
+            // For comment blocks, Tab toggles header/body editing.
+            bool commentTabContext = _editingCommentBlock is not null
+                                  || _editingCommentHeaderBlock is not null
+                                  || _vm?.SelectedElement is CommentBlockViewModel;
+            if (commentTabContext && TryCycleCommentEditOnTab())
+            {
+                e.Handled = true;
+                return;
+            }
+
+            // Otherwise, Tab or Shift+Tab: navigate between parameters within a node or function instance.
             bool isShiftTab = (e.KeyModifiers & KeyModifiers.Shift) != 0;
             if (NavigateToNextParameter(isShiftTab))
             {
                 e.Handled = true;
             }
+            else if (_vm?.SelectedElement is not null)
+            {
+                // Keep focus on the canvas when an element is selected even if
+                // there is no editable target for this Tab key press.
+                e.Handled = true;
+            }
         }
+        base.OnKeyDown(e);
     }
+    
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
         if ((e.KeyModifiers & KeyModifiers.Control) != 0)

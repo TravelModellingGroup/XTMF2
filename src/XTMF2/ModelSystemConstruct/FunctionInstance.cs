@@ -372,6 +372,15 @@ namespace XTMF2.ModelSystemConstruct
                 finally { _contextStack.Pop(); }
             }
 
+            public override bool GetValueAtEditingTime(Type outputType, 
+                [NotNullWhen(true)] out object? convertedValue,
+                [NotNullWhen(false)] out string? errorString)
+            {
+                (_contextStack ??= new Stack<FunctionInstance>()).Push(_fi);
+                try   { return _inner.GetValueAtEditingTime(outputType, out convertedValue, out errorString); }
+                finally { _contextStack.Pop(); }
+            }
+
             public override string Representation => _inner.Representation;
             public override Type Type => _inner.Type;
 

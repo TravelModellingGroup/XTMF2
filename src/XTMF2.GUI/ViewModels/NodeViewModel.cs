@@ -18,6 +18,7 @@
 */
 using System;
 using System.ComponentModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using XTMF2;
 using XTMF2.Configuration;
@@ -78,6 +79,11 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     /// (e.g. "BasicParameter`1"). Updates automatically when the type changes.
     /// </summary>
     public string TypeName => UnderlyingNode.Type?.Name ?? "Unknown";
+
+    /// <summary>
+    /// Get the underlying module's type.
+    /// </summary>
+    public Type ModuleType => UnderlyingNode.Type;
 
     /// <summary>
     /// True when the node's type is <see cref="BasicParameter{T}"/> or
@@ -419,5 +425,28 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
         var h = loc.Height > 0 ? loc.Height : 50f;
         _session.SetNodeLocation(_user, UnderlyingNode,
             new Rectangle((float)x, (float)y, w, h), out _);
+    }
+
+    internal Node? GetParameter(string parameterName)
+    {
+        var parameter = UnderlyingNode.GetParameter(_session, parameterName);
+        return parameter;
+    }
+
+    internal string? EvaluateParameterValue()
+    {
+        if (IsScriptedParameter)
+        {
+            if (!_session.EvaluateParameterExpression(UnderlyingNode, out object? value)
+                || value is not String)
+            {
+                return String.Empty;
+            }
+            return value as String;
+        }
+        else
+        {
+            return UnderlyingNode.ParameterValue?.Representation ?? string.Empty;
+        }
     }
 }

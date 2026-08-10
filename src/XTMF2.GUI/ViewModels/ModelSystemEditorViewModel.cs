@@ -38,6 +38,7 @@ using XTMF2.GUI.Resources;
 using XTMF2.GUI.Views;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
+using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -815,7 +816,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             foreach (var fp in _currentFunctionTemplate.UnderlyingTemplate.FunctionParameters)
                 FunctionParameterVMs.Add(new FunctionParameterViewModel(fp, Session, User));
         foreach (var link in boundary.Links)          TryAddLinkViewModel(link);
-        foreach (var cb in boundary.CommentBlocks)    CommentBlocks.Add(new CommentBlockViewModel(cb, Session, User));
+        foreach (var cb in boundary.CommentBlocks)
+            if (!CommentBlocks.Any(v => ReferenceEquals(v.UnderlyingBlock, cb)))
+                CommentBlocks.Add(new CommentBlockViewModel(cb, Session, User));
     }
 
     // Cached reference to the current boundary's Boundaries collection so we can
@@ -1011,6 +1014,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (e.NewItems is not null)
             foreach (CommentBlock cb in e.NewItems)
             {
+                var existing = CommentBlocks.FirstOrDefault(v => ReferenceEquals(v.UnderlyingBlock, cb));
+                if (existing is not null)
+                {
+                    SelectElement(existing);
+                    continue;
+                }
+
                 var cvm = new CommentBlockViewModel(cb, Session, User);
                 CommentBlocks.Add(cvm);
                 SelectElement(cvm);
@@ -4070,7 +4080,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             // Pass 3: restore links between pasted nodes (cross-node links).
             if (createdNodes.Count > 1)
             {
-                var nameToNode = createdNodes.ToDictionary(e => e.Element.Name, e => e.Node);
+                var nameToNode = createdNodes
+                    .Where(e => !string.IsNullOrWhiteSpace(e.Element.Name))
+                    .ToDictionary(e => e.Element.Name!, e => e.Node);
                 foreach (var (element, originNode) in createdNodes)
                 {
                     foreach (var crossLink in element.CrossLinks ?? [])
@@ -4126,8 +4138,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         float w = element.W > 0 ? element.W : 120f;
         float h = element.H > 0 ? element.H : 50f;
         var newLoc = new Rectangle(element.X + dx, element.Y + dy, w, h);
+        var nodeName = string.IsNullOrWhiteSpace(element.Name) ? "Pasted Node" : element.Name;
 
-        if (!Session.AddNode(User, _currentBoundary, element.Name, type, newLoc,
+        if (!Session.AddNode(User, _currentBoundary, nodeName, type, newLoc,
                 out var newNode, out var addError))
         {
             await ShowError("Paste Failed", addError);
@@ -4162,8 +4175,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
             var hook = newNode.Hooks?.FirstOrDefault(h => h.Name == inlined.HookName);
             if (hook is null) continue;
+            var childName = string.IsNullOrWhiteSpace(inlined.Child.Name) ? "Pasted Node" : inlined.Child.Name;
 
-            if (!Session.AddNode(User, _currentBoundary, inlined.Child.Name, childType,
+            if (!Session.AddNode(User, _currentBoundary, childName, childType,
                     Rectangle.Hidden, out var childNode, out _))
                 continue;
 
@@ -4185,8 +4199,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         float w = element.W > 0 ? element.W : (float)CommentBlockViewModel.DefaultWidth;
         float h = element.H > 0 ? element.H : (float)CommentBlockViewModel.DefaultHeight;
         var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
-        // Name on CommentBlock stores the comment text.
-        Session.AddCommentBlock(User, _currentBoundary, element.Name, loc, out _, out _);
+        // Prefer the dedicated comment body field; fall back to legacy payloads using "name".
+        var body = element.CommentBody ?? element.Name ?? string.Empty;
+        if (!Session.AddCommentBlock(User, _currentBoundary, body, loc, out var block, out _)
+            || block is null)
+        {
+            return;
+        }
+
+        Session.SetCommentBlockHeader(User, block, element.CommentHeader ?? string.Empty, out _);
     }
 
     private FunctionTemplate? PasteFunctionTemplate(CanvasElementDto element, float dx, float dy)
@@ -4221,10 +4242,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         // Legacy fallback for payloads without embedded template snapshots.
-        string name = element.Name;
+        string baseName = string.IsNullOrWhiteSpace(element.Name) ? "Function Template" : element.Name;
+        string name = baseName;
         int suffix = 2;
         while (FunctionTemplates.Any(ft => string.Equals(ft.Name, name, StringComparison.OrdinalIgnoreCase)))
-            name = $"{element.Name} ({suffix++})";
+            name = $"{baseName} ({suffix++})";
 
         if (!Session.AddFunctionTemplate(User, _currentBoundary, name, out var ft, out _))
             return null;
@@ -4253,10 +4275,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (template is null) return;
 
         // Generate a unique name if needed.
-        string name = element.Name;
+        string baseName = string.IsNullOrWhiteSpace(element.Name) ? "Function Instance" : element.Name;
+        string name = baseName;
         int suffix = 2;
         while (_currentBoundary.FunctionInstances.Any(fi => string.Equals(fi.Name, name, StringComparison.OrdinalIgnoreCase)))
-            name = $"{element.Name} ({suffix++})";
+            name = $"{baseName} ({suffix++})";
 
         float w = element.W > 0 ? element.W : 160f;
         float h = element.H > 0 ? element.H : 70f;
@@ -4332,6 +4355,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Session.AddGhostNode(User, _currentBoundary, referencedNvm.UnderlyingNode, loc, out _, out _);
     }
 
+    internal bool UpdateCurrentParameterValueFromFilePath(NodeViewModel nvm, string newFilePath, bool isDirectory,
+        [NotNullWhen(false) ]out CommandError? error)
+    {
+        return Session.SetParameterValueFromFilePath(User, nvm.UnderlyingNode, newFilePath, isDirectory, out error);
+    }
+
     // ── IDisposable ───────────────────────────────────────────────────────
     /// <inheritdoc />
     public void Dispose()
@@ -4362,4 +4391,5 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         Session.Dispose();
     }
+
 }

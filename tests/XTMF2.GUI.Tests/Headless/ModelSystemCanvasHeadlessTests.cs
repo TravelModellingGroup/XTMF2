@@ -26,6 +26,7 @@ using XTMF2.GUI.ViewModels;
 using XTMF2.ModelSystemConstruct;
 using System.Linq;
 using System.Reflection;
+using System;
 
 namespace XTMF2.GUI.Tests.Headless;
 
@@ -68,6 +69,103 @@ public class ModelSystemCanvasHeadlessTests
             // Without setting DataContext, the canvas VM is null.
             Assert.IsNull(canvas.DataContext);
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_ResolveFilePathTargetNode_TargetsParameterNodeFromHook()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ResolveFilePathTargetNode_TargetsParameterNodeFromHook),
+            (user, projectSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "OpenReadStreamModule",
+                    typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile),
+                    new Rectangle(20, 20, 160, 60),
+                    out var sourceNode,
+                    out var error), error?.Message);
+                Assert.IsNotNull(sourceNode);
+
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "FilePathParameter",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>),
+                    new Rectangle(220, 20, 160, 60),
+                    out var parameterNode,
+                    out var error2), error2?.Message);
+                Assert.IsNotNull(parameterNode);
+
+                var filePathHook = sourceNode!.Hooks.First(h => h.Name == "File Path");
+                Assert.IsTrue(msSession.AddLink(user, sourceNode, filePathHook, parameterNode!, out _, out var linkError), linkError?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var sourceVm = vm.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, sourceNode));
+                Assert.IsNotNull(sourceVm);
+
+                var canvas = new ModelSystemCanvas();
+                var method = typeof(ModelSystemCanvas).GetMethod(
+                    "ResolveFilePathTargetNode",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.IsNotNull(method);
+
+                var result = (Node?)method!.Invoke(canvas, new object[] { sourceVm! });
+                Assert.AreSame(parameterNode, result);
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_ContextMenu_ShowsFileSubmenuForStringFilePathNodes()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ContextMenu_ShowsFileSubmenuForStringFilePathNodes),
+            (user, projectSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "FilePathParameter",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>),
+                    new Rectangle(20, 20, 160, 60),
+                    out var parameterNode,
+                    out var error), error?.Message);
+                Assert.IsNotNull(parameterNode);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var nodeVm = vm.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, parameterNode));
+                Assert.IsNotNull(nodeVm);
+                // Set the UX to invarient culture to ensure the context menu is consistent across locales.
+                System.Threading.Thread.CurrentThread.CurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var showMenu = typeof(ModelSystemCanvas).GetMethod(
+                        "ShowContextMenu",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(showMenu);
+
+                    showMenu!.Invoke(canvas, new object?[] { nodeVm!, null });
+
+                    var menu = canvas.ContextMenu;
+                    Assert.IsNotNull(menu);
+
+                    var fileMenu = menu!.Items.OfType<MenuItem>().FirstOrDefault(item =>
+                        string.Equals(item.Header?.ToString(), "File", System.StringComparison.Ordinal));
+                    Assert.IsNotNull(fileMenu);
+
+                    var fileItemHeaders = fileMenu!.Items.OfType<MenuItem>()
+                        .Select(item => item.Header?.ToString())
+                        .ToArray();
+
+                    CollectionAssert.Contains(fileItemHeaders, "Open");
+                    CollectionAssert.Contains(fileItemHeaders, "Set File…");
+                    CollectionAssert.Contains(fileItemHeaders, "Set Directory…");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
     }
 
     [TestMethod]
