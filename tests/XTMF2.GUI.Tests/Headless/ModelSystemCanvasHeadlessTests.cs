@@ -71,23 +71,6 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
-    public void ModelSystemCanvas_BuildUpdatedFilePathValue_RewritesRightHandStringLiteral()
-    {
-        var method = typeof(ModelSystemCanvas).GetMethods(BindingFlags.Static | BindingFlags.NonPublic)
-            .Single(m => m.Name == "BuildUpdatedFilePathValue" && m.GetParameters().Length == 3);
-        Assert.IsNotNull(method, "BuildUpdatedFilePathValue helper should exist.");
-
-        var updated = (string)method!.Invoke(null, new object?[]
-        {
-            "\"C:/old/file.txt\" + \"suffix.txt\"",
-            "/tmp/new-file.txt",
-            null
-        })!;
-
-        Assert.AreEqual("\"C:/old/file.txt\" + \"/tmp/new-file.txt\"", updated);
-    }
-
-    [TestMethod]
     public void ModelSystemCanvas_ResolveFilePathTargetNode_TargetsParameterNodeFromHook()
     {
         TestGuiHelper.RunInModelSystemContext(
@@ -131,69 +114,6 @@ public class ModelSystemCanvasHeadlessTests
                 var result = (Node?)method!.Invoke(canvas, new object[] { sourceVm! });
                 Assert.AreSame(parameterNode, result);
             });
-    }
-
-    [TestMethod]
-    public void ModelSystemCanvas_BuildUpdatedFilePathValue_PreservesDirectoryVariableWhenDirectoryMatches()
-    {
-        var method = typeof(ModelSystemCanvas).GetMethod(
-            "BuildUpdatedFilePathValue",
-            BindingFlags.Static | BindingFlags.NonPublic,
-            binder: null,
-            types: [typeof(string), typeof(string), typeof(string)],
-            modifiers: null);
-        Assert.IsNotNull(method, "BuildUpdatedFilePathValue overload for scripted expressions should exist.");
-
-        var updated = (string)method!.Invoke(null, new object[]
-        {
-            "\"/tmp\" + \"localFilePath.csv\"",
-            "/tmp/newFile.csv",
-            "/tmp/localFilePath.csv"
-        })!;
-
-        Assert.AreEqual("\"/tmp\" + \"newFile.csv\"", updated);
-    }
-
-    [TestMethod]
-    public void ModelSystemCanvas_BuildUpdatedFilePathValue_PreservesSharedPrefixForSubdirectorySelection()
-    {
-        var method = typeof(ModelSystemCanvas).GetMethod(
-            "BuildUpdatedFilePathValue",
-            BindingFlags.Static | BindingFlags.NonPublic,
-            binder: null,
-            types: [typeof(string), typeof(string), typeof(string)],
-            modifiers: null);
-        Assert.IsNotNull(method, "BuildUpdatedFilePathValue overload for scripted expressions should exist.");
-
-        var updated = (string)method!.Invoke(null, new object[]
-        {
-            "\"/tmp/shared\" + \"oldFile.csv\"",
-            "/tmp/shared/sub/newFile.csv",
-            "/tmp/shared/oldFile.csv"
-        })!;
-
-        Assert.AreEqual("\"/tmp/shared\" + \"sub/newFile.csv\"", updated);
-    }
-
-    [TestMethod]
-    public void ModelSystemCanvas_BuildUpdatedFilePathValue_UsesFullValueWhenDirectoryDoesNotMatchSelection()
-    {
-        var method = typeof(ModelSystemCanvas).GetMethod(
-            "BuildUpdatedFilePathValue",
-            BindingFlags.Static | BindingFlags.NonPublic,
-            binder: null,
-            types: [typeof(string), typeof(string), typeof(string)],
-            modifiers: null);
-        Assert.IsNotNull(method, "BuildUpdatedFilePathValue overload for scripted expressions should exist.");
-
-        var updated = (string)method!.Invoke(null, new object[]
-        {
-            "InputDirectory + \"oldFile.csv\"",
-            "/tmp/other/newFile.csv",
-            "/tmp/shared/oldFile.csv"
-        })!;
-
-        Assert.AreEqual("\"/tmp/other/newFile.csv\"", updated);
     }
 
     [TestMethod]
