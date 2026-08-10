@@ -117,6 +117,55 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void ModelSystemCanvas_ContextMenu_ShowsFileSubmenuForStringFilePathNodes()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ContextMenu_ShowsFileSubmenuForStringFilePathNodes),
+            (user, projectSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "FilePathParameter",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>),
+                    new Rectangle(20, 20, 160, 60),
+                    out var parameterNode,
+                    out var error), error?.Message);
+                Assert.IsNotNull(parameterNode);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var nodeVm = vm.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, parameterNode));
+                Assert.IsNotNull(nodeVm);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var showMenu = typeof(ModelSystemCanvas).GetMethod(
+                        "ShowContextMenu",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(showMenu);
+
+                    showMenu!.Invoke(canvas, new object?[] { nodeVm!, null });
+
+                    var menu = canvas.ContextMenu;
+                    Assert.IsNotNull(menu);
+
+                    var fileMenu = menu!.Items.OfType<MenuItem>().FirstOrDefault(item =>
+                        string.Equals(item.Header?.ToString(), "File", System.StringComparison.Ordinal));
+                    Assert.IsNotNull(fileMenu);
+
+                    var fileItemHeaders = fileMenu!.Items.OfType<MenuItem>()
+                        .Select(item => item.Header?.ToString())
+                        .ToArray();
+
+                    CollectionAssert.Contains(fileItemHeaders, "Open");
+                    CollectionAssert.Contains(fileItemHeaders, "Set…");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void ModelSystemCanvas_NameEdit_IsCanceledWhenEditedNodeIsDeleted()
     {
         TestGuiHelper.RunInModelSystemContext(

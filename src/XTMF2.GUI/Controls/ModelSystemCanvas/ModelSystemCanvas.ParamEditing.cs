@@ -288,15 +288,31 @@ partial class ModelSystemCanvas
         return null;
     }
 
-    private async Task TryOpenOpenReadStreamFromFileParameterAsync()
+    private static bool IsFilePathTargetNode(NodeViewModel? node)
     {
-        if (_vm?.SelectedElement is not NodeViewModel nvm)
+        return node is not null && (node.ModuleType switch
         {
-            _vm?.ShowToast("Select a file-path parameter node to update.", isError: true, durationMs: 3000);
+            Type t when t == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile) => true,
+            Type t when t == typeof(XTMF2.RuntimeModules.BasicParameter<string>) => true,
+            Type t when t == typeof(XTMF2.RuntimeModules.ScriptedParameter<string>) => true,
+            _ => false
+        });
+    }
+
+    private async Task TryOpenOpenReadStreamFromFileParameterAsync(NodeViewModel? targetNodeModel = null)
+    {
+        var nvm = targetNodeModel ?? _vm?.SelectedElement as NodeViewModel;
+        if (_vm is null)
+        {
+            return;
+        }
+        if (nvm is null)
+        {
+            _vm.ShowToast("Select a file-path parameter node to update.", isError: true, durationMs: 3000);
             return;
         }
 
-        if (!nvm.IsParameterNode && nvm.UnderlyingNode.Type?.FullName != "XTMF2.RuntimeModules.OpenReadStreamFromFile")
+        if (!IsFilePathTargetNode(nvm))
         {
             _vm.ShowToast("Select a file-path parameter node or an OpenReadStreamFromFile node.", isError: true, durationMs: 3000);
             return;
@@ -362,7 +378,7 @@ partial class ModelSystemCanvas
 
         if (string.IsNullOrWhiteSpace(currentValue))
         {
-            _vm.ShowToast("No file path is currently set.", isError: true, durationMs: 3000);
+            _vm?.ShowToast("No file path is currently set.", isError: true, durationMs: 3000);
             return;
         }
         // We need to check to see if it was a directory or if it was a file
@@ -385,15 +401,20 @@ partial class ModelSystemCanvas
         }
     }
 
-    private async Task TryUpdateOpenReadStreamFromFileParameterAsync()
+    private async Task TryUpdateOpenReadStreamFromFileParameterAsync(NodeViewModel? targetNode = null)
     {
-        if (_vm?.SelectedElement is not NodeViewModel nvm)
+        targetNode ??= _vm?.SelectedElement as NodeViewModel;
+        if (_vm is null)
         {
-            _vm?.ShowToast("Select a file-path parameter node to update.", isError: true, durationMs: 3000);
+            return;
+        }
+        if (targetNode is not NodeViewModel nvm)
+        {
+            _vm.ShowToast("Select a file-path parameter node to update.", isError: true, durationMs: 3000);
             return;
         }
 
-        if (!nvm.IsParameterNode && nvm.UnderlyingNode.Type?.FullName != "XTMF2.RuntimeModules.OpenReadStreamFromFile")
+        if (!IsFilePathTargetNode(nvm))
         {
             _vm.ShowToast("Select a file-path parameter node or an OpenReadStreamFromFile node.", isError: true, durationMs: 3000);
             return;
