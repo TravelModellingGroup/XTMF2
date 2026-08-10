@@ -150,7 +150,7 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal override bool Construct(ref string? error)
+        internal override bool Construct(ref string? error, ref Guid? elementId)
         {
             if (Origin.IsDisabled)
             {
@@ -185,11 +185,13 @@ namespace XTMF2.ModelSystemConstruct
                 if (moduleCount <= 0)
                 {
                     error = "At least one module is required as a destination.";
+                    elementId = Origin.Id;
                     return false;
                 }
                 if(IsDisabled)
                 {
                     error = "A required MultiLink is disabled!";
+                    elementId = Origin.Id;
                     return false;
                 }
             }

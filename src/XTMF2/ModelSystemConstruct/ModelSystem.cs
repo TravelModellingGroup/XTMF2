@@ -268,12 +268,13 @@ namespace XTMF2
         /// </summary>
         /// <param name="runtime">The XTMF run time that we are executing within.</param>
         /// <param name="error">An error message if it can not be constructed.</param>
+        /// <param name="elementId">The ID of the element that is causing the construction error.</param>
         /// <returns>True if it was created, false with message otherwise.</returns>
-        internal bool Construct(XTMFRuntime runtime, ref string? error)
+        internal bool Construct(XTMFRuntime runtime, ref string? error, ref Guid? elementId)
         {
-            return GlobalBoundary.ConstructModules(runtime, ref error)
-                && GlobalBoundary.ConstructLinks(ref error)
-                && GlobalBoundary.ConstructEmptyLinks(ref error);;
+            return GlobalBoundary.ConstructModules(runtime, ref error, ref elementId)
+                && GlobalBoundary.ConstructLinks(ref error, ref elementId)
+                && GlobalBoundary.ConstructEmptyLinks(ref error, ref elementId);;
         }
 
         /// <summary>

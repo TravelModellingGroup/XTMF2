@@ -301,7 +301,7 @@ namespace XTMF2.ModelSystemConstruct
         /// internal boundary, keyed by the template's original <see cref="Node"/>.
         /// Called by <see cref="Boundary.ConstructModules"/> during a model-system run.
         /// </summary>
-        internal bool ConstructRuntimeModules(XTMFRuntime runtime, ref string? error)
+        internal bool ConstructRuntimeModules(XTMFRuntime runtime, ref string? error, ref Guid? elementId)
         {
             if (IsDisabled)
             {
@@ -315,13 +315,21 @@ namespace XTMF2.ModelSystemConstruct
             var internals = Template.InternalModules;
             foreach (var start in internals.Starts)
             {
-                if (!start.ConstructModuleInstance(runtime, out var m, ref error)) return false;
+                if (!start.ConstructModuleInstance(runtime, out var m, ref error))
+                {
+                    elementId = start.Id;
+                    return false;  
+                } 
                 _runtimeModules[start] = m!;
                 WrapScriptedExpression(start, m!);
             }
             foreach (var node in internals.Modules)
             {
-                if (!node.ConstructModuleInstance(runtime, out var m, ref error)) return false;
+                if (!node.ConstructModuleInstance(runtime, out var m, ref error)) 
+                {
+                    elementId = node.Id;
+                    return false;
+                }
                 _runtimeModules[node] = m!;
                 WrapScriptedExpression(node, m!);
             }

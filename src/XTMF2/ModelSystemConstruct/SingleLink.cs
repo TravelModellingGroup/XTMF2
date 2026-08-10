@@ -91,7 +91,7 @@ public sealed class SingleLink : Link
     internal override bool SetAllDestinationsHidden(bool hidden, [NotNullWhen(false)] out CommandError? error)
         => SetDestinationHidden(0, hidden, out error);
 
-    internal override bool Construct(ref string? error)
+    internal override bool Construct(ref string? error, ref Guid? elementId)
     {
         if (Origin.IsDisabled)
         {
@@ -160,11 +160,13 @@ public sealed class SingleLink : Link
             if (destinationIsDisabled)
             {
                 error = "A link destined for a disabled module was not optional.";
+                elementId = effectiveDest.Id;
                 return false;
             }
             if (IsDisabled)
             {
                 error = "A non optional link is disabled!";
+                elementId = Origin.Id;
                 return false;
             }
         }

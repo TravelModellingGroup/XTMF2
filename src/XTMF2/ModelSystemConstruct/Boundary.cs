@@ -241,8 +241,9 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         /// <param name="runtime">The XTMF runtime to run from.</param>
         /// <param name="error">An error message if the construction fails.</param>
+        /// <param name="elementId">The ID of the element that is causing the construction error.</param>
         /// <returns>True if successful, false otherwise with an error message.</returns>
-        internal bool ConstructModules(XTMFRuntime runtime, ref string? error)
+        internal bool ConstructModules(XTMFRuntime runtime, ref string? error, ref Guid? elementId)
         {
             lock (_writeLock)
             {
@@ -254,6 +255,7 @@ namespace XTMF2.ModelSystemConstruct
                     }
                     if (!start.ConstructModule(runtime, ref error))
                     {
+                        elementId = start.Id;
                         return false;
                     }
                 }
@@ -265,13 +267,14 @@ namespace XTMF2.ModelSystemConstruct
                     }
                     if (!module.ConstructModule(runtime, ref error))
                     {
+                        elementId = module.Id;
                         return false;
                     }
                 }
                 // now construct all of the children
                 foreach (var child in Boundaries)
                 {
-                    if (!child.ConstructModules(runtime, ref error))
+                    if (!child.ConstructModules(runtime, ref error, ref elementId))
                     {
                         return false;
                     }
@@ -279,7 +282,11 @@ namespace XTMF2.ModelSystemConstruct
                 // Construct per-instance runtime modules for each FunctionInstance.
                 foreach (var fi in _functionInstances)
                 {
-                    if (!fi.ConstructRuntimeModules(runtime, ref error)) return false;
+                    if (!fi.ConstructRuntimeModules(runtime, ref error, ref elementId))
+                    {
+                        elementId = fi.Id;
+                        return false;
+                    }
                 }
                 error = null;
                 return true;
@@ -659,21 +666,22 @@ namespace XTMF2.ModelSystemConstruct
             return child is null ? null : ResolveBoundary(child, rest);
         }
 
-        internal bool ConstructLinks(ref string? error)
+        internal bool ConstructLinks(ref string? error, ref Guid? elementId)
         {
             lock (_writeLock)
             {
                 foreach (var link in _links)
                 {
-                    if (!link.Construct(ref error))
+                    if (!link.Construct(ref error, ref elementId))
                     {
+
                         return false;
                     }
                 }
                 // now construct all of the children
                 foreach (var child in Boundaries)
                 {
-                    if (!child.ConstructLinks(ref error))
+                    if (!child.ConstructLinks(ref error, ref elementId))
                     {
                         return false;
                     }
@@ -681,13 +689,17 @@ namespace XTMF2.ModelSystemConstruct
                 // Wire the per-instance cloned modules for each FunctionInstance.
                 foreach (var fi in _functionInstances)
                 {
-                    if (!fi.ConstructRuntimeLinks(ref error)) return false;
+                    if (!fi.ConstructRuntimeLinks(ref error)) 
+                    {
+                        elementId = fi.Id;
+                        return false;
+                    }
                 }
                 return true;
             }
         }
 
-        internal bool ConstructEmptyLinks(ref string? error)
+        internal bool ConstructEmptyLinks(ref string? error, ref Guid? elementId)
         {
             lock (_writeLock)
             {
@@ -699,12 +711,12 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         continue;
                     }
-                    module.ConstructEmptyLinks(ref error);
+                    module.ConstructEmptyLinks(ref error, ref elementId);
                 }
                 // now construct all of the children
                 foreach (var child in Boundaries)
                 {
-                    if (!child.ConstructEmptyLinks(ref error))
+                    if (!child.ConstructEmptyLinks(ref error, ref elementId))
                     {
                         return false;
                     }
