@@ -177,7 +177,7 @@ partial class ModelSystemCanvas
             if (_vm?.SelectedElement is NodeViewModel nvm
                 && (nvm.IsParameterNode || nvm.UnderlyingNode.Type == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile)))
             {
-                _ = TryUpdateOpenReadStreamFromFileParameterAsync();
+                _ = TryUpdateOpenReadStreamFromFileParameterAsync(false);
                 e.Handled = true;
             }
         }

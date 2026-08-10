@@ -2367,17 +2367,28 @@ namespace XTMF2.Editing
         /// <param name="user">The user issuing the command</param>
         /// <param name="nodeToAssign">The parameter to set.</param>
         /// <param name="filePath">The file path to set the parameter to.</param
+        /// <param name="isDirectory">Whether the file path is a directory or not.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message.</returns
-        public bool SetParameterValueFromFilePath(User user, Node nodeToAssign, string filePath, [NotNullWhen(false)] out CommandError? error)
+        public bool SetParameterValueFromFilePath(User user, Node nodeToAssign, string filePath, bool isDirectory, [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(nodeToAssign);
-            
-            if (filePath is null || !File.Exists(filePath))
+            if(isDirectory)
             {
-                error = new CommandError($"The file path '{filePath}' does not exist.", false);
-                return false;
+                if (filePath is null || !Directory.Exists(filePath))
+                {
+                    error = new CommandError($"The directory path '{filePath}' does not exist.", false);
+                    return false;
+                }
+            }
+            else
+            {
+                if (filePath is null || !File.Exists(filePath))
+                {
+                    error = new CommandError($"The file path '{filePath}' does not exist.", false);
+                    return false;
+                }
             }
 
             lock (_sessionLock)

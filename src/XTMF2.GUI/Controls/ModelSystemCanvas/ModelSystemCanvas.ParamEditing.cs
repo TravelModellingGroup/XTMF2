@@ -401,7 +401,7 @@ partial class ModelSystemCanvas
         }
     }
 
-    private async Task TryUpdateOpenReadStreamFromFileParameterAsync(NodeViewModel? targetNode = null)
+    private async Task TryUpdateOpenReadStreamFromFileParameterAsync(bool directory, NodeViewModel? targetNode = null)
     {
         targetNode ??= _vm?.SelectedElement as NodeViewModel;
         if (_vm is null)
@@ -429,24 +429,45 @@ partial class ModelSystemCanvas
 
         try
         {
-            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+            if(directory)
             {
-                Title = "Select File",
-                AllowMultiple = false,
-                FileTypeFilter = new[]
+                var directories = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
                 {
-                    new Avalonia.Platform.Storage.FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    Title = "Select Folder",
+                    AllowMultiple = false
+                });
+
+                if (directories.Count == 0) return;
+
+                var directoryPath = directories[0].TryGetLocalPath();
+                if (string.IsNullOrEmpty(directoryPath)) return;
+
+                if(!_vm.UpdateCurrentParameterValueFromFilePath(nvm, directoryPath, true, out var error))
+                {
+                    _vm.ShowToast(error?.Message ?? "Failed to update the directory path.", isError: true, durationMs: 4000);
                 }
-            });
-
-            if (files.Count == 0) return;
-
-            var filePath = files[0].TryGetLocalPath();
-            if (string.IsNullOrEmpty(filePath)) return;
-
-            if(!_vm.UpdateCurrentParameterValueFromFilePath(nvm, filePath, out var error))
+            }
+            else
             {
-                _vm.ShowToast(error?.Message ?? "Failed to update the file path.", isError: true, durationMs: 4000);
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Select File",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (files.Count == 0) return;
+
+                var filePath = files[0].TryGetLocalPath();
+                if (string.IsNullOrEmpty(filePath)) return;
+
+                if(!_vm.UpdateCurrentParameterValueFromFilePath(nvm, filePath, false, out var error))
+                {
+                    _vm.ShowToast(error?.Message ?? "Failed to update the file path.", isError: true, durationMs: 4000);
+                }
             }
             
             InvalidateVisual();

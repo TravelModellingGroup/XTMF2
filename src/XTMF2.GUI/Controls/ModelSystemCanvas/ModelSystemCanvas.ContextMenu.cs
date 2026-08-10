@@ -574,9 +574,13 @@ partial class ModelSystemCanvas
             openFileItem.Click += async (_, _) => await TryOpenOpenReadStreamFromFileParameterAsync(fileNodeVm);
             fileMenu.Items.Add(openFileItem);
 
-            var setFileItem = new MenuItem { Header = "Set…" };
-            setFileItem.Click += async (_, _) => await TryUpdateOpenReadStreamFromFileParameterAsync(fileNodeVm);
+            var setFileItem = new MenuItem { Header = "Set File…" };
+            setFileItem.Click += async (_, _) => await TryUpdateOpenReadStreamFromFileParameterAsync(false, fileNodeVm);
             fileMenu.Items.Add(setFileItem);
+
+            var setDirectoryItem = new MenuItem { Header = "Set Directory…" };
+            setDirectoryItem.Click += async (_, _) => await TryUpdateOpenReadStreamFromFileParameterAsync(true, fileNodeVm);
+            fileMenu.Items.Add(setDirectoryItem);
 
             menu.Items.Add(fileMenu);
             menu.Items.Add(new Separator());

@@ -4355,10 +4355,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Session.AddGhostNode(User, _currentBoundary, referencedNvm.UnderlyingNode, loc, out _, out _);
     }
 
-    internal bool UpdateCurrentParameterValueFromFilePath(NodeViewModel nvm, string newFilePath, 
+    internal bool UpdateCurrentParameterValueFromFilePath(NodeViewModel nvm, string newFilePath, bool isDirectory,
         [NotNullWhen(false) ]out CommandError? error)
     {
-        return Session.SetParameterValueFromFilePath(User, nvm.UnderlyingNode, newFilePath, out error);
+        return Session.SetParameterValueFromFilePath(User, nvm.UnderlyingNode, newFilePath, isDirectory, out error);
     }
 
     // ── IDisposable ───────────────────────────────────────────────────────
