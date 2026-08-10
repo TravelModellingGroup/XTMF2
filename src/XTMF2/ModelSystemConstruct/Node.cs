@@ -300,17 +300,20 @@ namespace XTMF2.ModelSystemConstruct
             module = m;
             module.Name = Name;
             if (ParameterValue is not null)
+            {
                 return ParameterValue.AssignToParameter(module, ref error);
+            }
             error = null;
             return true;
         }
 
-        internal void ConstructEmptyLinks(ref string? error)
+        internal bool ConstructEmptyLinks(ref string? error, ref Guid? elementId)
         {
             if (_type is null)
             {
                 error = $"Unable to construct a module named {Name} without a type!";
-                return;
+                elementId = Id;
+                return false;
             }
             foreach (var hook in Hooks)
             {
@@ -322,6 +325,7 @@ namespace XTMF2.ModelSystemConstruct
                     }
                 }
             }
+            return true;
         }
 
         /// <summary>

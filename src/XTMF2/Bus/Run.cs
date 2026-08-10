@@ -138,10 +138,12 @@ namespace XTMF2.Bus
                 return false;
             }
             if (!ModelSystem.Load(modelSystemAsString, _runtime, out var ms, ref error)
-                || !ms!.Construct(_runtime, ref error)
+                || !ms!.Construct(_runtime, ref error, ref elementId)
                 || !ms!.Validate(ref moduleName, ref error, ref elementId))
             {
-                RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, "Failed when validating the model system! " + error + "\r\n" + modelSystemAsString);
+                RunResults.WriteValidationError(_currentWorkingDirectory, moduleName,
+                    "Failed when validating the model system! " + error + "\r\n" + modelSystemAsString,
+                    elementId);
                 return false;
             }
             _modelSystem = ms;

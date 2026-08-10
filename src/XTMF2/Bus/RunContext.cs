@@ -581,7 +581,7 @@ namespace XTMF2.Bus
             }
 
             if (!ModelSystem.Load(msString, _runtime, out ms, ref errorMsg)
-                || !ms!.Construct(_runtime, ref errorMsg)
+                || !ms!.Construct(_runtime, ref errorMsg, ref elementId)
                 || !ms!.Validate(ref moduleName, ref errorMsg, ref elementId))
             {
                 error = new RunError(RunErrorType.Validation,

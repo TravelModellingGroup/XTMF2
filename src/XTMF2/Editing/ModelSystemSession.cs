@@ -2432,9 +2432,9 @@ namespace XTMF2.Editing
                     }
                 }
                 // At this point nodeToAssign should be a BasicParameter or ScriptedParameter that we can set the value of.
-                if ((nodeToAssign?.Type?.IsAssignableFrom(typeof(RuntimeModules.ScriptedParameter<string>)) ?? false) == true)
+                if (nodeToAssign?.Type == typeof(RuntimeModules.ScriptedParameter<string>))
                 {
-                    var parameterValue = nodeToAssign.ParameterValue;
+                    var originalParameterValue = nodeToAssign.ParameterValue;
 
                     List<Node> availableVariables = [];
                     // Put the local variables first so they get resolved first.
@@ -2446,7 +2446,7 @@ namespace XTMF2.Editing
                     // append the higher order model system variables second so they get resolved last.
                     availableVariables = [.. availableVariables, .. this.ModelSystem.Variables];
                     string? e = null;
-                    if (!ParameterCompiler.CreateExpression(availableVariables, parameterValue?.Representation!, out var expression, ref e))
+                    if (!ParameterCompiler.CreateExpression(availableVariables, originalParameterValue?.Representation!, out var expression, ref e))
                     {
                         error = new CommandError($"Failed to parse the ScriptedParameter expression: {e}", false);
                         return false;
@@ -2478,18 +2478,21 @@ namespace XTMF2.Editing
                                         sb.Append(lhs.AsString());
                                         sb.Append(" + \"");
                                         sb.Append(filePath);
-                                        sb.Append("\"");
-                                        var optimizedExpression = ParameterExpression.CreateParameter(sb.ToString(), typeof(string));
-                                        if (nodeToAssign.SetParameterValue(optimizedExpression, out error))
+                                        sb.Append('\"');
+                                        if (ParameterCompiler.CreateExpression(availableVariables, sb.ToString(), out var updatedExpression, ref e))
                                         {
-                                            Buffer.AddUndo(new Command(() =>
+                                            var newParameter = ParameterExpression.CreateParameter(updatedExpression);
+                                            if (nodeToAssign.SetParameterValue(newParameter, out error))
                                             {
-                                                return (nodeToAssign.SetParameterValue(parameterValue!, out var e), e);
-                                            }, () =>
-                                            {
-                                                return (nodeToAssign.SetParameterValue(optimizedExpression, out var e), e);
-                                            }));
-                                            return true;
+                                                Buffer.AddUndo(new Command(() =>
+                                                {
+                                                    return (nodeToAssign.SetParameterValue(originalParameterValue!, out var e), e);
+                                                }, () =>
+                                                {
+                                                    return (nodeToAssign.SetParameterValue(newParameter, out var e), e);
+                                                }));
+                                                return true;
+                                            }
                                         }
                                     }
                                 }
@@ -2497,21 +2500,24 @@ namespace XTMF2.Editing
                         }
                     }
                     // If we get here then we were not able to match a pattern that we can solve, so we will just assign the scriped parameter as a literal.
-                    var newExpression = ParameterExpression.CreateParameter($"\"{filePath}\"", typeof(string));
-                    if (nodeToAssign.SetParameterValue(newExpression, out error))
+                    if (ParameterCompiler.CreateExpression(availableVariables, $"\"{filePath}\"", out var ue, ref e))
                     {
-                        Buffer.AddUndo(new Command(() =>
+                        var newExpression = ParameterExpression.CreateParameter(ue);
+                        if (nodeToAssign.SetParameterValue(newExpression, out error))
                         {
-                            return (nodeToAssign.SetParameterValue(parameterValue!, out var e), e);
-                        }, () =>
-                        {
-                            return (nodeToAssign.SetParameterValue(newExpression, out var e), e);
-                        }));
+                            Buffer.AddUndo(new Command(() =>
+                            {
+                                return (nodeToAssign.SetParameterValue(originalParameterValue!, out var e), e);
+                            }, () =>
+                            {
+                                return (nodeToAssign.SetParameterValue(newExpression, out var e), e);
+                            }));
+                            return true;
+                        }
                         return true;
                     }
-                    return true;
                 }
-                else if(nodeToAssign?.Type?.IsAssignableFrom(typeof(RuntimeModules.BasicParameter<string>)) ?? false)
+                else if(nodeToAssign?.Type == typeof(RuntimeModules.BasicParameter<string>))
                 {
                     return InnerSetBasicParameter(nodeToAssign, filePath, out error);
                 }
@@ -2521,6 +2527,9 @@ namespace XTMF2.Editing
                     return false;
                 }
             }
+            
+            error = new CommandError("Failed to set the parameter value from file path.", false);
+            return false;
         }
 
         /// <summary>

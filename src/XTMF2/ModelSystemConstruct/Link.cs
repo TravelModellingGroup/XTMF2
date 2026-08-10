@@ -276,7 +276,7 @@ namespace XTMF2
             return true;
         }
 
-        internal abstract bool Construct(ref string? error);
+        internal abstract bool Construct(ref string? error, ref Guid? elementId);
 
         internal bool SetDisabled(bool disabled, [NotNullWhen(false)] out CommandError? error)
         {
