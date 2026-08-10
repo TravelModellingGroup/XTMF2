@@ -26,6 +26,7 @@ using XTMF2.GUI.ViewModels;
 using XTMF2.ModelSystemConstruct;
 using System.Linq;
 using System.Reflection;
+using System;
 
 namespace XTMF2.GUI.Tests.Headless;
 
@@ -137,7 +138,8 @@ public class ModelSystemCanvasHeadlessTests
                 using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
                 var nodeVm = vm.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, parameterNode));
                 Assert.IsNotNull(nodeVm);
-
+                // Set the UX to invarient culture to ensure the context menu is consistent across locales.
+                System.Threading.Thread.CurrentThread.CurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
                 Session.Dispatch(() =>
                 {
                     var canvas = new ModelSystemCanvas { DataContext = vm };
@@ -160,7 +162,8 @@ public class ModelSystemCanvasHeadlessTests
                         .ToArray();
 
                     CollectionAssert.Contains(fileItemHeaders, "Open");
-                    CollectionAssert.Contains(fileItemHeaders, "Set…");
+                    CollectionAssert.Contains(fileItemHeaders, "Set File…");
+                    CollectionAssert.Contains(fileItemHeaders, "Set Directory…");
                 }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
             });
     }
