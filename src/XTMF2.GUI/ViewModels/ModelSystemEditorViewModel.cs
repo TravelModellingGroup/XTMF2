@@ -1533,6 +1533,82 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         NavigateIntoFunctionTemplate(ftvm);
     }
 
+    private static Node? ResolveLinkOriginNode(ICanvasElement originElement)
+        => originElement switch
+        {
+            NodeViewModel nvm => nvm.UnderlyingNode,
+            StartViewModel svm => svm.UnderlyingStart,
+            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+            _ => null
+        };
+
+    private static List<NodeHook> GetCompatibleHooks(Node originNode, Type? destinationType)
+    {
+        var compatible = new List<NodeHook>();
+        if (destinationType is null)
+        {
+            return compatible;
+        }
+
+        foreach (var hook in originNode.Hooks)
+        {
+            Type hookElementType = (hook.Cardinality is HookCardinality.AtLeastOne or HookCardinality.AnyNumber)
+                ? (hook.Type.GetElementType() ?? hook.Type)
+                : hook.Type;
+            if (hookElementType.IsAssignableFrom(destinationType))
+            {
+                compatible.Add(hook);
+            }
+        }
+
+        return compatible;
+    }
+
+    private async Task<NodeHook?> SelectHookAsync(IReadOnlyList<NodeHook> compatible, string originName, string destinationName)
+    {
+        if (compatible.Count == 0)
+        {
+            return null;
+        }
+
+        if (compatible.Count == 1)
+        {
+            return compatible[0];
+        }
+
+        if (ParentWindow is null)
+        {
+            return null;
+        }
+
+        var dialog = new HookPickerDialog(compatible,
+            $"Select which hook on '{originName}' to connect to '{destinationName}':");
+        await dialog.ShowDialog(ParentWindow);
+        if (dialog.WasCancelled)
+        {
+            return null;
+        }
+
+        return dialog.SelectedHook;
+    }
+
+    private async Task<bool> TryCreateReversedLinkAsync(Node originNode, Node destinationNode, string destinationName)
+    {
+        var reversedHooks = GetCompatibleHooks(destinationNode, originNode.Type);
+        var selectedHook = await SelectHookAsync(reversedHooks, destinationName, originNode.Name);
+        if (selectedHook is null)
+        {
+            return false;
+        }
+
+        if (!Session.AddLink(User, destinationNode, selectedHook, originNode, out _, out var error))
+        {
+            await ShowError("Create Link Failed", error);
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// Attempt to create a link from <paramref name="originElement"/> to <paramref name="destVm"/>.
     /// If any compatible hooks are found, either uses the sole hook automatically or
@@ -1558,45 +1634,25 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         // Resolve the underlying origin node.
-        Node? originNode = originElement switch
-        {
-            NodeViewModel             nvm  => nvm.UnderlyingNode,
-            StartViewModel            svm  => svm.UnderlyingStart,
-            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
-            _                             => null
-        };
+        Node? originNode = ResolveLinkOriginNode(originElement);
         if (originNode is null) return;
 
-        var compatible = new List<NodeHook>();
-        foreach (var hook in originNode.Hooks)
-        {
-            Type hookElementType = (hook.Cardinality is HookCardinality.AtLeastOne or HookCardinality.AnyNumber)
-                ? (hook.Type.GetElementType() ?? hook.Type)
-                : hook.Type;
-            if (hookElementType.IsAssignableFrom(destType))
-                compatible.Add(hook);
-        }
+        var compatible = GetCompatibleHooks(originNode, destType);
 
         if (compatible.Count == 0)
         {
+            if (await TryCreateReversedLinkAsync(originNode, destNode, destFi.Name))
+            {
+                return;
+            }
+
             await ShowError("Incompatible Types",
-                new CommandError($"No hooks on '{originNode.Name}' are compatible with '{destFi.Name}' (type '{destType.Name}')."));
+                new CommandError($"No hooks on '{originNode.Name}' are compatible with '{destFi.Name}' (type '{destType.Name}'), and no hooks on '{destFi.Name}' are compatible with '{originNode.Name}' (type '{originNode.Type?.Name ?? "Unknown"}')."));
             return;
         }
 
-        NodeHook selectedHook;
-        if (compatible.Count == 1)
-        {
-            selectedHook = compatible[0];
-        }
-        else
-        {
-            var dialog = new HookPickerDialog(compatible,
-                $"Select which hook on '{originNode.Name}' to connect to '{destFi.Name}':");
-            await dialog.ShowDialog(ParentWindow);
-            if (dialog.WasCancelled || dialog.SelectedHook is null) return;
-            selectedHook = dialog.SelectedHook;
-        }
+        var selectedHook = await SelectHookAsync(compatible, originNode.Name, destFi.Name);
+        if (selectedHook is null) return;
 
         if (!Session.AddLink(User, originNode, selectedHook, destNode, out _, out var error))
             await ShowError("Create Link Failed", error);
@@ -1611,13 +1667,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (ParentWindow is null || _currentFunctionTemplate is null) return;
 
-        Node? originNode = originElement switch
-        {
-            NodeViewModel             nvm  => nvm.UnderlyingNode,
-            StartViewModel            svm  => svm.UnderlyingStart,
-            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
-            _                             => null
-        };
+        Node? originNode = ResolveLinkOriginNode(originElement);
         if (originNode is null) return;
 
         var fp      = destFpVm.UnderlyingParameter;
@@ -1629,15 +1679,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return;
         }
 
-        var compatible = new List<NodeHook>();
-        foreach (var hook in originNode.Hooks)
-        {
-            Type hookElementType = (hook.Cardinality is HookCardinality.AtLeastOne or HookCardinality.AnyNumber)
-                ? (hook.Type.GetElementType() ?? hook.Type)
-                : hook.Type;
-            if (hookElementType.IsAssignableFrom(destType))
-                compatible.Add(hook);
-        }
+        var compatible = GetCompatibleHooks(originNode, destType);
 
         if (compatible.Count == 0)
         {
@@ -1646,19 +1688,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return;
         }
 
-        NodeHook selectedHook;
-        if (compatible.Count == 1)
-        {
-            selectedHook = compatible[0];
-        }
-        else
-        {
-            var dialog = new HookPickerDialog(compatible,
-                $"Select which hook on '{originNode.Name}' to connect to parameter '{fp.Name}':");
-            await dialog.ShowDialog(ParentWindow);
-            if (dialog.WasCancelled || dialog.SelectedHook is null) return;
-            selectedHook = dialog.SelectedHook;
-        }
+        var selectedHook = await SelectHookAsync(compatible, originNode.Name, fp.Name);
+        if (selectedHook is null) return;
 
         if (!Session.AddLink(User, originNode, selectedHook, fp, out _, out var error))
             await ShowError("Create Link Failed", error);
@@ -1669,27 +1700,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (ParentWindow is null) return;
 
         // Resolve the underlying origin node (Start is also a Node; FunctionInstance is also a Node).
-        Node? originNode = originElement switch
-        {
-            NodeViewModel             nvm  => nvm.UnderlyingNode,
-            StartViewModel            svm  => svm.UnderlyingStart,
-            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
-            _                             => null
-        };
+        Node? originNode = ResolveLinkOriginNode(originElement);
         if (originNode is null) return;
 
         var destType = destVm.UnderlyingNode.Type;
 
         // Filter hooks on the origin to those whose type is compatible with the destination.
-        var compatible = new List<NodeHook>();
-        foreach (var hook in originNode.Hooks)
-        {
-            Type hookElementType = (hook.Cardinality is HookCardinality.AtLeastOne or HookCardinality.AnyNumber)
-                ? (hook.Type.GetElementType() ?? hook.Type)
-                : hook.Type;
-            if (hookElementType.IsAssignableFrom(destType))
-                compatible.Add(hook);
-        }
+        var compatible = GetCompatibleHooks(originNode, destType);
 
         if (compatible.Count == 0)
         {
@@ -1717,24 +1734,18 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 return;
             }
 
+            if (await TryCreateReversedLinkAsync(originNode, destVm.UnderlyingNode, destVm.Name))
+            {
+                return;
+            }
+
             await ShowError("Incompatible Types",
-                new CommandError($"No hooks on '{originNode.Name}' are compatible with type '{destType?.Name ?? "Unknown"}'."));
+                new CommandError($"No hooks on '{originNode.Name}' are compatible with type '{destType?.Name ?? "Unknown"}', and no hooks on '{destVm.Name}' are compatible with type '{originNode.Type?.Name ?? "Unknown"}'."));
             return;
         }
 
-        NodeHook selectedHook;
-        if (compatible.Count == 1)
-        {
-            selectedHook = compatible[0];
-        }
-        else
-        {
-            var dialog = new HookPickerDialog(compatible,
-                $"Select which hook on '{originNode.Name}' to connect to '{destVm.Name}':");
-            await dialog.ShowDialog(ParentWindow);
-            if (dialog.WasCancelled || dialog.SelectedHook is null) return;
-            selectedHook = dialog.SelectedHook;
-        }
+        var selectedHook = await SelectHookAsync(compatible, originNode.Name, destVm.Name);
+        if (selectedHook is null) return;
 
         if (!Session.AddLink(User, originNode, selectedHook, destVm.UnderlyingNode, out _, out var error))
             await ShowError("Create Link Failed", error);
