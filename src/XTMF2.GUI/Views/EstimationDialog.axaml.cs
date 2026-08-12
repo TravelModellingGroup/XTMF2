@@ -29,6 +29,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using XTMF2.GUI.Controls;
 using XTMF2.Bus.Optimization;
 using XTMF2.GUI;
 using XTMF2.GUI.ViewModels;
@@ -200,6 +201,7 @@ public partial class EstimationDialog : Window, INotifyPropertyChanged
         EditorVm = null!;
         DataContext = this;
         InitializeComponent();
+        AddHandler(InputElement.KeyDownEvent, OnDialogKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
 
     public EstimationDialog(ModelSystemEditorViewModel editorVm)
@@ -207,6 +209,7 @@ public partial class EstimationDialog : Window, INotifyPropertyChanged
         EditorVm = editorVm;
         DataContext = this;
         InitializeComponent();
+        AddHandler(InputElement.KeyDownEvent, OnDialogKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         AttachGroupFilterHandlers();
         RefreshFilteredGroups();
         SelectedGroup = GroupVms.FirstOrDefault();
@@ -219,6 +222,26 @@ public partial class EstimationDialog : Window, INotifyPropertyChanged
         Raise(nameof(SelectedObjective));
         _suppressAlgorithmCommand = false;
         RefreshFilteredEntries();
+    }
+
+    private void OnDialogKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        Close();
+    }
+
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+        Dispatcher.UIThread.Post(() =>
+        {
+            this.FindControl<SearchBox>("GroupSearchBox")?.FocusSearchBox();
+        }, DispatcherPriority.Input);
     }
 
     private void AttachGroupFilterHandlers()
