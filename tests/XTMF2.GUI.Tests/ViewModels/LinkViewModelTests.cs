@@ -19,16 +19,23 @@
 
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
+using Avalonia.Controls;
+using Avalonia.Headless;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Editing;
 using XTMF2.GUI.Tests.Modules;
 using XTMF2.GUI.ViewModels;
+using XTMF2.ModelSystemConstruct;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.GUI.Tests.ViewModels;
 
 [TestClass]
 public class LinkViewModelTests
 {
+    private HeadlessUnitTestSession Session => HeadlessAppLifetime.HeadlessSession!;
+
     [TestMethod]
     public void RefreshEndpoints_UsesOriginCenter()
     {
@@ -142,5 +149,46 @@ public class LinkViewModelTests
             Assert.AreEqual(linkVm.Destination.CenterY, linkVm.Y2, 1e-9);
             
         });
+    }
+
+    [TestMethod]
+    public void CreateLinkAsync_ReversesDirectionWhenForwardIsIncompatible()
+    {
+        TestGuiHelper.RunInModelSystemContext(nameof(CreateLinkAsync_ReversesDirectionWhenForwardIsIncompatible),
+            (user, _, msSession) =>
+            {
+                CommandError? error = null;
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+
+                Assert.IsTrue(msSession.AddNode(user, boundary, "Ignore",
+                    typeof(IgnoreResult<string>), new Rectangle(20, 20, 120, 50),
+                    out var ignoreNode, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, boundary, "Execute",
+                    typeof(Execute), new Rectangle(260, 20, 120, 50),
+                    out var executeNode, out error), error?.Message);
+                Assert.IsNotNull(ignoreNode);
+                Assert.IsNotNull(executeNode);
+
+                using var vmEditor = new ModelSystemEditorViewModel(msSession, user, runController: null);
+
+                var ignoreVm = vmEditor.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, ignoreNode));
+                var executeVm = vmEditor.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, executeNode));
+                Assert.IsNotNull(ignoreVm);
+                Assert.IsNotNull(executeVm);
+
+                Session.Dispatch(() =>
+                {
+                    vmEditor.ParentWindow = new Window();
+                    vmEditor.CreateLinkAsync(ignoreVm!, executeVm!)
+                        .GetAwaiter().GetResult();
+                }, CancellationToken.None).GetAwaiter().GetResult();
+
+                Assert.HasCount(1, boundary.Links, "Expected one link to be created.");
+                var link = boundary.Links[0];
+                Assert.AreSame(executeNode, link.Origin, "The link should be created from the destination back to the dragged origin.");
+                Assert.IsInstanceOfType<MultiLink>(link);
+                CollectionAssert.Contains(((MultiLink)link).Destinations.ToList(), ignoreNode,
+                    "The dragged origin should become a destination of the reversed link.");
+            });
     }
 }
