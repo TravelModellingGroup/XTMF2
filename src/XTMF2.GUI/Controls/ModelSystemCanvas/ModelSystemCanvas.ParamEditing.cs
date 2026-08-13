@@ -299,49 +299,26 @@ partial class ModelSystemCanvas
         });
     }
 
-    private async Task TryOpenOpenReadStreamFromFileParameterAsync(NodeViewModel? targetNodeModel = null)
+    private bool TryGetResolvedFileSystemPath(NodeViewModel? targetNodeModel, out string currentValue, out bool isDirectory)
     {
+        currentValue = string.Empty;
+        isDirectory = false;
+
         var nvm = targetNodeModel ?? _vm?.SelectedElement as NodeViewModel;
         if (_vm is null)
         {
-            return;
+            return false;
         }
         if (nvm is null)
         {
             _vm.ShowToast("Select a file-path parameter node to update.", isError: true, durationMs: 3000);
-            return;
+            return false;
         }
 
         if (!IsFilePathTargetNode(nvm))
         {
             _vm.ShowToast("Select a file-path parameter node or an OpenReadStreamFromFile node.", isError: true, durationMs: 3000);
-            return;
-        }
-
-        string GetExpression(NodeViewModel node)
-        {
-            if (node.IsScriptedParameter)
-            {
-                return node.ParameterValueRepresentation ?? string.Empty;
-            }
-            else if(node.ModuleType == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile))
-            {
-                // For OpenReadStreamFromFile nodes, the file path is stored in the "FilePath" parameter.
-                var filePathParam = node.GetParameter("File Path");
-                if (filePathParam is null)
-                {
-                    return string.Empty;
-                }
-                if (filePathParam.ParameterValue?.GetValueAtEditingTime(typeof(string), out var value, out string? conversionError) ?? false)
-                {
-                    return value as string ?? string.Empty;
-                }
-                return string.Empty;
-            }
-            else
-            {
-                return node.ParameterValueRepresentation ?? string.Empty;
-            }
+            return false;
         }
 
         string GetResolvedValue(NodeViewModel node)
@@ -350,7 +327,7 @@ partial class ModelSystemCanvas
             {
                 return node.EvaluateParameterValue() ?? string.Empty;
             }
-            else if(node.ModuleType == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile))
+            else if (node.ModuleType == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile))
             {
                 var filePathParam = node.GetParameter("File Path");
                 if (filePathParam is null)
@@ -373,21 +350,35 @@ partial class ModelSystemCanvas
         var targetVm = ReferenceEquals(targetNode, nvm.UnderlyingNode)
             ? nvm
             : new NodeViewModel(targetNode, _vm.Session, _vm.User);
-        var currentExpression = GetExpression(targetVm);
-        var currentValue = GetResolvedValue(targetVm);
+        currentValue = GetResolvedValue(targetVm);
 
         if (string.IsNullOrWhiteSpace(currentValue))
         {
-            _vm?.ShowToast("No file path is currently set.", isError: true, durationMs: 3000);
-            return;
+            _vm.ShowToast("No file path is currently set.", isError: true, durationMs: 3000);
+            return false;
         }
-        // We need to check to see if it was a directory or if it was a file
+
         var directoryInfo = new DirectoryInfo(currentValue);
         var fileInfo = new FileInfo(currentValue);
-        ;
         if (!directoryInfo.Exists && !fileInfo.Exists)
         {
             _vm.ShowToast($"The file '{currentValue}' does not exist.", isError: true, durationMs: 4000);
+            return false;
+        }
+
+        isDirectory = directoryInfo.Exists;
+        return true;
+    }
+
+    private async Task TryOpenOpenReadStreamFromFileParameterAsync(NodeViewModel? targetNodeModel = null)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        if (!TryGetResolvedFileSystemPath(targetNodeModel, out var currentValue, out _))
+        {
             return;
         }
 
@@ -398,6 +389,38 @@ partial class ModelSystemCanvas
         catch (Exception ex)
         {
             _vm.ShowToast($"Unable to open '{currentValue}': {ex.Message}", isError: true, durationMs: 4000);
+        }
+    }
+
+    private async Task TryOpenOpenReadStreamFromFileParentDirectoryAsync(NodeViewModel? targetNodeModel = null)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        if (!TryGetResolvedFileSystemPath(targetNodeModel, out var currentValue, out var isDirectory))
+        {
+            return;
+        }
+
+        string? directoryToOpen = isDirectory
+            ? currentValue
+            : Path.GetDirectoryName(currentValue);
+
+        if (string.IsNullOrWhiteSpace(directoryToOpen) || !Directory.Exists(directoryToOpen))
+        {
+            _vm.ShowToast($"Unable to find a parent directory for '{currentValue}'.", isError: true, durationMs: 4000);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = directoryToOpen, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _vm.ShowToast($"Unable to open directory '{directoryToOpen}': {ex.Message}", isError: true, durationMs: 4000);
         }
     }
 
