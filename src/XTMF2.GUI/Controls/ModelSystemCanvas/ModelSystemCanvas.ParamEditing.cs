@@ -503,6 +503,30 @@ partial class ModelSystemCanvas
 
     private void OnInlineEnumEditorKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Tab && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0)
+        {
+            bool isShiftTab = (e.KeyModifiers & KeyModifiers.Shift) != 0;
+            if (NavigateToNextParameter(isShiftTab) || _vm?.SelectedElement is not null)
+            {
+                // Keep Tab navigation semantics consistent with the canvas:
+                // move to next/previous parameter rather than changing enum selection.
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if (e.Key is Key.Enter or Key.Return)
+        {
+            CommitParamEdit();
+            // Post focus restoration so any ComboBox-internal focus changes
+            // from closing the dropdown don't move focus to the menu bar.
+            Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => Focus(),
+                Avalonia.Threading.DispatcherPriority.Input);
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Escape)
         {
             // Set loading flag so the DropDownClosed event that fires when we close
