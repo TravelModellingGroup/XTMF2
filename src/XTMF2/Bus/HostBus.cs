@@ -136,12 +136,6 @@ public sealed class HostBus : IDisposable
     public event RunError? ClientErrorWhenRunningModelSystem;
 
     /// <summary>
-    /// This event is signalled when a client runs into an error and includes
-    /// optional model-element metadata.
-    /// </summary>
-    public event RunErrorWithTarget? ClientErrorWhenRunningModelSystemWithTarget;
-
-    /// <summary>
     /// This event is triggered when the client has sent an update for the run's status message.
     /// </summary>
     public event ClientStatusUpdate? ClientReportedStatus;
@@ -226,7 +220,6 @@ public sealed class HostBus : IDisposable
                                 var moduleName = reader.ReadString();
                                 var elementId = Guid.TryParse(reader.ReadString(), out var parsedId) ? (Guid?)parsedId : null;
                                 IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, String.Empty, moduleName, elementId));
-                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystemWithTarget?.Invoke(this, runId, errMsg, String.Empty, moduleName, elementId));
                             }
                             break;
                         case In.ClientFinishedModelSystem:
@@ -246,7 +239,6 @@ public sealed class HostBus : IDisposable
                                     ? (Guid?)parsedId
                                     : null;
                                 IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, stack, moduleName, elementId));
-                                IgnoreWarnings(() => ClientErrorWhenRunningModelSystemWithTarget?.Invoke(this, runId, errMsg, stack, moduleName, elementId));
                             }
                             break;
                         case In.ClientReportedStatus:

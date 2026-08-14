@@ -415,9 +415,9 @@ namespace XTMF2.UnitTests
                             };
                             client = new Process()
                             {
-                                StartInfo = startInfo
+                                StartInfo = startInfo,
+                                EnableRaisingEvents = true
                             };
-                            client.EnableRaisingEvents = true;
                             client.Start();
                         }
                         catch (Exception e)

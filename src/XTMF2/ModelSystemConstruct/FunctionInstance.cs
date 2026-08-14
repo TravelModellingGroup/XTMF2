@@ -576,5 +576,22 @@ namespace XTMF2.ModelSystemConstruct
             }
             return true;
         }
+
+        /// <summary>
+        /// Disposes all per-instance cloned modules.  Called by the run engine's cleanup phase.
+        /// </summary>
+        internal void DisposeRuntimeModules()
+        {
+            if (_runtimeModules is null) return;
+
+            foreach (var module in _runtimeModules.Values)
+            {
+                if (module is IDisposable disposable)
+                {
+                    try { disposable.Dispose(); }
+                    catch { /* ignore */ }
+                }
+            }
+        }
     }
 }
