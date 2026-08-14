@@ -194,6 +194,7 @@ namespace XTMF2.Bus
                                 }
                                 break;
                             default:
+                                Console.WriteLine("Unknown message from run!");
                                 return;
                         }
                     }

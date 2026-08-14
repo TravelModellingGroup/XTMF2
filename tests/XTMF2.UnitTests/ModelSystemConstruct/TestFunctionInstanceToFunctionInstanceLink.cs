@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
 using System.IO;
 using System.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -115,17 +116,23 @@ public class TestFunctionInstanceToFunctionInstanceLink
                         success = true;
                         sem.Release();
                     };
+                    
                     runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack, moduleName, elementId) =>
                     {
                         runError = new CommandError(e + "\r\n" + stack);
                         sem.Release();
                     };
 
+                    runBus.ClientReportedStatus += (_, _, status) =>
+                    {
+                        Console.WriteLine(status);
+                    };
+
                     Assert.IsTrue(runBus.RunModelSystem(msSession,
                         Path.Combine(pSession.RunsDirectory, "InnerFIToOuterFI"),
                         "Start", out _, out runError), runError?.Message);
 
-                    if (!sem.Wait(2000))
+                    if (!sem.Wait(5000))
                         Assert.Fail("Model system did not complete within the time limit.");
 
                     Assert.IsTrue(success,

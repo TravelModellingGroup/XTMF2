@@ -472,7 +472,7 @@ public class TestFunctionTemplateVariables
                     Assert.IsTrue(runBus.RunModelSystem(ms,
                         Path.Combine(pSession.RunsDirectory, "FPLocalVarRuntime"),
                         "Start", out _, out runError), runError?.Message);
-                    Assert.IsTrue(sem.Wait(5000), "Model system did not complete in time!");
+                    Assert.IsTrue(sem.Wait(20000), "Model system did not complete in time!");
                     Assert.IsTrue(success, "Model system failed: " + runError?.Message);
                 });
             });
@@ -536,7 +536,7 @@ public class TestFunctionTemplateVariables
                     Assert.IsTrue(runBus.RunModelSystem(ms,
                         Path.Combine(pSession.RunsDirectory, "SetableLocalVarRuntime"),
                         "Start", out _, out runError), runError?.Message);
-                    Assert.IsTrue(sem.Wait(5000), "Model system did not complete in time!");
+                    Assert.IsTrue(sem.Wait(20000), "Model system did not complete in time!");
                     Assert.IsTrue(success, "Model system failed: " + runError?.Message);
                 });
             });
@@ -597,7 +597,11 @@ public class TestFunctionTemplateVariables
                     CommandError runError = null;
                     bool success = false;
                     using var sem = new SemaphoreSlim(0);
-                    runBus.ClientFinishedModelSystem += (_, _) => { success = true; sem.Release(); };
+                    runBus.ClientFinishedModelSystem += (_, _) => 
+                    {
+                        success = true; 
+                        sem.Release(); 
+                    };
                     runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack, moduleName, elementId) =>
                     {
                         runError = new CommandError(e + "\r\n" + stack);

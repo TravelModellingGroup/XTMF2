@@ -106,7 +106,7 @@ public class RunController : IDisposable
         };
         hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
         hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
-        hostBus.ClientErrorWhenRunningModelSystemWithTarget += controller.OnClientErrorWhenRunningModelSystem;
+        hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
         hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
         hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
         // Start the client processing in a separate thread to avoid blocking the GUI
@@ -153,7 +153,7 @@ public class RunController : IDisposable
             controller = new RunController(runtime, hostBus);
             hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
             hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
-            hostBus.ClientErrorWhenRunningModelSystemWithTarget += controller.OnClientErrorWhenRunningModelSystem;
+            hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
             hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
             hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
             return true;

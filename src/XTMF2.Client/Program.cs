@@ -100,7 +100,7 @@ namespace XTMF2.Client
             {
                 loadedConfig.LoadAssembly(dll);
             }
-            using var clientBus = new RunServerBus(serverStream, true, runtime, extraDlls);
+            using var clientBus = new RunServerBus(serverStream, true, runtime, extraDlls, System.Diagnostics.Debugger.IsAttached);
             clientBus.ProcessRequests();
         }
     }

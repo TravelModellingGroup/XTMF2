@@ -284,12 +284,53 @@ namespace XTMF2.Bus
             }
             finally
             {
+                DisposeModules();
                 Directory.SetCurrentDirectory(originalDir);
                 if (runBus is not null && ReferenceEquals(runBus.CurrentRun, this))
                     runBus.CurrentRun = null;
             }
             // success for now
             return null;
+        }
+
+        private void DisposeModules()
+        {
+            var modelSystem = _modelSystem;
+            if (modelSystem is null) return;
+
+            void DisposeModules(Boundary boundary)
+            {
+                if (boundary is null) return;
+
+                foreach(var module in boundary.Modules)
+                {
+                    var innerModule = module.Module;
+                    if (innerModule is IDisposable d)
+                    {
+                        try
+                        {
+                            d.Dispose();
+                        }
+                        catch
+                        { }
+                    }
+                }
+
+                foreach(var functionInstance in boundary.FunctionInstances)
+                {
+                    functionInstance.DisposeRuntimeModules();
+                }
+
+                foreach (var innerBoundary in boundary.Boundaries)
+                {
+                    DisposeModules(innerBoundary);
+                }
+
+            }
+            
+            DisposeModules(modelSystem.GlobalBoundary);
+            _modelSystem = null;
+            GC.Collect();
         }
 
         /// <summary>
