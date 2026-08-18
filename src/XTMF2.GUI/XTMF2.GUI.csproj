@@ -1,15 +1,17 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Resources\XTMF_icon.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <OutputPath>..\..\..\XTMF2-Dev\</OutputPath>
+    <PackageIcon>XTMF_icon.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,7 +39,7 @@
   </ItemGroup>
 
   <ItemGroup>    
-    <AvaloniaResource Include="Resources\XTMF_icon.png"/>
+    <AvaloniaResource Include="Resources\XTMF_icon.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,5 +53,12 @@
     <ProjectReference Include="..\XTMF2.Interfaces\XTMF2.Interfaces.csproj" />
     <ProjectReference Include="..\XTMF2.Client\XTMF2.RunServer.csproj" />
     <ProjectReference Include="..\XTMF2.Run\XTMF2.Run.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Resources\XTMF_icon.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 </Project>
