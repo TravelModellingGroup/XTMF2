@@ -172,7 +172,13 @@ public class SystemConfiguration
         {
             if (!toExclude.Contains(dllFile.Name))
             {
-                LoadAssembly(Assembly.LoadFrom(dllFile.FullName));
+
+                try
+                {
+                    var assemblyToLoad = Assembly.LoadFrom(dllFile.FullName);
+                    LoadAssembly(assemblyToLoad);
+                }
+                catch (BadImageFormatException) { } // Skip non.Net dlls                
             }
         }
     }
@@ -184,7 +190,7 @@ public class SystemConfiguration
     /// <param name="assembly">The assembly to load</param>
     public void LoadAssembly(Assembly assembly)
     {
-        if (assembly == null)
+        if (assembly is null)
         {
             throw new ArgumentNullException(nameof(assembly));
         }
