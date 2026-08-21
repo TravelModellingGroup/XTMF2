@@ -140,6 +140,22 @@ partial class ModelSystemCanvas
                             Name: ft.Name,
                             EmbeddedTemplateSnapshot: templateSnapshot,
                             FunctionParameters: fpDtos.Count > 0 ? fpDtos : null);
+
+                        // If this template snapshot is already present (for example as an
+                        // auto-added FunctionInstance companion), keep a single entry.
+                        if (!string.IsNullOrWhiteSpace(templateSnapshot))
+                        {
+                            var existingTemplateIndex = dtos.FindIndex(existing =>
+                                existing.Kind == CanvasElementKind.FunctionTemplate
+                                && string.Equals(existing.EmbeddedTemplateSnapshot, templateSnapshot, System.StringComparison.Ordinal));
+                            if (existingTemplateIndex >= 0)
+                            {
+                                // Prefer the explicit user-copied FunctionTemplate over a companion stub.
+                                if (dtos[existingTemplateIndex].IsTemplateCompanion)
+                                    dtos[existingTemplateIndex] = dto;
+                                continue;
+                            }
+                        }
                         break;
 
                     case FunctionInstanceViewModel fi:

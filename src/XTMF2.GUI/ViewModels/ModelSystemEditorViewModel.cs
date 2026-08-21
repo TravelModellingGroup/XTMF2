@@ -4042,12 +4042,29 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         try
         {
             var pastedTemplatesBySnapshot = new Dictionary<string, FunctionTemplate>(StringComparer.Ordinal);
+            var templateSnapshotsReferencedByInstances = payload.Elements
+                .Where(e => e.Kind == CanvasElementKind.FunctionInstance
+                    && !string.IsNullOrWhiteSpace(e.EmbeddedTemplateSnapshot))
+                .Select(e => e.EmbeddedTemplateSnapshot!)
+                .ToHashSet(StringComparer.Ordinal);
 
             // Paste FunctionTemplates first so FunctionInstances that reference them can be resolved.
             foreach (var element in payload.Elements)
             {
                 if (element.Kind != CanvasElementKind.FunctionTemplate) continue;
-                var pastedTemplate = PasteFunctionTemplate(element, dx, dy);
+
+                // Guard against duplicate FunctionTemplate payload entries for the same snapshot.
+                if (!string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot)
+                    && pastedTemplatesBySnapshot.ContainsKey(element.EmbeddedTemplateSnapshot))
+                {
+                    continue;
+                }
+
+                var preferReuseExisting = element.IsTemplateCompanion
+                    || (!string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot)
+                        && templateSnapshotsReferencedByInstances.Contains(element.EmbeddedTemplateSnapshot));
+
+                var pastedTemplate = PasteFunctionTemplate(element, dx, dy, preferReuseExisting);
                 if (pastedTemplate is not null && !string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot))
                     pastedTemplatesBySnapshot[element.EmbeddedTemplateSnapshot] = pastedTemplate;
             }
@@ -4221,7 +4238,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         Session.SetCommentBlockHeader(User, block, element.CommentHeader ?? string.Empty, out _);
     }
 
-    private FunctionTemplate? PasteFunctionTemplate(CanvasElementDto element, float dx, float dy)
+    private FunctionTemplate? PasteFunctionTemplate(CanvasElementDto element, float dx, float dy, bool preferReuseExisting)
     {
         float w = element.W > 0 ? element.W : 220f;
         float h = element.H > 0 ? element.H : 140f;
@@ -4231,7 +4248,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         {
             // Companion template entries (auto-added when copying a FunctionInstance)
             // should resolve to an equivalent existing template when available.
-            if (element.IsTemplateCompanion
+            if (preferReuseExisting
                 && Session.TryFindEquivalentFunctionTemplateSnapshot(element.EmbeddedTemplateSnapshot, out var existingTemplate, out _)
                 && existingTemplate is not null)
             {
