@@ -17,14 +17,47 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Linq;
+using XTMF2.Editing;
 using XTMF2.GUI.ViewModels;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.GUI.Tests.ViewModels;
 
 [TestClass]
 public class ModelSystemEditorViewModelClipboardTests
 {
+    private static FunctionTemplate BuildTemplate(
+        User user,
+        ModelSystemSession session,
+        string templateName,
+        Rectangle templateLocation,
+        Rectangle entryLocation,
+        Rectangle parameterLocation)
+    {
+        var boundary = session.ModelSystem.GlobalBoundary;
+
+        Assert.IsTrue(session.AddFunctionTemplate(user, boundary, templateName,
+            out var template, out var error), error?.Message);
+        Assert.IsNotNull(template);
+
+        Assert.IsTrue(session.SetFunctionTemplateLocation(user, template!, templateLocation, out error),
+            error?.Message);
+
+        Assert.IsTrue(session.AddModelSystemStart(user, template!.InternalModules, "Entry",
+            entryLocation, out var entry, out error), error?.Message);
+        Assert.IsNotNull(entry);
+
+        Assert.IsTrue(session.SetFunctionTemplateEntryNode(user, template, entry, out error),
+            error?.Message);
+
+        Assert.IsTrue(session.AddFunctionParameter(user, template, "Input",
+            typeof(IFunction<string>), parameterLocation, out _, out error), error?.Message);
+
+        return template;
+    }
+
     [TestMethod]
     public void ClipboardSerializer_CommentBlock_UsesBodyField()
     {
@@ -226,6 +259,273 @@ public class ModelSystemEditorViewModelClipboardTests
                 Assert.HasCount(1, inner!.CommentBlocks);
                 Assert.HasCount(1, vmEditor.CommentBlocks);
                 Assert.AreEqual("After switch", vmEditor.CommentBlocks[0].Name);
+            });
+    }
+
+    [TestMethod]
+    public void PasteElementsAsync_FunctionInstancePayloadWithDuplicateTemplateSnapshots_ImportsSingleTemplate()
+    {
+        TestGuiHelper.RunInProjectContext(
+            nameof(PasteElementsAsync_FunctionInstancePayloadWithDuplicateTemplateSnapshots_ImportsSingleTemplate),
+            (runtime, user, projectSession) =>
+            {
+                CommandError? error = null;
+
+                Assert.IsTrue(projectSession.CreateNewModelSystem(user, "SourceModel", out var sourceHeader, out error),
+                    error?.Message);
+                Assert.IsTrue(projectSession.CreateNewModelSystem(user, "TargetModel", out var targetHeader, out error),
+                    error?.Message);
+
+                string? snapshot = null;
+
+                Assert.IsTrue(projectSession.EditModelSystem(user, sourceHeader!, out var sourceSession, out error)
+                    .UsingIf(sourceSession, () =>
+                    {
+                        Assert.IsNotNull(sourceSession);
+                        var sourceMs = sourceSession!;
+
+                        var sourceTemplate = BuildTemplate(
+                            user,
+                            sourceMs,
+                            "SharedTemplate",
+                            new Rectangle(20, 20, 260, 160),
+                            new Rectangle(30, 40, 160, 60),
+                            new Rectangle(50, 120, 150, 50));
+
+                        Assert.IsTrue(sourceMs.ExportFunctionTemplateSnapshot(sourceTemplate, out snapshot, out error),
+                            error?.Message);
+                        Assert.IsFalse(string.IsNullOrWhiteSpace(snapshot));
+                    }), error?.Message);
+
+                Assert.IsTrue(projectSession.EditModelSystem(user, targetHeader!, out var targetSession, out error)
+                    .UsingIf(targetSession, () =>
+                    {
+                        Assert.IsNotNull(targetSession);
+                        var targetMs = targetSession!;
+
+                        using var vmEditor = new ModelSystemEditorViewModel(targetMs, user, runController: null);
+
+                        var payload = new CanvasClipboardPayload(
+                            Source: "XTMF2Canvas",
+                            Version: 1,
+                            Elements:
+                            [
+                                new CanvasElementDto(
+                                    Kind: CanvasElementKind.FunctionTemplate,
+                                    X: 100f,
+                                    Y: 120f,
+                                    W: 240f,
+                                    H: 160f,
+                                    Name: "SharedTemplate",
+                                    EmbeddedTemplateSnapshot: snapshot!,
+                                    IsTemplateCompanion: false),
+                                new CanvasElementDto(
+                                    Kind: CanvasElementKind.FunctionTemplate,
+                                    X: 130f,
+                                    Y: 150f,
+                                    W: 240f,
+                                    H: 160f,
+                                    Name: "SharedTemplate",
+                                    EmbeddedTemplateSnapshot: snapshot!,
+                                    IsTemplateCompanion: true),
+                                new CanvasElementDto(
+                                    Kind: CanvasElementKind.FunctionInstance,
+                                    X: 180f,
+                                    Y: 220f,
+                                    W: 160f,
+                                    H: 70f,
+                                    Name: "PastedInstance",
+                                    TemplateName: "SharedTemplate",
+                                        EmbeddedTemplateSnapshot: snapshot!)
+                            ]);
+
+                        vmEditor.PasteElementsAsync(payload, anchorX: 0, anchorY: 0)
+                            .GetAwaiter().GetResult();
+
+                        var boundary = targetMs.ModelSystem.GlobalBoundary;
+                        Assert.HasCount(1, boundary.FunctionTemplates,
+                            "Duplicate template snapshot entries should materialize one imported template.");
+                        Assert.HasCount(1, boundary.FunctionInstances,
+                            "FunctionInstance should paste successfully.");
+                        Assert.AreSame(boundary.FunctionTemplates.Single(), boundary.FunctionInstances.Single().Template,
+                            "Pasted FunctionInstance should reference the single imported template.");
+                    }), error?.Message);
+            });
+    }
+
+    [TestMethod]
+    public void PasteElementsAsync_FunctionInstanceReferencedTemplate_ReusesExistingEquivalentTemplate()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(PasteElementsAsync_FunctionInstanceReferencedTemplate_ReusesExistingEquivalentTemplate),
+            (user, _, session) =>
+            {
+                var existingTemplate = BuildTemplate(
+                    user,
+                    session,
+                    "ExistingTemplate",
+                    new Rectangle(30, 30, 260, 160),
+                    new Rectangle(40, 60, 160, 60),
+                    new Rectangle(70, 130, 150, 50));
+
+                Assert.IsTrue(session.ExportFunctionTemplateSnapshot(existingTemplate, out var snapshot, out var error),
+                    error?.Message);
+                Assert.IsFalse(string.IsNullOrWhiteSpace(snapshot));
+
+                using var vmEditor = new ModelSystemEditorViewModel(session, user, runController: null);
+                var payload = new CanvasClipboardPayload(
+                    Source: "XTMF2Canvas",
+                    Version: 1,
+                    Elements:
+                    [
+                        new CanvasElementDto(
+                            Kind: CanvasElementKind.FunctionTemplate,
+                            X: 110f,
+                            Y: 130f,
+                            W: 240f,
+                            H: 160f,
+                            Name: "ExistingTemplate",
+                            EmbeddedTemplateSnapshot: snapshot,
+                            IsTemplateCompanion: false),
+                        new CanvasElementDto(
+                            Kind: CanvasElementKind.FunctionInstance,
+                            X: 160f,
+                            Y: 220f,
+                            W: 160f,
+                            H: 70f,
+                            Name: "PastedInstance",
+                            TemplateName: "ExistingTemplate",
+                            EmbeddedTemplateSnapshot: snapshot)
+                    ]);
+
+                vmEditor.PasteElementsAsync(payload, anchorX: 0, anchorY: 0)
+                    .GetAwaiter().GetResult();
+
+                var boundary = session.ModelSystem.GlobalBoundary;
+                Assert.HasCount(1, boundary.FunctionTemplates,
+                    "Equivalent existing template should be reused instead of duplicating.");
+                Assert.HasCount(1, boundary.FunctionInstances,
+                    "FunctionInstance should be pasted.");
+                Assert.AreSame(existingTemplate, boundary.FunctionInstances.Single().Template,
+                    "Pasted FunctionInstance should resolve to the existing equivalent template.");
+            });
+    }
+
+    [TestMethod]
+    public void PasteElementsAsync_MixedPayload_DedupesTemplateAndPastesOtherElements()
+    {
+        TestGuiHelper.RunInProjectContext(
+            nameof(PasteElementsAsync_MixedPayload_DedupesTemplateAndPastesOtherElements),
+            (_, user, projectSession) =>
+            {
+                CommandError? error = null;
+
+                Assert.IsTrue(projectSession.CreateNewModelSystem(user, "SourceMixed", out var sourceHeader, out error),
+                    error?.Message);
+                Assert.IsTrue(projectSession.CreateNewModelSystem(user, "TargetMixed", out var targetHeader, out error),
+                    error?.Message);
+
+                string? snapshot = null;
+                Assert.IsTrue(projectSession.EditModelSystem(user, sourceHeader!, out var sourceSession, out error)
+                    .UsingIf(sourceSession, () =>
+                    {
+                        Assert.IsNotNull(sourceSession);
+                        var sourceMs = sourceSession!;
+
+                        var sourceTemplate = BuildTemplate(
+                            user,
+                            sourceMs,
+                            "MixedTemplate",
+                            new Rectangle(40, 40, 260, 160),
+                            new Rectangle(60, 90, 160, 60),
+                            new Rectangle(85, 150, 150, 50));
+
+                        Assert.IsTrue(sourceMs.ExportFunctionTemplateSnapshot(sourceTemplate, out snapshot, out error),
+                            error?.Message);
+                        Assert.IsFalse(string.IsNullOrWhiteSpace(snapshot));
+                    }), error?.Message);
+
+                Assert.IsTrue(projectSession.EditModelSystem(user, targetHeader!, out var targetSession, out error)
+                    .UsingIf(targetSession, () =>
+                    {
+                        Assert.IsNotNull(targetSession);
+                        var targetMs = targetSession!;
+
+                        using var vmEditor = new ModelSystemEditorViewModel(targetMs, user, runController: null);
+
+                        var payload = new CanvasClipboardPayload(
+                            Source: "XTMF2Canvas",
+                            Version: 1,
+                            Elements:
+                            [
+                                new CanvasElementDto(
+                                    Kind: CanvasElementKind.Node,
+                                    X: 5f,
+                                    Y: 10f,
+                                    W: 120f,
+                                    H: 50f,
+                                    Name: "MixedNode",
+                                    TypeName: typeof(BasicParameter<string>).AssemblyQualifiedName,
+                                    ParameterValue: "abc",
+                                    IsScriptedParam: false),
+                                new CanvasElementDto(
+                                    Kind: CanvasElementKind.CommentBlock,
+                                    X: 12f,
+                                    Y: 18f,
+                                    W: 220f,
+                                    H: 90f,
+                                    Name: null,
+                                    CommentBody: "Mixed body",
+                                    CommentHeader: "Mixed header"),
+                                new CanvasElementDto(
+                                    Kind: CanvasElementKind.FunctionTemplate,
+                                    X: 90f,
+                                    Y: 110f,
+                                    W: 240f,
+                                    H: 160f,
+                                    Name: "MixedTemplate",
+                                    EmbeddedTemplateSnapshot: snapshot!,
+                                    IsTemplateCompanion: false),
+                                new CanvasElementDto(
+                                    Kind: CanvasElementKind.FunctionTemplate,
+                                    X: 120f,
+                                    Y: 140f,
+                                    W: 240f,
+                                    H: 160f,
+                                    Name: "MixedTemplate",
+                                    EmbeddedTemplateSnapshot: snapshot!,
+                                    IsTemplateCompanion: true),
+                                new CanvasElementDto(
+                                    Kind: CanvasElementKind.FunctionInstance,
+                                    X: 180f,
+                                    Y: 220f,
+                                    W: 160f,
+                                    H: 70f,
+                                    Name: "MixedInstance",
+                                    TemplateName: "MixedTemplate",
+                                    EmbeddedTemplateSnapshot: snapshot!)
+                            ]);
+
+                        vmEditor.PasteElementsAsync(payload, anchorX: 0, anchorY: 0)
+                            .GetAwaiter().GetResult();
+
+                        var boundary = targetMs.ModelSystem.GlobalBoundary;
+                        Assert.HasCount(1, boundary.Modules,
+                            "Node in mixed payload should be pasted.");
+                        Assert.AreEqual("MixedNode", boundary.Modules[0].Name);
+
+                        Assert.HasCount(1, boundary.CommentBlocks,
+                            "Comment block in mixed payload should be pasted.");
+                        Assert.AreEqual("Mixed body", boundary.CommentBlocks[0].Comment);
+                        Assert.AreEqual("Mixed header", boundary.CommentBlocks[0].Header);
+
+                        Assert.HasCount(1, boundary.FunctionTemplates,
+                            "Duplicate template snapshot entries should still dedupe in mixed payloads.");
+                        Assert.HasCount(1, boundary.FunctionInstances,
+                            "Function instance in mixed payload should be pasted.");
+                        Assert.AreSame(boundary.FunctionTemplates.Single(), boundary.FunctionInstances.Single().Template,
+                            "Function instance should bind to deduped template.");
+                    }), error?.Message);
             });
     }
 }
