@@ -271,7 +271,7 @@ public class RunController : IDisposable
         {
             _sessionsByRunId[id] = (msSession, user);
         }
-        var vm = RunsViewModel.AddRun(id, runName, msSession, user);
+        var vm = RunsViewModel.AddRun(id, runName, runDirectory, msSession, user);
         if (runMode != RunMode.Normal)
         {
             // Extract parameter metadata so the progress dialog can show names/bounds.
