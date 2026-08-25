@@ -39,6 +39,7 @@ internal sealed class StringLiteral : Literal
     ///<inheritdoc/>
     internal override Result GetResult(IModule caller)
     {
-        return new StringResult(new string(Text.Span));
+        // exclude the containing quotes.
+        return new StringResult(new string(Text.Span[1..^1]));
     }
 }

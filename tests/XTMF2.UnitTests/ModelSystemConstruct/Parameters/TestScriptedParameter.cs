@@ -9,7 +9,7 @@ using XTMF2.RuntimeModules;
 namespace XTMF2.UnitTests.ModelSystemConstruct.Parameters;
 
 [TestClass]
-public class TestScriptedParameterStringAssignment
+public class TestScriptedParameter
 {
     [TestMethod]
     public void ScriptedParameter_StringLiteral_RoundTripsRepresentation()
