@@ -398,7 +398,7 @@ public static class ParameterCompiler
         {
             return false;
         }
-        expression = new StringLiteral(text.Slice(first + 1, second), offset + first);
+        expression = new StringLiteral(text.Slice(first, second + 2), offset + first);
         return true;
     }
 

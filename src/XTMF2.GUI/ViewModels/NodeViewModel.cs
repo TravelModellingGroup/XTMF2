@@ -266,14 +266,14 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     /// </summary>
     public bool SetParameterValue(string value, out CommandError? error)
     {
-        var t = UnderlyingNode.Type;
-        bool isScripted = t is not null && t.IsGenericType
-                          && t.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
-
-        if (isScripted)
+        if (IsScriptedParameter)
+        {
             return _session.SetParameterExpression(_user, UnderlyingNode, value, out error);
-
-        return _session.SetParameterValue(_user, UnderlyingNode, value, out error);
+        }
+        else
+        {
+            return _session.SetParameterValue(_user, UnderlyingNode, value, out error);
+        }
     }
 
     /// <summary>

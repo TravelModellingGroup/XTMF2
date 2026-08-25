@@ -34,7 +34,7 @@ internal class ScriptedParameter : ParameterExpression
 
     public override string Representation
     {
-        get => new (_expression.AsString());
+        get => new(_expression.AsString());
     }
 
     public override object? GetValue(IModule caller, Type type, ref string? errorString)

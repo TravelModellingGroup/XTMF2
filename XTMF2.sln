@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31912.275
+# Visual Studio Version 18
+VisualStudioVersion = 18.9.12112.369 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFiles", "SolutionFiles", "{2C9F1CF3-4FF1-4601-80EB-996F7D771178}"
 	ProjectSection(SolutionItems) = preProject
@@ -29,8 +29,6 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XTMF2.Run", "src\XTMF2.Run\XTMF2.Run.csproj", "{F6999FCE-4C4F-4CF6-9B70-0DEA31FB5E6D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XTMF2.GUI", "src\XTMF2.GUI\XTMF2.GUI.csproj", "{A16D11CD-0D70-4558-8CEA-52F0601C215A}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "XTMF2.Client", "XTMF2.Client", "{C8EE62EB-FB4F-2E7A-ABC1-8B3BF6E0080E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -138,7 +136,6 @@ Global
 		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890} = {77789778-93F5-46A6-9114-CCE855E5919C}
 		{F6999FCE-4C4F-4CF6-9B70-0DEA31FB5E6D} = {9040CC77-712E-414D-8453-391F9F348218}
 		{A16D11CD-0D70-4558-8CEA-52F0601C215A} = {9040CC77-712E-414D-8453-391F9F348218}
-		{C8EE62EB-FB4F-2E7A-ABC1-8B3BF6E0080E} = {9040CC77-712E-414D-8453-391F9F348218}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {15025AE3-C5AA-4CD4-BC38-D1C1BA8904AF}
