@@ -19,7 +19,10 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using XTMF2.Configuration;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -53,6 +56,12 @@ public sealed partial class RunViewModel : ObservableObject
     /// <summary>The human-readable name given to this run.</summary>
     public string RunName { get; }
 
+    /// <summary>The directory that the run executes in and writes its output to.</summary>
+    public string RunDirectory { get; }
+
+    /// <summary>True when this run has a known output directory that can be opened.</summary>
+    public bool HasRunDirectory => !string.IsNullOrWhiteSpace(RunDirectory);
+
     /// <summary>Current execution status.</summary>
     [ObservableProperty]
     private RunStatus _status = RunStatus.Running;
@@ -80,12 +89,70 @@ public sealed partial class RunViewModel : ObservableObject
     private readonly ModelSystemSession _session;
     private readonly User _user;
 
-    public RunViewModel(string runId, string runName, ModelSystemSession session, User user)
+    public RunViewModel(string runId, string runName, string runDirectory, ModelSystemSession session, User user)
     {
         RunId   = runId;
         RunName = runName;
+        RunDirectory = runDirectory;
         _session = session;
         _user = user;
+    }
+
+    private bool CanOpenRunDirectory() => HasRunDirectory;
+
+    /// <summary>
+    /// Opens the run's output directory in the operating system's file explorer.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanOpenRunDirectory))]
+    private void OpenRunDirectory()
+    {
+        if (!Directory.Exists(RunDirectory))
+        {
+            Messages.Add($"The run directory does not exist: {RunDirectory}");
+            return;
+        }
+        if (!TryOpenDirectoryInFileExplorer(RunDirectory))
+        {
+            Messages.Add($"Unable to open the run directory: {RunDirectory}");
+        }
+    }
+
+    private static bool TryOpenDirectoryInFileExplorer(string directoryPath)
+    {
+        try
+        {
+            ProcessStartInfo startInfo;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                startInfo = new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    UseShellExecute = true
+                };
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                startInfo = new ProcessStartInfo
+                {
+                    FileName = "open",
+                    UseShellExecute = false
+                };
+            }
+            else
+            {
+                startInfo = new ProcessStartInfo
+                {
+                    FileName = "xdg-open",
+                    UseShellExecute = false
+                };
+            }
+            startInfo.ArgumentList.Add(directoryPath);
+            return Process.Start(startInfo) is not null;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>

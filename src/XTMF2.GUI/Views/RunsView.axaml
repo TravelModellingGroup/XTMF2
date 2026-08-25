@@ -104,6 +104,13 @@
                                        Opacity="0.7"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
+                        <Button Content="📂  Open Run Output Directory"
+                                Command="{Binding SelectedRun.OpenRunDirectoryCommand}"
+                                IsVisible="{Binding SelectedRun.HasRunDirectory}"
+                                Classes="dlg-primary"
+                                Margin="0,6,0,0"
+                                HorizontalAlignment="Left"
+                                ToolTip.Tip="Open this run's output directory in the file explorer."/>
                         <Button Content="{Binding SelectedRun.ErrorNavigationLinkText}"
                             IsVisible="{Binding SelectedRun.HasErrorNavigationTarget}"
                             Classes="dlg-primary"
