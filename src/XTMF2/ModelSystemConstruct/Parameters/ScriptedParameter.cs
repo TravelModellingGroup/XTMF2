@@ -34,7 +34,24 @@ internal class ScriptedParameter : ParameterExpression
 
     public override string Representation
     {
-        get => new (_expression.AsString());
+        get
+        {
+            // For string-typed expressions we need to preserve surrounding quotes
+            // so the expression can be round-tripped through CreateExpression.
+            var span = _expression.AsString();
+            var s = new string(span);
+            if (_expression.Type == typeof(string))
+            {
+                // If the expression text is not already quoted (this happens for
+                // top-level string literals which store only the inner text), add
+                // surrounding quotes so serialization and re-parsing work.
+                if (s.Length == 0 || (s[0] != '"' && s[0] != '\''))
+                {
+                    return '"' + s + '"';
+                }
+            }
+            return s;
+        }
     }
 
     public override object? GetValue(IModule caller, Type type, ref string? errorString)
