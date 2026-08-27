@@ -92,7 +92,7 @@ public sealed class CombineContextFFromNoContext<Context1, Context2, Return> : B
 
 [Module(Name = "Combine Context From No Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/CombineContextFromNoContext.html",
 Description = "Combines the contexts as derived from First and Second and invokes To Invoke with the combined context.")]
-public sealed class CombineContexF<Context1, Context2, Return> : BaseFunction<Context1, Return>
+public sealed class CombineContextF<Context1, Context2, Return> : BaseFunction<Context1, Return>
 {
     [SubModule(Name = "Second", Required = true, Index = 0, Description = "The second context to use.")]
     public IFunction<Context2>? Second;

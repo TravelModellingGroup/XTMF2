@@ -67,7 +67,7 @@ public class OpenReadStreamFromFile : BaseFunction<ReadStream>
             }
             else
             {
-
+                error = "No path was given to open a ReadStream from!";
                 return false;
             }
         }

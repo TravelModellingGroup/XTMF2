@@ -22,7 +22,7 @@ using System.Text;
 
 namespace XTMF2.RuntimeModules;
 [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-    Description = "Writes the provided mess to the log and then invokes the next step.")]
+    Description = "Writes the provided message to the log and then invokes the next step.")]
 public sealed class WriteToLogF<Return> : BaseFunction<Return>
 {
     [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
@@ -43,7 +43,7 @@ public sealed class WriteToLogF<Return> : BaseFunction<Return>
 }
 
 [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-    Description = "Writes the provided mess to the log and then invokes the next step.")]
+    Description = "Writes the provided message to the log and then invokes the next step.")]
 public sealed class WriteToLogF<Context, Return> : BaseFunction<Context, Return>
 {
     [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
@@ -64,7 +64,7 @@ public sealed class WriteToLogF<Context, Return> : BaseFunction<Context, Return>
 }
 
 [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-    Description = "Writes the provided mess to the log and then invokes the next step.")]
+    Description = "Writes the provided message to the log and then invokes the next step.")]
 public sealed class WriteToLogBasedOnContextF<Context, Return> : BaseFunction<Context, Return>
 {
     [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
@@ -85,7 +85,7 @@ public sealed class WriteToLogBasedOnContextF<Context, Return> : BaseFunction<Co
 }
 
 [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-    Description = "Writes the provided mess to the log and then invokes the next step.")]
+    Description = "Writes the provided message to the log and then invokes the next step.")]
 public sealed class WriteToLogA : BaseAction
 {
     [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
@@ -106,7 +106,7 @@ public sealed class WriteToLogA : BaseAction
 }
 
 [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-    Description = "Writes the provided mess to the log and then invokes the next step.")]
+    Description = "Writes the provided message to the log and then invokes the next step.")]
 public sealed class WriteToLogA<Context> : BaseAction<Context>
 {
     [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
@@ -127,7 +127,7 @@ public sealed class WriteToLogA<Context> : BaseAction<Context>
 }
 
 [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-    Description = "Writes the provided mess to the log and then invokes the next step.")]
+    Description = "Writes the provided message to the log and then invokes the next step.")]
 public sealed class WriteToLogBasedOnContextA<Context> : BaseAction<Context>
 {
     [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
