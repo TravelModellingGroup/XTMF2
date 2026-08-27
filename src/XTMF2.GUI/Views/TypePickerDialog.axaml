@@ -31,6 +31,7 @@
             <ctrl:SearchBox Grid.Row="1"
                             x:Name="FilterBox"
                             Text="{Binding FilterText, Mode=TwoWay}"
+                            EnterPressed="FilterBox_EnterPressed"
                             Watermark="Filter by type name…"
                             Margin="0,0,0,6"/>
 
