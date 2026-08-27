@@ -77,6 +77,10 @@ partial class ModelSystemCanvas
             ClearMultiSelection();
             e.Handled = true;
         }
+        else if (TryHandleAddShortcut(e))
+        {
+            e.Handled = true;
+        }
         else if ((e.Key is Key.Return or Key.Enter) && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
             if (_vm.SelectedElement is FunctionTemplateViewModel ftvm)
@@ -235,6 +239,48 @@ partial class ModelSystemCanvas
             }
         }
         base.OnKeyDown(e);
+    }
+
+    private bool TryHandleAddShortcut(KeyEventArgs e)
+    {
+        if (_vm is null
+            || _editingParamNode is not null
+            || _editingNameElement is not null
+            || _editingCommentBlock is not null
+            || _editingCommentHeaderBlock is not null
+            || (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) != KeyModifiers.Control)
+        {
+            return false;
+        }
+
+        var spawnPt = GetKeyboardSpawnPoint();
+        switch (e.Key)
+        {
+            case Key.M:
+                _ = _vm.AddModuleAtAsync(spawnPt.X, spawnPt.Y);
+                return true;
+            case Key.I:
+                _ = _vm.AddFunctionInstanceAtAsync(spawnPt.X, spawnPt.Y);
+                return true;
+            case Key.T:
+                _ = _vm.AddFunctionTemplateAtAsync(spawnPt.X, spawnPt.Y);
+                return true;
+            case Key.N:
+                _vm.AddCommentBlockAt(spawnPt.X, spawnPt.Y);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private Point GetKeyboardSpawnPoint()
+    {
+        var sv = GetScrollViewer();
+        double viewportWidth = sv?.Viewport.Width ?? Bounds.Width;
+        double viewportHeight = sv?.Viewport.Height ?? Bounds.Height;
+        double x = ((sv?.Offset.X ?? 0) + viewportWidth / 2.0) / _scale;
+        double y = ((sv?.Offset.Y ?? 0) + viewportHeight / 2.0) / _scale;
+        return new Point(x, y);
     }
     
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)

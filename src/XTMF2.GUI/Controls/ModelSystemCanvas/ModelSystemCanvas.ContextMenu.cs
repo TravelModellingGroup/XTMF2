@@ -304,19 +304,19 @@ partial class ModelSystemCanvas
             addStartItem.Click += (_, _) => _vm.AddStartAt(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addStartItem);
 
-            var addModuleItem = new MenuItem { Header = "Add Module…" };
+            var addModuleItem = new MenuItem { Header = "Add Module…\tCtrl+M" };
             addModuleItem.Click += (_, _) => _ = _vm.AddModuleAtAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addModuleItem);
 
-            var addCommentItem = new MenuItem { Header = "Add Comment" };
+            var addCommentItem = new MenuItem { Header = "Add Comment\tCtrl+N" };
             addCommentItem.Click += (_, _) => _vm.AddCommentBlockAt(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addCommentItem);
 
-            var addFtItem = new MenuItem { Header = "Add Function Template…" };
+            var addFtItem = new MenuItem { Header = "Add Function Template…\tCtrl+T" };
             addFtItem.Click += (_, _) => _ = _vm.AddFunctionTemplateAtAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addFtItem);
 
-            var addFiItem = new MenuItem { Header = "Add Function Instance…" };
+            var addFiItem = new MenuItem { Header = "Add Function Instance…\tCtrl+I" };
             addFiItem.Click += (_, _) => _ = _vm.AddFunctionInstanceAtAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addFiItem);
 

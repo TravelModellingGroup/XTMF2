@@ -19,6 +19,7 @@
 
 using Avalonia.Headless;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.GUI.Controls;
 using XTMF2.GUI.Tests.Modules;
@@ -69,6 +70,46 @@ public class ModelSystemCanvasHeadlessTests
             // Without setting DataContext, the canvas VM is null.
             Assert.IsNull(canvas.DataContext);
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_AddShortcuts_CreateCommentAndFunctionTemplate()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_AddShortcuts_CreateCommentAndFunctionTemplate),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    canvas.Measure(new Avalonia.Size(800, 600));
+                    canvas.Arrange(new Avalonia.Rect(0, 0, 800, 600));
+
+                    var handleAddShortcut = typeof(ModelSystemCanvas).GetMethod(
+                        "TryHandleAddShortcut",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(handleAddShortcut);
+
+                    var commentShortcut = new KeyEventArgs
+                    {
+                        Key = Key.N,
+                        KeyModifiers = KeyModifiers.Control
+                    };
+                    var templateShortcut = new KeyEventArgs
+                    {
+                        Key = Key.T,
+                        KeyModifiers = KeyModifiers.Control
+                    };
+
+                    Assert.IsTrue((bool)handleAddShortcut!.Invoke(canvas, new object[] { commentShortcut })!);
+                    Assert.IsTrue((bool)handleAddShortcut.Invoke(canvas, new object[] { templateShortcut })!);
+
+                    Assert.HasCount(1, vm.CommentBlocks);
+                    Assert.HasCount(1, vm.FunctionTemplates);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
     }
 
     [TestMethod]
