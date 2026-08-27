@@ -98,15 +98,33 @@
                 </ComboBox.ItemTemplate>
             </ComboBox>
 
-            <AutoCompleteBox x:Name="NodeSearchBox"
-                             Grid.Column="2"
-                             ItemsSource="{Binding SearchItems}"
-                             MinimumPrefixLength="0"
-                             FilterMode="ContainsOrdinal"
-                             ValueMemberBinding="{Binding Name}"
-                             Watermark="Find... (Ctrl+E)"
-                             Width="250"
-                             VerticalAlignment="Center"/>
+            <Grid Grid.Column="2"
+                  Width="250"
+                  VerticalAlignment="Center">
+                <AutoCompleteBox x:Name="NodeSearchBox"
+                                 ItemsSource="{Binding SearchItems}"
+                                 MinimumPrefixLength="0"
+                                 FilterMode="ContainsOrdinal"
+                                 ValueMemberBinding="{Binding Name}"
+                                 Watermark="Find... (Ctrl+E)"
+                                 Padding="8,4,28,4"/>
+                <!-- Magnifying glass icon, right-aligned, non-interactive -->
+                <Canvas Width="16" Height="16"
+                        Margin="0,0,7,0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        IsHitTestVisible="False">
+                    <Ellipse Canvas.Left="1" Canvas.Top="1"
+                             Width="10" Height="10"
+                             Stroke="{DynamicResource TextControlPlaceholderForeground}"
+                             StrokeThickness="1.5"
+                             Fill="Transparent"/>
+                    <Line StartPoint="9.5,9.5" EndPoint="14.5,14.5"
+                          Stroke="{DynamicResource TextControlPlaceholderForeground}"
+                          StrokeThickness="1.5"
+                          StrokeLineCap="Round"/>
+                </Canvas>
+            </Grid>
         </Grid>
 
         <!-- ── Main content: full-width canvas with floating overlays ─────── -->
