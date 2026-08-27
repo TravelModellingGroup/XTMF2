@@ -26,3 +26,14 @@ public sealed class SimpleGuiTestModule : BaseFunction<string>
 {
     public override string Invoke() => "GUI Test";
 }
+
+[Module(Name = "Linked GUI Test Module",
+    DocumentationLink = "http://example.com",
+    Description = "A minimal module with an outgoing hook used in GUI unit tests.")]
+public sealed class LinkedGuiTestModule : BaseFunction<string>
+{
+    [SubModule(Name = "Child", Description = "A linked child module", Required = false, Index = 0)]
+    public SimpleGuiTestModule? Child { get; set; }
+
+    public override string Invoke() => Child?.Invoke() ?? string.Empty;
+}

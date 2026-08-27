@@ -18,7 +18,10 @@
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
+using System.Reflection;
 using XTMF2.Editing;
+using XTMF2.GUI.Controls;
+using XTMF2.GUI.Tests.Modules;
 using XTMF2.GUI.ViewModels;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
@@ -191,6 +194,204 @@ public class ModelSystemEditorViewModelClipboardTests
                 Assert.HasCount(1, comments);
                 Assert.AreEqual("Legacy body text", comments[0].Comment);
                 Assert.AreEqual("Legacy Header", comments[0].Header);
+            });
+    }
+
+    [TestMethod]
+    public void PasteElementsAsync_CopiedOriginLinksToExistingDestinationById()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(PasteElementsAsync_CopiedOriginLinksToExistingDestinationById),
+            (user, _, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "Origin",
+                    typeof(LinkedGuiTestModule),
+                    new Rectangle(20, 20, 160, 60),
+                    out var origin,
+                    out var originError),
+                    originError?.Message);
+                Assert.IsNotNull(origin);
+
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "Destination",
+                    typeof(SimpleGuiTestModule),
+                    new Rectangle(260, 20, 160, 60),
+                    out var destination,
+                    out var destinationError),
+                    destinationError?.Message);
+                Assert.IsNotNull(destination);
+
+                var hook = origin!.Hooks.First(h => h.Name == "Child");
+                Assert.IsTrue(msSession.AddLink(user, origin, hook, destination!, out var addedLink, out var linkError),
+                    linkError?.Message);
+                Assert.IsNotNull(addedLink);
+
+                using var vmEditor = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var payload = new CanvasClipboardPayload(
+                    Source: "XTMF2Canvas",
+                    Version: 1,
+                    Elements:
+                    [
+                        new CanvasElementDto(
+                            Kind: CanvasElementKind.Node,
+                            X: 20f,
+                            Y: 20f,
+                            W: 160f,
+                            H: 60f,
+                            Name: "Origin",
+                            TypeName: typeof(LinkedGuiTestModule).AssemblyQualifiedName,
+                            OriginalId: origin.Id,
+                            CrossLinks:
+                            [
+                                new CrossNodeLinkDto("Child", "Destination", destination!.Id)
+                            ])
+                    ]);
+
+                vmEditor.PasteElementsAsync(payload, anchorX: 400, anchorY: 20)
+                    .GetAwaiter().GetResult();
+
+                var pastedOrigin = boundary.Modules.Single(n => n.Name == "Origin" && n.Id != origin.Id);
+                var pastedLink = boundary.Links.OfType<SingleLink>().SingleOrDefault(l =>
+                    ReferenceEquals(l.Origin, pastedOrigin)
+                    && ReferenceEquals(l.Destination, destination));
+
+                Assert.IsNotNull(pastedLink);
+            });
+    }
+
+    [TestMethod]
+    public void PasteElementsAsync_CopiedOriginLinksToExistingDestinationByIdInAnotherBoundary()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(PasteElementsAsync_CopiedOriginLinksToExistingDestinationByIdInAnotherBoundary),
+            (user, _, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddBoundary(user, boundary, "Other", out var otherBoundary, out var boundaryError),
+                    boundaryError?.Message);
+                Assert.IsNotNull(otherBoundary);
+
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "Origin",
+                    typeof(LinkedGuiTestModule),
+                    new Rectangle(20, 20, 160, 60),
+                    out var origin,
+                    out var originError),
+                    originError?.Message);
+                Assert.IsNotNull(origin);
+
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    otherBoundary!,
+                    "Destination",
+                    typeof(SimpleGuiTestModule),
+                    new Rectangle(260, 20, 160, 60),
+                    out var destination,
+                    out var destinationError),
+                    destinationError?.Message);
+                Assert.IsNotNull(destination);
+
+                var hook = origin!.Hooks.First(h => h.Name == "Child");
+                Assert.IsTrue(msSession.AddLink(user, origin, hook, destination!, out var addedLink, out var linkError),
+                    linkError?.Message);
+                Assert.IsNotNull(addedLink);
+
+                using var vmEditor = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var payload = new CanvasClipboardPayload(
+                    Source: "XTMF2Canvas",
+                    Version: 1,
+                    Elements:
+                    [
+                        new CanvasElementDto(
+                            Kind: CanvasElementKind.Node,
+                            X: 20f,
+                            Y: 20f,
+                            W: 160f,
+                            H: 60f,
+                            Name: "Origin",
+                            TypeName: typeof(LinkedGuiTestModule).AssemblyQualifiedName,
+                            OriginalId: origin.Id,
+                            CrossLinks:
+                            [
+                                new CrossNodeLinkDto("Child", "Destination", destination!.Id)
+                            ])
+                    ]);
+
+                vmEditor.PasteElementsAsync(payload, anchorX: 400, anchorY: 20)
+                    .GetAwaiter().GetResult();
+
+                var pastedOrigin = boundary.Modules.Single(n => n.Name == "Origin" && n.Id != origin.Id);
+                var pastedLink = boundary.Links.OfType<SingleLink>().SingleOrDefault(l =>
+                    ReferenceEquals(l.Origin, pastedOrigin)
+                    && ReferenceEquals(l.Destination, destination));
+
+                Assert.IsNotNull(pastedLink);
+                Assert.IsTrue(vmEditor.Links.Any(lvm => ReferenceEquals(lvm.UnderlyingLink, pastedLink)),
+                    "The pasted cross-boundary link should be represented in the current canvas view.");
+            });
+    }
+
+    [TestMethod]
+    public void CopyMetadata_CrossBoundaryLinkNeedsUnderlyingDestinationWhenCanvasDestinationIsNotVisible()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(CopyMetadata_CrossBoundaryLinkNeedsUnderlyingDestinationWhenCanvasDestinationIsNotVisible),
+            (user, _, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddBoundary(user, boundary, "Other", out var otherBoundary, out var boundaryError),
+                    boundaryError?.Message);
+                Assert.IsNotNull(otherBoundary);
+
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "Origin",
+                    typeof(LinkedGuiTestModule),
+                    new Rectangle(20, 20, 160, 60),
+                    out var origin,
+                    out var originError),
+                    originError?.Message);
+                Assert.IsNotNull(origin);
+
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    otherBoundary!,
+                    "Destination",
+                    typeof(SimpleGuiTestModule),
+                    new Rectangle(260, 20, 160, 60),
+                    out var destination,
+                    out var destinationError),
+                    destinationError?.Message);
+                Assert.IsNotNull(destination);
+
+                var hook = origin!.Hooks.First(h => h.Name == "Child");
+                Assert.IsTrue(msSession.AddLink(user, origin, hook, destination!, out var addedLink, out var linkError),
+                    linkError?.Message);
+                Assert.IsNotNull(addedLink);
+
+                using var vmEditor = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var renderedLink = vmEditor.Links.Single(lvm => ReferenceEquals(lvm.UnderlyingLink, addedLink));
+
+                Assert.IsNull(renderedLink.Destination,
+                    "The cross-boundary destination is not represented by a visible canvas element in the current boundary.");
+
+                var destinationResolver = typeof(ModelSystemCanvas).GetMethod(
+                    "TryGetLinkDestinationForRenderedBranch",
+                    BindingFlags.Static | BindingFlags.NonPublic);
+                Assert.IsNotNull(destinationResolver);
+
+                object?[] args = [renderedLink, null];
+                Assert.IsTrue((bool)destinationResolver!.Invoke(null, args)!);
+                Assert.AreSame(destination, args[1]);
             });
     }
 

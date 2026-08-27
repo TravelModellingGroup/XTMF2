@@ -4069,7 +4069,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                     pastedTemplatesBySnapshot[element.EmbeddedTemplateSnapshot] = pastedTemplate;
             }
 
-            // Pass 1: create all nodes (without linking inlined children yet).
+            // Pass 1: create all node-like elements (without linking inlined children yet).
             var createdNodes = new List<(CanvasElementDto Element, Node Node)>();
             Node? firstNode = null;
             foreach (var element in payload.Elements)
@@ -4090,7 +4090,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                         break;
 
                     case CanvasElementKind.FunctionInstance:
-                        PasteFunctionInstance(element, dx, dy, pastedTemplatesBySnapshot);
+                        var pastedInstance = PasteFunctionInstance(element, dx, dy, pastedTemplatesBySnapshot);
+                        if (pastedInstance is not null)
+                            createdNodes.Add((element, pastedInstance));
                         break;
 
                     case CanvasElementKind.GhostNode:
@@ -4105,17 +4107,21 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             foreach (var (element, node) in createdNodes)
                 PasteNodeInlinedChildren(element, node);
 
-            // Pass 3: restore links between pasted nodes (cross-node links).
-            if (createdNodes.Count > 1)
+            // Pass 3: restore links from pasted origins to pasted destinations, or to
+            // existing destination nodes in the target model system matched by GUID.
+            if (createdNodes.Count > 0)
             {
                 var nameToNode = createdNodes
                     .Where(e => !string.IsNullOrWhiteSpace(e.Element.Name))
                     .ToDictionary(e => e.Element.Name!, e => e.Node);
+                var originalIdToPastedNode = createdNodes
+                    .Where(e => e.Element.OriginalId.HasValue)
+                    .ToDictionary(e => e.Element.OriginalId!.Value, e => e.Node);
                 foreach (var (element, originNode) in createdNodes)
                 {
                     foreach (var crossLink in element.CrossLinks ?? [])
                     {
-                        if (!nameToNode.TryGetValue(crossLink.DestName, out var destNode)) continue;
+                        if (!TryResolvePastedLinkDestination(crossLink, originalIdToPastedNode, nameToNode, out var destNode)) continue;
                         var hook = originNode.Hooks?.FirstOrDefault(h => h.Name == crossLink.HookName);
                         if (hook is null) continue;
                         Session.AddLink(User, originNode, hook, destNode, out _, out _);
@@ -4133,6 +4139,72 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         {
             Session.CommitBatch();
         }
+    }
+
+    private bool TryResolvePastedLinkDestination(
+        CrossNodeLinkDto crossLink,
+        IReadOnlyDictionary<Guid, Node> originalIdToPastedNode,
+        IReadOnlyDictionary<string, Node> nameToPastedNode,
+        [NotNullWhen(true)] out Node? destination)
+    {
+        if (crossLink.DestId is Guid destId)
+        {
+            if (originalIdToPastedNode.TryGetValue(destId, out destination))
+                return true;
+
+            if (TryFindNodeById(destId, Session.ModelSystem.GlobalBoundary, out destination))
+                return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(crossLink.DestName)
+            && nameToPastedNode.TryGetValue(crossLink.DestName, out destination))
+        {
+            return true;
+        }
+
+        destination = null;
+        return false;
+    }
+
+    private static bool TryFindNodeById(Guid id, Boundary root, [NotNullWhen(true)] out Node? node)
+    {
+        var queue = new Queue<Boundary>();
+        queue.Enqueue(root);
+        while (queue.Count > 0)
+        {
+            var boundary = queue.Dequeue();
+            foreach (var module in boundary.Modules)
+            {
+                if (module.Id == id)
+                {
+                    node = module;
+                    return true;
+                }
+            }
+            foreach (var start in boundary.Starts)
+            {
+                if (start.Id == id)
+                {
+                    node = start;
+                    return true;
+                }
+            }
+            foreach (var instance in boundary.FunctionInstances)
+            {
+                if (instance.Id == id)
+                {
+                    node = instance;
+                    return true;
+                }
+            }
+            foreach (var template in boundary.FunctionTemplates)
+                queue.Enqueue(template.InternalModules);
+            foreach (var child in boundary.Boundaries)
+                queue.Enqueue(child);
+        }
+
+        node = null;
+        return false;
     }
 
     internal bool TryExportFunctionTemplateSnapshot(FunctionTemplate template, out string? snapshot)
@@ -4293,14 +4365,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         return ft;
     }
 
-    private void PasteFunctionInstance(
+    private FunctionInstance? PasteFunctionInstance(
         CanvasElementDto element,
         float dx,
         float dy,
         IReadOnlyDictionary<string, FunctionTemplate> pastedTemplatesBySnapshot)
     {
         var template = ResolveTemplateForPastedFunctionInstance(element, dx, dy, pastedTemplatesBySnapshot);
-        if (template is null) return;
+        if (template is null) return null;
 
         // Generate a unique name if needed.
         string baseName = string.IsNullOrWhiteSpace(element.Name) ? "Function Instance" : element.Name;
@@ -4313,7 +4385,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         float h = element.H > 0 ? element.H : 70f;
         var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
 
-        Session.AddFunctionInstance(User, _currentBoundary, template, name, loc, out _, out _);
+        return Session.AddFunctionInstance(User, _currentBoundary, template, name, loc, out var instance, out _)
+            ? instance
+            : null;
     }
 
     private FunctionTemplate? ResolveTemplateForPastedFunctionInstance(

@@ -72,7 +72,8 @@ partial class ModelSystemCanvas
             TypeName:        node.Type?.AssemblyQualifiedName,
             ParameterValue:  paramValue,
             IsScriptedParam: isScriptedParam,
-            InlinedChildren: inlined);
+            InlinedChildren: inlined,
+            OriginalId:      node.Id);
     }
 
     /// <summary>
@@ -159,6 +160,7 @@ partial class ModelSystemCanvas
                         break;
 
                     case FunctionInstanceViewModel fi:
+                        nodeToDtoIndex[fi.UnderlyingInstance] = dtos.Count;
                         _vm.TryExportFunctionTemplateSnapshot(fi.UnderlyingInstance.Template, out var instanceTemplateSnapshot);
                         dto = new CanvasElementDto(
                             CanvasElementKind.FunctionInstance,
@@ -166,7 +168,8 @@ partial class ModelSystemCanvas
                             (float)fi.Width, (float)fi.Height,
                             Name: fi.Name,
                             TemplateName: fi.TemplateName,
-                            EmbeddedTemplateSnapshot: instanceTemplateSnapshot);
+                            EmbeddedTemplateSnapshot: instanceTemplateSnapshot,
+                            OriginalId: fi.UnderlyingInstance.Id);
                         break;
 
                     case GhostNodeViewModel ghost:
@@ -209,22 +212,22 @@ partial class ModelSystemCanvas
             }
         }
 
-        // Second pass: detect links where both origin and destination are in the copied set
-        // and record them as cross-node links on the origin's DTO.
-        if (nodeToDtoIndex.Count > 1 && _vm is not null)
+        // Second pass: record outgoing links from copied node-like origins. On paste,
+        // destinations are resolved first to pasted nodes by GUID, then to existing nodes
+        // in the target model system by the same original GUID.
+        if (nodeToDtoIndex.Count > 0 && _vm is not null)
         {
             foreach (var lvm in _vm.Links)
             {
-                if (lvm.Origin is not NodeViewModel originNvm) continue;
-                if (!nodeToDtoIndex.TryGetValue(originNvm.UnderlyingNode, out var originIdx)) continue;
+                if (!TryGetCopyableNode(lvm.Origin, out var originNode, out _)) continue;
+                if (!nodeToDtoIndex.TryGetValue(originNode, out var originIdx)) continue;
 
-                if (lvm.Destination is not NodeViewModel destNvm) continue;
-                if (destNvm.IsInlined) continue;
-                if (!nodeToDtoIndex.ContainsKey(destNvm.UnderlyingNode)) continue;
+                if (!TryGetLinkDestinationForRenderedBranch(lvm, out var destNode)) continue;
+                bool destIsInlined = lvm.Destination is NodeViewModel { IsInlined: true };
+                if (destIsInlined) continue;
 
-                // Both ends are in the selection — record a cross-link.
                 var hookName = lvm.UnderlyingLink.OriginHook.Name;
-                var destName = destNvm.UnderlyingNode.Name;
+                var destName = destNode.Name;
                 var origDto  = dtos[originIdx];
                 var crossLinks = origDto.CrossLinks ?? new System.Collections.Generic.List<CrossNodeLinkDto>();
                 if (origDto.CrossLinks is null)
@@ -232,7 +235,7 @@ partial class ModelSystemCanvas
                     origDto = origDto with { CrossLinks = crossLinks };
                     dtos[originIdx] = origDto;
                 }
-                crossLinks.Add(new CrossNodeLinkDto(hookName, destName));
+                crossLinks.Add(new CrossNodeLinkDto(hookName, destName, destNode.Id));
             }
         }
 
@@ -259,6 +262,41 @@ partial class ModelSystemCanvas
         var payload = CanvasClipboardSerializer.TryDeserialize(text);
         if (payload is null) return;
         await _vm.PasteElementsAsync(payload, anchorX, anchorY);
+    }
+
+    private static bool TryGetCopyableNode(ICanvasElement? element, out Node node, out bool isInlined)
+    {
+        switch (element)
+        {
+            case NodeViewModel nvm:
+                node = nvm.UnderlyingNode;
+                isInlined = nvm.IsInlined;
+                return true;
+            case FunctionInstanceViewModel fivm:
+                node = fivm.UnderlyingInstance;
+                isInlined = false;
+                return true;
+            default:
+                node = null!;
+                isInlined = false;
+                return false;
+        }
+    }
+
+    private static bool TryGetLinkDestinationForRenderedBranch(LinkViewModel link, out Node destination)
+    {
+        switch (link.UnderlyingLink)
+        {
+            case SingleLink singleLink:
+                destination = singleLink.Destination;
+                return true;
+            case MultiLink multiLink when link.DestinationIndex >= 0 && link.DestinationIndex < multiLink.Destinations.Count:
+                destination = multiLink.Destinations[link.DestinationIndex];
+                return true;
+            default:
+                destination = null!;
+                return false;
+        }
     }
 
 }

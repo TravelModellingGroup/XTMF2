@@ -54,6 +54,10 @@ internal sealed record CanvasClipboardPayload(
 /// All element types share this record; unused fields are omitted from JSON.
 /// </summary>
 /// <param name="Kind">Discriminator — one of the <see cref="CanvasElementKind"/> constants.</param>
+/// <param name="OriginalId">
+/// Stable ID of the copied model node, when the element represents a node-like object.
+/// Used to reconnect pasted origins to pasted or already-existing link destinations.
+/// </param>
 /// <param name="Name">
 /// Display name of the element. For <see cref="CanvasElementKind.CommentBlock"/>,
 /// this is treated as a legacy fallback for older payloads.
@@ -122,22 +126,28 @@ internal sealed record CanvasElementDto(
     [property: JsonPropertyName("crossLinks")]         List<CrossNodeLinkDto>? CrossLinks        = null,
     [property: JsonPropertyName("isTemplateCompanion")] bool               IsTemplateCompanion = false,
     [property: JsonPropertyName("body")]               string?             CommentBody         = null,
-    [property: JsonPropertyName("commentHeader")]      string?             CommentHeader       = null
+    [property: JsonPropertyName("commentHeader")]      string?             CommentHeader       = null,
+    [property: JsonPropertyName("originalId")]         Guid?               OriginalId          = null
 );
 
 /// <summary>
-/// A link from one copied <see cref="CanvasElementKind.Node"/> to another node that
-/// was in the same copy selection.  Stored per-origin so it can be recreated on paste
-/// once all nodes have been constructed.
+/// A link from one copied node-like element to another node-like element.  Stored per-origin
+/// so it can be recreated on paste once all pasted elements have been constructed, or
+/// reconnected to an existing destination in the target model system by destination ID.
 /// </summary>
 /// <param name="HookName">The name of the hook on the <em>origin</em> node.</param>
 /// <param name="DestName">
 /// The <see cref="CanvasElementDto.Name"/> of the destination node within the same
-/// <see cref="CanvasClipboardPayload"/>.
+/// <see cref="CanvasClipboardPayload"/>. Used as a legacy fallback for older payloads.
+/// </param>
+/// <param name="DestId">
+/// Stable ID of the original destination node. Used to find either the pasted destination
+/// from the same payload, or an already-existing destination in the target model system.
 /// </param>
 internal sealed record CrossNodeLinkDto(
     [property: JsonPropertyName("hookName")] string HookName,
-    [property: JsonPropertyName("destName")] string DestName);
+    [property: JsonPropertyName("destName")] string? DestName = null,
+    [property: JsonPropertyName("destId")]   Guid?   DestId   = null);
 
 /// <summary>
 /// A single function-parameter slot captured from a <see cref="CanvasElementKind.FunctionTemplate"/>.
