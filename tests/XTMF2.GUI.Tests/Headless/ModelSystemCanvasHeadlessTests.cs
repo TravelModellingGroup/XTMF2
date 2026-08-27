@@ -20,6 +20,7 @@
 using Avalonia.Headless;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.GUI.Controls;
 using XTMF2.GUI.Tests.Modules;
@@ -140,6 +141,45 @@ public class ModelSystemCanvasHeadlessTests
                         && grid.Children.OfType<TextBlock>().Any(text => text.Text == "Ctrl+M"));
 
                     Assert.IsNotNull(addModuleItem);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_AutoScrollTimer_ContinuesForPendingLinkDrag()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_AutoScrollTimer_ContinuesForPendingLinkDrag),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                vm.AddStartAt(20, 20);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var linkOriginField = typeof(ModelSystemCanvas).GetField(
+                        "_linkOrigin",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var timerField = typeof(ModelSystemCanvas).GetField(
+                        "_autoScrollTimer",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var autoScrollTick = typeof(ModelSystemCanvas).GetMethod(
+                        "OnAutoScrollTick",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+
+                    Assert.IsNotNull(linkOriginField);
+                    Assert.IsNotNull(timerField);
+                    Assert.IsNotNull(autoScrollTick);
+
+                    linkOriginField!.SetValue(canvas, vm.Starts[0]);
+                    var timer = (DispatcherTimer)timerField!.GetValue(canvas)!;
+                    timer.Start();
+
+                    autoScrollTick!.Invoke(canvas, new object?[] { null, EventArgs.Empty });
+
+                    Assert.IsTrue(timer.IsEnabled);
+                    timer.Stop();
                 }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
             });
     }

@@ -772,6 +772,7 @@ partial class ModelSystemCanvas
         if (_linkOrigin is not null)
         {
             _linkCurrentPos = mpos;
+            TryAutoScrollForDrag(svPos);
             InvalidateVisual();
             e.Handled = true;
             return;
