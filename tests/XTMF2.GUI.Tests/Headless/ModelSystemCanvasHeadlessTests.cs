@@ -113,6 +113,38 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void ModelSystemCanvas_ContextMenu_ShortcutHeadersUseTwoColumnGrid()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ContextMenu_ShortcutHeadersUseTwoColumnGrid),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var showMenu = typeof(ModelSystemCanvas).GetMethod(
+                        "ShowContextMenu",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(showMenu);
+
+                    showMenu!.Invoke(canvas, new object?[] { null, null });
+
+                    var menu = canvas.ContextMenu;
+                    Assert.IsNotNull(menu);
+
+                    var addModuleItem = menu!.Items.OfType<MenuItem>().FirstOrDefault(item =>
+                        item.Header is Grid grid
+                        && grid.Children.OfType<TextBlock>().Any(text => text.Text == "Add Module…")
+                        && grid.Children.OfType<TextBlock>().Any(text => text.Text == "Ctrl+M"));
+
+                    Assert.IsNotNull(addModuleItem);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void ModelSystemCanvas_ResolveFilePathTargetNode_TargetsParameterNodeFromHook()
     {
         TestGuiHelper.RunInModelSystemContext(
