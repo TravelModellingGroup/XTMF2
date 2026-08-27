@@ -20,132 +20,129 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
+namespace XTMF2.RuntimeModules;
+[Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
+    Description = "Writes the provided mess to the log and then invokes the next step.")]
+public sealed class WriteToLogF<Return> : BaseFunction<Return>
 {
-    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-        Description = "Writes the provided mess to the log and then invokes the next step.")]
-    public sealed class WriteToLogF<Return> : BaseFunction<Return>
+    [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
+    public IFunction<Log> Log = null!;
+
+    [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
+    public IFunction<Return> ToInvoke = null!;
+
+    [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
+    public IFunction<string> Message = null!;
+
+    public override Return Invoke()
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IFunction<Log> Log = null!;
-
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
-        public IFunction<Return> ToInvoke = null!;
-
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<string> Message = null!;
-
-        public override Return Invoke()
-        {
-            var log = Log.Invoke();
-            log.Invoke(Message.Invoke());
-            return ToInvoke.Invoke();
-        }
+        var log = Log.Invoke();
+        log.Invoke(Message.Invoke());
+        return ToInvoke.Invoke();
     }
+}
 
-    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-        Description = "Writes the provided mess to the log and then invokes the next step.")]
-    public sealed class WriteToLogF<Context, Return> : BaseFunction<Context, Return>
+[Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
+    Description = "Writes the provided mess to the log and then invokes the next step.")]
+public sealed class WriteToLogF<Context, Return> : BaseFunction<Context, Return>
+{
+    [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
+    public IFunction<Log> Log = null!;
+
+    [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
+    public IFunction<Context, Return> ToInvoke = null!;
+
+    [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
+    public IFunction<string> Message = null!;
+
+    public override Return Invoke(Context context)
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IFunction<Log> Log = null!;
-
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
-        public IFunction<Context, Return> ToInvoke = null!;
-
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<string> Message = null!;
-
-        public override Return Invoke(Context context)
-        {
-            var log = Log.Invoke();
-            log.Invoke(Message.Invoke());
-            return ToInvoke.Invoke(context);
-        }
+        var log = Log.Invoke();
+        log.Invoke(Message.Invoke());
+        return ToInvoke.Invoke(context);
     }
+}
 
-    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-        Description = "Writes the provided mess to the log and then invokes the next step.")]
-    public sealed class WriteToLogBasedOnContextF<Context, Return> : BaseFunction<Context, Return>
+[Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
+    Description = "Writes the provided mess to the log and then invokes the next step.")]
+public sealed class WriteToLogBasedOnContextF<Context, Return> : BaseFunction<Context, Return>
+{
+    [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
+    public IFunction<Log> Log = null!;
+
+    [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
+    public IFunction<Context, Return> ToInvoke = null!;
+
+    [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
+    public IFunction<Context, string> Message = null!;
+
+    public override Return Invoke(Context context)
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IFunction<Log> Log = null!;
-
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
-        public IFunction<Context, Return> ToInvoke = null!;
-
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<Context, string> Message = null!;
-
-        public override Return Invoke(Context context)
-        {
-            var log = Log.Invoke();
-            log.Invoke(Message.Invoke(context));
-            return ToInvoke.Invoke(context);
-        }
+        var log = Log.Invoke();
+        log.Invoke(Message.Invoke(context));
+        return ToInvoke.Invoke(context);
     }
+}
 
-    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-        Description = "Writes the provided mess to the log and then invokes the next step.")]
-    public sealed class WriteToLogA : BaseAction
+[Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
+    Description = "Writes the provided mess to the log and then invokes the next step.")]
+public sealed class WriteToLogA : BaseAction
+{
+    [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
+    public IFunction<Log> Log = null!;
+
+    [SubModule(Required = false, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
+    public IAction? ToInvoke;
+
+    [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
+    public IFunction<string> Message = null!;
+
+    public override void Invoke()
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IFunction<Log> Log = null!;
-
-        [SubModule(Required = false, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
-        public IAction? ToInvoke;
-
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<string> Message = null!;
-
-        public override void Invoke()
-        {
-            var log = Log.Invoke();
-            log.Invoke(Message.Invoke());
-            ToInvoke?.Invoke();
-        }
+        var log = Log.Invoke();
+        log.Invoke(Message.Invoke());
+        ToInvoke?.Invoke();
     }
+}
 
-    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-        Description = "Writes the provided mess to the log and then invokes the next step.")]
-    public sealed class WriteToLogA<Context> : BaseAction<Context>
+[Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
+    Description = "Writes the provided mess to the log and then invokes the next step.")]
+public sealed class WriteToLogA<Context> : BaseAction<Context>
+{
+    [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
+    public IFunction<Log> Log = null!;
+
+    [SubModule(Required = false, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
+    public IAction<Context>? ToInvoke;
+
+    [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
+    public IFunction<string> Message = null!;
+
+    public override void Invoke(Context context)
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IFunction<Log> Log = null!;
-
-        [SubModule(Required = false, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
-        public IAction<Context>? ToInvoke;
-
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<string> Message = null!;
-
-        public override void Invoke(Context context)
-        {
-            var log = Log.Invoke();
-            log.Invoke(Message.Invoke());
-            ToInvoke?.Invoke(context);
-        }
+        var log = Log.Invoke();
+        log.Invoke(Message.Invoke());
+        ToInvoke?.Invoke(context);
     }
+}
 
-    [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
-        Description = "Writes the provided mess to the log and then invokes the next step.")]
-    public sealed class WriteToLogBasedOnContextA<Context> : BaseAction<Context>
+[Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
+    Description = "Writes the provided mess to the log and then invokes the next step.")]
+public sealed class WriteToLogBasedOnContextA<Context> : BaseAction<Context>
+{
+    [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
+    public IFunction<Log> Log = null!;
+
+    [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
+    public IAction<Context> ToInvoke = null!;
+
+    [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
+    public IFunction<Context, string> Message = null!;
+
+    public override void Invoke(Context context)
     {
-        [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
-        public IFunction<Log> Log = null!;
-
-        [SubModule(Required = true, Name = "To Invoke", Description = "The function to execute after writing to the log.", Index = 1, PassesExecution = true)]
-        public IAction<Context> ToInvoke = null!;
-
-        [Parameter(Required = true, Name = "Message", Description = "The message to write to the log.", DefaultValue = "", Index = 2)]
-        public IFunction<Context, string> Message = null!;
-
-        public override void Invoke(Context context)
-        {
-            var log = Log.Invoke();
-            log.Invoke(Message.Invoke(context));
-            ToInvoke.Invoke(context);
-        }
+        var log = Log.Invoke();
+        log.Invoke(Message.Invoke(context));
+        ToInvoke.Invoke(context);
     }
-
 }

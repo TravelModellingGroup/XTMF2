@@ -21,8 +21,7 @@ using System.Collections.Generic;
 using System.Text;
 using XTMF2.Configuration;
 
-namespace XTMF2.RuntimeModules
-{
+namespace XTMF2.RuntimeModules;
     [Module(Name = "Report Invocation", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ReportInvocation.html",
 Description = "Reports to XTMF that the model system has run through this point.")]
     public sealed class ReportFunctionInvocation<Return> : BaseFunction<Return> 
@@ -143,4 +142,3 @@ Description = "Reports to XTMF that the model system has run through this point.
             ToInvoke!.Invoke(context);
         }
     }
-}

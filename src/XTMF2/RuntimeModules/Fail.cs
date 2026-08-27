@@ -20,83 +20,82 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
+namespace XTMF2.RuntimeModules;
+
+[Module(Name = "Fail", Description = "Crash the model run with a message.",
+    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
+public sealed class FailA : BaseAction
 {
-    [Module(Name = "Fail", Description = "Crash the model run with a message.",
-        DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
-    public sealed class FailA : BaseAction
+    [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
+    public IFunction<string>? Message;
+
+    public override void Invoke()
     {
-        [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<string>? Message;
-
-        public override void Invoke()
-        {
-            throw new XTMFRuntimeException(this, Message?.Invoke());
-        }
+        throw new XTMFRuntimeException(this, Message?.Invoke());
     }
+}
 
-    [Module(Name = "Fail", Description = "Crash the model run with a message.",
-        DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
-    public sealed class FailA<Context> : BaseAction<Context>
-    {
-        [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<string>? Message;
-
-        public override void Invoke(Context context)
-        {
-            throw new XTMFRuntimeException(this, Message?.Invoke());
-        }
-    }
-
-    [Module(Name = "Fail", Description = "Crash the model run with a message.",
+[Module(Name = "Fail", Description = "Crash the model run with a message.",
     DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
-    public sealed class FailWithContextA<Context> : BaseAction<Context>
+public sealed class FailA<Context> : BaseAction<Context>
+{
+    [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
+    public IFunction<string>? Message;
+
+    public override void Invoke(Context context)
     {
-        [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<Context, string>? Message;
-
-        public override void Invoke(Context context)
-        {
-            throw new XTMFRuntimeException(this, Message?.Invoke(context));
-        }
+        throw new XTMFRuntimeException(this, Message?.Invoke());
     }
+}
 
-    [Module(Name = "Fail", Description = "Crash the model run with a message.",
+[Module(Name = "Fail", Description = "Crash the model run with a message.",
+DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
+public sealed class FailWithContextA<Context> : BaseAction<Context>
+{
+    [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
+    public IFunction<Context, string>? Message;
+
+    public override void Invoke(Context context)
+    {
+        throw new XTMFRuntimeException(this, Message?.Invoke(context));
+    }
+}
+
+[Module(Name = "Fail", Description = "Crash the model run with a message.",
+DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
+public sealed class FailF<Return> : BaseFunction<Return>
+{
+    [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
+    public IFunction<string>? Message;
+
+    public override Return Invoke()
+    {
+        throw new XTMFRuntimeException(this, Message?.Invoke());
+    }
+}
+
+[Module(Name = "Fail", Description = "Crash the model run with a message.",
     DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
-    public sealed class FailF<Return> : BaseFunction<Return>
-    {
-        [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<string>? Message;
+public sealed class FailF<Context, Return> : BaseFunction<Context, Return>
+{
+    [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
+    public IFunction<string>? Message;
 
-        public override Return Invoke()
-        {
-            throw new XTMFRuntimeException(this, Message?.Invoke());
-        }
+    public override Return Invoke(Context context)
+    {
+        throw new XTMFRuntimeException(this, Message?.Invoke());
     }
+}
 
-    [Module(Name = "Fail", Description = "Crash the model run with a message.",
-        DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
-    public sealed class FailF<Context, Return> : BaseFunction<Context, Return>
+[Module(Name = "Fail", Description = "Crash the model run with a message.",
+DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
+public sealed class FailWithContextF<Context, Return> : BaseFunction<Context, Return>
+{
+    [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
+    public IFunction<Context, string>? Message;
+
+    public override Return Invoke(Context context)
     {
-        [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<string>? Message;
-
-        public override Return Invoke(Context context)
-        {
-            throw new XTMFRuntimeException(this, Message?.Invoke());
-        }
-    }
-
-    [Module(Name = "Fail", Description = "Crash the model run with a message.",
-    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
-    public sealed class FailWithContextF<Context, Return> : BaseFunction<Context, Return>
-    {
-        [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
-        public IFunction<Context, string>? Message;
-
-        public override Return Invoke(Context context)
-        {
-            throw new XTMFRuntimeException(this, Message?.Invoke(context));
-        }
+        throw new XTMFRuntimeException(this, Message?.Invoke(context));
     }
 }

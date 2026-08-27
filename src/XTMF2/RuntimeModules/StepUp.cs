@@ -20,47 +20,46 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
+namespace XTMF2.RuntimeModules;
+
+[Module(Name = "Step Return Up", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/StepReturnUp.html",
+Description = "Converts the result of a function to the expected type from the calling module.")]
+public sealed class StepReturnUp<Original, ConvertTo> : BaseFunction<ConvertTo> 
+    where Original : ConvertTo
 {
-    [Module(Name = "Step Return Up", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/StepReturnUp.html",
-Description = "Converts the result of a function to the expected type from the calling module.")]
-    public sealed class StepReturnUp<Original, ConvertTo> : BaseFunction<ConvertTo> 
-        where Original : ConvertTo
-    {
-        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
-        public IFunction<Original>? ToInvoke;
+    [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
+    public IFunction<Original>? ToInvoke;
 
-        public override ConvertTo Invoke()
-        {
-            return ToInvoke!.Invoke();
-        }
+    public override ConvertTo Invoke()
+    {
+        return ToInvoke!.Invoke();
     }
+}
 
-    [Module(Name = "Step Return Up", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/StepReturnUp.html",
+[Module(Name = "Step Return Up", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/StepReturnUp.html",
 Description = "Converts the result of a function to the expected type from the calling module.")]
-    public sealed class StepReturnUp<Original, ConvertTo, Context> : BaseFunction<Context, ConvertTo> 
-        where Original : ConvertTo
-    {
-        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
-        public IFunction<Context, Original>? ToInvoke;
+public sealed class StepReturnUp<Original, ConvertTo, Context> : BaseFunction<Context, ConvertTo> 
+    where Original : ConvertTo
+{
+    [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
+    public IFunction<Context, Original>? ToInvoke;
 
-        public override ConvertTo Invoke(Context context)
-        {
-            return ToInvoke!.Invoke(context);
-        }
+    public override ConvertTo Invoke(Context context)
+    {
+        return ToInvoke!.Invoke(context);
     }
+}
 
-    [Module(Name = "Step Return Up", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/StepReturnUp.html",
+[Module(Name = "Step Return Up", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/StepReturnUp.html",
 Description = "Converts the result of a function to the expected type from the calling module.")]
-    public sealed class StepActionUp<Original, ConvertTo> : BaseAction<Original>
-        where Original : ConvertTo
-    {
-        [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
-        public IAction<ConvertTo>? ToInvoke;
+public sealed class StepActionUp<Original, ConvertTo> : BaseAction<Original>
+    where Original : ConvertTo
+{
+    [SubModule(Required = true, Name = "ToInvoke", Description = "Invoke with converted context", Index = 0)]
+    public IAction<ConvertTo>? ToInvoke;
 
-        public override void Invoke(Original context)
-        {
-            ToInvoke!.Invoke(context);
-        }
+    public override void Invoke(Original context)
+    {
+        ToInvoke!.Invoke(context);
     }
 }

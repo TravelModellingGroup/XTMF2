@@ -20,58 +20,57 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
-{
-    [Module(Name = "Open Read Stream From File", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/OpenReadStreamFromFile.html",
+namespace XTMF2.RuntimeModules;
+
+[Module(Name = "Open Read Stream From File", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/OpenReadStreamFromFile.html",
 Description = "Provides the ability to read a file from the path given to it via the context.")]
-    public class OpenReadStreamFromFile : BaseFunction<ReadStream>
+public class OpenReadStreamFromFile : BaseFunction<ReadStream>
+{
+    [Parameter(DefaultValue = "true", Description = "True if the file should be checked at runtime to ensure that it exists.", Index=1,
+        Name="Check File Exists At Run Start", Required = true)]
+    public IFunction<bool>? CheckFileExistsAtRunStart;
+
+    [Parameter(DefaultValue = "", Description = "The path to the file to load.", Index = 0,
+        Name = "File Path", Required = true)]
+    public IFunction<string>? FilePath;
+
+    public override ReadStream Invoke()
     {
-        [Parameter(DefaultValue = "true", Description = "True if the file should be checked at runtime to ensure that it exists.", Index=1,
-            Name="Check File Exists At Run Start", Required = true)]
-        public IFunction<bool>? CheckFileExistsAtRunStart;
-
-        [Parameter(DefaultValue = "", Description = "The path to the file to load.", Index = 0,
-            Name = "File Path", Required = true)]
-        public IFunction<string>? FilePath;
-
-        public override ReadStream Invoke()
+        try
         {
-            try
+            if (FilePath?.Invoke() is string path)
             {
-                if (FilePath?.Invoke() is string path)
-                {
-                    return new ReadStream(File.OpenRead(path));
-                }
-                else
-                {
-                    throw new XTMFRuntimeException(this, "No path was given to open a ReadStream from!");
-                }
+                return new ReadStream(File.OpenRead(path));
             }
-            catch(IOException e)
+            else
             {
-                throw new XTMFRuntimeException(this, e.Message, e);
+                throw new XTMFRuntimeException(this, "No path was given to open a ReadStream from!");
             }
         }
-
-        public override bool RuntimeValidation(ref string? error)
+        catch(IOException e)
         {
-            if(CheckFileExistsAtRunStart?.Invoke() == true)
-            {
-                if (FilePath?.Invoke() is string filePath)
-                {
-                    if (!File.Exists(filePath))
-                    {
-                        error = $"The file '{filePath}' does not exist!";
-                        return false;
-                    }
-                }
-                else
-                {
+            throw new XTMFRuntimeException(this, e.Message, e);
+        }
+    }
 
+    public override bool RuntimeValidation(ref string? error)
+    {
+        if(CheckFileExistsAtRunStart?.Invoke() == true)
+        {
+            if (FilePath?.Invoke() is string filePath)
+            {
+                if (!File.Exists(filePath))
+                {
+                    error = $"The file '{filePath}' does not exist!";
                     return false;
                 }
             }
-            return true;
+            else
+            {
+
+                return false;
+            }
         }
+        return true;
     }
 }

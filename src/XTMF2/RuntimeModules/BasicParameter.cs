@@ -20,19 +20,18 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
+namespace XTMF2.RuntimeModules;
+
+[Module(Name = "Basic Parameter", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/BasicParameter.html",
+Description = "Provides the ability to have a value in a model system.")]
+public class BasicParameter<T> : BaseFunction<T>
 {
-    [Module(Name = "Basic Parameter", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/BasicParameter.html",
-    Description = "Provides the ability to have a value in a model system.")]
-    public class BasicParameter<T> : BaseFunction<T>
-    {
 #pragma warning disable CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
-        public T Value;
+    public T Value;
 #pragma warning restore CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
 
-        public override T Invoke()
-        {
-            return Value;
-        }
+    public override T Invoke()
+    {
+        return Value;
     }
 }

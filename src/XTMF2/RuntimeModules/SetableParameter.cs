@@ -20,20 +20,19 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
-{
-    [Module(Name = "Setable Parameter", Description = "A basic data store of variable type that can be set.",
-        DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/SetableParameter.html")]
-    public sealed class SetableParameter<T> : BasicParameter<T>, ISetableValue<T>
-    {
-        public T Get()
-        {
-            return Value;
-        }
+namespace XTMF2.RuntimeModules;
 
-        public void Set(T value)
-        {
-            Value = value;
-        }
+[Module(Name = "Setable Parameter", Description = "A basic data store of variable type that can be set.",
+    DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/SetableParameter.html")]
+public sealed class SetableParameter<T> : BasicParameter<T>, ISetableValue<T>
+{
+    public T Get()
+    {
+        return Value;
+    }
+
+    public void Set(T value)
+    {
+        Value = value;
     }
 }

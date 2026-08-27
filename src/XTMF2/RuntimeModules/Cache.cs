@@ -21,78 +21,77 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 
-namespace XTMF2.RuntimeModules
+namespace XTMF2.RuntimeModules;
+
+[Module(Name = "Cache", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Cache.html",
+Description = "Provides a way to keep the result of a function unless unloaded by an event.")]
+public sealed class Cache<T> : BaseFunction<T>, IDisposable
 {
-    [Module(Name = "Cache", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Cache.html",
-    Description = "Provides a way to keep the result of a function unless unloaded by an event.")]
-    public sealed class Cache<T> : BaseFunction<T>, IDisposable
-    {
-        private readonly Lock _lock = new Lock();
+    private readonly Lock _lock = new Lock();
 
 #pragma warning disable CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
-        private T _cachedValue;
+    private T _cachedValue;
 #pragma warning restore CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
-        private bool _initialized = false;
+    private bool _initialized = false;
 
 
-        [SubModule(Required = true, Name = "Source", Description = "Get the cached data", Index = 0)]
-        public IFunction<T>? Source;
+    [SubModule(Required = true, Name = "Source", Description = "Get the cached data", Index = 0)]
+    public IFunction<T>? Source;
 
-        [SubModule(Required = false, Name = "Force Update", Description = "Invoke to force an update", Index = 1)]
-        public IEvent? ForceUpdate;
+    [SubModule(Required = false, Name = "Force Update", Description = "Invoke to force an update", Index = 1)]
+    public IEvent? ForceUpdate;
 
-        public override T Invoke()
+    public override T Invoke()
+    {
+        lock (_lock)
+        {
+            if (!_initialized)
+            {
+                _cachedValue = Source!.Invoke();
+                _initialized = true;
+                GC.ReRegisterForFinalize(this);
+            }
+            return _cachedValue!;
+        }
+    }
+
+    public override bool RuntimeValidation(ref string? error)
+    {
+        ForceUpdate?.Register(() =>
         {
             lock (_lock)
             {
-                if (!_initialized)
-                {
-                    _cachedValue = Source!.Invoke();
-                    _initialized = true;
-                    GC.ReRegisterForFinalize(this);
-                }
-                return _cachedValue!;
-            }
-        }
-
-        public override bool RuntimeValidation(ref string? error)
-        {
-            ForceUpdate?.Register(() =>
-            {
-                lock (_lock)
-                {
-                    _initialized = false;
-                    Dispose();
-                }
-            });
-            return true;
-        }
-
-        ~Cache()
-        {
-            Dispose(false);
-        }
-
-        private void Dispose(bool managed)
-        {
-            if(managed)
-            {
-                GC.SuppressFinalize(this);
-            }
-            lock (_lock)
-            {
-                if (_initialized && _cachedValue is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-                _cachedValue = default!;
                 _initialized = false;
+                Dispose();
             }
-        }
+        });
+        return true;
+    }
 
-        public void Dispose()
+    ~Cache()
+    {
+        Dispose(false);
+    }
+
+    private void Dispose(bool managed)
+    {
+        if(managed)
         {
-            Dispose(true);
+            GC.SuppressFinalize(this);
         }
+        lock (_lock)
+        {
+            if (_initialized && _cachedValue is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+            _cachedValue = default!;
+            _initialized = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
     }
 }
