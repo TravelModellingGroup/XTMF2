@@ -211,6 +211,70 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void ModelSystemCanvas_ParameterTabPosition_IgnoresHiddenOptionalHooks()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ParameterTabPosition_IgnoresHiddenOptionalHooks),
+            (user, projectSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "Origin",
+                    typeof(OptionalThenParameterGuiTestModule),
+                    new Rectangle(20, 40, 160, 60),
+                    out var origin,
+                    out var originError),
+                    originError?.Message);
+                Assert.IsNotNull(origin);
+
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "Editable Value",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>),
+                    Rectangle.Hidden,
+                    out var parameter,
+                    out var parameterError),
+                    parameterError?.Message);
+                Assert.IsNotNull(parameter);
+
+                var editableHook = origin!.Hooks.First(h => h.Name == "Editable Value");
+                Assert.IsTrue(msSession.AddLink(user, origin, editableHook, parameter!, out var link, out var linkError),
+                    linkError?.Message);
+                Assert.IsNotNull(link);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var buildCache = typeof(ModelSystemCanvas).GetMethod(
+                        "BuildHookAnchorCache",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var calculateRow = typeof(ModelSystemCanvas).GetMethod(
+                        "CalculateParameterRowPosition",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(buildCache);
+                    Assert.IsNotNull(calculateRow);
+
+                    buildCache!.Invoke(canvas, []);
+
+                    var originVm = vm.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, origin));
+                    Assert.IsNotNull(originVm);
+
+                    var result = calculateRow!.Invoke(canvas, [originVm!, editableHook]);
+                    Assert.IsNotNull(result);
+
+                    var row = ((double X, double Y, double W))result!;
+                    Assert.AreEqual(originVm!.Y + 28.0, row.Y, 0.0001,
+                        "The editor should align to the first visible hook row, not the raw hook index after a hidden optional hook.");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void ModelSystemCanvas_AutoScrollTimer_ContinuesForPendingLinkDrag()
     {
         TestGuiHelper.RunInModelSystemContext(

@@ -37,3 +37,17 @@ public sealed class LinkedGuiTestModule : BaseFunction<string>
 
     public override string Invoke() => Child?.Invoke() ?? string.Empty;
 }
+
+[Module(Name = "Optional Then Parameter GUI Test Module",
+    DocumentationLink = "http://example.com",
+    Description = "A module whose hidden optional hook precedes an inlined parameter hook.")]
+public sealed class OptionalThenParameterGuiTestModule : BaseFunction<string>
+{
+    [SubModule(Name = "Optional Child", Description = "An unselected optional hook", Required = false, Index = 0)]
+    public SimpleGuiTestModule? OptionalChild { get; set; }
+
+    [Parameter(Name = "Editable Value", Description = "An editable parameter hook", Required = false, Index = 1, DefaultValue = "")]
+    public IFunction<string>? EditableValue { get; set; }
+
+    public override string Invoke() => EditableValue?.Invoke() ?? string.Empty;
+}

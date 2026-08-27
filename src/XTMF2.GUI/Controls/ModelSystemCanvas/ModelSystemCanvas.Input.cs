@@ -1542,7 +1542,7 @@ partial class ModelSystemCanvas
                 return (nodeVm.X, nodeVm.Y + NodeHeaderHeight, NodeRenderWidth(nodeVm));
             }
 
-            var nodeHooks = nodeVm.UnderlyingNode.Hooks;
+            var nodeHooks = GetVisibleHooksForNode(nodeVm);
             if (nodeHooks is null) return null;
 
             int hookIdx = -1;
@@ -1625,6 +1625,38 @@ partial class ModelSystemCanvas
     {
         public object Hook { get; set; }
         public NodeViewModel? InlinedParam { get; set; }
+    }
+
+    private IReadOnlyList<NodeHook>? GetVisibleHooksForNode(NodeViewModel nodeVm)
+    {
+        if (_nodeVisibleHooks.TryGetValue(nodeVm, out var visibleHooks))
+        {
+            return visibleHooks;
+        }
+
+        var nodeHooks = nodeVm.UnderlyingNode.Hooks;
+        if (nodeHooks is null) return null;
+        if (_vm?.ShowAllHooks == true || nodeVm.ShowHooks)
+        {
+            return nodeHooks;
+        }
+
+        var connected = new HashSet<NodeHook>();
+        if (_vm is not null)
+        {
+            foreach (var link in _vm.Links)
+            {
+                if (ReferenceEquals(link.Origin, nodeVm))
+                {
+                    connected.Add(link.UnderlyingLink.OriginHook);
+                }
+            }
+        }
+
+        return [.. nodeHooks.Where(h =>
+            h.Cardinality == HookCardinality.Single ||
+            h.Cardinality == HookCardinality.AtLeastOne ||
+            connected.Contains(h))];
     }
 
     /// <summary>
