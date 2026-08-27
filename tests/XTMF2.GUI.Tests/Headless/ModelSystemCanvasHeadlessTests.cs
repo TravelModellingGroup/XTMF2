@@ -146,6 +146,71 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void ModelSystemCanvas_ArrowKeys_DoNotNavigateWhileEditingParameterOrComment()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ArrowKeys_DoNotNavigateWhileEditingParameterOrComment),
+            (user, projectSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "ParameterNode",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>),
+                    new Rectangle(20, 20, 160, 60),
+                    out var parameterNode,
+                    out var parameterError),
+                    parameterError?.Message);
+                Assert.IsNotNull(parameterNode);
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "RightNode",
+                    typeof(SimpleGuiTestModule),
+                    new Rectangle(260, 20, 160, 60),
+                    out _,
+                    out var rightNodeError),
+                    rightNodeError?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                vm.AddCommentBlockAt(20, 160);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var beginParamEdit = typeof(ModelSystemCanvas).GetMethod(
+                        "BeginParamEdit",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var beginCommentEdit = typeof(ModelSystemCanvas).GetMethod(
+                        "BeginCommentEdit",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var onKeyDown = typeof(ModelSystemCanvas).GetMethod(
+                        "OnKeyDown",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(beginParamEdit);
+                    Assert.IsNotNull(beginCommentEdit);
+                    Assert.IsNotNull(onKeyDown);
+
+                    var parameterVm = vm.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, parameterNode));
+                    var commentVm = vm.CommentBlocks.FirstOrDefault();
+                    Assert.IsNotNull(parameterVm);
+                    Assert.IsNotNull(commentVm);
+
+                    vm.SelectElementCommand.Execute(commentVm);
+                    beginCommentEdit!.Invoke(canvas, new object[] { commentVm! });
+                    onKeyDown!.Invoke(canvas, new object[] { new KeyEventArgs { Key = Key.Right } });
+                    Assert.AreSame(commentVm, vm.SelectedElement);
+
+                    vm.SelectElementCommand.Execute(parameterVm);
+                    beginParamEdit!.Invoke(canvas, new object?[] { parameterVm!, -1.0, -1.0, -1.0, null, null });
+                    onKeyDown.Invoke(canvas, new object[] { new KeyEventArgs { Key = Key.Right } });
+                    Assert.AreSame(parameterVm, vm.SelectedElement);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void ModelSystemCanvas_AutoScrollTimer_ContinuesForPendingLinkDrag()
     {
         TestGuiHelper.RunInModelSystemContext(

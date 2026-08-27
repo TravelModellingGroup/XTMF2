@@ -186,7 +186,7 @@ partial class ModelSystemCanvas
             }
         }
         else if (e.Key == Key.Up
-            && _editingParamNode is null
+            && !IsParameterOrCommentEditing
             && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
         {
             // Arrow Up: navigate to nearest element above current selection.
@@ -194,20 +194,24 @@ partial class ModelSystemCanvas
             e.Handled = true;
         }
         else if (e.Key == Key.Down
-            && _editingParamNode is null
+            && !IsParameterOrCommentEditing
             && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
         {
             // Arrow Down: navigate to nearest element below current selection.
             NavigateToNextElement(NavigationDirection.Down);
             e.Handled = true;
         }
-        else if (e.Key == Key.Left && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        else if (e.Key == Key.Left
+            && !IsParameterOrCommentEditing
+            && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
         {
             // Arrow Left: navigate to nearest element to the left of current selection.
             NavigateToNextElement(NavigationDirection.Left);
             e.Handled = true;
         }
-        else if (e.Key == Key.Right && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        else if (e.Key == Key.Right
+            && !IsParameterOrCommentEditing
+            && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
         {
             // Arrow Right: navigate to nearest element to the right of current selection.
             NavigateToNextElement(NavigationDirection.Right);
@@ -240,6 +244,11 @@ partial class ModelSystemCanvas
         }
         base.OnKeyDown(e);
     }
+
+    private bool IsParameterOrCommentEditing =>
+        _editingParamNode is not null
+        || _editingCommentBlock is not null
+        || _editingCommentHeaderBlock is not null;
 
     private bool TryHandleAddShortcut(KeyEventArgs e)
     {
