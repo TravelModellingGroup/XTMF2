@@ -1036,6 +1036,7 @@ public sealed partial class ModelSystemCanvas : Control
                 Math.Max(0, sv.Offset.X + dx),
                 Math.Max(0, sv.Offset.Y + dy));
             RefreshPendingLinkCurrentPos(svPos);
+            RefreshSelectionRectCurrentPos(svPos);
             if (!_autoScrollTimer.IsEnabled)
                 _autoScrollTimer.Start();
         }
@@ -1053,7 +1054,7 @@ public sealed partial class ModelSystemCanvas : Control
     /// </summary>
     private void OnAutoScrollTick(object? sender, EventArgs e)
     {
-        if (_dragging is null && _linkOrigin is null)
+        if (_dragging is null && _linkOrigin is null && _selRectStart is null)
         {
             _autoScrollTimer.Stop();
             return;
@@ -1069,6 +1070,19 @@ public sealed partial class ModelSystemCanvas : Control
         if (sv is null) return;
 
         _linkCurrentPos = new Point(
+            (sv.Offset.X + svPos.X) / _scale,
+            (sv.Offset.Y + svPos.Y) / _scale);
+        InvalidateVisual();
+    }
+
+    private void RefreshSelectionRectCurrentPos(Point svPos)
+    {
+        if (_selRectStart is null) return;
+
+        var sv = GetScrollViewer();
+        if (sv is null) return;
+
+        _selRectCurrent = new Point(
             (sv.Offset.X + svPos.X) / _scale,
             (sv.Offset.Y + svPos.Y) / _scale);
         InvalidateVisual();

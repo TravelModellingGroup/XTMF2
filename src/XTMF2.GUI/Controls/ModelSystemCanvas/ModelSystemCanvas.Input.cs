@@ -828,6 +828,7 @@ partial class ModelSystemCanvas
         if (_selRectStart is not null)
         {
             _selRectCurrent = mpos;
+            TryAutoScrollForDrag(svPos);
             InvalidateVisual();
             e.Handled = true;
             return;
