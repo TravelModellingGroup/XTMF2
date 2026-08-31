@@ -77,6 +77,10 @@ partial class ModelSystemCanvas
             ClearMultiSelection();
             e.Handled = true;
         }
+        else if (TryHandleAddShortcut(e))
+        {
+            e.Handled = true;
+        }
         else if ((e.Key is Key.Return or Key.Enter) && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
             if (_vm.SelectedElement is FunctionTemplateViewModel ftvm)
@@ -182,7 +186,7 @@ partial class ModelSystemCanvas
             }
         }
         else if (e.Key == Key.Up
-            && _editingParamNode is null
+            && !IsParameterOrCommentEditing
             && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
         {
             // Arrow Up: navigate to nearest element above current selection.
@@ -190,20 +194,24 @@ partial class ModelSystemCanvas
             e.Handled = true;
         }
         else if (e.Key == Key.Down
-            && _editingParamNode is null
+            && !IsParameterOrCommentEditing
             && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
         {
             // Arrow Down: navigate to nearest element below current selection.
             NavigateToNextElement(NavigationDirection.Down);
             e.Handled = true;
         }
-        else if (e.Key == Key.Left && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        else if (e.Key == Key.Left
+            && !IsParameterOrCommentEditing
+            && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
         {
             // Arrow Left: navigate to nearest element to the left of current selection.
             NavigateToNextElement(NavigationDirection.Left);
             e.Handled = true;
         }
-        else if (e.Key == Key.Right && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
+        else if (e.Key == Key.Right
+            && !IsParameterOrCommentEditing
+            && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) == 0)
         {
             // Arrow Right: navigate to nearest element to the right of current selection.
             NavigateToNextElement(NavigationDirection.Right);
@@ -235,6 +243,53 @@ partial class ModelSystemCanvas
             }
         }
         base.OnKeyDown(e);
+    }
+
+    private bool IsParameterOrCommentEditing =>
+        _editingParamNode is not null
+        || _editingCommentBlock is not null
+        || _editingCommentHeaderBlock is not null;
+
+    private bool TryHandleAddShortcut(KeyEventArgs e)
+    {
+        if (_vm is null
+            || _editingParamNode is not null
+            || _editingNameElement is not null
+            || _editingCommentBlock is not null
+            || _editingCommentHeaderBlock is not null
+            || (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift)) != KeyModifiers.Control)
+        {
+            return false;
+        }
+
+        var spawnPt = GetKeyboardSpawnPoint();
+        switch (e.Key)
+        {
+            case Key.M:
+                _ = _vm.AddModuleAtAsync(spawnPt.X, spawnPt.Y);
+                return true;
+            case Key.I:
+                _ = _vm.AddFunctionInstanceAtAsync(spawnPt.X, spawnPt.Y);
+                return true;
+            case Key.T:
+                _ = _vm.AddFunctionTemplateAtAsync(spawnPt.X, spawnPt.Y);
+                return true;
+            case Key.N:
+                _vm.AddCommentBlockAt(spawnPt.X, spawnPt.Y);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private Point GetKeyboardSpawnPoint()
+    {
+        var sv = GetScrollViewer();
+        double viewportWidth = sv?.Viewport.Width ?? Bounds.Width;
+        double viewportHeight = sv?.Viewport.Height ?? Bounds.Height;
+        double x = ((sv?.Offset.X ?? 0) + viewportWidth / 2.0) / _scale;
+        double y = ((sv?.Offset.Y ?? 0) + viewportHeight / 2.0) / _scale;
+        return new Point(x, y);
     }
     
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -726,6 +781,7 @@ partial class ModelSystemCanvas
         if (_linkOrigin is not null)
         {
             _linkCurrentPos = mpos;
+            TryAutoScrollForDrag(svPos);
             InvalidateVisual();
             e.Handled = true;
             return;
@@ -772,6 +828,7 @@ partial class ModelSystemCanvas
         if (_selRectStart is not null)
         {
             _selRectCurrent = mpos;
+            TryAutoScrollForDrag(svPos);
             InvalidateVisual();
             e.Handled = true;
             return;
@@ -1485,7 +1542,7 @@ partial class ModelSystemCanvas
                 return (nodeVm.X, nodeVm.Y + NodeHeaderHeight, NodeRenderWidth(nodeVm));
             }
 
-            var nodeHooks = nodeVm.UnderlyingNode.Hooks;
+            var nodeHooks = GetVisibleHooksForNode(nodeVm);
             if (nodeHooks is null) return null;
 
             int hookIdx = -1;
@@ -1568,6 +1625,38 @@ partial class ModelSystemCanvas
     {
         public object Hook { get; set; }
         public NodeViewModel? InlinedParam { get; set; }
+    }
+
+    private IReadOnlyList<NodeHook>? GetVisibleHooksForNode(NodeViewModel nodeVm)
+    {
+        if (_nodeVisibleHooks.TryGetValue(nodeVm, out var visibleHooks))
+        {
+            return visibleHooks;
+        }
+
+        var nodeHooks = nodeVm.UnderlyingNode.Hooks;
+        if (nodeHooks is null) return null;
+        if (_vm?.ShowAllHooks == true || nodeVm.ShowHooks)
+        {
+            return nodeHooks;
+        }
+
+        var connected = new HashSet<NodeHook>();
+        if (_vm is not null)
+        {
+            foreach (var link in _vm.Links)
+            {
+                if (ReferenceEquals(link.Origin, nodeVm))
+                {
+                    connected.Add(link.UnderlyingLink.OriginHook);
+                }
+            }
+        }
+
+        return [.. nodeHooks.Where(h =>
+            h.Cardinality == HookCardinality.Single ||
+            h.Cardinality == HookCardinality.AtLeastOne ||
+            connected.Contains(h))];
     }
 
     /// <summary>

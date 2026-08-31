@@ -20,64 +20,63 @@
 using System.Diagnostics.CodeAnalysis;
 using XTMF2.ModelSystemConstruct;
 
-namespace XTMF2.RuntimeModules
+namespace XTMF2.RuntimeModules;
+
+[Module(Name = "Scripted Parameter", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ScriptedParameter.html",
+Description = "Provides the ability to have a value that is calculated in an expression.")]
+public sealed class ScriptedParameter<T> : BaseFunction<T>
 {
-    [Module(Name = "Scripted Parameter", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ScriptedParameter.html",
-    Description = "Provides the ability to have a value that is calculated in an expression.")]
-    public sealed class ScriptedParameter<T> : BaseFunction<T>
-    {
 #pragma warning disable CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
-        public ParameterExpression Expression;
+    public ParameterExpression Expression;
 #pragma warning restore CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
 
-        public override T Invoke()
+    public override T Invoke()
+    {
+        string? error = null;
+        if (!Expression.IsCompatible(typeof(T), ref error))
         {
-            string? error = null;
-            if (!Expression.IsCompatible(typeof(T), ref error))
-            {
-                Throw(error);
-            }
-            var ret = Expression.GetValue(this, typeof(T), ref error);
-            if (ret is null)
-            {
-                ThrowGotNull();
-            }
-            return (T)ret;
+            Throw(error);
         }
+        var ret = Expression.GetValue(this, typeof(T), ref error);
+        if (ret is null)
+        {
+            ThrowGotNull();
+        }
+        return (T)ret;
+    }
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="error"></param>
-        /// <exception cref="XTMFRuntimeException">The requested error message.</exception>
-        [DoesNotReturn]
-        private void Throw(string error)
-        {
-            throw new XTMFRuntimeException(this, error);
-        }
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="error"></param>
+    /// <exception cref="XTMFRuntimeException">The requested error message.</exception>
+    [DoesNotReturn]
+    private void Throw(string error)
+    {
+        throw new XTMFRuntimeException(this, error);
+    }
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <exception cref="XTMFRuntimeException"></exception>
-        [DoesNotReturn]
-        private void ThrowGotNull()
-        {
-            throw new XTMFRuntimeException(this, $"Unable to get a {typeof(T).FullName} value from expression '{Expression.Representation}'!");
-        }
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <exception cref="XTMFRuntimeException"></exception>
+    [DoesNotReturn]
+    private void ThrowGotNull()
+    {
+        throw new XTMFRuntimeException(this, $"Unable to get a {typeof(T).FullName} value from expression '{Expression.Representation}'!");
+    }
 
-        public override bool RuntimeValidation(ref string? error)
+    public override bool RuntimeValidation(ref string? error)
+    {
+        if(!base.RuntimeValidation(ref error))
         {
-            if(!base.RuntimeValidation(ref error))
-            {
-                return false;
-            }
-            if (Expression is null)
-            {
-                error = "Expression is not set!";
-                return false;
-            }
-            return true;
+            return false;
         }
+        if (Expression is null)
+        {
+            error = "Expression is not set!";
+            return false;
+        }
+        return true;
     }
 }

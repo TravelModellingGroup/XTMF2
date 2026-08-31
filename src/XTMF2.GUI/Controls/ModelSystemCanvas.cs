@@ -997,7 +997,7 @@ public sealed partial class ModelSystemCanvas : Control
 
     /// <summary>
     /// Scrolls the host <see cref="ScrollViewer"/> when the pointer is within
-    /// <see cref="AutoScrollZone"/> pixels of any viewport edge during an element drag.
+    /// <see cref="AutoScrollZone"/> pixels of any viewport edge during a drag.
     /// The scroll delta is proportional to how far inside the zone the cursor sits,
     /// reaching <see cref="AutoScrollSpeed"/> at the very edge.
     /// Also starts/stops the continuous <see cref="_autoScrollTimer"/> based on whether
@@ -1035,6 +1035,8 @@ public sealed partial class ModelSystemCanvas : Control
             sv.Offset = new Vector(
                 Math.Max(0, sv.Offset.X + dx),
                 Math.Max(0, sv.Offset.Y + dy));
+            RefreshPendingLinkCurrentPos(svPos);
+            RefreshSelectionRectCurrentPos(svPos);
             if (!_autoScrollTimer.IsEnabled)
                 _autoScrollTimer.Start();
         }
@@ -1052,12 +1054,38 @@ public sealed partial class ModelSystemCanvas : Control
     /// </summary>
     private void OnAutoScrollTick(object? sender, EventArgs e)
     {
-        if (_dragging is null)
+        if (_dragging is null && _linkOrigin is null && _selRectStart is null)
         {
             _autoScrollTimer.Stop();
             return;
         }
         TryAutoScrollForDrag(_lastSvPos);
+    }
+
+    private void RefreshPendingLinkCurrentPos(Point svPos)
+    {
+        if (_linkOrigin is null) return;
+
+        var sv = GetScrollViewer();
+        if (sv is null) return;
+
+        _linkCurrentPos = new Point(
+            (sv.Offset.X + svPos.X) / _scale,
+            (sv.Offset.Y + svPos.Y) / _scale);
+        InvalidateVisual();
+    }
+
+    private void RefreshSelectionRectCurrentPos(Point svPos)
+    {
+        if (_selRectStart is null) return;
+
+        var sv = GetScrollViewer();
+        if (sv is null) return;
+
+        _selRectCurrent = new Point(
+            (sv.Offset.X + svPos.X) / _scale,
+            (sv.Offset.Y + svPos.Y) / _scale);
+        InvalidateVisual();
     }
 
     private void OnZoomTextBoxKeyDown(object? sender, KeyEventArgs e)

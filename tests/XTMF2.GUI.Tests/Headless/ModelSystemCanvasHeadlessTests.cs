@@ -19,6 +19,8 @@
 
 using Avalonia.Headless;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.GUI.Controls;
 using XTMF2.GUI.Tests.Modules;
@@ -68,6 +70,277 @@ public class ModelSystemCanvasHeadlessTests
             var canvas = new ModelSystemCanvas();
             // Without setting DataContext, the canvas VM is null.
             Assert.IsNull(canvas.DataContext);
+        }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_AddShortcuts_CreateCommentAndFunctionTemplate()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_AddShortcuts_CreateCommentAndFunctionTemplate),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    canvas.Measure(new Avalonia.Size(800, 600));
+                    canvas.Arrange(new Avalonia.Rect(0, 0, 800, 600));
+
+                    var handleAddShortcut = typeof(ModelSystemCanvas).GetMethod(
+                        "TryHandleAddShortcut",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(handleAddShortcut);
+
+                    var commentShortcut = new KeyEventArgs
+                    {
+                        Key = Key.N,
+                        KeyModifiers = KeyModifiers.Control
+                    };
+                    var templateShortcut = new KeyEventArgs
+                    {
+                        Key = Key.T,
+                        KeyModifiers = KeyModifiers.Control
+                    };
+
+                    Assert.IsTrue((bool)handleAddShortcut!.Invoke(canvas, new object[] { commentShortcut })!);
+                    Assert.IsTrue((bool)handleAddShortcut.Invoke(canvas, new object[] { templateShortcut })!);
+
+                    Assert.HasCount(1, vm.CommentBlocks);
+                    Assert.HasCount(1, vm.FunctionTemplates);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_ContextMenu_ShortcutHeadersUseTwoColumnGrid()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ContextMenu_ShortcutHeadersUseTwoColumnGrid),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var showMenu = typeof(ModelSystemCanvas).GetMethod(
+                        "ShowContextMenu",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(showMenu);
+
+                    showMenu!.Invoke(canvas, new object?[] { null, null });
+
+                    var menu = canvas.ContextMenu;
+                    Assert.IsNotNull(menu);
+
+                    var addModuleItem = menu!.Items.OfType<MenuItem>().FirstOrDefault(item =>
+                        item.Header is Grid grid
+                        && grid.Children.OfType<TextBlock>().Any(text => text.Text == "Add Module…")
+                        && grid.Children.OfType<TextBlock>().Any(text => text.Text == "Ctrl+M"));
+
+                    Assert.IsNotNull(addModuleItem);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_ArrowKeys_DoNotNavigateWhileEditingParameterOrComment()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ArrowKeys_DoNotNavigateWhileEditingParameterOrComment),
+            (user, projectSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "ParameterNode",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>),
+                    new Rectangle(20, 20, 160, 60),
+                    out var parameterNode,
+                    out var parameterError),
+                    parameterError?.Message);
+                Assert.IsNotNull(parameterNode);
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "RightNode",
+                    typeof(SimpleGuiTestModule),
+                    new Rectangle(260, 20, 160, 60),
+                    out _,
+                    out var rightNodeError),
+                    rightNodeError?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                vm.AddCommentBlockAt(20, 160);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var beginParamEdit = typeof(ModelSystemCanvas).GetMethod(
+                        "BeginParamEdit",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var beginCommentEdit = typeof(ModelSystemCanvas).GetMethod(
+                        "BeginCommentEdit",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var onKeyDown = typeof(ModelSystemCanvas).GetMethod(
+                        "OnKeyDown",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(beginParamEdit);
+                    Assert.IsNotNull(beginCommentEdit);
+                    Assert.IsNotNull(onKeyDown);
+
+                    var parameterVm = vm.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, parameterNode));
+                    var commentVm = vm.CommentBlocks.FirstOrDefault();
+                    Assert.IsNotNull(parameterVm);
+                    Assert.IsNotNull(commentVm);
+
+                    vm.SelectElementCommand.Execute(commentVm);
+                    beginCommentEdit!.Invoke(canvas, new object[] { commentVm! });
+                    onKeyDown!.Invoke(canvas, new object[] { new KeyEventArgs { Key = Key.Right } });
+                    Assert.AreSame(commentVm, vm.SelectedElement);
+
+                    vm.SelectElementCommand.Execute(parameterVm);
+                    beginParamEdit!.Invoke(canvas, new object?[] { parameterVm!, -1.0, -1.0, -1.0, null, null });
+                    onKeyDown.Invoke(canvas, new object[] { new KeyEventArgs { Key = Key.Right } });
+                    Assert.AreSame(parameterVm, vm.SelectedElement);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_ParameterTabPosition_IgnoresHiddenOptionalHooks()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ParameterTabPosition_IgnoresHiddenOptionalHooks),
+            (user, projectSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "Origin",
+                    typeof(OptionalThenParameterGuiTestModule),
+                    new Rectangle(20, 40, 160, 60),
+                    out var origin,
+                    out var originError),
+                    originError?.Message);
+                Assert.IsNotNull(origin);
+
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    boundary,
+                    "Editable Value",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>),
+                    Rectangle.Hidden,
+                    out var parameter,
+                    out var parameterError),
+                    parameterError?.Message);
+                Assert.IsNotNull(parameter);
+
+                var editableHook = origin!.Hooks.First(h => h.Name == "Editable Value");
+                Assert.IsTrue(msSession.AddLink(user, origin, editableHook, parameter!, out var link, out var linkError),
+                    linkError?.Message);
+                Assert.IsNotNull(link);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var buildCache = typeof(ModelSystemCanvas).GetMethod(
+                        "BuildHookAnchorCache",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var calculateRow = typeof(ModelSystemCanvas).GetMethod(
+                        "CalculateParameterRowPosition",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(buildCache);
+                    Assert.IsNotNull(calculateRow);
+
+                    buildCache!.Invoke(canvas, []);
+
+                    var originVm = vm.Nodes.FirstOrDefault(n => ReferenceEquals(n.UnderlyingNode, origin));
+                    Assert.IsNotNull(originVm);
+
+                    var result = calculateRow!.Invoke(canvas, [originVm!, editableHook]);
+                    Assert.IsNotNull(result);
+
+                    var row = ((double X, double Y, double W))result!;
+                    Assert.AreEqual(originVm!.Y + 28.0, row.Y, 0.0001,
+                        "The editor should align to the first visible hook row, not the raw hook index after a hidden optional hook.");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_AutoScrollTimer_ContinuesForPendingLinkDrag()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_AutoScrollTimer_ContinuesForPendingLinkDrag),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                vm.AddStartAt(20, 20);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var linkOriginField = typeof(ModelSystemCanvas).GetField(
+                        "_linkOrigin",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var timerField = typeof(ModelSystemCanvas).GetField(
+                        "_autoScrollTimer",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var autoScrollTick = typeof(ModelSystemCanvas).GetMethod(
+                        "OnAutoScrollTick",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+
+                    Assert.IsNotNull(linkOriginField);
+                    Assert.IsNotNull(timerField);
+                    Assert.IsNotNull(autoScrollTick);
+
+                    linkOriginField!.SetValue(canvas, vm.Starts[0]);
+                    var timer = (DispatcherTimer)timerField!.GetValue(canvas)!;
+                    timer.Start();
+
+                    autoScrollTick!.Invoke(canvas, new object?[] { null, EventArgs.Empty });
+
+                    Assert.IsTrue(timer.IsEnabled);
+                    timer.Stop();
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_AutoScrollTimer_ContinuesForRubberBandSelection()
+    {
+        Session.Dispatch(() =>
+        {
+            var canvas = new ModelSystemCanvas();
+            var selectionStartField = typeof(ModelSystemCanvas).GetField(
+                "_selRectStart",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            var timerField = typeof(ModelSystemCanvas).GetField(
+                "_autoScrollTimer",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            var autoScrollTick = typeof(ModelSystemCanvas).GetMethod(
+                "OnAutoScrollTick",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            Assert.IsNotNull(selectionStartField);
+            Assert.IsNotNull(timerField);
+            Assert.IsNotNull(autoScrollTick);
+
+            selectionStartField!.SetValue(canvas, new Avalonia.Point(20, 20));
+            var timer = (DispatcherTimer)timerField!.GetValue(canvas)!;
+            timer.Start();
+
+            autoScrollTick!.Invoke(canvas, new object?[] { null, EventArgs.Empty });
+
+            Assert.IsTrue(timer.IsEnabled);
+            timer.Stop();
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
     }
 

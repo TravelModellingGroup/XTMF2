@@ -385,6 +385,16 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
     /// <summary>Pick button for the second type-argument slot (the ReturnType for IFunction).</summary>
     private async void PickTypeArg1_Click(object? sender, RoutedEventArgs e) => await PickTypeArgAsync(1);
 
+    private void FilterBox_EnterPressed(object? sender, RoutedEventArgs e)
+    {
+        if (FilteredTypes.Count > 0)
+        {
+            TypeListBox.SelectedIndex = 0;
+        }
+
+        OK_Click(null, e);
+    }
+
     private void OK_Click(object? sender, RoutedEventArgs e)
     {
         if (!CanOK) return;

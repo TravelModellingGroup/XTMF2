@@ -21,63 +21,62 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
+namespace XTMF2.RuntimeModules;
+
+[Module(Name = "Basic Event", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/BasicEvent.html",
+Description = "Provides the ability for modules to invoke a set of other modules that are waiting for something to occur.")]
+public sealed class BasicEvent : BaseEvent
 {
-    [Module(Name = "Basic Event", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/BasicEvent.html",
-    Description = "Provides the ability for modules to invoke a set of other modules that are waiting for something to occur.")]
-    public sealed class BasicEvent : BaseEvent
+    private readonly List<Action> _toInvoke = new List<Action>();
+
+    public override void Invoke()
     {
-        private readonly List<Action> _toInvoke = new List<Action>();
-
-        public override void Invoke()
+        // make a copy in case the invocation causes an additional registration
+        List<Action> copy;
+        lock(_toInvoke)
         {
-            // make a copy in case the invocation causes an additional registration
-            List<Action> copy;
-            lock(_toInvoke)
-            {
-                copy = _toInvoke.ToList();
-            }
-            foreach(var registered in copy)
-            {
-                registered.Invoke();
-            }
+            copy = _toInvoke.ToList();
         }
-
-        public override void Register(Action module)
+        foreach(var registered in copy)
         {
-            lock(_toInvoke)
-            {
-                _toInvoke.Add(module);
-            }
+            registered.Invoke();
         }
     }
 
-    [Module(Name = "Basic Event", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/BasicEvent.html",
-    Description = "Provides the ability for modules to invoke a set of other modules that are waiting for something to occur.")]
-    public sealed class BasicEvent<Context> : BaseEvent<Context>
+    public override void Register(Action module)
     {
-        private readonly List<Action<Context>> _toInvoke = new List<Action<Context>>();
-
-        public override void Invoke(Context context)
+        lock(_toInvoke)
         {
-            // make a copy in case the invocation causes an additional registration
-            List<Action<Context>> copy;
-            lock (_toInvoke)
-            {
-                copy = _toInvoke.ToList();
-            }
-            foreach (var registered in copy)
-            {
-                registered.Invoke(context);
-            }
+            _toInvoke.Add(module);
         }
+    }
+}
 
-        public override void Register(Action<Context> module)
+[Module(Name = "Basic Event", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/BasicEvent.html",
+Description = "Provides the ability for modules to invoke a set of other modules that are waiting for something to occur.")]
+public sealed class BasicEvent<Context> : BaseEvent<Context>
+{
+    private readonly List<Action<Context>> _toInvoke = new List<Action<Context>>();
+
+    public override void Invoke(Context context)
+    {
+        // make a copy in case the invocation causes an additional registration
+        List<Action<Context>> copy;
+        lock (_toInvoke)
         {
-            lock (_toInvoke)
-            {
-                _toInvoke.Add(module);
-            }
+            copy = _toInvoke.ToList();
+        }
+        foreach (var registered in copy)
+        {
+            registered.Invoke(context);
+        }
+    }
+
+    public override void Register(Action<Context> module)
+    {
+        lock (_toInvoke)
+        {
+            _toInvoke.Add(module);
         }
     }
 }

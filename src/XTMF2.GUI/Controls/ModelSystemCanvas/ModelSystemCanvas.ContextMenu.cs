@@ -19,7 +19,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Layout;
 using Avalonia.Styling;
 using XTMF2.GUI.ViewModels;
 using XTMF2.ModelSystemConstruct;
@@ -100,6 +102,34 @@ partial class ModelSystemCanvas
             FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
             _ => null,
         };
+
+    private static Grid CreateShortcutMenuHeader(string description, string shortcut)
+    {
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            MinWidth = 280
+        };
+
+        var descriptionText = new TextBlock
+        {
+            Text = description
+        };
+
+        var shortcutText = new TextBlock
+        {
+            Text = shortcut,
+            Margin = new Thickness(24, 0, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Opacity = 0.65
+        };
+
+        Grid.SetColumn(descriptionText, 0);
+        Grid.SetColumn(shortcutText, 1);
+        grid.Children.Add(descriptionText);
+        grid.Children.Add(shortcutText);
+        return grid;
+    }
 
     private List<Link> GetDisableTargetsForClickedLink(LinkViewModel clickedLink)
     {
@@ -304,19 +334,19 @@ partial class ModelSystemCanvas
             addStartItem.Click += (_, _) => _vm.AddStartAt(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addStartItem);
 
-            var addModuleItem = new MenuItem { Header = "Add Module…" };
+            var addModuleItem = new MenuItem { Header = CreateShortcutMenuHeader("Add Module…", "Ctrl+M") };
             addModuleItem.Click += (_, _) => _ = _vm.AddModuleAtAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addModuleItem);
 
-            var addCommentItem = new MenuItem { Header = "Add Comment" };
+            var addCommentItem = new MenuItem { Header = CreateShortcutMenuHeader("Add Comment", "Ctrl+N") };
             addCommentItem.Click += (_, _) => _vm.AddCommentBlockAt(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addCommentItem);
 
-            var addFtItem = new MenuItem { Header = "Add Function Template…" };
+            var addFtItem = new MenuItem { Header = CreateShortcutMenuHeader("Add Function Template…", "Ctrl+T") };
             addFtItem.Click += (_, _) => _ = _vm.AddFunctionTemplateAtAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addFtItem);
 
-            var addFiItem = new MenuItem { Header = "Add Function Instance…" };
+            var addFiItem = new MenuItem { Header = CreateShortcutMenuHeader("Add Function Instance…", "Ctrl+I") };
             addFiItem.Click += (_, _) => _ = _vm.AddFunctionInstanceAtAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(addFiItem);
 
@@ -330,7 +360,7 @@ partial class ModelSystemCanvas
 
             // ── Paste (always available; reads system clipboard at click-time) ────
             bgMenu.Items.Add(new Separator());
-            var pasteItem = new MenuItem { Header = "Paste\tCtrl+V" };
+            var pasteItem = new MenuItem { Header = CreateShortcutMenuHeader("Paste", "Ctrl+V") };
             pasteItem.Click += (_, _) => _ = PasteElementsAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(pasteItem);
 
@@ -855,12 +885,12 @@ partial class ModelSystemCanvas
                 el is NodeViewModel envm && !envm.IsParameterNode
                 || el is FunctionInstanceViewModel);
 
-            string extractHeader = extractCount > 1
-                ? $"Extract {extractCount} Elements to Function Template…\tCtrl+Shift+M"
-                : "Extract to Function Template…\tCtrl+Shift+M";
+            string extractDescription = extractCount > 1
+                ? $"Extract {extractCount} Elements to Function Template…"
+                : "Extract to Function Template…";
 
             var capturedExtractElements = selElements;
-            var extractItem = new MenuItem { Header = extractHeader };
+            var extractItem = new MenuItem { Header = CreateShortcutMenuHeader(extractDescription, "Ctrl+Shift+M") };
             extractItem.Click += (_, _) => _ = vm.ExtractSelectionToFunctionTemplateAsync(capturedExtractElements);
             menu.Items.Add(new Separator());
             menu.Items.Add(extractItem);
@@ -1071,9 +1101,9 @@ partial class ModelSystemCanvas
                       _                        => false,
                   })
                 : 1;
-            string copyHeader = copyCount > 1 ? $"Copy {copyCount} Elements\tCtrl+C" : "Copy\tCtrl+C";
+            string copyDescription = copyCount > 1 ? $"Copy {copyCount} Elements" : "Copy";
 
-            var copyItem = new MenuItem { Header = copyHeader };
+            var copyItem = new MenuItem { Header = CreateShortcutMenuHeader(copyDescription, "Ctrl+C") };
             copyItem.Click += (_, _) =>
             {
                 // Narrow selection to just this element when it isn't already multi-selected.

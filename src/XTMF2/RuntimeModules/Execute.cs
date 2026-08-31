@@ -21,93 +21,92 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace XTMF2.RuntimeModules
-{
-    [Module(Name = "Execute", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Execute.html",
+namespace XTMF2.RuntimeModules;
+
+[Module(Name = "Execute", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Execute.html",
 Description = "Provides a way to execute a series of actions in order, optionally in parallel or with multiple iterations.")]
-    public class Execute : BaseAction
+public class Execute : BaseAction
+{
+    [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false, Index = 0)]
+    public IFunction<bool>? ParallelExecution;
+
+    [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
+    public IFunction<int>? Iterations;
+
+    [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2, PassesExecution = true)]
+    public ISetableValue<int>? CurrentIteration;
+
+    [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 3, PassesExecution = true)]
+    public IAction[]? ToInvoke;
+
+    public override void Invoke()
     {
-        [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false, Index = 0)]
-        public IFunction<bool>? ParallelExecution;
-
-        [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
-        public IFunction<int>? Iterations;
-
-        [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2, PassesExecution = true)]
-        public ISetableValue<int>? CurrentIteration;
-
-        [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 3, PassesExecution = true)]
-        public IAction[]? ToInvoke;
-
-        public override void Invoke()
+        var iterations = Iterations?.Invoke() ?? 1;
+        var parallel = ParallelExecution?.Invoke() ?? false;
+        if (parallel)
         {
-            var iterations = Iterations?.Invoke() ?? 1;
-            var parallel = ParallelExecution?.Invoke() ?? false;
-            if (parallel)
+            for (int iteration = 0; iteration < iterations; iteration++)
             {
-                for (int iteration = 0; iteration < iterations; iteration++)
+                CurrentIteration?.Set(iteration);
+                Parallel.ForEach(ToInvoke!, (action) =>
                 {
-                    CurrentIteration?.Set(iteration);
-                    Parallel.ForEach(ToInvoke!, (action) =>
-                    {
-                        action?.Invoke();
-                    });
-                }
+                    action?.Invoke();
+                });
             }
-            else
+        }
+        else
+        {
+            for (int iteration = 0; iteration < iterations; iteration++)
             {
-                for (int iteration = 0; iteration < iterations; iteration++)
+                CurrentIteration?.Set(iteration);
+                foreach (var module in ToInvoke!)
                 {
-                    CurrentIteration?.Set(iteration);
-                    foreach (var module in ToInvoke!)
-                    {
-                        module?.Invoke();
-                    }
+                    module?.Invoke();
                 }
             }
         }
     }
+}
 
-    [Module(Name = "Execute", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Execute.html",
+[Module(Name = "Execute", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Execute.html",
 Description = "Provides a way to execute a series of actions in order, optionally in parallel or with multiple iterations.")]
-    public class Execute<Context> : BaseAction<Context>
+public class Execute<Context> : BaseAction<Context>
+{
+    [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false, Index = 0)]
+    public IFunction<bool>? ParallelExecution;
+
+    [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
+    public IFunction<int>? Iterations;
+
+    [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2, PassesExecution = true)]
+    public ISetableValue<int>? CurrentIteration;
+
+    [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 3, PassesExecution = true)]
+    public IAction<Context>[]? ToInvoke;
+
+    public override void Invoke(Context context)
     {
-        [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false, Index = 0)]
-        public IFunction<bool>? ParallelExecution;
-
-        [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
-        public IFunction<int>? Iterations;
-
-        [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2, PassesExecution = true)]
-        public ISetableValue<int>? CurrentIteration;
-
-        [SubModule(Name = "To Execute", Description = "The modules in order to execute", Index = 3, PassesExecution = true)]
-        public IAction<Context>[]? ToInvoke;
-
-        public override void Invoke(Context context)
+        var iterations = Iterations?.Invoke() ?? 1;
+        var parallel = ParallelExecution?.Invoke() ?? false;
+        if (parallel)
         {
-            var iterations = Iterations?.Invoke() ?? 1;
-            var parallel = ParallelExecution?.Invoke() ?? false;
-            if (parallel)
+            for (int iteration = 0; iteration < iterations; iteration++)
             {
-                for (int iteration = 0; iteration < iterations; iteration++)
+                CurrentIteration?.Set(iteration);
+                Parallel.ForEach(ToInvoke!, (action) =>
                 {
-                    CurrentIteration?.Set(iteration);
-                    Parallel.ForEach(ToInvoke!, (action) =>
-                    {
-                        action?.Invoke(context);
-                    });
-                }
+                    action?.Invoke(context);
+                });
             }
-            else
+        }
+        else
+        {
+            for (int iteration = 0; iteration < iterations; iteration++)
             {
-                for (int iteration = 0; iteration < iterations; iteration++)
+                CurrentIteration?.Set(iteration);
+                foreach (var module in ToInvoke!)
                 {
-                    CurrentIteration?.Set(iteration);
-                    foreach (var module in ToInvoke!)
-                    {
-                        module?.Invoke(context);
-                    }
+                    module?.Invoke(context);
                 }
             }
         }

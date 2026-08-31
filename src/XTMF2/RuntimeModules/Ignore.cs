@@ -21,8 +21,7 @@ using System.Collections.Generic;
 using System.Text;
 using XTMF2;
 
-namespace XTMF2.RuntimeModules
-{
+namespace XTMF2.RuntimeModules;
     [Module(Name = "Ignore Result", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IgnoreResult.html",
 Description = "Ignore the result of a function call.  This allows you to call functions from an action.")]
     public class IgnoreResult<FuncReturn> : BaseAction
@@ -74,4 +73,3 @@ Description = "Ignore the context of a function call.  This allows you to call f
             return ToInvoke!.Invoke();
         }
     }
-}

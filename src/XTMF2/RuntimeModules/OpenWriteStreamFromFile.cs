@@ -21,42 +21,41 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
-{
-    [Module(Name = "Open Write Stream From File", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/OpenWriteStreamFromFile.html",
+namespace XTMF2.RuntimeModules;
+
+[Module(Name = "Open Write Stream From File", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/OpenWriteStreamFromFile.html",
 Description = "Provides a WriteStream to the given file name from context.")]
-    public class OpenWriteStreamFromFile : BaseFunction<WriteStream>
+public class OpenWriteStreamFromFile : BaseFunction<WriteStream>
+{
+
+    [Parameter(DefaultValue = "", Description = "The path to the file to load.", Index = 0,
+        Name = "File Path", Required = true)]
+    public IFunction<string>? FilePath;
+
+    public override WriteStream Invoke()
     {
-
-        [Parameter(DefaultValue = "", Description = "The path to the file to load.", Index = 0,
-            Name = "File Path", Required = true)]
-        public IFunction<string>? FilePath;
-
-        public override WriteStream Invoke()
+        var context = FilePath!.Invoke();
+        if(String.IsNullOrWhiteSpace(context))
         {
-            var context = FilePath!.Invoke();
-            if(String.IsNullOrWhiteSpace(context))
+            throw new XTMFRuntimeException(this, "The provided file path was empty!");
+        }
+        try
+        {
+            FileInfo f = new FileInfo(context);
+            var dir = f.Directory;
+            if(dir is null)
             {
-                throw new XTMFRuntimeException(this, "The provided file path was empty!");
+                throw new XTMFRuntimeException(this, $"The provided file path is not a valid file path!");
             }
-            try
+            if (!dir.Exists)
             {
-                FileInfo f = new FileInfo(context);
-                var dir = f.Directory;
-                if(dir is null)
-                {
-                    throw new XTMFRuntimeException(this, $"The provided file path is not a valid file path!");
-                }
-                if (!dir.Exists)
-                {
-                    dir.Create();
-                }
-                return new WriteStream(File.Open(context, FileMode.Create, FileAccess.Write));
+                dir.Create();
             }
-            catch(IOException e)
-            {
-                throw new XTMFRuntimeException(this, e.Message, e);
-            }
+            return new WriteStream(File.Open(context, FileMode.Create, FileAccess.Write));
+        }
+        catch(IOException e)
+        {
+            throw new XTMFRuntimeException(this, e.Message, e);
         }
     }
 }

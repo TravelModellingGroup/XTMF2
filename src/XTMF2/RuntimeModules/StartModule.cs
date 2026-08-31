@@ -20,8 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
-{
+namespace XTMF2.RuntimeModules;
     /// <summary>
     /// The type used for a start node
     /// </summary>
@@ -37,4 +36,3 @@ Description = "A starting point for a model system.")]
             ToExecute?.Invoke();
         }
     }
-}

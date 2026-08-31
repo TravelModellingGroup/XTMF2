@@ -47,8 +47,6 @@ public partial class App : Application
             // Load the XTMF Runtime asynchronously
             _ = Task.Run(async () =>
             {
-                // Artificial delay for testing (0.5 seconds)
-                await Task.Delay(500);
                 try
                 {
                     // Create the XTMF Runtime

@@ -20,8 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace XTMF2.RuntimeModules
-{
+namespace XTMF2.RuntimeModules;
     [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
     public sealed class IfF<Return> : BaseFunction<Return>
@@ -183,4 +182,3 @@ Description = "Provides a way to conditionally execute.  If the condition is tru
             }
         }
     }
-}

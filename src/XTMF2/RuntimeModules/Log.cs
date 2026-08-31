@@ -23,77 +23,76 @@ using System.Text;
 using System.Text.Unicode;
 using System.Threading;
 
-namespace XTMF2.RuntimeModules
-{
-    [Module(Name = "Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Log.html",
+namespace XTMF2.RuntimeModules;
+
+[Module(Name = "Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Log.html",
 Description = "Provides functionality for synchronizing the writing of events to a log and providing time stamps.")]
-    public sealed class Log : BaseAction<string>, IFunction<Log>, IDisposable
+public sealed class Log : BaseAction<string>, IFunction<Log>, IDisposable
+{
+    [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.", Index = 0)]
+    public IFunction<WriteStream>? LogStream;
+
+    private readonly Lock _writeLock = new();
+
+    private StreamWriter? _writer;
+
+    private bool _alwaysFlush = false;
+
+    public override void Invoke(string message)
     {
-        [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.", Index = 0)]
-        public IFunction<WriteStream>? LogStream;
-
-        private readonly Lock _writeLock = new();
-
-        private StreamWriter? _writer;
-
-        private bool _alwaysFlush = false;
-
-        public override void Invoke(string message)
+        lock (_writeLock)
         {
-            lock (_writeLock)
+            if(_writer is null)
             {
-                if(_writer is null)
+                if (LogStream?.Invoke() is WriteStream writeStream)
                 {
-                    if (LogStream?.Invoke() is WriteStream writeStream)
-                    {
-                        // Check to see if we need to always flush the stream.
-                        _alwaysFlush = writeStream is RunStatusStream;
-                        var encoding = _alwaysFlush ? new UTF8Encoding(false, true) : Encoding.UTF8;
-                        _writer = new StreamWriter(writeStream, encoding, 0x4000, false);
-                    }
-                    else
-                    {
-                        throw new XTMFRuntimeException(this, "Unable to create a write stream to store the log into!");
-                    }
+                    // Check to see if we need to always flush the stream.
+                    _alwaysFlush = writeStream is RunStatusStream;
+                    var encoding = _alwaysFlush ? new UTF8Encoding(false, true) : Encoding.UTF8;
+                    _writer = new StreamWriter(writeStream, encoding, 0x4000, false);
                 }
-                // don't block while writing
-                _writer.Write(TimeStampMessage(message));
-                if (_alwaysFlush)
+                else
                 {
-                    _writer.Flush();
+                    throw new XTMFRuntimeException(this, "Unable to create a write stream to store the log into!");
                 }
             }
-        }
-
-        Log IFunction<Log>.Invoke()
-        {
-            return this;
-        }
-
-        private static string TimeStampMessage(string message)
-        {
-            var now = DateTime.Now;
-            return $"[{now.Hour:D2}:{now.Minute:D2}:{now.Second:D2}] {message}";
-        }
-
-        private void Dispose(bool managed)
-        {
-            if(managed)
+            // don't block while writing
+            _writer.Write(TimeStampMessage(message));
+            if (_alwaysFlush)
             {
-                GC.SuppressFinalize(this);
+                _writer.Flush();
             }
-            _writer?.Dispose();
-            _writer = null;
         }
+    }
 
-        public void Dispose()
-        {
-            Dispose(true);
-        }
+    Log IFunction<Log>.Invoke()
+    {
+        return this;
+    }
 
-        ~Log()
+    private static string TimeStampMessage(string message)
+    {
+        var now = DateTime.Now;
+        return $"[{now.Hour:D2}:{now.Minute:D2}:{now.Second:D2}] {message}";
+    }
+
+    private void Dispose(bool managed)
+    {
+        if(managed)
         {
-            Dispose(false);
+            GC.SuppressFinalize(this);
         }
+        _writer?.Dispose();
+        _writer = null;
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+    }
+
+    ~Log()
+    {
+        Dispose(false);
     }
 }
