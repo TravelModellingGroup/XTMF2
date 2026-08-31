@@ -275,14 +275,16 @@ namespace XTMF2.Repository
 
             var typeInfo = type.GetTypeInfo();
             var hooks = new List<NodeHook>();
-            // Load properties and fields
-            ModuleAttribute description = LoadModuleDescription(type);
-            LoadFields(type, typeInfo, hooks);
-            LoadProperties(type, typeInfo, hooks);
+            var errors = new List<Exception>();
+            // Load properties and fields, collecting every code style error found so
+            // a single fix-and-recompile cycle can surface all of them at once.
+            ModuleAttribute? description = LoadModuleDescription(type, errors);
+            LoadFields(type, typeInfo, hooks, errors);
+            LoadProperties(type, typeInfo, hooks, errors);
             // Make sure all of the hooks have names
             if (hooks.Any(h => String.IsNullOrWhiteSpace(h.Name)))
             {
-                throw new XTMFCodeStyleError(type, "All sub module properties in must have a name defined in their attribute!");
+                errors.Add(new XTMFCodeStyleError(type, "All sub module properties in must have a name defined in their attribute!"));
             }
             // ensure there are no duplicates
             var duplicates = from h in hooks
@@ -291,7 +293,7 @@ namespace XTMF2.Repository
                              select h;
             if (duplicates.Any())
             {
-                throw new XTMFCodeStyleError(type, $"Duplicate properties with the name {duplicates.First().Name}!");
+                errors.Add(new XTMFCodeStyleError(type, $"Duplicate properties with the name {duplicates.First().Name}!"));
             }
             duplicates = from h in hooks
                          let index = h.Index
@@ -300,14 +302,18 @@ namespace XTMF2.Repository
             if(duplicates.Any())
             {
                 var first = duplicates.First();
-                throw new XTMFCodeStyleError(type, $"Duplicate properties with same index {first.Index}!");
+                errors.Add(new XTMFCodeStyleError(type, $"Duplicate properties with same index {first.Index}!"));
+            }
+            if (errors.Count > 0)
+            {
+                throw new AggregateException($"{errors.Count} code style error(s) were found in type {type.FullName}!", errors);
             }
             // sort the hooks so this can be relied upon
             hooks.Sort((first, second) => first.Index - second.Index);
-            return (description, typeInfo, hooks.ToArray());
+            return (description!, typeInfo, hooks.ToArray());
         }
 
-        private ModuleAttribute LoadModuleDescription(Type type)
+        private ModuleAttribute? LoadModuleDescription(Type type, List<Exception> errors)
         {
             if (type == null)
             {
@@ -317,24 +323,25 @@ namespace XTMF2.Repository
             var description = (ModuleAttribute?)type.GetTypeInfo().GetCustomAttribute(typeof(ModuleAttribute));
             if(description == null)
             {
-                throw new XTMFCodeStyleError(type, "There was no module meta-data stored for this type!");
+                errors.Add(new XTMFCodeStyleError(type, "There was no module meta-data stored for this type!"));
+                return null;
             }
             if(String.IsNullOrWhiteSpace(description.Name))
             {
-                throw new XTMFCodeStyleError(type, "The module meta-data's Name field was left blank!");
+                errors.Add(new XTMFCodeStyleError(type, "The module meta-data's Name field was left blank!"));
             }
             if(String.IsNullOrWhiteSpace(description.DocumentationLink))
             {
-                throw new XTMFCodeStyleError(type, "The module meta-data's Documentation Link field was left blank!");
+                errors.Add(new XTMFCodeStyleError(type, "The module meta-data's Documentation Link field was left blank!"));
             }
             if (String.IsNullOrWhiteSpace(description.Description))
             {
-                throw new XTMFCodeStyleError(type, "The module meta-data's Description field was left blank!");
+                errors.Add(new XTMFCodeStyleError(type, "The module meta-data's Description field was left blank!"));
             }
             return description;
         }
 
-        private static void LoadFields(Type type, TypeInfo typeInfo, List<NodeHook> hooks)
+        private static void LoadFields(Type type, TypeInfo typeInfo, List<NodeHook> hooks, List<Exception> errors)
         {
             if (typeInfo == null)
             {
@@ -366,39 +373,69 @@ namespace XTMF2.Repository
                         // Analyze the property to ensure proper code style
                         if (!attributes.Any())
                         {
-                            throw new XTMFCodeStyleError(type, $"You must define an attribute defining the sub module property {field.Name}!");
+                            errors.Add(new XTMFCodeStyleError(type, $"You must define an attribute defining the sub module property {field.Name}!"));
+                            continue;
                         }
                         if (attributes.Count() > 1)
                         {
-                            throw new XTMFCodeStyleError(type, $"Only one attribute defining the sub module property {field.Name} is allowed!");
+                            errors.Add(new XTMFCodeStyleError(type, $"Only one attribute defining the sub module property {field.Name} is allowed!"));
+                            continue;
                         }
                         if (attributes.First() is ParameterAttribute parameter)
                         {
-                            if(parameter.Index < 0)
+                            if (!ValidateSubModuleAttribute(type, field.Name, parameter, errors))
                             {
-                                throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {field.Name}!");
+                                continue;
                             }
                             // all parameters are required
                             hooks.Add(new FieldHook(parameter.Name!, field, true, parameter.Index, true, parameter.DefaultValue, parameter.PassesExecution));
                         }
                         else if (attributes.First() is SubModuleAttribute subModule)
                         {
-                            if (subModule.Index < 0)
+                            if (!ValidateSubModuleAttribute(type, field.Name, subModule, errors))
                             {
-                                throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {field.Name}!");
+                                continue;
                             }
                             hooks.Add(new FieldHook(subModule.Name!, field, subModule.Required, subModule.Index, false, null, subModule.PassesExecution));
                         }
                         else
                         {
-                            throw new XTMFCodeStyleError(type, $"Unknown attribute defining sub module property {field.Name}!");
+                            errors.Add(new XTMFCodeStyleError(type, $"Unknown attribute defining sub module property {field.Name}!"));
+                            continue;
                         }
                     }
                 }
             }
         }
 
-        private static void LoadProperties(Type type, TypeInfo typeInfo, List<NodeHook> hooks)
+        /// <summary>
+        /// Checks a Parameter/SubModule attribute for a blank Name, blank Description, or
+        /// undefined Index, recording an error for each violation found rather than stopping
+        /// at the first one.
+        /// </summary>
+        /// <returns><see langword="true"/> if no violations were found.</returns>
+        private static bool ValidateSubModuleAttribute(Type type, string memberName, SubModuleAttribute attribute, List<Exception> errors)
+        {
+            var isValid = true;
+            if (String.IsNullOrWhiteSpace(attribute.Name))
+            {
+                errors.Add(new XTMFCodeStyleError(type, $"The name was left blank for sub module property {memberName}!"));
+                isValid = false;
+            }
+            if (String.IsNullOrWhiteSpace(attribute.Description))
+            {
+                errors.Add(new XTMFCodeStyleError(type, $"The description was left blank for sub module property {memberName}!"));
+                isValid = false;
+            }
+            if (attribute.Index < 0)
+            {
+                errors.Add(new XTMFCodeStyleError(type, $"There is no index defined for sub module property {memberName}!"));
+                isValid = false;
+            }
+            return isValid;
+        }
+
+        private static void LoadProperties(Type type, TypeInfo typeInfo, List<NodeHook> hooks, List<Exception> errors)
         {
             if (typeInfo == null)
             {
@@ -431,36 +468,40 @@ namespace XTMF2.Repository
                         // Analyze the property to ensure proper code style
                         if (!attributes.Any())
                         {
-                            throw new XTMFCodeStyleError(type, $"You must define an attribute defining the sub module property {property.Name}!");
+                            errors.Add(new XTMFCodeStyleError(type, $"You must define an attribute defining the sub module property {property.Name}!"));
+                            continue;
                         }
                         if (attributes.Count() > 1)
                         {
-                            throw new XTMFCodeStyleError(type, $"Only one attribute defining the sub module property {property.Name} is allowed!");
+                            errors.Add(new XTMFCodeStyleError(type, $"Only one attribute defining the sub module property {property.Name} is allowed!"));
+                            continue;
                         }
                         if (!(property.CanRead && property.CanWrite))
                         {
-                            throw new XTMFCodeStyleError(type, $"You must be able to read and write to the sub module property {property.Name}!");
+                            errors.Add(new XTMFCodeStyleError(type, $"You must be able to read and write to the sub module property {property.Name}!"));
+                            continue;
                         }
                         if (attributes.First() is ParameterAttribute parameter)
                         {
-                            if (parameter.Index < 0)
+                            if (!ValidateSubModuleAttribute(type, property.Name, parameter, errors))
                             {
-                                throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {property.Name}!");
+                                continue;
                             }
                             // all parameters are required
                             hooks.Add(new PropertyHook(parameter.Name!, property, true, parameter.Index, true, parameter.DefaultValue, parameter.PassesExecution));
                         }
                         else if (attributes.First() is SubModuleAttribute subModule)
                         {
-                            if (subModule.Index < 0)
+                            if (!ValidateSubModuleAttribute(type, property.Name, subModule, errors))
                             {
-                                throw new XTMFCodeStyleError(type, $"There is no index defined for sub module property {property.Name}!");
+                                continue;
                             }
                             hooks.Add(new PropertyHook(subModule.Name!, property, subModule.Required, subModule.Index, false, null, subModule.PassesExecution));
                         }
                         else
                         {
-                            throw new XTMFCodeStyleError(type, $"Unknown attribute defining sub module property {property.Name}!");
+                            errors.Add(new XTMFCodeStyleError(type, $"Unknown attribute defining sub module property {property.Name}!"));
+                            continue;
                         }
                     }
                 }

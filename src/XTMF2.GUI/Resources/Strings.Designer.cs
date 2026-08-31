@@ -146,6 +146,9 @@ public static class Strings
     // Runtime Initialization
     public static string RuntimeInitialization_ErrorTitle => Get(nameof(RuntimeInitialization_ErrorTitle));
     public static string RuntimeInitialization_CodeStyleError => Get(nameof(RuntimeInitialization_CodeStyleError));
+    public static string RuntimeInitialization_CodeStyleErrorIntro => Get(nameof(RuntimeInitialization_CodeStyleErrorIntro));
+    public static string RuntimeInitialization_ErrorCounter => Get(nameof(RuntimeInitialization_ErrorCounter));
+    public static string RuntimeInitialization_ErrorTabLabel => Get(nameof(RuntimeInitialization_ErrorTabLabel));
     public static string RuntimeInitialization_ErrorMessage => Get(nameof(RuntimeInitialization_ErrorMessage));
 
     // Model System Editor

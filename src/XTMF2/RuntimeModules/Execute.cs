@@ -27,10 +27,10 @@ namespace XTMF2.RuntimeModules;
 Description = "Provides a way to execute a series of actions in order, optionally in parallel or with multiple iterations.")]
 public class Execute : BaseAction
 {
-    [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false, Index = 0)]
+    [Parameter(DefaultValue = "false", Name = "Parallel Execution", Description = "If true, executes the modules to invoke in parallel instead of in sequence.", Required = false, Index = 0)]
     public IFunction<bool>? ParallelExecution;
 
-    [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
+    [Parameter(DefaultValue = "1", Name = "Iterations", Description = "The number of times to execute the modules to invoke.", Required = false, Index = 1)]
     public IFunction<int>? Iterations;
 
     [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2, PassesExecution = true)]
@@ -72,10 +72,10 @@ public class Execute : BaseAction
 Description = "Provides a way to execute a series of actions in order, optionally in parallel or with multiple iterations.")]
 public class Execute<Context> : BaseAction<Context>
 {
-    [Parameter(DefaultValue = "false", Name = "Parallel Execution", Required = false, Index = 0)]
+    [Parameter(DefaultValue = "false", Name = "Parallel Execution", Description = "If true, executes the modules to invoke in parallel instead of in sequence.", Required = false, Index = 0)]
     public IFunction<bool>? ParallelExecution;
 
-    [Parameter(DefaultValue = "1", Name = "Iterations", Required = false, Index = 1)]
+    [Parameter(DefaultValue = "1", Name = "Iterations", Description = "The number of times to execute the modules to invoke.", Required = false, Index = 1)]
     public IFunction<int>? Iterations;
 
     [SubModule(Name = "Current Iteration", Required = false, Description = "Place to store the current iteration", Index = 2, PassesExecution = true)]

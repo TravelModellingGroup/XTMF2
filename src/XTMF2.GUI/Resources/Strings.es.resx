@@ -322,6 +322,15 @@ Esta acción no se puede deshacer.</value>
 
 {0}</value>
   </data>
+  <data name="RuntimeInitialization_CodeStyleErrorIntro" xml:space="preserve">
+    <value>Error al inicializar el runtime de XTMF debido a los siguientes errores de estilo de código:</value>
+  </data>
+  <data name="RuntimeInitialization_ErrorCounter" xml:space="preserve">
+    <value>Error {0} de {1}</value>
+  </data>
+  <data name="RuntimeInitialization_ErrorTabLabel" xml:space="preserve">
+    <value>Error {0}</value>
+  </data>
   <data name="RuntimeInitialization_ErrorMessage" xml:space="preserve">
     <value>Error al inicializar el runtime de XTMF:
 
