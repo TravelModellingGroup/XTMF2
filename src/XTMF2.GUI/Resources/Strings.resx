@@ -360,6 +360,15 @@ This action cannot be undone.</value>
 
 {0}</value>
   </data>
+  <data name="RuntimeInitialization_CodeStyleErrorIntro" xml:space="preserve">
+    <value>Failed to initialize XTMF runtime due to the following code style error(s):</value>
+  </data>
+  <data name="RuntimeInitialization_ErrorCounter" xml:space="preserve">
+    <value>Error {0} of {1}</value>
+  </data>
+  <data name="RuntimeInitialization_ErrorTabLabel" xml:space="preserve">
+    <value>Error {0}</value>
+  </data>
   <data name="RuntimeInitialization_ErrorMessage" xml:space="preserve">
     <value>Failed to initialize XTMF runtime:
 

@@ -328,6 +328,15 @@ Cette action ne peut pas être annulée.</value>
 
 {0}</value>
   </data>
+  <data name="RuntimeInitialization_CodeStyleErrorIntro" xml:space="preserve">
+    <value>Échec de l'initialisation du runtime XTMF en raison des erreurs de style de code suivantes :</value>
+  </data>
+  <data name="RuntimeInitialization_ErrorCounter" xml:space="preserve">
+    <value>Erreur {0} sur {1}</value>
+  </data>
+  <data name="RuntimeInitialization_ErrorTabLabel" xml:space="preserve">
+    <value>Erreur {0}</value>
+  </data>
   <data name="RuntimeInitialization_ErrorMessage" xml:space="preserve">
     <value>Échec de l'initialisation du runtime XTMF :
 
