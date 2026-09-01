@@ -509,7 +509,7 @@ namespace XTMF2.Editing
 
         private void OnBufferPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName is nameof(CanUndo) or nameof(CanRedo))
+            if (e.PropertyName is nameof(CanUndo) or nameof(CanRedo) or nameof(ChangeCount))
                 PropertyChanged?.Invoke(this, e);
         }
 
@@ -4786,6 +4786,9 @@ namespace XTMF2.Editing
 
         /// <summary>True when there is at least one command that can be undone.</summary>
         public bool CanUndo => Buffer.CanUndo;
+
+        /// <summary>Revision of the model edits made during this session.</summary>
+        public long ChangeCount => Buffer.ChangeCount;
 
         /// <summary>True when there is at least one command that can be redone.</summary>
         public bool CanRedo => Buffer.CanRedo;
