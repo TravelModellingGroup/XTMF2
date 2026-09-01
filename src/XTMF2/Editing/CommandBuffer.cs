@@ -31,6 +31,7 @@ namespace XTMF2.Editing
         private readonly EditingStack _undo = new EditingStack(MaxCapacity);
         private readonly EditingStack _redo = new EditingStack(MaxCapacity);
         private readonly object _executionLock = new object();
+        private long _changeCount;
 
         /// <summary>
         /// When non-null, all incoming <see cref="AddUndo"/> calls accumulate here
@@ -56,6 +57,7 @@ namespace XTMF2.Editing
                     if (batch!.Undo(out error))
                     {
                         _redo.Add(batch);
+                        ChangeCount++;
                         return true;
                     }
                 }
@@ -76,6 +78,7 @@ namespace XTMF2.Editing
                     if (batch!.Redo(out error))
                     {
                         _undo.Add(batch);
+                        ChangeCount++;
                         return true;
                     }
                 }
@@ -97,6 +100,7 @@ namespace XTMF2.Editing
                 {
                     _undo.Add(new CommandBatch(command));
                     _redo.Clear();
+                    ChangeCount++;
                 }
             }
         }
@@ -113,6 +117,7 @@ namespace XTMF2.Editing
                 {
                     _undo.Add(batch);
                     _redo.Clear();
+                    ChangeCount++;
                 }
             }
         }
@@ -143,6 +148,7 @@ namespace XTMF2.Editing
                     {
                         _undo.Add(batch);
                         _redo.Clear();
+                        ChangeCount++;
                     }
                 }
             }
@@ -153,5 +159,16 @@ namespace XTMF2.Editing
 
         /// <summary>True when there is at least one redoable command.</summary>
         public bool CanRedo => _redo.Count > 0;
+
+        /// <summary>Revision of the model edits made in this buffer.</summary>
+        public long ChangeCount
+        {
+            get => _changeCount;
+            private set
+            {
+                _changeCount = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ChangeCount)));
+            }
+        }
     }
 }

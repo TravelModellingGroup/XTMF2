@@ -28,6 +28,7 @@ using Dock.Model.Avalonia;
 using Dock.Model.Avalonia.Controls;
 using Dock.Model.Controls;
 using Dock.Model.Core;
+using DockableClosingEventArgs = Dock.Model.Core.Events.DockableClosingEventArgs;
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -47,6 +48,10 @@ public partial class MainWindow : Window
     private XTMFRuntime? _runtime;
     private User? _currentUser;
     private bool _isLoading = true;
+    private bool _allowClose;
+    private bool _closeCheckInProgress;
+    private bool _allowDocumentClose;
+    private bool _documentCloseInProgress;
     private SettingsWindow? _settingsWindow;
 
     /// <summary>
@@ -78,6 +83,7 @@ public partial class MainWindow : Window
     private void InitializeDock()
     {
         var factory = new Factory();
+        factory.DockableClosing += OnDockableClosing;
         _documentDock = new DocumentDock
         {
             Id = "DocumentDock",
@@ -450,6 +456,84 @@ public partial class MainWindow : Window
 
     private void Exit_Click(object? sender, RoutedEventArgs e) => Close();
 
+    private async void OnDockableClosing(object? sender, DockableClosingEventArgs e)
+    {
+        if (_allowDocumentClose
+            || e.Dockable is not IDocument document
+            || document.Context is not ModelSystemEditorViewModel editor
+            || !editor.IsDirty)
+            return;
+
+        e.Cancel = true;
+        await PromptToCloseEditorAsync(editor);
+    }
+
+    private async Task PromptToCloseEditorAsync(ModelSystemEditorViewModel editor)
+    {
+        if (_documentCloseInProgress) return;
+        _documentCloseInProgress = true;
+        try
+        {
+            FocusEditorTab(editor);
+            var dialog = new SaveChangesDialog(
+                "Save Model System",
+                $"Save changes to '{editor.ModelSystemHeader.Name ?? "Model System"}' before closing?");
+            await dialog.ShowDialog(this);
+
+            if (dialog.Result == SaveChangesDialog.DialogResult.Cancel)
+                return;
+            if (dialog.Result == SaveChangesDialog.DialogResult.Yes
+                && !await editor.SaveModelSystemAsync())
+                return;
+
+            _allowDocumentClose = true;
+            Documents.Remove(editor);
+        }
+        finally
+        {
+            _allowDocumentClose = false;
+            _documentCloseInProgress = false;
+        }
+    }
+
+    protected override async void OnClosing(WindowClosingEventArgs e)
+    {
+        if (_allowClose)
+        {
+            base.OnClosing(e);
+            return;
+        }
+
+        e.Cancel = true;
+        if (_closeCheckInProgress) return;
+        _closeCheckInProgress = true;
+        try
+        {
+            foreach (var editor in Documents.OfType<ModelSystemEditorViewModel>().Where(vm => vm.IsDirty).ToList())
+            {
+                FocusEditorTab(editor);
+                var dialog = new SaveChangesDialog(
+                    "Save Model System",
+                    $"Save changes to '{editor.ModelSystemHeader.Name ?? "Model System"}' before closing?");
+                await dialog.ShowDialog(this);
+
+                if (dialog.Result == SaveChangesDialog.DialogResult.Cancel)
+                    return;
+                if (dialog.Result == SaveChangesDialog.DialogResult.Yes
+                    && !await editor.SaveModelSystemAsync())
+                    return;
+            }
+
+            _allowDocumentClose = true;
+            _allowClose = true;
+            Close();
+        }
+        finally
+        {
+            _closeCheckInProgress = false;
+        }
+    }
+
     private void Window_KeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.W && e.KeyModifiers == KeyModifiers.Control)
@@ -512,6 +596,12 @@ public partial class MainWindow : Window
             && activeDoc.CanClose
             && activeDoc.Context is object context)
         {
+            if (activeDoc.Context is ModelSystemEditorViewModel editor && editor.IsDirty)
+            {
+                _ = PromptToCloseEditorAsync(editor);
+                return;
+            }
+
             if (DockControl.Layout is IDock currentDock
                 && currentDock.CanGoBack)
             {

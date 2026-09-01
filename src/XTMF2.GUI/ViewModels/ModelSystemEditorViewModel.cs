@@ -160,7 +160,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     // ── Dock integration ──────────────────────────────────────────────────
     /// <summary>Tab title shown in the dock.</summary>
-    public string Title => $"✎  {ModelSystemHeader.Name ?? "Model System"}";
+    public string Title => $"✎  {ModelSystemHeader.Name ?? "Model System"}{(IsDirty ? " *" : string.Empty)}";
 
     /// <summary>Allow the user to close this tab.</summary>
     public bool CanClose => true;
@@ -563,6 +563,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     [ObservableProperty]
     private bool _canRedo;
 
+    private long _savedChangeCount;
+
+    /// <summary>True when the model system changed since its last successful save.</summary>
+    public bool IsDirty => Session.ChangeCount != _savedChangeCount;
+
     // Unsubscribe from the outgoing element before the field changes.
     partial void OnSelectedElementChanging(ICanvasElement? value)
     {
@@ -779,6 +784,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Mirror CanUndo/CanRedo from the session reactively.
         _canUndo = Session.CanUndo;
         _canRedo = Session.CanRedo;
+        _savedChangeCount = Session.ChangeCount;
         ((System.ComponentModel.INotifyPropertyChanged)Session).PropertyChanged += OnSessionPropertyChanged;
 
         // Keep SearchItems in sync with the canvas collections.
@@ -799,6 +805,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (e.PropertyName == nameof(Session.CanUndo))      CanUndo = Session.CanUndo;
         else if (e.PropertyName == nameof(Session.CanRedo)) CanRedo = Session.CanRedo;
+        else if (e.PropertyName == nameof(Session.ChangeCount))
+        {
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(Title));
+        }
     }
 
     // ── Collection sync ───────────────────────────────────────────────────
@@ -3194,20 +3205,27 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     /// <summary>Save the model system to its project file.</summary>
     [RelayCommand]
-    private async Task SaveModelSystem()
+    private Task SaveModelSystem() => SaveModelSystemAsync();
+
+    public async Task<bool> SaveModelSystemAsync()
     {
         ShowToast(Strings.ModelSystemEditor_ToastSaving);
         // Yield to let the UI render the "saving" toast before the synchronous save runs.
         await Task.Yield();
         if (Session.Save(out var error))
         {
+            _savedChangeCount = Session.ChangeCount;
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(Title));
             ShowToast(Strings.ModelSystemEditor_ToastSaved);
+            return true;
         }
         else
         {
             var msg = string.Format(Strings.ModelSystemEditor_ToastSaveFailed,
                                     error?.Message ?? Strings.ModelSystems_UnknownError);
             ShowToast(msg, isError: true, durationMs: 6000);
+            return false;
         }
     }
 
