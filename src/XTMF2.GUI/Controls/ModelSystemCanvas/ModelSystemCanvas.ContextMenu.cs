@@ -630,6 +630,35 @@ partial class ModelSystemCanvas
         }
 
         // ── Standard Delete ───────────────────────────────────────────────
+        if (element is CommentBlockViewModel commentVm
+            && vm.CurrentFunctionTemplate is { } currentTemplate
+            && currentTemplate.UnderlyingTemplate.InternalModules.CommentBlocks.Contains(commentVm.UnderlyingBlock))
+        {
+            bool isDescription = ReferenceEquals(currentTemplate.UnderlyingTemplate.DescriptionComment,
+                                                  commentVm.UnderlyingBlock);
+            var descriptionItem = new MenuItem
+            {
+                Header = isDescription
+                    ? "Clear Function Template Description"
+                    : "Use as Function Template Description"
+            };
+            descriptionItem.Click += (_, _) =>
+            {
+                if (!vm.Session.SetFunctionTemplateDescriptionComment(
+                        vm.User,
+                        currentTemplate.UnderlyingTemplate,
+                        isDescription ? null : commentVm.UnderlyingBlock,
+                        out var error))
+                {
+                    vm.ShowToast(error?.Message ?? "Unable to update the function template description.",
+                        isError: true, durationMs: 5000);
+                }
+                InvalidateAndMeasure();
+            };
+            menu.Items.Add(descriptionItem);
+            menu.Items.Add(new Separator());
+        }
+
         var deleteItem = new MenuItem { Header = "Delete" };
         deleteItem.Click += (_, _) =>
         {

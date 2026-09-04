@@ -940,6 +940,15 @@ partial class ModelSystemCanvas
             var functionInstanceHook = HitTestFiHook(canvasPosition)?.hook;
             hookDescription = functionInstanceHook?.Parameter.Description;
         }
+        if (hookDescription is null)
+        {
+            hookDescription = HitTest(canvasPosition, testComments: false) switch
+            {
+                FunctionTemplateViewModel functionTemplate => functionTemplate.Description,
+                FunctionInstanceViewModel functionInstance => functionInstance.UnderlyingInstance.Template.Description,
+                _ => null
+            };
+        }
         ToolTip.SetTip(this, string.IsNullOrWhiteSpace(hookDescription) ? null : hookDescription);
     }
 

@@ -95,6 +95,9 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
     public string EntryNodeTypeName
         => UnderlyingInstance.Template.Type?.Name ?? string.Empty;
 
+    /// <summary>Description inherited from the referenced FunctionTemplate.</summary>
+    public string Description => UnderlyingInstance.Template.Description;
+
     /// <summary>
     /// Live-synced list of <see cref="FunctionParameter"/> objects derived from the referenced template.
     /// Kept in sync with <see cref="FunctionTemplate.FunctionParameters"/>.
@@ -144,6 +147,8 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
     {
         if (e.PropertyName == nameof(FunctionTemplate.Type))
             OnPropertyChanged(nameof(EntryNodeTypeName));
+        else if (e.PropertyName == nameof(FunctionTemplate.Description))
+            OnPropertyChanged(nameof(Description));
     }
 
     private void OnFunctionParametersChanged(object? sender, NotifyCollectionChangedEventArgs e)

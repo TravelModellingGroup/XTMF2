@@ -793,14 +793,24 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
+                var owningTemplate = boundary.OwningFunctionTemplate;
+                var wasDescriptionComment = owningTemplate?.DescriptionComment == block;
                 if (boundary.RemoveCommentBlock(block, out error))
                 {
+                    if (wasDescriptionComment)
+                        owningTemplate!.SetDescriptionComment(null);
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (boundary.AddCommentBlock(block, out var e), e);
+                        var restored = boundary.AddCommentBlock(block, out var e);
+                        if (restored && wasDescriptionComment)
+                            owningTemplate!.SetDescriptionComment(block);
+                        return (restored, e);
                     }, () =>
                     {
-                        return (boundary.RemoveCommentBlock(block, out var e), e);
+                        var removed = boundary.RemoveCommentBlock(block, out var e);
+                        if (removed && wasDescriptionComment)
+                            owningTemplate!.SetDescriptionComment(null);
+                        return (removed, e);
                     }));
                     return true;
                 }
@@ -4173,6 +4183,40 @@ namespace XTMF2.Editing
                 }, () =>
                 {
                     template.SetEntryNode(entryNode);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
+        /// <summary>Assigns a contained comment block as a function template description.</summary>
+        public bool SetFunctionTemplateDescriptionComment(User user, FunctionTemplate template,
+            CommentBlock? comment, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            error = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (comment is not null && !template.InternalModules.CommentBlocks.Contains(comment))
+                {
+                    error = new CommandError("The description comment must be contained within the function template.");
+                    return false;
+                }
+                var oldComment = template.DescriptionComment;
+                template.SetDescriptionComment(comment);
+                Buffer.AddUndo(new Command(() =>
+                {
+                    template.SetDescriptionComment(oldComment);
+                    return (true, null);
+                }, () =>
+                {
+                    template.SetDescriptionComment(comment);
                     return (true, null);
                 }));
                 return true;

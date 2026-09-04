@@ -616,6 +616,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (e.PropertyName is nameof(NodeViewModel.TypeName)
             or nameof(FunctionParameterViewModel.TypeName)
             or nameof(FunctionInstanceViewModel.TemplateName)
+            or nameof(FunctionInstanceViewModel.Description)
             or nameof(ICanvasElement.Name))
         {
             OnPropertyChanged(nameof(SelectedElementTypeName));
@@ -674,7 +675,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             CommentBlockViewModel comment => ("Comment Block", "Comment", comment.Name, string.Empty),
             NodeViewModel node => BuildModuleMetadata(node.Name, node.UnderlyingNode.Type),
             FunctionTemplateViewModel template => BuildModuleMetadata(template.Name, template.UnderlyingTemplate.Type),
-            FunctionInstanceViewModel instance => BuildModuleMetadata(instance.Name, instance.UnderlyingInstance.Template.Type),
+            FunctionInstanceViewModel instance => BuildFunctionInstanceMetadata(instance),
             FunctionParameterViewModel parameter => (
                 parameter.Name,
                 FormatTypeNameWithGenerics(parameter.UnderlyingParameter.Type),
@@ -684,6 +685,18 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         };
 
         return true;
+    }
+
+    private static (string moduleName, string typeName, string description, string documentationLink)
+        BuildFunctionInstanceMetadata(FunctionInstanceViewModel instance)
+    {
+        var metadata = BuildModuleMetadata(instance.Name, instance.UnderlyingInstance.Template.Type);
+        var templateDescription = instance.UnderlyingInstance.Template.Description;
+        return (
+            metadata.moduleName,
+            metadata.typeName,
+            string.IsNullOrWhiteSpace(templateDescription) ? metadata.description : templateDescription,
+            metadata.documentationLink);
     }
 
     private static (string moduleName, string typeName, string description, string documentationLink) BuildModuleMetadata(string moduleName, Type? moduleType)
