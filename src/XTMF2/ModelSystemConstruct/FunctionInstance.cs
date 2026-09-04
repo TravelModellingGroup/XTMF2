@@ -109,6 +109,7 @@ namespace XTMF2.ModelSystemConstruct
         // ── Dynamic hooks (one per FunctionParameter) ─────────────────────
 
         private IReadOnlyList<NodeHook>? _cachedHooks;
+        private readonly Dictionary<FunctionParameter, FunctionParameterHook> _functionParameterHooks = new();
 
         /// <summary>
         /// The outgoing hooks of this function instance, one per
@@ -126,7 +127,15 @@ namespace XTMF2.ModelSystemConstruct
                     var list = new List<NodeHook>();
                     int idx = 0;
                     foreach (var fp in Template.FunctionParameters)
-                        list.Add(new FunctionParameterHook(fp, idx++));
+                    {
+                        if (!_functionParameterHooks.TryGetValue(fp, out var hook))
+                        {
+                            hook = new FunctionParameterHook(fp, idx);
+                            _functionParameterHooks.Add(fp, hook);
+                        }
+                        list.Add(hook);
+                        idx++;
+                    }
                     _cachedHooks = list.AsReadOnly();
                 }
                 return _cachedHooks;

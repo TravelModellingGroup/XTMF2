@@ -421,6 +421,13 @@ partial class ModelSystemCanvas
                     menu.Items.Add(switchItem);
                 }
 
+                if (vm.IsInsideFunctionTemplate && capturedParam.IsBasicParameter)
+                {
+                    var convertItem = new MenuItem { Header = "Create Function Parameter from Basic Parameter" };
+                    convertItem.Click += (_, _) => vm.ConvertBasicParameterToFunctionParameter(capturedParam);
+                    menu.Items.Add(convertItem);
+                }
+
                 menu.Items.Add(new Separator());
             }
 
@@ -697,6 +704,14 @@ partial class ModelSystemCanvas
                                      isError: true, durationMs: 6000);
                 };
                 menu.Items.Add(switchItem);
+            }
+
+            if (vm.IsInsideFunctionTemplate && paramNode.IsBasicParameter)
+            {
+                var capturedBasicParameter = paramNode;
+                var convertItem = new MenuItem { Header = "Create Function Parameter from Basic Parameter" };
+                convertItem.Click += (_, _) => vm.ConvertBasicParameterToFunctionParameter(capturedBasicParameter);
+                menu.Items.Add(convertItem);
             }
 
             menu.Items.Add(new Separator());

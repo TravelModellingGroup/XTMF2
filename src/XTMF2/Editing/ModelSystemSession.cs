@@ -4076,6 +4076,198 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Replaces a BasicParameter inside a function template with a FunctionParameter.
+        /// Existing internal links are redirected to the new FunctionParameter, and every
+        /// FunctionInstance receives a BasicParameter provider containing the old value.
+        /// </summary>
+        public bool ConvertBasicParameterToFunctionParameter(User user, Node basicParameter,
+            out FunctionParameter? parameter, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(basicParameter);
+            parameter = null;
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var type = basicParameter.Type;
+                if (type is null || !type.IsGenericType
+                    || type.GetGenericTypeDefinition() != typeof(RuntimeModules.BasicParameter<>))
+                {
+                    error = new CommandError("Only BasicParameter nodes can be converted to FunctionParameters.");
+                    return false;
+                }
+
+                var internalBoundary = basicParameter.ContainedWithin;
+                var template = internalBoundary?.OwningFunctionTemplate;
+                if (internalBoundary is null || template is null)
+                {
+                    error = new CommandError("The BasicParameter must be inside a FunctionTemplate.");
+                    return false;
+                }
+
+                var value = basicParameter.ParameterValue?.Representation;
+                if (value is null)
+                {
+                    error = new CommandError($"BasicParameter '{basicParameter.Name}' has no value to expose.");
+                    return false;
+                }
+
+                var linked = internalBoundary.Links
+                    .Where(link => link.HasDestination(basicParameter))
+                    .ToList();
+                var parameterLocation = basicParameter.Location;
+                var parameterBaseName = basicParameter.Name;
+                if (parameterLocation.Equals(Rectangle.Hidden))
+                {
+                    parameterBaseName = linked.FirstOrDefault()?.OriginHook.Name ?? parameterBaseName;
+                    var containingElement = linked
+                        .Select(link => link.Origin)
+                        .FirstOrDefault(origin => !origin.Location.Equals(Rectangle.Hidden));
+                    parameterLocation = containingElement is not null
+                        ? new Rectangle(containingElement.Location.X + containingElement.Location.Width + 30f,
+                            containingElement.Location.Y, 250f, 50f)
+                        : new Rectangle(40f, 40f, 250f, 50f);
+                }
+                    var parameterName = MakeUniqueFunctionParameterName(template, parameterBaseName);
+                var instances = EnumerateBoundaries(ModelSystem.GlobalBoundary)
+                    .SelectMany(boundary => boundary.FunctionInstances)
+                    .Where(instance => ReferenceEquals(instance.Template, template))
+                    .ToList();
+                var providers = new List<(FunctionInstance Instance, Node Provider, Link Link)>();
+
+                if (!template.AddFunctionParameter(parameterName, type, parameterLocation,
+                        out parameter, out error))
+                    return false;
+
+                var capturedParameter = parameter;
+                bool Apply()
+                {
+                    CommandError? localError;
+                    foreach (var link in linked)
+                        internalBoundary.RemoveLink(link, out localError);
+                    internalBoundary.RemoveNode(basicParameter, out localError);
+
+                    foreach (var link in linked)
+                    {
+                        if (link is SingleLink single)
+                        {
+                            single.SetDestination(capturedParameter, out localError);
+                        }
+                        else if (link is MultiLink multi)
+                        {
+                            for (int i = 0; i < multi.Destinations.Count; i++)
+                            {
+                                if (ReferenceEquals(multi.Destinations[i], basicParameter))
+                                    multi.ReplaceDestination(i, capturedParameter, out localError);
+                            }
+                        }
+                        internalBoundary.AddLink(link, out localError);
+                    }
+
+                    foreach (var instance in instances)
+                    {
+                        var providerName = MakeUniqueNodeName(instance.ContainedWithin!, parameterName);
+                        if (!instance.ContainedWithin!.AddNode(GetModuleRepository(), providerName, type,
+                                Rectangle.Hidden, out var provider, out localError))
+                            return false;
+                        if (!provider!.SetParameterValue(ParameterExpression.CreateParameter(value, type.GenericTypeArguments[0]),
+                                out localError))
+                            return false;
+
+                        var hook = instance.Hooks.OfType<FunctionParameterHook>()
+                            .FirstOrDefault(candidate => ReferenceEquals(candidate.Parameter, capturedParameter));
+                        if (hook is null || !instance.ContainedWithin.AddLink(instance, hook, provider,
+                                out var providerLink, out localError))
+                            return false;
+                        providers.Add((instance, provider, providerLink!));
+                    }
+
+                    return true;
+                }
+
+                void Restore()
+                {
+                    CommandError? localError;
+                    foreach (var (_, provider, providerLink) in providers)
+                    {
+                        provider.ContainedWithin!.RemoveLink(providerLink, out localError);
+                        provider.ContainedWithin.RemoveNode(provider, out localError);
+                    }
+                    providers.Clear();
+
+                    foreach (var link in linked)
+                        internalBoundary.RemoveLink(link, out localError);
+                    foreach (var link in linked)
+                    {
+                        if (link is SingleLink single)
+                            single.SetDestination(basicParameter, out localError);
+                        else if (link is MultiLink multi)
+                        {
+                            for (int i = 0; i < multi.Destinations.Count; i++)
+                            {
+                                if (ReferenceEquals(multi.Destinations[i], capturedParameter))
+                                    multi.ReplaceDestination(i, basicParameter, out localError);
+                            }
+                        }
+                        internalBoundary.AddLink(link, out localError);
+                    }
+                    internalBoundary.AddNode(basicParameter, out localError);
+                    template.RemoveFunctionParameter(capturedParameter, out localError);
+                }
+
+                if (!Apply())
+                {
+                    Restore();
+                    error = new CommandError("Unable to create FunctionParameter providers for all FunctionInstances.");
+                    parameter = null;
+                    return false;
+                }
+
+                Buffer.AddUndo(new Command(
+                    () => { Restore(); return (true, null); },
+                    () => { return (Apply(), (CommandError?)null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        private static string MakeUniqueFunctionParameterName(FunctionTemplate template, string baseName)
+        {
+            var name = baseName;
+            int index = 2;
+            while (template.FunctionParameters.Any(parameter =>
+                parameter.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                name = $"{baseName}{index++}";
+            return name;
+        }
+
+        private static string MakeUniqueNodeName(Boundary boundary, string baseName)
+        {
+            var name = baseName;
+            int index = 2;
+            while (boundary.Modules.Any(node => node.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                || boundary.FunctionInstances.Any(instance => instance.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                name = $"{baseName}{index++}";
+            return name;
+        }
+
+        private static IEnumerable<Boundary> EnumerateBoundaries(Boundary boundary)
+        {
+            yield return boundary;
+            foreach (var child in boundary.Boundaries)
+            {
+                foreach (var nested in EnumerateBoundaries(child))
+                    yield return nested;
+            }
+        }
+
+        /// <summary>
         /// Removes a <see cref="FunctionParameter"/> from <paramref name="template"/>.
         /// Any links inside the template that point to the parameter are also removed.
         /// </summary>

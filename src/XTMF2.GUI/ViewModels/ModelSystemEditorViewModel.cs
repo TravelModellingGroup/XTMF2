@@ -2960,6 +2960,16 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             await ShowError("Create Link Failed", linkError);
     }
 
+            /// <summary>Converts a BasicParameter node in the current template into a FunctionParameter.</summary>
+            public void ConvertBasicParameterToFunctionParameter(NodeViewModel nodeVm)
+            {
+            if (!IsInsideFunctionTemplate) return;
+
+            if (!Session.ConvertBasicParameterToFunctionParameter(User, nodeVm.UnderlyingNode,
+                out _, out var error))
+                ShowToast(error?.Message ?? "Unable to create Function Parameter.", isError: true, durationMs: 6000);
+            }
+
     /// <summary>
     /// Removes a <see cref="FunctionParameter"/> from the current function template.
     /// </summary>

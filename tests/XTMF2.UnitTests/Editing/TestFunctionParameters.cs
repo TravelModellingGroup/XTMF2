@@ -243,6 +243,56 @@ namespace XTMF2.UnitTests.Editing
             });
         }
 
+        [TestMethod]
+        public void TestConvertBasicParameterToFunctionParameter()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestConvertBasicParameterToFunctionParameter), (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var ms = mSession.ModelSystem;
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, "FT",
+                    out FunctionTemplate template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, template.InternalModules, "Value",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>), Rectangle.Hidden,
+                    out var basicParameter, out error), error?.Message);
+                Assert.IsTrue(mSession.SetParameterValue(user, basicParameter!, "Hello", out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, template.InternalModules, "Inner",
+                    typeof(XTMF2.UnitTests.Modules.SimpleParameterModule), new Rectangle(10f, 20f, 120f, 50f),
+                    out var innerNode, out error), error?.Message);
+                var hook = innerNode!.Hooks.First(h => h.Name == "Real Function");
+                Assert.IsTrue(mSession.AddLink(user, innerNode, hook, basicParameter!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionInstance(user, ms.GlobalBoundary, template, "FI",
+                    Rectangle.Hidden, out var instance, out error), error?.Message);
+
+                Assert.IsTrue(mSession.ConvertBasicParameterToFunctionParameter(user, basicParameter!,
+                    out var parameter, out error), error?.Message);
+
+                Assert.IsNotNull(parameter);
+                Assert.AreEqual("Real Function", parameter!.Name);
+                Assert.AreEqual(typeof(XTMF2.RuntimeModules.BasicParameter<string>), parameter!.Type);
+                Assert.AreEqual(160f, parameter.Location.X);
+                Assert.AreEqual(20f, parameter.Location.Y);
+                Assert.AreEqual(250f, parameter.Location.Width);
+                Assert.AreEqual(50f, parameter.Location.Height);
+                Assert.DoesNotContain(basicParameter!, template.InternalModules.Modules);
+                Assert.IsTrue(template.InternalModules.Links.Any(link =>
+                    link is SingleLink single && single.Destination == parameter));
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
+                var provider = ms.GlobalBoundary.Modules[0];
+                Assert.AreEqual("Hello", provider.ParameterValue!.Representation);
+                Assert.IsTrue(ms.GlobalBoundary.Links.Any(link =>
+                    link.Origin == instance && link.DestinationCount == 1
+                    && link is SingleLink single
+                    && single.Destination == provider));
+
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.Contains(basicParameter!, template.InternalModules.Modules);
+                Assert.DoesNotContain(parameter, template.FunctionParameters);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
+            });
+        }
+
         // ── Save / Load roundtrip ─────────────────────────────────────────
 
         [TestMethod]

@@ -223,6 +223,20 @@ namespace XTMF2.ModelSystemConstruct
             _hiddenDestinations.RemoveAt(i);
         }
 
+        internal bool ReplaceDestination(int index, Node destination, [NotNullWhen(false)] out CommandError? error)
+        {
+            if (index < 0 || index >= _Destinations.Count)
+            {
+                error = new CommandError("Destination index out of range for MultiLink replacement.");
+                return false;
+            }
+
+            _Destinations[index] = destination;
+            Notify(nameof(Destinations));
+            error = null;
+            return true;
+        }
+
         /// <summary>Moves the destination at <paramref name="fromIndex"/> to <paramref name="toIndex"/>.</summary>
         internal void MoveDestination(int fromIndex, int toIndex)
         {

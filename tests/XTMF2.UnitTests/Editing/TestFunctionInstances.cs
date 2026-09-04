@@ -497,6 +497,26 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void TestFunctionInstancePreservesFunctionParameterHookIdentity()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestFunctionInstancePreservesFunctionParameterHookIdentity),
+                (user, pSession, mSession) =>
+                {
+                    var template = AddTemplate(user, mSession);
+                    var instance = AddInstance(user, mSession, template);
+                    Assert.IsTrue(mSession.AddFunctionParameter(user, template, "First", typeof(IModule),
+                        Rectangle.Hidden, out var first, out var error), error?.Message);
+                    var firstHook = instance.Hooks[0];
+
+                    Assert.IsTrue(mSession.AddFunctionParameter(user, template, "Second", typeof(IModule),
+                        Rectangle.Hidden, out _, out error), error?.Message);
+
+                    Assert.AreSame(first, ((FunctionParameterHook)instance.Hooks[0]).Parameter);
+                    Assert.AreSame(firstHook, instance.Hooks[0]);
+                });
+        }
+
+        [TestMethod]
         public void TestFunctionTemplateResolvesById()
         {
             TestHelper.RunInModelSystemContext("TestFunctionTemplateResolvesById", (user, pSession, mSession) =>
