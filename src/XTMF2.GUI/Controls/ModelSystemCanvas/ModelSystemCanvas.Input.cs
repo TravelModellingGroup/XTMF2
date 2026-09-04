@@ -941,6 +941,8 @@ partial class ModelSystemCanvas
             hookDescription = functionInstanceHook?.Parameter.Description;
         }
         if (hookDescription is null)
+            hookDescription = HitTestFunctionTemplateHook(canvasPosition)?.Description;
+        if (hookDescription is null)
         {
             hookDescription = HitTest(canvasPosition, testComments: false) switch
             {

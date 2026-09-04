@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using XTMF2.GUI.ViewModels;
+using XTMF2.ModelSystemConstruct;
 using System.Collections.ObjectModel;
 
 namespace XTMF2.GUI.Controls;
@@ -139,6 +140,26 @@ partial class ModelSystemCanvas
                         return (fi, fph);
                     }
                 }
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the FunctionParameter whose hook row contains <paramref name="pos"/>
+    /// on a FunctionTemplate, or <c>null</c> when the point is outside its hook rows.
+    /// </summary>
+    private FunctionParameter? HitTestFunctionTemplateHook(Point pos)
+    {
+        if (_vm is null) return null;
+        foreach (var template in _vm.FunctionTemplates)
+        {
+            if (pos.X < template.X || pos.X > template.X + template.Width) continue;
+            for (int i = 0; i < template.FunctionParameters.Count; i++)
+            {
+                double rowTop = template.Y + FtHeaderHeight + i * FtHookRowHeight;
+                if (pos.Y >= rowTop && pos.Y < rowTop + FtHookRowHeight)
+                    return template.FunctionParameters[i];
             }
         }
         return null;
