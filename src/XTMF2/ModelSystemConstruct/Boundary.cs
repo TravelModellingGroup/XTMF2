@@ -655,6 +655,54 @@ namespace XTMF2.ModelSystemConstruct
                 ft.Name.Equals(templateName, StringComparison.Ordinal));
         }
 
+        /// <summary>
+        /// Resolves a <see cref="FunctionTemplate"/> by its stable identifier within
+        /// <paramref name="root"/> and its child boundaries.
+        /// </summary>
+        public static FunctionTemplate? ResolveTemplate(Boundary root, Guid id)
+        {
+            var template = root._functionTemplates.FirstOrDefault(ft => ft.Id == id);
+            if (template is not null) return template;
+
+            foreach (var child in root._boundaries)
+            {
+                template = ResolveTemplate(child, id);
+                if (template is not null) return template;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Resolves a function template by name across the model-system boundary tree.
+        /// Returns <see langword="null"/> unless exactly one matching template exists.
+        /// </summary>
+        public static FunctionTemplate? ResolveUniqueTemplateByName(Boundary root, string name)
+        {
+            FunctionTemplate? match = null;
+            int matchCount = 0;
+            foreach (var template in EnumerateFunctionTemplates(root))
+            {
+                if (!template.Name.Equals(name, StringComparison.Ordinal)) continue;
+                match = template;
+                if (++matchCount > 1) return null;
+            }
+
+            return match;
+        }
+
+        private static IEnumerable<FunctionTemplate> EnumerateFunctionTemplates(Boundary boundary)
+        {
+            foreach (var template in boundary._functionTemplates)
+                yield return template;
+
+            foreach (var child in boundary._boundaries)
+            {
+                foreach (var template in EnumerateFunctionTemplates(child))
+                    yield return template;
+            }
+        }
+
         private static Boundary? ResolveBoundary(Boundary root, string path)
         {
             if (string.IsNullOrEmpty(path)) return root;

@@ -41,6 +41,7 @@ namespace XTMF2.ModelSystemConstruct
         // ── Additional JSON property names (NameProperty / X / Y / Width / HeightProperty /
         //    IndexProperty are inherited as protected constants from Node) ─────────────
         private const string TemplateNameProperty = "TemplateName";
+        private const string TemplateIdProperty = "TemplateId";
 
         /// <summary>
         /// The <see cref="FunctionTemplate"/> that this is an instantiation of.
@@ -150,6 +151,7 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteString(NameProperty, Name);
             var qualifiedName = Boundary.GetQualifiedTemplateName(ContainedWithin, Template) ?? Template.Name;
             writer.WriteString(TemplateNameProperty, qualifiedName);
+            writer.WriteString(TemplateIdProperty, Template.Id);
             writer.WriteNumber(IndexProperty, myIndex);
             writer.WriteNumber(XProperty, Location.X);
             writer.WriteNumber(YProperty, Location.Y);
@@ -181,6 +183,7 @@ namespace XTMF2.ModelSystemConstruct
 
             string? name         = null;
             string? templateName = null;
+            Guid?  templateId   = null;
             int     fiIndex      = -1;
             Guid    id           = Guid.Empty;
             float   x = 40, y = 40, w = 120, h = 50;
@@ -193,6 +196,7 @@ namespace XTMF2.ModelSystemConstruct
                 if      (reader.ValueTextEquals(IdProperty))            { reader.Read(); var s = reader.GetString(); if (s is not null) Guid.TryParse(s, out id); }
                 else if (reader.ValueTextEquals(NameProperty))         { reader.Read(); name         = reader.GetString(); }
                 else if (reader.ValueTextEquals(TemplateNameProperty)) { reader.Read(); templateName = reader.GetString(); }
+                else if (reader.ValueTextEquals(TemplateIdProperty))   { reader.Read(); if (reader.TryGetGuid(out var parsedId)) templateId = parsedId; }
                 else if (reader.ValueTextEquals(IndexProperty))        { reader.Read(); fiIndex      = reader.GetInt32();  }
                 else if (reader.ValueTextEquals(XProperty))            { reader.Read(); x            = reader.GetSingle(); }
                 else if (reader.ValueTextEquals(YProperty))            { reader.Read(); y            = reader.GetSingle(); }
@@ -214,9 +218,20 @@ namespace XTMF2.ModelSystemConstruct
             }
 
             var template = Boundary.ResolveTemplate(parentBoundary, templateName!);
+            if (template is null && templateId.HasValue)
+                template = Boundary.ResolveTemplate(parentBoundary, templateId.Value);
             if (template is null)
             {
-                error = $"FunctionInstance '{name}' references unknown FunctionTemplate '{templateName}'.";
+                var modelSystemRoot = parentBoundary;
+                while (modelSystemRoot.Parent is not null)
+                    modelSystemRoot = modelSystemRoot.Parent;
+                template = Boundary.ResolveUniqueTemplateByName(modelSystemRoot, templateName!);
+            }
+            if (template is null)
+            {
+                error = templateId.HasValue
+                    ? $"FunctionInstance '{name}' references unknown FunctionTemplate '{templateName}' ({templateId.Value})."
+                    : $"FunctionInstance '{name}' references unknown FunctionTemplate '{templateName}'.";
                 return false;
             }
 
