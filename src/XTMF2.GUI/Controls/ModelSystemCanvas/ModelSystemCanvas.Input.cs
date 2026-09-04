@@ -863,9 +863,26 @@ partial class ModelSystemCanvas
 
         // ── Cursor feedback while idle ────────────────────────────────────
         if (_dragging is null)
-            Cursor = HitTestResizeHandle(mpos) is not null
-                ? new Cursor(StandardCursorType.SizeAll)
-                : Cursor.Default;
+        {
+            if (HitTestResizeHandle(mpos) is not null)
+            {
+                Cursor = new Cursor(StandardCursorType.SizeAll);
+            }
+            else
+            {
+                var functionParameterHit = HitTest(mpos, testComments: false) as FunctionParameterViewModel;
+                bool overDescription = functionParameterHit is not null
+                    && mpos.Y >= functionParameterHit.Y + FtHeaderHeight + FpTypeRowHeight
+                    && mpos.Y < functionParameterHit.Y + FtHeaderHeight
+                        + FpTypeRowHeight + FpDescriptionRowHeight;
+                bool overEditableParameter = overDescription
+                    || HitTestParamValueRow(mpos) is not null
+                    || HitTestInlinedParamRow(mpos) is not null;
+                Cursor = overEditableParameter
+                    ? new Cursor(StandardCursorType.Ibeam)
+                    : Cursor.Default;
+            }
+        }
 
         if (_dragging is null) return;
 
