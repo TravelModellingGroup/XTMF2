@@ -73,6 +73,27 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void TestFunctionParameterDescriptionUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestFunctionParameterDescriptionUndoRedo), (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var ms = mSession.ModelSystem;
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, "MyFT",
+                    out FunctionTemplate template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "P1",
+                    typeof(XTMF2.IModule), Rectangle.Hidden, out var fp, out error), error?.Message);
+
+                Assert.IsTrue(mSession.SetFunctionParameterDescription(user, fp, "Input description", out error), error?.Message);
+                Assert.AreEqual("Input description", fp.Description);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.AreEqual(string.Empty, fp.Description);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.AreEqual("Input description", fp.Description);
+            });
+        }
+
+        [TestMethod]
         public void TestRemoveFunctionParameter()
         {
             TestHelper.RunInModelSystemContext(nameof(TestRemoveFunctionParameter), (user, pSession, mSession) =>

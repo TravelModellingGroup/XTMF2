@@ -225,6 +225,14 @@ partial class ModelSystemCanvas
         }
         else if (e.Key == Key.Tab && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0)
         {
+            if ((e.KeyModifiers & KeyModifiers.Shift) == 0
+                && _vm?.SelectedElement is FunctionParameterViewModel functionParameter)
+            {
+                BeginDescriptionEdit(functionParameter);
+                e.Handled = true;
+                return;
+            }
+
             // For comment blocks, Tab toggles header/body editing.
             bool commentTabContext = _editingCommentBlock is not null
                                   || _editingCommentHeaderBlock is not null
@@ -253,6 +261,7 @@ partial class ModelSystemCanvas
 
     private bool IsParameterOrCommentEditing =>
         _editingParamNode is not null
+        || _editingDescriptionParameter is not null
         || _editingCommentBlock is not null
         || _editingCommentHeaderBlock is not null;
 
@@ -453,6 +462,17 @@ partial class ModelSystemCanvas
         // ── Inline parameter value edit (single left click on param row) ──
         if (!isLinkDrag && !isCtrlLeft)
         {
+            var functionParameterHit = HitTest(mpos, testComments: false) as FunctionParameterViewModel;
+            if (functionParameterHit is not null
+                && mpos.Y >= functionParameterHit.Y + FtHeaderHeight + FpTypeRowHeight
+                && mpos.Y < functionParameterHit.Y + FtHeaderHeight + FpTypeRowHeight + FpDescriptionRowHeight)
+            {
+                _vm.SelectElementCommand.Execute(functionParameterHit);
+                BeginDescriptionEdit(functionParameterHit);
+                e.Handled = true;
+                return;
+            }
+
             // Regular parameter value row (node is visible on canvas).
             var paramRowHit = HitTestParamValueRow(mpos);
             if (paramRowHit is not null)
@@ -778,6 +798,7 @@ partial class ModelSystemCanvas
         var pos = e.GetCurrentPoint(this).Position;  // screen coords
         var mpos = ToCanvasPos(pos);                  // model coords
         _lastCanvasMousePos = mpos;
+        UpdateHookTooltip(mpos);
 
         // Capture ScrollViewer-local position now for auto-scroll use later.
         var svForScroll = GetScrollViewer();
@@ -892,6 +913,17 @@ partial class ModelSystemCanvas
         InvalidateAndMeasure();
         TryAutoScrollForDrag(svPos);
         e.Handled = true;
+    }
+
+    private void UpdateHookTooltip(Point canvasPosition)
+    {
+        var hookDescription = HitTestHook(canvasPosition)?.hook.Description;
+        if (hookDescription is null)
+        {
+            var functionInstanceHook = HitTestFiHook(canvasPosition)?.hook;
+            hookDescription = functionInstanceHook?.Parameter.Description;
+        }
+        ToolTip.SetTip(this, string.IsNullOrWhiteSpace(hookDescription) ? null : hookDescription);
     }
 
     /// <summary>

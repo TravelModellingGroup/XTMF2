@@ -1914,6 +1914,38 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>Sets a FunctionParameter description with undo support.</summary>
+        public bool SetFunctionParameterDescription(User user, FunctionParameter parameter, string description,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(parameter);
+            ArgumentNullException.ThrowIfNull(description);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var oldDescription = parameter.Description;
+                parameter.SetDescription(description);
+                Buffer.AddUndo(new Command(() =>
+                {
+                    parameter.SetDescription(oldDescription);
+                    return (true, (CommandError?)null);
+                }, () =>
+                {
+                    parameter.SetDescription(description);
+                    return (true, (CommandError?)null);
+                }));
+                error = null;
+                return true;
+            }
+        }
+
         /// <summary>
         /// Returns all nodes whose <see cref="ParameterExpression"/> is a
         /// <see cref="ScriptedParameter"/> that textually references <paramref name="oldName"/>

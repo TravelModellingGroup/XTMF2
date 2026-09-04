@@ -565,6 +565,9 @@ partial class ModelSystemCanvas
             ctx.DrawRectangle(headerFill, border, rect, FiCornerRadius, FiCornerRadius);
             ctx.DrawRectangle(bodyFill, null,
                 new Rect(fp.X, fp.Y + FtHeaderHeight, rw, rh - FtHeaderHeight));
+            ctx.DrawRectangle(_isLight ? FpDescriptionFillL : FpDescriptionFill, null,
+                new Rect(fp.X + 1, fp.Y + FtHeaderHeight + FpTypeRowHeight,
+                         rw - 2, FpDescriptionRowHeight));
             ctx.DrawRectangle(null, border, rect, FiCornerRadius, FiCornerRadius);
 
             // Name label in header.
@@ -574,12 +577,20 @@ partial class ModelSystemCanvas
             using (ctx.PushClip(new Rect(fp.X + 4, fp.Y, rw - 8, FtHeaderHeight)))
                 ctx.DrawText(labelFtText, new Point(lx, ly));
 
-            // Type name in smaller text below header.
+            // Type and description each occupy their own row below the header.
             if (!string.IsNullOrEmpty(fp.TypeName))
             {
                 var typeText = MakeText(fp.TypeName, HookFontSize, textBrush);
-                using (ctx.PushClip(new Rect(fp.X + 4, fp.Y + FtHeaderHeight, rw - 8, rh - FtHeaderHeight)))
+                using (ctx.PushClip(new Rect(fp.X + 4, fp.Y + FtHeaderHeight, rw - 8, FpTypeRowHeight)))
                     ctx.DrawText(typeText, new Point(lx, fp.Y + FtHeaderHeight + 4.0));
+            }
+            if (!string.IsNullOrEmpty(fp.Description))
+            {
+                var descriptionText = MakeText(fp.Description, HookFontSize, textBrush);
+                using (ctx.PushClip(new Rect(fp.X + 4, fp.Y + FtHeaderHeight + FpTypeRowHeight,
+                                             rw - 8, FpDescriptionRowHeight)))
+                    ctx.DrawText(descriptionText,
+                        new Point(lx, fp.Y + FtHeaderHeight + FpTypeRowHeight + 4.0));
             }
 
             // Resize grip (same dot pattern as other elements).

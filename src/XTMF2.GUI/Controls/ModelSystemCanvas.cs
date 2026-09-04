@@ -159,6 +159,11 @@ public sealed partial class ModelSystemCanvas : Control
     /// <summary>Model-space position and size of the name editor overlay.</summary>
     private double _nameEditorX, _nameEditorY, _nameEditorW, _nameEditorH;
 
+    // ── Inline FunctionParameter description editor ─────────────────────
+    private readonly TextBox _descriptionEditor;
+    private FunctionParameterViewModel? _editingDescriptionParameter;
+    private double _descriptionEditorX, _descriptionEditorY, _descriptionEditorW, _descriptionEditorH;
+
     // ── Inlined BasicParameter caches (rebuilt by BuildHookAnchorCache) ───
     /// <summary>
     /// Maps (origin node, hook) → the BasicParameter node that is currently inlined
@@ -315,6 +320,24 @@ public sealed partial class ModelSystemCanvas : Control
         _nameEditor.LostFocus += OnNameEditorLostFocus;
         LogicalChildren.Add(_nameEditor);
         VisualChildren.Add(_nameEditor);
+
+        _descriptionEditor = new TextBox
+        {
+            FontFamily = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize = HookFontSize,
+            Foreground = Brushes.White,
+            Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38)),
+            BorderThickness = new Thickness(1),
+            BorderBrush = FpBorderBrush,
+            Padding = new Thickness(4, 0, 4, 0),
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            IsVisible = false,
+        };
+        _descriptionEditor.AddHandler(InputElement.KeyDownEvent, OnDescriptionEditorKeyDown,
+                                      Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        _descriptionEditor.LostFocus += OnDescriptionEditorLostFocus;
+        LogicalChildren.Add(_descriptionEditor);
+        VisualChildren.Add(_descriptionEditor);
 
         // ── Zoom control (pinned to viewport bottom-right) ────────────────
         _zoomTextBox = new TextBox
@@ -800,6 +823,10 @@ public sealed partial class ModelSystemCanvas : Control
         {
             _nameEditor.Measure(new Size(_nameEditorW * _scale, _nameEditorH * _scale));
         }
+        if (_editingDescriptionParameter is not null)
+        {
+            _descriptionEditor.Measure(new Size(_descriptionEditorW * _scale, _descriptionEditorH * _scale));
+        }
         // Measure the zoom bar so ArrangeOverride can use its desired size.
         _zoomBar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         return new Size(maxX * _scale, maxY * _scale);
@@ -888,6 +915,15 @@ public sealed partial class ModelSystemCanvas : Control
                 _nameEditorW * _scale,
                 _nameEditorH * _scale));
         }
+            if (_editingDescriptionParameter is not null)
+            {
+                _descriptionEditor.FontSize = HookFontSize * _scale;
+                _descriptionEditor.Arrange(new Rect(
+                _descriptionEditorX * _scale,
+                _descriptionEditorY * _scale,
+                _descriptionEditorW * _scale,
+                _descriptionEditorH * _scale));
+            }
         // Pin the zoom control to the bottom-right of the visible viewport.
         var sv = GetScrollViewer();
         var zw = _zoomBar.DesiredSize.Width;

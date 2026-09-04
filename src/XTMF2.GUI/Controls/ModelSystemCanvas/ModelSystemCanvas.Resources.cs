@@ -191,6 +191,8 @@ partial class ModelSystemCanvas
     private const double FtHeaderHeight = 28.0;
     private const double FtHookRowHeight = 16.0;
     private const double FtNameFontSize = 11.0;
+    private const double FpTypeRowHeight = 20.0;
+    private const double FpDescriptionRowHeight = 20.0;
     private const double FtCornerRadius = 6.0;
     // Function-instance box (teal/green palette, solid border to distinguish from template)
     private static readonly IBrush FiFill = new SolidColorBrush(Color.FromRgb(0x07, 0x24, 0x24));
@@ -307,9 +309,11 @@ partial class ModelSystemCanvas
     // ── Dark-mode FunctionParameter brushes (promoted from per-frame allocations) ──
     private static readonly IBrush FpBodyFill    = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x8C, 0x00));
     private static readonly IBrush FpHeaderFill  = new SolidColorBrush(Color.FromArgb(0xFF, 0xC0, 0x50, 0x00));
+    private static readonly IBrush FpDescriptionFill = new SolidColorBrush(Color.FromArgb(0x42, 0x40, 0xA0, 0xD8));
     private static readonly IBrush FpBorderBrush = new SolidColorBrush(Colors.DarkOrange);
     private static readonly IBrush FpSelBorderBrush = new SolidColorBrush(Colors.OrangeRed);
     private static readonly IBrush FpBodyFillSel = new SolidColorBrush(Colors.PeachPuff);   // light-mode selected fill
+    private static readonly IBrush FpDescriptionFillL = new SolidColorBrush(Color.FromArgb(0x58, 0xFF, 0xFF, 0xFF));
     private static readonly Color  FpGlowColor   = Colors.OrangeRed;
 
     // ── Pre-computed Pen instances (replaces per-frame `new Pen(...)`) ────

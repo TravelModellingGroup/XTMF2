@@ -31,6 +31,8 @@ namespace XTMF2
     {
         public virtual string Name { get; protected set; }
 
+        public string Description { get; }
+
         public HookCardinality Cardinality { get; private set; }
 
         public int Index { get; private set; }
@@ -55,9 +57,11 @@ namespace XTMF2
         /// </summary>
         public bool PassesExecution { get; private set; }
 
-        public NodeHook(string name, HookCardinality cardinality, int index, bool isParameter, string? defaultValue, bool passesExecution = false)
+        public NodeHook(string name, HookCardinality cardinality, int index, bool isParameter, string? defaultValue,
+            bool passesExecution = false, string? description = null)
         {
             Name = name;
+            Description = description ?? string.Empty;
             Cardinality = cardinality;
             Index = index;
             IsParameter = isParameter;
@@ -121,8 +125,9 @@ namespace XTMF2
     sealed class PropertyHook : NodeHook
     {
         readonly PropertyInfo Property;
-        public PropertyHook(string name, PropertyInfo property, bool required, int index, bool isParameter, string? defaultValue, bool passesExecution = false)
-            : base(name, GetCardinality(property, required), index, isParameter, defaultValue, passesExecution)
+        public PropertyHook(string name, PropertyInfo property, bool required, int index, bool isParameter, string? defaultValue,
+            bool passesExecution = false, string? description = null)
+            : base(name, GetCardinality(property, required), index, isParameter, defaultValue, passesExecution, description)
         {
             Property = property;
         }
@@ -206,8 +211,9 @@ namespace XTMF2
     sealed class FieldHook : NodeHook
     {
         readonly FieldInfo Field;
-        public FieldHook(string name, FieldInfo field, bool required, int index, bool isParameter, string? defaultValue, bool passesExecution = false)
-            : base(name, GetCardinality(field, required), index, isParameter, defaultValue, passesExecution)
+        public FieldHook(string name, FieldInfo field, bool required, int index, bool isParameter, string? defaultValue,
+            bool passesExecution = false, string? description = null)
+            : base(name, GetCardinality(field, required), index, isParameter, defaultValue, passesExecution, description)
         {
             Field = field;
         }
