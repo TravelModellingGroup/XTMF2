@@ -3500,6 +3500,58 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>Sets the orthogonal-routing flag on multiple links as one undoable action.</summary>
+        public bool SetLinksOrthogonal(User user, IEnumerable<Link> links, bool orthogonal,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(links);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var linksToChange = links.Where(l => l is not null)
+                    .Distinct()
+                    .Where(l => l.IsOrthogonal != orthogonal)
+                    .ToList();
+                if (linksToChange.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var changedLinks = new List<Link>(linksToChange.Count);
+                var batch = new CommandBatch();
+                foreach (var linkToChange in linksToChange)
+                {
+                    if (!linkToChange.SetOrthogonal(orthogonal, out error))
+                    {
+                        foreach (var changed in changedLinks)
+                            _ = changed.SetOrthogonal(!orthogonal, out _);
+                        return false;
+                    }
+
+                    changedLinks.Add(linkToChange);
+                    batch.Add(new Command(() =>
+                    {
+                        return (linkToChange.SetOrthogonal(!orthogonal, out var undoError), undoError);
+                    }, () =>
+                    {
+                        return (linkToChange.SetOrthogonal(orthogonal, out var redoError), redoError);
+                    }));
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
+            }
+        }
+
         /// <summary>
         /// Save the model system
         /// </summary>
@@ -3576,6 +3628,64 @@ namespace XTMF2.Editing
                 {
                     return false;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Removes multiple links as one undoable action.
+        /// </summary>
+        public bool RemoveLinks(User user, IEnumerable<Link> links, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(links);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var targets = links.Where(l => l is not null).Distinct().ToList();
+                if (targets.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var removed = new List<(Link Link, Boundary Boundary)>(targets.Count);
+                var batch = new CommandBatch();
+                foreach (var linkToRemove in targets)
+                {
+                    var boundary = linkToRemove.Origin?.ContainedWithin;
+                    if (boundary is null)
+                    {
+                        error = new CommandError("The link does not belong to a boundary.");
+                        foreach (var (removedLink, removedBoundary) in removed)
+                            removedBoundary.AddLink(removedLink, out _);
+                        return false;
+                    }
+                    if (!boundary.RemoveLink(linkToRemove, out error))
+                    {
+                        foreach (var (removedLink, removedBoundary) in removed)
+                            removedBoundary.AddLink(removedLink, out _);
+                        return false;
+                    }
+
+                    removed.Add((linkToRemove, boundary));
+                    batch.Add(new Command(() =>
+                    {
+                        return (boundary.AddLink(linkToRemove, out var undoError), undoError);
+                    }, () =>
+                    {
+                        return (boundary.RemoveLink(linkToRemove, out var redoError), redoError);
+                    }));
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
             }
         }
 

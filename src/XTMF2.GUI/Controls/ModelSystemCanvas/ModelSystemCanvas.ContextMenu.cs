@@ -539,7 +539,9 @@ partial class ModelSystemCanvas
                 ? "Switch to Curved Routing"
                 : "Switch to Orthogonal Routing";
             var routingItem = new MenuItem { Header = routingHeader };
-            routingItem.Click += (_, _) => vm.ToggleLinkOrthogonal(capturedRoutingLink.UnderlyingLink);
+            var routingTargets = GetDisableTargetsForClickedLink(capturedRoutingLink);
+            routingItem.Click += (_, _) => vm.ToggleLinksOrthogonal(
+                routingTargets, !capturedRoutingLink.UnderlyingLink.IsOrthogonal);
             menu.Items.Add(routingItem);
 
             bool nextDestinationHidden = !link.IsDestinationBranchHidden;

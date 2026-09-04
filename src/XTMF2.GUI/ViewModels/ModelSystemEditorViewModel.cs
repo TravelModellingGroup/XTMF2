@@ -3572,7 +3572,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     internal void ToggleLinkOrthogonal(Link link)
     {
-        if (!Session.SetLinkOrthogonal(User, link, !link.IsOrthogonal, out var error) && error is not null)
+        if (!Session.SetLinksOrthogonal(User, new[] { link }, !link.IsOrthogonal, out var error) && error is not null)
+            ShowToast(error.Message ?? "Could not change link routing.", isError: true, durationMs: 4000);
+    }
+
+    internal void ToggleLinksOrthogonal(IReadOnlyList<Link> links, bool orthogonal)
+    {
+        if (!Session.SetLinksOrthogonal(User, links, orthogonal, out var error) && error is not null)
             ShowToast(error.Message ?? "Could not change link routing.", isError: true, durationMs: 4000);
     }
 
@@ -3659,6 +3665,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         if (firstError is not null)
             ShowToast(firstError.Message ?? "Delete failed.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>Deletes multiple links as one undoable action.</summary>
+    public async Task DeleteMultipleLinksAsync(IReadOnlyList<Link> links)
+    {
+        SelectLink(null);
+        if (!Session.RemoveLinks(User, links, out var error) && error is not null)
+            ShowToast(error.Message ?? "Delete failed.", isError: true, durationMs: 4000);
     }
 
     /// <summary>Delete whichever element or link is currently selected.</summary>

@@ -54,7 +54,13 @@ partial class ModelSystemCanvas
         }
         else if (e.Key is Key.Delete or Key.Back)
         {
-            if (_multiSelection.Count > 1)
+            if (_multiLinkSelection.Count > 1)
+            {
+                var linksToDelete = _multiLinkSelection.ToList();
+                ClearMultiSelection();
+                _ = _vm.DeleteMultipleLinksAsync(linksToDelete);
+            }
+            else if (_multiSelection.Count > 1)
             {
                 // Snapshot the set before clearing so deletions don't mutate it mid-loop.
                 var toDelete = _multiSelection.ToList();
@@ -976,6 +982,29 @@ partial class ModelSystemCanvas
                         firstHit ??= node;
                     }
                 }
+
+                if (firstHit is null)
+                {
+                    LinkViewModel? firstLinkHit = null;
+                    foreach (var link in _vm.Links)
+                    {
+                        if (link.IsDestinationBranchHidden && !_vm.RenderAllHiddenDestinationLinks)
+                            continue;
+                        if (link.Destination is null
+                            || link.Destination is NodeViewModel destinationNode && destinationNode.IsInlined)
+                            continue;
+                        if (!LinkIntersectsSelectionRect(link, finalRect))
+                            continue;
+
+                        _multiLinkSelection.Add(link.UnderlyingLink);
+                        link.IsSelected = true;
+                        firstLinkHit ??= link;
+                    }
+
+                    if (firstLinkHit is not null)
+                        _vm.SelectLinkCommand.Execute(firstLinkHit);
+                }
+
                 foreach (var comment in _vm.CommentBlocks)
                 {
                     var cr = new Rect(comment.X, comment.Y, comment.Width, comment.Height);
@@ -1133,6 +1162,63 @@ partial class ModelSystemCanvas
         EndPointerInteraction(e.Pointer);
         InvalidateAndMeasure();
         e.Handled = true;
+    }
+
+    private bool LinkIntersectsSelectionRect(LinkViewModel link, Rect selectionRect)
+    {
+        if (link.UnderlyingLink.IsOrthogonal)
+        {
+            _orthogonalSpineX.TryGetValue(link.UnderlyingLink, out var spineX);
+            var points = ComputeOrthogonalPath(link, spineX > 0 ? spineX : (double?)null);
+            for (int i = 1; i < points.Length; i++)
+            {
+                if (SegmentIntersectsRect(points[i - 1], points[i], selectionRect))
+                    return true;
+            }
+            return false;
+        }
+
+        var (p1, c1, c2, p2) = ComputeSCurve(link);
+        const int SelectionSamples = 16;
+        var previous = p1;
+        for (int sample = 1; sample <= SelectionSamples; sample++)
+        {
+            var next = SampleCubicBezier(p1, c1, c2, p2, sample / (double)SelectionSamples);
+            if (SegmentIntersectsRect(previous, next, selectionRect))
+                return true;
+            previous = next;
+        }
+        return false;
+    }
+
+    private static bool SegmentIntersectsRect(Point start, Point end, Rect rect)
+    {
+        if (rect.Contains(start) || rect.Contains(end))
+            return true;
+
+        var topLeft = new Point(rect.Left, rect.Top);
+        var topRight = new Point(rect.Right, rect.Top);
+        var bottomRight = new Point(rect.Right, rect.Bottom);
+        var bottomLeft = new Point(rect.Left, rect.Bottom);
+        return SegmentsIntersect(start, end, topLeft, topRight)
+            || SegmentsIntersect(start, end, topRight, bottomRight)
+            || SegmentsIntersect(start, end, bottomRight, bottomLeft)
+            || SegmentsIntersect(start, end, bottomLeft, topLeft);
+    }
+
+    private static bool SegmentsIntersect(Point firstStart, Point firstEnd, Point secondStart, Point secondEnd)
+    {
+        static double Cross(Point a, Point b, Point c) =>
+            (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+
+        var first = Cross(firstStart, firstEnd, secondStart);
+        var second = Cross(firstStart, firstEnd, secondEnd);
+        var third = Cross(secondStart, secondEnd, firstStart);
+        var fourth = Cross(secondStart, secondEnd, firstEnd);
+        const double Epsilon = 0.000001;
+
+        return ((first > Epsilon && second < -Epsilon) || (first < -Epsilon && second > Epsilon))
+            && ((third > Epsilon && fourth < -Epsilon) || (third < -Epsilon && fourth > Epsilon));
     }
 
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)

@@ -144,6 +144,36 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void UndoRemoveMultipleLinksAsOneAction()
+        {
+            TestHelper.RunInModelSystemContext("UndoRemoveMultipleLinksAsOneAction", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                CommandError error = null;
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Parameter1", typeof(BasicParameter<string>), Rectangle.Hidden,
+                    out var parameter1, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Module1", typeof(SimpleParameterModule), Rectangle.Hidden,
+                    out var module1, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Parameter2", typeof(BasicParameter<string>), Rectangle.Hidden,
+                    out var parameter2, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Module2", typeof(SimpleParameterModule), Rectangle.Hidden,
+                    out var module2, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, module1, module1.Hooks[0], parameter1, out var link1, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, module2, module2.Hooks[0], parameter2, out var link2, out error), error?.Message);
+                Assert.HasCount(2, ms.GlobalBoundary.Links);
+
+                Assert.IsTrue(mSession.RemoveLinks(user, new[] { link1, link2 }, out error), error?.Message);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.HasCount(2, ms.GlobalBoundary.Links);
+                Assert.Contains(link1, ms.GlobalBoundary.Links);
+                Assert.Contains(link2, ms.GlobalBoundary.Links);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
+            });
+        }
+
+        [TestMethod]
         public void AddSingleLinkToDifferentModule()
         {
             /*
