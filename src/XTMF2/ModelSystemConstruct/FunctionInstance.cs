@@ -344,6 +344,8 @@ namespace XTMF2.ModelSystemConstruct
                     elementId = start.Id;
                     return false;  
                 } 
+                if (m is RuntimeModules.GetFunctionInstanceName getInstanceName)
+                    getInstanceName.FunctionInstanceName = Name;
                 _runtimeModules[start] = m!;
                 WrapScriptedExpression(start, m!);
             }
@@ -354,6 +356,8 @@ namespace XTMF2.ModelSystemConstruct
                     elementId = node.Id;
                     return false;
                 }
+                if (m is RuntimeModules.GetFunctionInstanceName getInstanceName)
+                    getInstanceName.FunctionInstanceName = Name;
                 _runtimeModules[node] = m!;
                 WrapScriptedExpression(node, m!);
             }
