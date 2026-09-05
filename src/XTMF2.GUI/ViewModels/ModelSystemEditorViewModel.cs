@@ -3303,7 +3303,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (ParentWindow is null) return;
 
-        var dialog = new BoundaryPickerDialog(GetAllBoundaries(GlobalBoundary), _currentBoundary);
+        var dialog = new BoundaryPickerDialog(
+            GetAllBoundaries(GlobalBoundary),
+            _currentBoundary,
+            DeleteBoundaryFromPickerAsync);
         await dialog.ShowDialog(ParentWindow);
 
         switch (dialog.Result)
@@ -3328,6 +3331,23 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 }
                 break;
         }
+    }
+
+    private async Task<bool> DeleteBoundaryFromPickerAsync(Boundary boundary)
+    {
+        if (boundary.Parent is null)
+            return false;
+
+        if (!Session.RemoveBoundary(User, boundary.Parent, boundary, out var error))
+        {
+            await ShowError("Delete Boundary Failed", error);
+            return false;
+        }
+
+        RebuildBoundaryNavItems();
+        if (ReferenceEquals(_currentBoundary, boundary))
+            SwitchToBoundary(boundary.Parent);
+        return true;
     }
 
     // ── Toast helper ──────────────────────────────────────────────────────

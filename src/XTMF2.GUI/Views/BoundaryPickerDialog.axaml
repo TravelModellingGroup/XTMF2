@@ -38,9 +38,24 @@
                      DoubleTapped="BoundaryListBox_DoubleTapped">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:BoundaryBrowseItem">
-                        <TextBlock Text="{Binding Boundary.Name}"
-                                   Margin="{Binding ItemMargin}"
-                                   Padding="2"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Boundary.Name}"
+                                       Margin="{Binding ItemMargin}"
+                                       Padding="2"/>
+                            <Button Grid.Column="1"
+                                    Classes="dlg-danger"
+                                    Click="DeleteBoundary_Click"
+                                    IsVisible="{Binding CanDelete}"
+                                    Padding="6,2"
+                                    Margin="4,0,0,0"
+                                    ToolTip.Tip="Delete boundary">
+                                <PathIcon Width="14"
+                                          Height="14"
+                                          Foreground="{DynamicResource DlgDanger}"
+                                          Data="M5,3 L9,3 L10,1 L14,1 L15,3 L19,3 L19,5 L17,5 L16,21 L8,21 L7,5 L5,5 Z M9,7 L9,18 L11,18 L11,7 Z M13,7 L13,18 L15,18 L15,7 Z"/>
+                            </Button>
+                        </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>

@@ -943,6 +943,16 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
+                var externalReferences = GetExternalFunctionInstancesOf(boundary);
+                if (externalReferences.Count > 0)
+                {
+                    var names = string.Join(", ", externalReferences.Select(fi => $"'{fi.Name}'"));
+                    error = new CommandError(
+                        $"Cannot remove boundary '{boundary.Name}' because it contains a " +
+                        $"FunctionTemplate referenced by the following function instance(s): {names}. " +
+                        "Remove those instances first.");
+                    return false;
+                }
                 var linksGoingToRemovedBoundary = ModelSystem.GlobalBoundary.GetLinksGoingToBoundary(boundary);
                 if (parentBoundary.RemoveBoundary(boundary, out error))
                 {
@@ -2282,6 +2292,36 @@ namespace XTMF2.Editing
                         result.Add(fi);
             }
             return result;
+        }
+
+        private List<FunctionInstance> GetExternalFunctionInstancesOf(Boundary boundary)
+        {
+            var templates = new HashSet<FunctionTemplate>();
+            var boundaries = new Stack<Boundary>();
+            boundaries.Push(boundary);
+            while (boundaries.Count > 0)
+            {
+                var current = boundaries.Pop();
+                foreach (var child in current.Boundaries)
+                    boundaries.Push(child);
+                foreach (var template in current.FunctionTemplates)
+                {
+                    templates.Add(template);
+                    boundaries.Push(template.InternalModules);
+                }
+            }
+
+            var externalInstances = new List<FunctionInstance>();
+            foreach (var template in templates)
+            {
+                foreach (var instance in GetAllFunctionInstancesOf(template))
+                {
+                    var containingBoundary = instance.ContainedWithin;
+                    if (containingBoundary != boundary && !boundary.Contains(containingBoundary))
+                        externalInstances.Add(instance);
+                }
+            }
+            return externalInstances;
         }
 
         private List<GhostNode> GetAllGhostNodesOf(Node realNode)

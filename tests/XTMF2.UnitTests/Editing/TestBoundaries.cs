@@ -114,6 +114,49 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void RemoveBoundaryWithReferencedFunctionTemplateFails()
+        {
+            TestHelper.RunInModelSystemContext(nameof(RemoveBoundaryWithReferencedFunctionTemplateFails),
+            (user, pSession, mSession) =>
+            {
+                var modelSystem = mSession.ModelSystem;
+                var globalBoundary = modelSystem.GlobalBoundary;
+                CommandError error = null;
+                Assert.IsTrue(mSession.AddBoundary(user, globalBoundary, "TemplateBoundary",
+                    out var templateBoundary, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, templateBoundary, "Template",
+                    out var template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionInstance(user, globalBoundary, template, "ExternalInstance",
+                    new Rectangle(0, 0, 160, 70), out _, out error), error?.Message);
+
+                Assert.IsFalse(mSession.RemoveBoundary(user, globalBoundary, templateBoundary, out error));
+                StringAssert.Contains(error?.Message, "ExternalInstance");
+                Assert.AreSame(templateBoundary, globalBoundary.Boundaries[0]);
+            });
+        }
+
+        [TestMethod]
+        public void RemoveBoundaryWithOnlyContainedFunctionInstancesSucceeds()
+        {
+            TestHelper.RunInModelSystemContext(nameof(RemoveBoundaryWithOnlyContainedFunctionInstancesSucceeds),
+            (user, pSession, mSession) =>
+            {
+                var modelSystem = mSession.ModelSystem;
+                var globalBoundary = modelSystem.GlobalBoundary;
+                CommandError error = null;
+                Assert.IsTrue(mSession.AddBoundary(user, globalBoundary, "TemplateBoundary",
+                    out var templateBoundary, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, templateBoundary, "Template",
+                    out var template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionInstance(user, templateBoundary, template, "ContainedInstance",
+                    new Rectangle(0, 0, 160, 70), out _, out error), error?.Message);
+
+                Assert.IsTrue(mSession.RemoveBoundary(user, globalBoundary, templateBoundary, out error), error?.Message);
+                Assert.IsEmpty(globalBoundary.Boundaries);
+            });
+        }
+
+        [TestMethod]
         public void RemoveBoundaryWithBadUser()
         {
             TestHelper.RunInModelSystemContext("RemoveBoundaryWithBadUser", (user, unauthorizedUser, pSession, mSession) =>
