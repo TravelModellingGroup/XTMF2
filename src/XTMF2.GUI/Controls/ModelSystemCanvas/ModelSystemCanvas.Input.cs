@@ -685,7 +685,8 @@ partial class ModelSystemCanvas
             // Begin link-creation drag from a node, start, or function instance (via its FunctionParameterHooks).
             // Comment blocks are not valid link origins.
             if (hit is NodeViewModel or StartViewModel
-                || (hit is FunctionInstanceViewModel hitFi && hitFi.FunctionParameters.Count > 0))
+                || (hit is FunctionInstanceViewModel hitFi && hitFi.FunctionParameters.Count > 0)
+                || hit is FunctionParameterViewModel)
             {
                 _linkOrigin = hit;
                 _linkCurrentPos = mpos;
@@ -1059,7 +1060,11 @@ partial class ModelSystemCanvas
             {
                 var releasePos = ToCanvasPos(e.GetCurrentPoint(this).Position);
                 var destHit = HitTest(releasePos, testComments: false);
-                if (destHit is NodeViewModel destNode && !ReferenceEquals(destNode, origin))
+                if (origin is FunctionParameterViewModel originFp
+                    && destHit is NodeViewModel targetNode
+                    && !ReferenceEquals(targetNode, origin))
+                    _ = _vm.CreateLinkAsync(originFp, targetNode);
+                else if (destHit is NodeViewModel destNode && !ReferenceEquals(destNode, origin))
                     _ = _vm.CreateLinkAsync(origin, destNode);
                 else if (destHit is FunctionInstanceViewModel destFi && !ReferenceEquals(destFi, origin))
                     _ = _vm.CreateLinkAsync(origin, destFi);

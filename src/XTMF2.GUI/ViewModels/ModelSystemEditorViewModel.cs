@@ -1719,6 +1719,32 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             await ShowError("Create Link Failed", error);
     }
 
+    /// <summary>
+    /// Creates a link from a compatible node hook to <paramref name="sourceFpVm"/>.
+    /// This is the reverse operation used when a user drags from a FunctionParameter
+    /// onto a node, since FunctionParameters are link destinations in the model.
+    /// </summary>
+    public async Task CreateLinkAsync(FunctionParameterViewModel sourceFpVm, NodeViewModel destinationNodeVm)
+    {
+        if (ParentWindow is null || _currentFunctionTemplate is null) return;
+
+        var parameter = sourceFpVm.UnderlyingParameter;
+        var compatible = GetCompatibleHooks(destinationNodeVm.UnderlyingNode, parameter.Type);
+        if (compatible.Count == 0)
+        {
+            await ShowError("Incompatible Types",
+                new CommandError($"No hooks on '{destinationNodeVm.Name}' are compatible with FunctionParameter type '{parameter.Type?.Name ?? "Unknown"}'."));
+            return;
+        }
+
+        var selectedHook = await SelectHookAsync(compatible, destinationNodeVm.Name, parameter.Name);
+        if (selectedHook is null) return;
+
+        if (!Session.AddLink(User, destinationNodeVm.UnderlyingNode, selectedHook,
+                             parameter, out _, out var error))
+            await ShowError("Create Link Failed", error);
+    }
+
     public async Task CreateLinkAsync(ICanvasElement originElement, NodeViewModel destVm)
     {
         if (ParentWindow is null) return;
