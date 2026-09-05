@@ -262,6 +262,7 @@ partial class ModelSystemCanvas
     private bool IsParameterOrCommentEditing =>
         _editingParamNode is not null
         || _editingDescriptionParameter is not null
+        || _editingNameElement is not null
         || _editingCommentBlock is not null
         || _editingCommentHeaderBlock is not null;
 
