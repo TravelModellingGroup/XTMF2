@@ -17,11 +17,15 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using XTMF2;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -34,6 +38,8 @@ public sealed partial class GhostNodeViewModel : ObservableObject, ICanvasElemen
 {
     /// <summary>The underlying ghost node model object.</summary>
     public GhostNode UnderlyingGhostNode { get; }
+    public NodeViewModel ReferencedNodeViewModel { get; }
+    public FunctionInstanceViewModel? ReferencedFunctionInstanceViewModel { get; }
 
     private readonly ModelSystemSession _session;
     private readonly User _user;
@@ -54,7 +60,9 @@ public sealed partial class GhostNodeViewModel : ObservableObject, ICanvasElemen
     public double Width  => _previewW ?? (UnderlyingGhostNode.Location.Width  is 0 ? 120.0 : (double)UnderlyingGhostNode.Location.Width);
 
     /// <summary>Rendered height; falls back to 50 when the model value is 0.</summary>
-    public double Height => _previewH ?? (UnderlyingGhostNode.Location.Height is 0 ? 50.0  : (double)UnderlyingGhostNode.Location.Height);
+    public double Height => _previewH ?? Math.Max(
+        UnderlyingGhostNode.Location.Height is 0 ? 50.0 : (double)UnderlyingGhostNode.Location.Height,
+        28.0 + (IsFunctionInstance ? FunctionParameters.Count : (IsParameterNode ? 1 : 0) + Hooks.Count) * 16.0);
 
     /// <inheritdoc/>
     public double CenterX => X + Width / 2.0;
@@ -65,15 +73,93 @@ public sealed partial class GhostNodeViewModel : ObservableObject, ICanvasElemen
     [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty] private bool _isSelected;
 
+    public Node ReferencedNode => UnderlyingGhostNode.ReferencedNode;
+    public bool IsFunctionInstance => ReferencedNode is FunctionInstance;
+    public bool IsParameterNode => ReferencedNode is Node node && IsParameterType(node.Type);
+    public bool IsBasicParameter => IsParameterNode && ReferencedNode.Type!.GetGenericTypeDefinition() == typeof(BasicParameter<>);
+    public bool IsScriptedParameter => IsParameterNode && ReferencedNode.Type!.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
+    public string TypeName => ReferencedNode.Type?.Name ?? "Unknown";
+    public string ParameterValueRepresentation => ReferencedNode.ParameterValue?.Representation ?? string.Empty;
+    public IReadOnlyList<NodeHook> Hooks => ReferencedNode.Hooks;
+    public ObservableCollection<FunctionParameter> FunctionParameters { get; } = new();
+
+    public string TemplateName => ReferencedNode is FunctionInstance instance ? instance.Template.Name : string.Empty;
+    public string EntryNodeTypeName => ReferencedNode is FunctionInstance instance
+        ? instance.Template.Type?.Name ?? string.Empty
+        : string.Empty;
+
+    private static bool IsParameterType(Type? type)
+        => type is not null && type.IsGenericType
+            && type.GetGenericTypeDefinition() is Type genericType
+            && (genericType == typeof(BasicParameter<>)
+                || genericType == typeof(ScriptedParameter<>)
+                || genericType == typeof(SetableParameter<>));
+
     public GhostNodeViewModel(GhostNode ghostNode, ModelSystemSession session, User user)
     {
         UnderlyingGhostNode = ghostNode;
         _session = session;
         _user    = user;
         _name    = ghostNode.Name ?? string.Empty;
+        ReferencedNodeViewModel = new NodeViewModel(ReferencedNode, session, user);
+        if (ReferencedNode is FunctionInstance instance)
+            ReferencedFunctionInstanceViewModel = new FunctionInstanceViewModel(instance, session, user);
+
+        if (ReferencedNode is FunctionInstance functionInstance)
+            foreach (var parameter in functionInstance.Template.FunctionParameters)
+                FunctionParameters.Add(parameter);
 
         ((INotifyPropertyChanged)ghostNode).PropertyChanged += OnModelPropertyChanged;
+        ((INotifyPropertyChanged)ReferencedNode).PropertyChanged += OnReferencedNodePropertyChanged;
     }
+
+    private void OnReferencedNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(Node.Type) or nameof(Node.ParameterValue) or nameof(Node.Hooks))
+        {
+            OnPropertyChanged(nameof(IsParameterNode));
+            OnPropertyChanged(nameof(IsBasicParameter));
+            OnPropertyChanged(nameof(IsScriptedParameter));
+            OnPropertyChanged(nameof(TypeName));
+            OnPropertyChanged(nameof(ParameterValueRepresentation));
+            OnPropertyChanged(nameof(Hooks));
+        }
+        if (e.PropertyName is nameof(FunctionInstance.Name) or nameof(FunctionInstance.Hooks))
+        {
+            OnPropertyChanged(nameof(TemplateName));
+            OnPropertyChanged(nameof(EntryNodeTypeName));
+            OnPropertyChanged(nameof(FunctionParameters));
+        }
+    }
+
+    public bool SetName(string name, out CommandError? error)
+        => ReferencedNode is FunctionInstance instance
+            ? _session.RenameFunctionInstance(_user, instance, name, out error)
+            : _session.SetNodeName(_user, ReferencedNode, name, out error);
+
+    public bool SetParameterValue(string value, out CommandError? error)
+        => _session.SetParameterValue(_user, ReferencedNode, value, out error);
+
+    public Node? GetEmbeddedParameter(NodeHook hook)
+    {
+        foreach (var link in ReferencedNode.ContainedWithin.Links)
+        {
+            if (link.Origin != ReferencedNode || link.OriginHook != hook)
+                continue;
+
+            if (link is SingleLink single && IsEmbeddedParameter(single.Destination))
+                return single.Destination;
+            if (link is MultiLink multi)
+            {
+                var destination = multi.Destinations.FirstOrDefault(IsEmbeddedParameter);
+                if (destination is not null) return destination;
+            }
+        }
+        return null;
+    }
+
+    private static bool IsEmbeddedParameter(Node node)
+        => node.Location.Equals(Rectangle.Hidden) && IsParameterType(node.Type);
 
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

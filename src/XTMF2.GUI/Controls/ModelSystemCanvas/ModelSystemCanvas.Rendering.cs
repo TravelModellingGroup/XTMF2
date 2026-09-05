@@ -28,6 +28,7 @@ using Avalonia.Media.TextFormatting;
 using Avalonia.Styling;
 using XTMF2.GUI.ViewModels;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.GUI.Controls;
 
@@ -56,12 +57,37 @@ partial class ModelSystemCanvas
             RenderFunctionTemplates(ctx);
             RenderFunctionInstances(ctx);
             RenderFunctionParameters(ctx);
+            RenderGhostCorrespondenceLines(ctx);
             RenderLinks(ctx);
             RenderNodes(ctx);
             RenderGhostNodes(ctx);
             RenderStarts(ctx);
             RenderPendingLink(ctx);
             RenderSelectionRect(ctx);
+        }
+    }
+
+    private void RenderGhostCorrespondenceLines(DrawingContext ctx)
+    {
+        if (_vm is null || (!_vm.ShowGhostCorrespondenceLines && !_vm.RenderAllHiddenDestinationLinks))
+            return;
+
+        foreach (var ghost in _vm.GhostNodes)
+        {
+            if (ghost.UnderlyingGhostNode.ContainedWithin != ghost.ReferencedNode.ContainedWithin)
+                continue;
+
+            var from = new Point(ghost.CenterX, ghost.CenterY);
+            ICanvasElement? target = ghost.ReferencedNode switch
+            {
+                FunctionInstance instance => _vm.FunctionInstances.FirstOrDefault(fi => fi.UnderlyingInstance == instance),
+                _ => _vm.Nodes.FirstOrDefault(node => node.UnderlyingNode == ghost.ReferencedNode)
+            };
+            if (target is null || ReferenceEquals(target, ghost))
+                continue;
+
+            var to = new Point(target.CenterX, target.CenterY);
+            ctx.DrawLine(GhostCorrespondencePen, from, to);
         }
     }
 
@@ -674,10 +700,11 @@ partial class ModelSystemCanvas
             double trunkBottomY = p1.Y;
             foreach (var sib in siblings)
             {
-                if (sib.Destination is null) continue;
+                var renderedDestination = RenderedDestination(sib);
+                if (renderedDestination is null) continue;
                 // Approach the destination from the right of p1 for the initial estimate.
                 var approachPt = new Point(p1.X + 1, p1.Y);
-                var p2 = OrthogonalDestBorderPoint(sib.Destination, approachPt)
+                var p2 = OrthogonalDestBorderPoint(renderedDestination, approachPt)
                          ?? new Point(sib.X2, sib.Y2);
                 double indivMid = (p1.X + p2.X) * 0.5;
                 if (indivMid < p1.X + MinStub) indivMid = p1.X + MinStub;
@@ -752,6 +779,8 @@ partial class ModelSystemCanvas
 
             if (link.UnderlyingLink.IsOrthogonal)
             {
+                var renderedOrigin = RenderedOrigin(link);
+                var renderedDestination = RenderedDestination(link);
                 // Orthogonal (right-angle) routing: horizontal exit → vertical jog → horizontal entry.
                 // Use a shared spine X for multi-link groups so all branches overlap on the trunk.
                 _orthogonalSpineX.TryGetValue(link.UnderlyingLink, out var spineX);
@@ -764,7 +793,7 @@ partial class ModelSystemCanvas
                 bp2 = pts[^1];
                 if (passesExecution)
                 {
-                    arrowFrom = BorderArrivalFrom(link.Destination, bp2);
+                    arrowFrom = BorderArrivalFrom(renderedDestination, bp2);
                     shaftEnd = DrawArrow(ctx, brush, arrowFrom, bp2);
                     labelFrom = pts[^2];
 
@@ -822,7 +851,7 @@ partial class ModelSystemCanvas
                 else
                 {
                     var revPts = new[] { pts[^1], pts[^2], pts[1], pts[0] };
-                    arrowFrom = BorderArrivalFrom(link.Origin, revPts[^1]);
+                    arrowFrom = BorderArrivalFrom(renderedOrigin, revPts[^1]);
                     shaftEnd = DrawArrow(ctx, brush, arrowFrom, revPts[^1]);
                     labelFrom = revPts[1];
 
@@ -835,6 +864,8 @@ partial class ModelSystemCanvas
             }
             else
             {
+                var renderedOrigin = RenderedOrigin(link);
+                var renderedDestination = RenderedDestination(link);
                 // Draw an S-shaped cubic Bézier curve. Tension adapts to the span so short
                 // links curve gently and long ones sweep broadly, with no elbow kinks.
                 var (bp1, bc1, bc2, bp2c) = ComputeSCurve(link);
@@ -865,7 +896,7 @@ partial class ModelSystemCanvas
                 }
                 else
                 {
-                    arrowFrom = BorderArrivalFrom(link.Origin, bp1);
+                    arrowFrom = BorderArrivalFrom(renderedOrigin, bp1);
                     shaftEnd = DrawArrow(ctx, brush, arrowFrom, bp1);
                     labelFrom = SampleCubicBezier(bp2, bc2, bc1, bp1, 0.03);
 
@@ -1294,7 +1325,8 @@ partial class ModelSystemCanvas
             ctx.DrawRectangle(_isLight ? GhostNodeFillL : GhostNodeFill, border, rect, NodeCornerRadius, NodeCornerRadius);
 
             // Ghost icon prefix ("⊙ ") to distinguish from real nodes at a glance.
-            var labelText = "\u2299 " + ghost.Name;
+            var labelText = "\u2299 " + (ghost.IsFunctionInstance ? ghost.Name :
+                ghost.IsParameterNode ? (ghost.IsBasicParameter ? "≡ " : "ƒ ") + ghost.Name : ghost.Name);
             var ft = MakeText(labelText, NodeFontSize, _isLight ? NodeTextBrushL : NodeTextBrush);
             var tx = ghost.X + (rw - ft.Width) / 2;
             var ty = ghost.Y + (NodeHeaderHeight - ft.Height) / 2;
@@ -1302,6 +1334,59 @@ partial class ModelSystemCanvas
             using (ctx.PushClip(new Rect(ghost.X + 4, ghost.Y, rw - 8, NodeHeaderHeight)))
             {
                 ctx.DrawText(ft, new Point(tx, ty));
+            }
+
+            var rows = ghost.IsFunctionInstance
+                ? ghost.FunctionParameters.Select((parameter, index) =>
+                {
+                    var hook = index < ghost.ReferencedNode.Hooks.Count ? ghost.ReferencedNode.Hooks[index] : null;
+                    var inlined = hook is not null ? FindGhostInlinedParameter(ghost, hook) : null;
+                    return inlined is null
+                        ? parameter.Name ?? string.Empty
+                        : $"{(inlined.IsBasicParameter ? "≡" : "ƒ")} {parameter.Name}: "
+                          + (string.IsNullOrEmpty(inlined.ParameterValueRepresentation) ? "(no value)" : inlined.ParameterValueRepresentation);
+                                }).ToList()
+                                : ghost.Hooks.Select(hook =>
+                                {
+                                        var embedded = ghost.GetEmbeddedParameter(hook);
+                                        return embedded is null
+                                                ? hook.Name
+                                                : $"{(embedded.Type!.GetGenericTypeDefinition() == typeof(BasicParameter<>) ? "≡" : "ƒ")} {hook.Name}: "
+                                                    + (string.IsNullOrEmpty(embedded.ParameterValue?.Representation) ? "(no value)" : embedded.ParameterValue.Representation);
+                                }).ToList();
+            if (ghost.IsParameterNode)
+                rows.Insert(0, string.IsNullOrEmpty(ghost.ParameterValueRepresentation) ? "(no value)" : ghost.ParameterValueRepresentation);
+
+            if (rows.Count > 0)
+            {
+                ctx.DrawLine(_isLight ? HookDividerPenL : HookDividerPen,
+                    new Point(ghost.X + 1, ghost.Y + NodeHeaderHeight),
+                    new Point(ghost.X + rw - 1, ghost.Y + NodeHeaderHeight));
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    double rowY = ghost.Y + NodeHeaderHeight + i * HookRowHeight;
+                    bool isValue = ghost.IsParameterNode && i == 0;
+                    ctx.DrawRectangle(isValue ? (_isLight ? ParamValueBgL : ParamValueBg) : InlineParamRowBg,
+                        null, new Rect(ghost.X + 1, rowY, rw - 2, HookRowHeight));
+                    ctx.DrawLine(_isLight ? HookDividerPenThinL : HookDividerPenThin,
+                        new Point(ghost.X + 1, rowY), new Point(ghost.X + rw - 1, rowY));
+                    ctx.DrawEllipse(isValue
+                            ? (_isLight ? ParamValueTextBrushL : ParamValueTextBrush)
+                            : (_isLight ? HookUnconnectedBrushL : HookUnconnectedBrush),
+                        null, new Point(ghost.X + rw, rowY + HookRowHeight / 2.0), HookDotRadius, HookDotRadius);
+                    if (!isValue && i - (ghost.IsParameterNode ? 1 : 0) >= 0
+                        && i - (ghost.IsParameterNode ? 1 : 0) < ghost.Hooks.Count
+                        && _leftGoingGhostHooks.Contains((ghost,
+                            ghost.Hooks[i - (ghost.IsParameterNode ? 1 : 0)])))
+                    {
+                        ctx.DrawEllipse(_isLight ? HookUnconnectedBrushL : HookUnconnectedBrush,
+                            null, new Point(ghost.X, rowY + HookRowHeight / 2.0), HookDotRadius, HookDotRadius);
+                    }
+                    var rowText = MakeText(rows[i], HookFontSize,
+                        _isLight ? NodeTextBrushL : NodeTextBrush);
+                    using (ctx.PushClip(new Rect(ghost.X + 6, rowY, Math.Max(0, rw - 12), HookRowHeight)))
+                        ctx.DrawText(rowText, new Point(ghost.X + 6, rowY + (HookRowHeight - rowText.Height) / 2.0));
+                }
             }
 
             // Resize grip dots (bottom-right corner).
@@ -1319,6 +1404,14 @@ partial class ModelSystemCanvas
                 }
             }
         }
+    }
+
+    private NodeViewModel? FindGhostInlinedParameter(GhostNodeViewModel ghost, NodeHook hook)
+    {
+        var embedded = ghost.GetEmbeddedParameter(hook);
+        if (embedded is null) return null;
+        return _vm?.Nodes.FirstOrDefault(node => node.UnderlyingNode == embedded)
+            ?? new NodeViewModel(embedded, _vm!.Session, _vm.User);
     }
 
     private void RenderStarts(DrawingContext ctx)

@@ -386,7 +386,7 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         /// <param name="boundary">The boundary to get links to.</param>
         /// <returns>A list of all links going to the given boundary.</returns>
-        internal List<Link> GetLinksGoingToBoundary(Boundary boundary)
+        public List<Link> GetLinksGoingToBoundary(Boundary boundary)
         {
             var ret = new List<Link>();
             var stack = new Stack<Boundary>();

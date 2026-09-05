@@ -25,6 +25,112 @@ namespace XTMF2.GUI.Controls;
 
 partial class ModelSystemCanvas
 {
+    private ICanvasElement RenderedOrigin(LinkViewModel link)
+    {
+        var origin = link.Origin;
+        return FindCloserGhost(origin, link.Destination) ?? origin;
+    }
+
+    private ICanvasElement? RenderedDestination(LinkViewModel link)
+    {
+        var destination = link.Destination;
+        return destination is null
+            ? null
+            : FindCloserGhost(destination, link.Origin) ?? destination;
+    }
+
+    private GhostNodeViewModel? FindCloserGhost(ICanvasElement element, ICanvasElement? opposite)
+    {
+        if (opposite is null || _vm is null || !TryGetRepresentedNode(element, out var representedNode))
+            return null;
+
+        var originalDistance = DistanceSquared(element.CenterX, element.CenterY,
+            opposite.CenterX, opposite.CenterY);
+        GhostNodeViewModel? closest = null;
+        var closestDistance = originalDistance;
+        foreach (var ghost in _vm.GhostNodes)
+        {
+            if (!ReferenceEquals(ghost.UnderlyingGhostNode.ReferencedNode, representedNode))
+                continue;
+
+            var ghostDistance = DistanceSquared(ghost.CenterX, ghost.CenterY,
+                opposite.CenterX, opposite.CenterY);
+            if (ghostDistance < closestDistance)
+            {
+                closest = ghost;
+                closestDistance = ghostDistance;
+            }
+        }
+        return closest;
+    }
+
+    private static bool TryGetRepresentedNode(ICanvasElement element, out XTMF2.ModelSystemConstruct.Node node)
+    {
+        switch (element)
+        {
+            case NodeViewModel nodeVm:
+                node = nodeVm.UnderlyingNode;
+                return true;
+            case FunctionInstanceViewModel instanceVm:
+                node = instanceVm.UnderlyingInstance;
+                return true;
+            case GhostNodeViewModel ghostVm:
+                node = ghostVm.UnderlyingGhostNode.ReferencedNode;
+                return true;
+            default:
+                node = null!;
+                return false;
+        }
+    }
+
+    private static double DistanceSquared(double x1, double y1, double x2, double y2)
+    {
+        var dx = x1 - x2;
+        var dy = y1 - y2;
+        return dx * dx + dy * dy;
+    }
+
+    private Point? GhostHookAnchor(GhostNodeViewModel ghost, NodeHook hook, Point opposite)
+    {
+        var hooks = ghost.Hooks;
+        var hookIndex = -1;
+        for (int i = 0; i < hooks.Count; i++)
+        {
+            if (ReferenceEquals(hooks[i], hook) || hooks[i].Name == hook.Name)
+            {
+                hookIndex = i;
+                break;
+            }
+        }
+        if (hookIndex < 0) return null;
+
+        var rowOffset = ghost.IsParameterNode ? 1 : 0;
+        var y = ghost.Y + NodeHeaderHeight
+            + (rowOffset + hookIndex) * HookRowHeight
+            + HookRowHeight / 2.0;
+        var goLeft = opposite.X < ghost.X + ghost.Width / 2.0;
+        return new Point(goLeft ? ghost.X : ghost.X + ghost.Width, y);
+    }
+
+    private Point? RenderedOriginPoint(LinkViewModel link, ICanvasElement origin, Point destination)
+        => origin is GhostNodeViewModel ghost
+            ? GhostHookAnchor(ghost, link.UnderlyingLink.OriginHook, destination)
+            : null;
+
+    private Point? RenderedDestinationPoint(LinkViewModel link, ICanvasElement destination, Point origin)
+        => destination is GhostNodeViewModel ghost
+            ? GhostHookAnchor(ghost, link.UnderlyingLink.OriginHook, origin)
+            : null;
+
+    private Point OrthogonalOriginDirection(LinkViewModel link, Point destination)
+    {
+        if (_orthogonalBreakpointDragLinks.Contains(link.UnderlyingLink))
+            return new Point(_orthogonalBreakpointPreviewX, destination.Y);
+        if (link.UnderlyingLink.OrthogonalBreakpointX is { } breakpointX)
+            return new Point(breakpointX, destination.Y);
+        return destination;
+    }
+
     /// <summary>
     /// Computes cubic Bézier control points for a direction-aware S-curve link.
     /// <para>
@@ -38,12 +144,20 @@ partial class ModelSystemCanvas
     /// </summary>
     private (Point p1, Point c1, Point c2, Point p2) ComputeSCurve(LinkViewModel link)
     {
-        var destCenter = new Point(link.X2, link.Y2);
+        var origin = RenderedOrigin(link);
+        var destination = RenderedDestination(link);
+        var destCenter = new Point(destination?.CenterX ?? link.X2, destination?.CenterY ?? link.Y2);
 
         // p1 and exit direction.
         Point p1;
         Vector exitDir;
-        if (link.Origin is NodeViewModel originNvm
+        var ghostOriginPoint = RenderedOriginPoint(link, origin, destCenter);
+        if (ghostOriginPoint is { } ghostP1)
+        {
+            p1 = ghostP1;
+            exitDir = destCenter.X < origin.X ? new Vector(-1, 0) : new Vector(1, 0);
+        }
+        else if (origin is NodeViewModel originNvm
             && _hookAnchors.TryGetValue((originNvm, link.UnderlyingLink.OriginHook), out var hookPt))
         {
             // Exit from the left face when the destination centre is to the left of the node.
@@ -51,7 +165,7 @@ partial class ModelSystemCanvas
             p1 = goLeft ? new Point(originNvm.X, hookPt.Y) : hookPt;
             exitDir = goLeft ? new Vector(-1, 0) : new Vector(1, 0);
         }
-        else if (link.Origin is FunctionInstanceViewModel fiOriginSC
+        else if (origin is FunctionInstanceViewModel fiOriginSC
             && link.UnderlyingLink.OriginHook is FunctionParameterHook fphSC
             && _fiHookAnchors.TryGetValue((fiOriginSC, fphSC), out var fiHookPtSC))
         {
@@ -59,7 +173,7 @@ partial class ModelSystemCanvas
             p1 = goLeft ? new Point(fiOriginSC.X, fiHookPtSC.Y) : fiHookPtSC;
             exitDir = goLeft ? new Vector(-1, 0) : new Vector(1, 0);
         }
-        else if (link.Origin is StartViewModel startOrigin)
+        else if (origin is StartViewModel startOrigin)
         {
             var oc = new Point(startOrigin.CenterX, startOrigin.CenterY);
             p1 = BorderPoint(link.Origin, destCenter) ?? oc;
@@ -69,15 +183,16 @@ partial class ModelSystemCanvas
         }
         else
         {
-            p1 = BorderPoint(link.Origin, destCenter) ?? new Point(link.X1, link.Y1);
+            p1 = BorderPoint(origin, destCenter) ?? new Point(origin.CenterX, origin.CenterY);
             exitDir = new Vector(1, 0);
         }
 
         // p2: destination border point approached from p1's direction.
-        var p2 = BorderPoint(link.Destination, p1) ?? destCenter;
+        var p2 = RenderedDestinationPoint(link, destination!, p1)
+            ?? BorderPoint(destination, p1) ?? destCenter;
 
         // c1 follows the exit tangent; c2 steps back from p2 along the entry tangent.
-        var entryDir = BorderInwardNormal(link.Destination, p2);
+        var entryDir = BorderInwardNormal(destination, p2);
         double dx = p2.X - p1.X, dy = p2.Y - p1.Y;
         double tension = Math.Max(Math.Sqrt(dx * dx + dy * dy) * 0.45, 50.0);
 
@@ -95,18 +210,24 @@ partial class ModelSystemCanvas
     /// </summary>
     private Point ComputeOrthogonalOriginPoint(LinkViewModel link)
     {
-        var destCenter = new Point(link.X2, link.Y2);
+        var origin = RenderedOrigin(link);
+        var destination = RenderedDestination(link);
+        var destCenter = new Point(destination?.CenterX ?? link.X2, destination?.CenterY ?? link.Y2);
 
-        var destCenterO = new Point(link.X2, link.Y2);
+        var destCenterO = OrthogonalOriginDirection(link, destCenter);
 
-        if (link.Origin is NodeViewModel originNvm
+        var ghostOriginPoint = RenderedOriginPoint(link, origin, destCenterO);
+        if (ghostOriginPoint is { } ghostP1)
+            return ghostP1;
+
+        if (origin is NodeViewModel originNvm
             && _hookAnchors.TryGetValue((originNvm, link.UnderlyingLink.OriginHook), out var hookPt))
         {
             bool goLeft = destCenterO.X < originNvm.X;
             return goLeft ? new Point(originNvm.X, hookPt.Y) : hookPt;
         }
 
-        if (link.Origin is FunctionInstanceViewModel fiOriginO
+        if (origin is FunctionInstanceViewModel fiOriginO
             && link.UnderlyingLink.OriginHook is FunctionParameterHook fphO
             && _fiHookAnchors.TryGetValue((fiOriginO, fphO), out var fiHookPtO))
         {
@@ -114,7 +235,7 @@ partial class ModelSystemCanvas
             return goLeft ? new Point(fiOriginO.X, fiHookPtO.Y) : fiHookPtO;
         }
 
-        if (link.Origin is StartViewModel startOriginO)
+        if (origin is StartViewModel startOriginO)
         {
             var oc = new Point(startOriginO.CenterX, startOriginO.CenterY);
             var r = StartViewModel.Radius;
@@ -122,8 +243,8 @@ partial class ModelSystemCanvas
             return new Point(oc.X + r * dir, oc.Y);
         }
 
-        return OrthogonalOriginBorderPoint(link.Origin, destCenter)
-               ?? new Point(link.X1, link.Y1);
+         return OrthogonalOriginBorderPoint(origin, destCenter)
+             ?? new Point(origin.CenterX, origin.CenterY);
     }
 
     /// <summary>
@@ -150,7 +271,8 @@ partial class ModelSystemCanvas
     {
         const double MinStub = 24.0; // minimum rightward stub length
 
-        var destCenter = new Point(link.X2, link.Y2);
+        var destination = RenderedDestination(link);
+        var destCenter = new Point(destination?.CenterX ?? link.X2, destination?.CenterY ?? link.Y2);
 
         // p1 — origin hook/border point.
         var p1 = ComputeOrthogonalOriginPoint(link);
@@ -169,7 +291,9 @@ partial class ModelSystemCanvas
         else
         {
             // p2 needs to be estimated with the approach direction from p1's side.
-            var p2est = OrthogonalDestBorderPoint(link.Destination,
+            var p2est = RenderedDestinationPoint(link, destination!,
+                            new Point(p1.X + 1, p1.Y))
+                        ?? OrthogonalDestBorderPoint(destination,
                             new Point(p1.X + 1, p1.Y)) ?? destCenter;
             spineX = (p1.X + p2est.X) * 0.5;
             spineX = Math.Max(spineX, p1.X + MinStub);
@@ -179,7 +303,8 @@ partial class ModelSystemCanvas
         //       destination the trunk sits on (left face when trunk is to the left,
         //       right face when trunk is to the right).
         var approachPt = new Point(spineX, p1.Y);
-        var p2 = OrthogonalDestBorderPoint(link.Destination, approachPt) ?? destCenter;
+        var p2 = RenderedDestinationPoint(link, destination!, approachPt)
+            ?? OrthogonalDestBorderPoint(destination, approachPt) ?? destCenter;
 
         // Three intermediate points: exit stub, corner, entry corner.
         var corner1 = new Point(spineX, p1.Y);  // end of horizontal exit segment

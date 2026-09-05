@@ -177,6 +177,7 @@ partial class ModelSystemCanvas
                 FunctionTemplateViewModel ftvm => ftvm.SetName(name, out renameError),
                 FunctionInstanceViewModel fivm => fivm.SetName(name, out renameError),
                 FunctionParameterViewModel fpvmC => fpvmC.SetName(name, out renameError),
+                GhostNodeViewModel gvm => gvm.SetName(name, out renameError),
                 _ => true,
             };
             if (!ok)

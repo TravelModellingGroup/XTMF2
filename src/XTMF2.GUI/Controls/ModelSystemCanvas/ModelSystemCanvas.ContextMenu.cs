@@ -378,6 +378,19 @@ partial class ModelSystemCanvas
             };
             bgMenu.Items.Add(showHiddenTempItem);
 
+            var showGhostLinesItem = new MenuItem
+            {
+                Header = "Show Ghost Correspondence Lines",
+                ToggleType = MenuItemToggleType.CheckBox,
+                IsChecked = _vm.ShowGhostCorrespondenceLines
+            };
+            showGhostLinesItem.Click += (_, _) =>
+            {
+                _vm.ShowGhostCorrespondenceLines = showGhostLinesItem.IsChecked;
+                InvalidateVisual();
+            };
+            bgMenu.Items.Add(showGhostLinesItem);
+
             ContextMenu = bgMenu;
             ContextMenu.Open(this);
             return;
@@ -945,6 +958,13 @@ partial class ModelSystemCanvas
         // ── Move to Boundary (ghost nodes) ────────────────────────────────────
         if (element is GhostNodeViewModel capturedGhost)
         {
+            var goToRepresentedItem = new MenuItem { Header = "Go to Represented Element" };
+            goToRepresentedItem.Click += (_, _) =>
+            {
+                vm.NavigateToElementById(capturedGhost.ReferencedNode.Id);
+                InvalidateAndMeasure();
+            };
+
             var moveGhostItem = new MenuItem { Header = "Move to Boundary…" };
             moveGhostItem.Click += async (_, _) =>
             {
@@ -952,6 +972,7 @@ partial class ModelSystemCanvas
                 InvalidateAndMeasure();
             };
             menu.Items.Add(new Separator());
+            menu.Items.Add(goToRepresentedItem);
             menu.Items.Add(moveGhostItem);
         }
 

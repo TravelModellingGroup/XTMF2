@@ -503,6 +503,16 @@ partial class ModelSystemCanvas
             }
 
             // Regular parameter value row (node is visible on canvas).
+            var ghostParamRowHit = HitTestGhostParamValueRow(mpos);
+            if (ghostParamRowHit is { } ghostParam)
+            {
+                _vm.SelectElementCommand.Execute(ghostParam.ghost);
+                BeginParamEdit(ghostParam.node, ghostParam.ghost.X,
+                    ghostParam.ghost.Y + NodeHeaderHeight, ghostParam.ghost.Width,
+                    ghostParam.ghost, SelfParameterNavigationKey);
+                e.Handled = true;
+                return;
+            }
             var paramRowHit = HitTestParamValueRow(mpos);
             if (paramRowHit is not null)
             {
@@ -589,6 +599,15 @@ partial class ModelSystemCanvas
             if (nodeHit is { IsParameterNode: true })
             {
                 _ = _vm.EditParameterNodeAsync(nodeHit);
+                e.Handled = true;
+                return;
+            }
+            if (HitTest(mpos, testComments: false) is GhostNodeViewModel ghostHit)
+            {
+                if (ghostHit.IsParameterNode)
+                    _ = _vm.EditParameterNodeAsync(new NodeViewModel(ghostHit.ReferencedNode, _vm.Session, _vm.User));
+                else
+                    BeginNameEdit(ghostHit);
                 e.Handled = true;
                 return;
             }
@@ -684,7 +703,7 @@ partial class ModelSystemCanvas
 
             // Begin link-creation drag from a node, start, or function instance (via its FunctionParameterHooks).
             // Comment blocks are not valid link origins.
-            if (hit is NodeViewModel or StartViewModel
+            if (hit is NodeViewModel or StartViewModel or GhostNodeViewModel
                 || (hit is FunctionInstanceViewModel hitFi && hitFi.FunctionParameters.Count > 0)
                 || hit is FunctionParameterViewModel)
             {
@@ -832,24 +851,7 @@ partial class ModelSystemCanvas
 
         if (_orthogonalBreakpointDragLink is not null)
         {
-            const double MinStub = 24.0;
-            var dragTargets = _vm!.Links
-                .Where(link => _orthogonalBreakpointDragLinks.Contains(link.UnderlyingLink))
-                .ToList();
-            var minX = double.NegativeInfinity;
-            var maxX = double.PositiveInfinity;
-            foreach (var dragTarget in dragTargets)
-            {
-                var origin = ComputeOrthogonalOriginPoint(dragTarget);
-                var destination = new Point(dragTarget.X2, dragTarget.Y2);
-                var destinationBorder = OrthogonalDestBorderPoint(dragTarget.Destination, new Point(origin.X + 1, origin.Y)) ?? destination;
-                minX = Math.Max(minX, origin.X + MinStub);
-                maxX = Math.Min(maxX, destinationBorder.X - MinStub);
-            }
-            if (double.IsNegativeInfinity(minX)) minX = mpos.X;
-            if (double.IsPositiveInfinity(maxX)) maxX = minX;
-            maxX = Math.Max(minX, maxX);
-            _orthogonalBreakpointPreviewX = Math.Clamp(mpos.X, minX, maxX);
+            _orthogonalBreakpointPreviewX = mpos.X;
             InvalidateVisual();
             e.Handled = true;
             return;
@@ -1000,6 +1002,13 @@ partial class ModelSystemCanvas
             hookDescription = functionInstanceHook?.Parameter.Description;
         }
         if (hookDescription is null)
+        {
+            var ghostHook = HitTestGhostOriginHook(canvasPosition)?.hook;
+            hookDescription = ghostHook is FunctionParameterHook functionParameterHook
+                ? functionParameterHook.Parameter.Description
+                : ghostHook?.Description;
+        }
+        if (hookDescription is null)
             hookDescription = HitTestFunctionTemplateHook(canvasPosition)?.Description;
         if (hookDescription is null)
         {
@@ -1064,12 +1073,23 @@ partial class ModelSystemCanvas
                     && destHit is NodeViewModel targetNode
                     && !ReferenceEquals(targetNode, origin))
                     _ = _vm.CreateLinkAsync(originFp, targetNode);
+                else if (origin is FunctionParameterViewModel originGhostFp
+                         && destHit is GhostNodeViewModel targetGhostForFp)
+                    _ = _vm.CreateLinkAsync(originGhostFp,
+                        targetGhostForFp.ReferencedNodeViewModel);
                 else if (destHit is NodeViewModel destNode && !ReferenceEquals(destNode, origin))
                     _ = _vm.CreateLinkAsync(origin, destNode);
                 else if (destHit is FunctionInstanceViewModel destFi && !ReferenceEquals(destFi, origin))
                     _ = _vm.CreateLinkAsync(origin, destFi);
                 else if (destHit is FunctionParameterViewModel destFp && !ReferenceEquals(destFp, origin))
                     _ = _vm.CreateLinkAsync(origin, destFp);
+                else if (destHit is GhostNodeViewModel destGhost)
+                {
+                    if (destGhost.ReferencedFunctionInstanceViewModel is { } ghostFi)
+                        _ = _vm.CreateLinkAsync(origin, ghostFi);
+                    else
+                        _ = _vm.CreateLinkAsync(origin, destGhost.ReferencedNodeViewModel);
+                }
             }
 
             InvalidateVisual();

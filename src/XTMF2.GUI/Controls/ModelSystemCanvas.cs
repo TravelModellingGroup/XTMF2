@@ -81,6 +81,12 @@ public sealed partial class ModelSystemCanvas : Control
     private readonly HashSet<(NodeViewModel, NodeHook)> _leftGoingHooks = new();
 
     /// <summary>
+    /// Per-frame set of ghost hook rows whose links depart leftward. Rebuilt by
+    /// <see cref="BuildHookAnchorCache"/> so ghost hook dots match regular nodes.
+    /// </summary>
+    private readonly HashSet<(GhostNodeViewModel, NodeHook)> _leftGoingGhostHooks = new();
+
+    /// <summary>
     /// Per-frame set of (fi, hook) pairs for FunctionInstance hooks where at least one
     /// link departs leftward.  Rebuilt each frame by <see cref="BuildHookAnchorCache"/>.
     /// </summary>
@@ -708,7 +714,8 @@ public sealed partial class ModelSystemCanvas : Control
         if (e.PropertyName is nameof(ModelSystemEditorViewModel.SelectedElement)
                            or nameof(ModelSystemEditorViewModel.SelectedLink)
                            or nameof(ModelSystemEditorViewModel.ShowAllHooks)
-                           or nameof(ModelSystemEditorViewModel.RenderAllHiddenDestinationLinks))
+                           or nameof(ModelSystemEditorViewModel.RenderAllHiddenDestinationLinks)
+                           or nameof(ModelSystemEditorViewModel.ShowGhostCorrespondenceLines))
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateAndMeasure);
         }

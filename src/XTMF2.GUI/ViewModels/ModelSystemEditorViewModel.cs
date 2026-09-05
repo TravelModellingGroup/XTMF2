@@ -182,6 +182,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     private readonly Dictionary<SingleLink, System.ComponentModel.PropertyChangedEventHandler> _singleLinkDestHandlers = new();
 
+    /// <summary>Link view-models projected into this boundary through matching ghost nodes.</summary>
+    private readonly HashSet<LinkViewModel> _projectedLinkViewModels = new();
+
     /// <summary>Observable wrappers around <see cref="Boundary.CommentBlocks"/>.</summary>
     public ObservableCollection<CommentBlockViewModel> CommentBlocks { get; } = new();
 
@@ -412,11 +415,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public string SelectedElementFieldLabel =>
         SelectedElement is CommentBlockViewModel ? "Comment" : "Name";
 
+    private ICanvasElement? SelectedMetadataElement => SelectedElement switch
+    {
+        GhostNodeViewModel ghost when ghost.ReferencedFunctionInstanceViewModel is not null
+            => ghost.ReferencedFunctionInstanceViewModel,
+        GhostNodeViewModel ghost => ghost.ReferencedNodeViewModel,
+        _ => SelectedElement
+    };
+
     /// <summary>
     /// True when the selected element is a <see cref="NodeViewModel"/>,
     /// used to gate the Change Type button in the property panel.
     /// </summary>
-    public bool SelectedElementIsNode => SelectedElement is NodeViewModel;
+    public bool SelectedElementIsNode => SelectedMetadataElement is NodeViewModel;
 
     /// <summary>True when the selected element is a <see cref="CommentBlockViewModel"/>.</summary>
     public bool SelectedElementIsComment => SelectedElement is CommentBlockViewModel;
@@ -429,7 +440,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// used to gate the parameter value editor in the property panel.
     /// </summary>
     public bool SelectedElementIsParameter
-        => SelectedElement is NodeViewModel pnvm && pnvm.IsParameterNode;
+        => SelectedMetadataElement is NodeViewModel pnvm && pnvm.IsParameterNode;
 
     /// <summary>
     /// Mutable copy of the selected parameter node's current value string,
@@ -442,7 +453,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// Human-readable type string shown in the property panel's "Type:" row.
     /// Automatically updates when the node's type changes.
     /// </summary>
-    public string SelectedElementTypeName => SelectedElement switch
+    public string SelectedElementTypeName => SelectedMetadataElement switch
     {
         StartViewModel             => "Start (entry point)",
         NodeViewModel nvm          => $"Module\n{nvm.TypeName}",
@@ -477,7 +488,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         => !string.IsNullOrWhiteSpace(SelectedSidePanelDocumentationLink);
 
     /// <summary>True when the selected element is a <see cref="FunctionInstanceViewModel"/>.</summary>
-    public bool SelectedSidePanelHasTemplateLink => SelectedElement is FunctionInstanceViewModel;
+    public bool SelectedSidePanelHasTemplateLink => SelectedMetadataElement is FunctionInstanceViewModel;
 
     /// <summary>The button text used to open the selected function instance's template.</summary>
     public string SelectedFunctionInstanceTemplateActionText
@@ -496,21 +507,21 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public bool SelectedElementIsFunctionTemplate => SelectedElement is FunctionTemplateViewModel;
 
     /// <summary>True when the selected element is a <see cref="FunctionInstanceViewModel"/>.</summary>
-    public bool SelectedElementIsFunctionInstance => SelectedElement is FunctionInstanceViewModel;
+    public bool SelectedElementIsFunctionInstance => SelectedMetadataElement is FunctionInstanceViewModel;
 
     /// <summary>
     /// The name of the template referenced by the currently selected function instance,
     /// or an empty string when nothing (or a non-instance element) is selected.
     /// </summary>
     public string SelectedFunctionInstanceTemplateName
-        => (SelectedElement as FunctionInstanceViewModel)?.TemplateName ?? string.Empty;
+        => (SelectedMetadataElement as FunctionInstanceViewModel)?.TemplateName ?? string.Empty;
 
     /// <summary>
     /// The <see cref="FunctionParameter"/> list of the template referenced by the currently
     /// selected function instance, or an empty collection.
     /// </summary>
     public System.Collections.Generic.IEnumerable<ModelSystemConstruct.FunctionParameter> SelectedFunctionInstanceFunctionParameters
-        => (SelectedElement as FunctionInstanceViewModel)?.FunctionParameters
+        => (SelectedMetadataElement as FunctionInstanceViewModel)?.FunctionParameters
            ?? System.Linq.Enumerable.Empty<ModelSystemConstruct.FunctionParameter>();
 
     /// <summary>
@@ -518,7 +529,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// drives the "(none)" hint text in the properties panel.
     /// </summary>
     public bool SelectedFunctionInstanceHasNoFunctionParameters
-        => SelectedElement is not FunctionInstanceViewModel fi || fi.FunctionParameters.Count == 0;
+        => SelectedMetadataElement is not FunctionInstanceViewModel fi || fi.FunctionParameters.Count == 0;
 
     /// <summary>
     /// The <see cref="FunctionParameter"/> list of the currently selected function template,
@@ -553,6 +564,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     [ObservableProperty]
     private bool _renderAllHiddenDestinationLinks;
+
+    /// <summary>When true, same-boundary ghosts are connected to their referenced elements.</summary>
+    [ObservableProperty]
+    private bool _showGhostCorrespondenceLines = true;
 
     // ── Undo / Redo state ─────────────────────────────────────────────────
     /// <summary>True when there is at least one undoable command.</summary>
@@ -606,7 +621,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         OnPropertyChanged(nameof(SelectedSidePanelHasTemplateLink));
         OnPropertyChanged(nameof(SelectedSidePanelHasFunctionParameterContext));
         SelectedElementParameterValue =
-            value is NodeViewModel pnvm && pnvm.IsParameterNode
+            SelectedMetadataElement is NodeViewModel pnvm && pnvm.IsParameterNode
                 ? pnvm.ParameterValueRepresentation
                 : string.Empty;
     }
@@ -617,6 +632,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             or nameof(FunctionParameterViewModel.TypeName)
             or nameof(FunctionInstanceViewModel.TemplateName)
             or nameof(FunctionInstanceViewModel.Description)
+            or nameof(GhostNodeViewModel.TypeName)
+            or nameof(GhostNodeViewModel.ParameterValueRepresentation)
             or nameof(ICanvasElement.Name))
         {
             OnPropertyChanged(nameof(SelectedElementTypeName));
@@ -634,7 +651,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
         if (e.PropertyName == nameof(NodeViewModel.ParameterValueRepresentation))
         {
-            if (SelectedElement is NodeViewModel nvm && nvm.IsParameterNode)
+            if (SelectedMetadataElement is NodeViewModel nvm && nvm.IsParameterNode)
                 SelectedElementParameterValue = nvm.ParameterValueRepresentation;
         }
     }
@@ -663,13 +680,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     [RelayCommand]
     private void OpenSelectedFunctionTemplate()
     {
-        if (SelectedElement is FunctionInstanceViewModel fivm)
+        if (SelectedMetadataElement is FunctionInstanceViewModel fivm)
             OpenFunctionTemplateOfInstance(fivm);
     }
 
     private bool TryGetSelectedSidePanelMetadata(out (string moduleName, string typeName, string description, string documentationLink) metadata)
     {
-        metadata = SelectedElement switch
+        metadata = SelectedMetadataElement switch
         {
             null => ("No module selected", string.Empty, string.Empty, string.Empty),
             CommentBlockViewModel comment => ("Comment Block", "Comment", comment.Name, string.Empty),
@@ -840,6 +857,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             foreach (var fp in _currentFunctionTemplate.UnderlyingTemplate.FunctionParameters)
                 FunctionParameterVMs.Add(new FunctionParameterViewModel(fp, Session, User));
         foreach (var link in boundary.Links)          TryAddLinkViewModel(link);
+        RebuildProjectedLinkViewModels();
         foreach (var cb in boundary.CommentBlocks)
             if (!CommentBlocks.Any(v => ReferenceEquals(v.UnderlyingBlock, cb)))
                 CommentBlocks.Add(new CommentBlockViewModel(cb, Session, User));
@@ -898,6 +916,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         UnsubscribeFromBoundary(_currentBoundary);
         foreach (var lvm in Links) lvm.Detach();
+        _projectedLinkViewModels.Clear();
         // Unsubscribe all SingleLink destination-change handlers tracked for the old boundary.
         foreach (var (sl, h) in _singleLinkDestHandlers)
             sl.PropertyChanged -= h;
@@ -1070,6 +1089,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 var vm = GhostNodes.FirstOrDefault(v => v.UnderlyingGhostNode == g);
                 if (vm is not null) GhostNodes.Remove(vm);
             }
+
+            RebuildProjectedLinkViewModels();
     }
 
     private void OnFunctionTemplatesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1208,6 +1229,69 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         NotifyCollectionChangedEventArgs e)
     {
         RebuildMultiLinkViewModels(ml, originElement);
+    }
+
+    private void RebuildProjectedLinkViewModels()
+    {
+        foreach (var linkViewModel in _projectedLinkViewModels)
+        {
+            linkViewModel.Detach();
+            Links.Remove(linkViewModel);
+        }
+        _projectedLinkViewModels.Clear();
+
+        foreach (var link in GlobalBoundary.GetLinksGoingToBoundary(_currentBoundary))
+        {
+            if (link.IsDisabled)
+                continue;
+
+            var destinations = link switch
+            {
+                SingleLink single when single.Destination?.ContainedWithin == _currentBoundary
+                    => [(single.Destination, 0)],
+                MultiLink multi
+                    => multi.Destinations
+                        .Select((destination, index) => (destination, index))
+                        .Where(item => item.destination.ContainedWithin == _currentBoundary),
+                _ => []
+            };
+
+            foreach (var (destination, destinationIndex) in destinations)
+            {
+                var destinationElement = ResolveElement(destination);
+                if (destinationElement is null)
+                    continue;
+
+                var originElement = FindClosestGhostFor(link.Origin, destinationElement);
+                if (originElement is null)
+                    continue;
+
+                var linkViewModel = new LinkViewModel(link, originElement, destinationElement, destinationIndex);
+                Links.Add(linkViewModel);
+                _projectedLinkViewModels.Add(linkViewModel);
+            }
+        }
+    }
+
+    private GhostNodeViewModel? FindClosestGhostFor(Node representedNode, ICanvasElement opposite)
+    {
+        GhostNodeViewModel? closest = null;
+        var closestDistance = double.PositiveInfinity;
+        foreach (var ghost in GhostNodes)
+        {
+            if (!ReferenceEquals(ghost.UnderlyingGhostNode.ReferencedNode, representedNode))
+                continue;
+
+            var dx = ghost.CenterX - opposite.CenterX;
+            var dy = ghost.CenterY - opposite.CenterY;
+            var distance = dx * dx + dy * dy;
+            if (distance < closestDistance)
+            {
+                closest = ghost;
+                closestDistance = distance;
+            }
+        }
+        return closest;
     }
 
     private ICanvasElement? ResolveElement(Node? node)
@@ -1563,6 +1647,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             NodeViewModel nvm => nvm.UnderlyingNode,
             StartViewModel svm => svm.UnderlyingStart,
             FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+            GhostNodeViewModel ghost => ghost.ReferencedNode,
             _ => null
         };
 

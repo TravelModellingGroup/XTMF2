@@ -41,6 +41,8 @@ partial class ModelSystemCanvas
     private static readonly DashStyle PendingLinkDash = new DashStyle([6, 4], 0);
     private static readonly DashStyle LinkDisabledDash = new DashStyle([7, 5], 0);
     private static readonly DashStyle LinkTempRevealDash = new DashStyle([2, 4], 0);
+    private static readonly Pen GhostCorrespondencePen = new(
+        new SolidColorBrush(Color.FromArgb(0xB0, 0xA8, 0xB0, 0xB8)), 1.5, dashStyle: new DashStyle([5, 4], 0));
     // Ghost node styling
     private static readonly IBrush GhostNodeFill = new SolidColorBrush(Color.FromArgb(0x50, 0x0E, 0x22, 0x38));
     private static readonly IBrush GhostNodeBorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x99, 0xDD)); // steel-blue neon
