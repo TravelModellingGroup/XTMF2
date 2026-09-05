@@ -85,6 +85,36 @@ partial class ModelSystemCanvas
         return null;
     }
 
+    private LinkViewModel? HitTestOrthogonalBreakpoint(Point pos)
+    {
+        if (_vm is null) return null;
+        const double BreakpointHitTolerance = 8.0;
+        foreach (var link in _vm.Links)
+        {
+            if (link.IsDestinationBranchHidden && !_vm.RenderAllHiddenDestinationLinks)
+                continue;
+            if (link.Destination is null || !link.UnderlyingLink.IsOrthogonal)
+                continue;
+
+            var points = ComputeOrthogonalPath(link,
+                ReferenceEquals(link, _orthogonalBreakpointDragLink)
+                    ? _orthogonalBreakpointPreviewX
+                    : GetSharedSpineX(link));
+            var spine = points[1].X;
+            var top = Math.Min(points[1].Y, points[2].Y) - BreakpointHitTolerance;
+            var bottom = Math.Max(points[1].Y, points[2].Y) + BreakpointHitTolerance;
+            if (Math.Abs(pos.X - spine) <= BreakpointHitTolerance
+                && pos.Y >= top && pos.Y <= bottom)
+                return link;
+        }
+        return null;
+    }
+
+    private double? GetSharedSpineX(LinkViewModel link)
+        => _orthogonalSpineX.TryGetValue(link.UnderlyingLink, out var spineX) && spineX > 0
+            ? spineX
+            : null;
+
     /// <summary>
     /// Returns the <see cref="NodeViewModel"/> and <see cref="NodeHook"/> whose rendered
     /// row rectangle contains <paramref name="pos"/>, or <c>null</c> when the point lies

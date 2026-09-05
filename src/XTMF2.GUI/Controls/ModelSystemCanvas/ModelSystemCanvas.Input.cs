@@ -409,6 +409,34 @@ partial class ModelSystemCanvas
         // Right-click begins a link-creation drag.  Ctrl+left-click is reserved for multi-selection.
         bool isLinkDrag = isRightButton;
 
+        if (!isLinkDrag && !isCtrlLeft && point.Properties.IsLeftButtonPressed)
+        {
+            var breakpointHit = HitTestOrthogonalBreakpoint(mpos);
+            if (breakpointHit is not null)
+            {
+                bool preserveMultiLinkSelection = _multiLinkSelection.Count > 1
+                    && _multiLinkSelection.Contains(breakpointHit.UnderlyingLink);
+                var selectedLinks = preserveMultiLinkSelection
+                    ? _multiLinkSelection.ToList()
+                    : new List<XTMF2.Link> { breakpointHit.UnderlyingLink };
+                if (!preserveMultiLinkSelection)
+                    ClearMultiSelection();
+                _vm.SelectLinkCommand.Execute(breakpointHit);
+                if (preserveMultiLinkSelection)
+                    RefreshMultiLinkSelectionVisuals();
+                _orthogonalBreakpointDragLink = breakpointHit;
+                _orthogonalBreakpointDragLinks.Clear();
+                foreach (var selectedLink in selectedLinks.Where(link => link.IsOrthogonal))
+                    _orthogonalBreakpointDragLinks.Add(selectedLink);
+                _orthogonalBreakpointPreviewX = ComputeOrthogonalPath(breakpointHit,
+                    GetSharedSpineX(breakpointHit))[1].X;
+                e.Pointer.Capture(this);
+                Focus();
+                e.Handled = true;
+                return;
+            }
+        }
+
         // ── Resize handle press (left button) ────────────────────────────
         if (!isLinkDrag && !isCtrlLeft)
         {
@@ -800,6 +828,31 @@ partial class ModelSystemCanvas
         _lastCanvasMousePos = mpos;
         UpdateHookTooltip(mpos);
 
+        if (_orthogonalBreakpointDragLink is not null)
+        {
+            const double MinStub = 24.0;
+            var dragTargets = _vm!.Links
+                .Where(link => _orthogonalBreakpointDragLinks.Contains(link.UnderlyingLink))
+                .ToList();
+            var minX = double.NegativeInfinity;
+            var maxX = double.PositiveInfinity;
+            foreach (var dragTarget in dragTargets)
+            {
+                var origin = ComputeOrthogonalOriginPoint(dragTarget);
+                var destination = new Point(dragTarget.X2, dragTarget.Y2);
+                var destinationBorder = OrthogonalDestBorderPoint(dragTarget.Destination, new Point(origin.X + 1, origin.Y)) ?? destination;
+                minX = Math.Max(minX, origin.X + MinStub);
+                maxX = Math.Min(maxX, destinationBorder.X - MinStub);
+            }
+            if (double.IsNegativeInfinity(minX)) minX = mpos.X;
+            if (double.IsPositiveInfinity(maxX)) maxX = minX;
+            maxX = Math.Max(minX, maxX);
+            _orthogonalBreakpointPreviewX = Math.Clamp(mpos.X, minX, maxX);
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
         // Capture ScrollViewer-local position now for auto-scroll use later.
         var svForScroll = GetScrollViewer();
         var svPos = svForScroll is not null ? e.GetCurrentPoint(svForScroll).Position : pos;
@@ -864,7 +917,11 @@ partial class ModelSystemCanvas
         // ── Cursor feedback while idle ────────────────────────────────────
         if (_dragging is null)
         {
-            if (HitTestResizeHandle(mpos) is not null)
+            if (HitTestOrthogonalBreakpoint(mpos) is not null)
+            {
+                Cursor = new Cursor(StandardCursorType.SizeWestEast);
+            }
+            else if (HitTestResizeHandle(mpos) is not null)
             {
                 Cursor = new Cursor(StandardCursorType.SizeAll);
             }
@@ -1136,6 +1193,21 @@ partial class ModelSystemCanvas
         }
 
         // ── Left-button release: end element resize ──────────────────────
+        if (_orthogonalBreakpointDragLink is not null)
+        {
+            var links = _orthogonalBreakpointDragLinks.ToList();
+            var breakpointX = _orthogonalBreakpointPreviewX;
+            _orthogonalBreakpointDragLink = null;
+            _orthogonalBreakpointDragLinks.Clear();
+            e.Pointer.Capture(null);
+            if (_vm is not null)
+                _vm.Session.SetLinksOrthogonalBreakpointX(_vm.User, links, breakpointX, out _);
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
+        // ── Left-button release: end element resize ──────────────────────
         if (_resizing is not null)
         {
             _resizing.CommitResize();
@@ -1285,10 +1357,13 @@ partial class ModelSystemCanvas
     {
         base.OnPointerCaptureLost(e);
         EndPointerInteraction(e.Pointer);
+        InvalidateVisual();
     }
 
     private void EndPointerInteraction(IPointer? pointer)
     {
+        _orthogonalBreakpointDragLink = null;
+        _orthogonalBreakpointDragLinks.Clear();
         _dragging = null;
         _resizing = null;
         _panning = false;

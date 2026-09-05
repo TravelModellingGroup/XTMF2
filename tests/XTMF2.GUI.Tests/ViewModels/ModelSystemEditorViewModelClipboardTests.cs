@@ -555,6 +555,86 @@ public class ModelSystemEditorViewModelClipboardTests
     }
 
     [TestMethod]
+    public void PasteElementsAsync_FunctionInstanceRestoresEmbeddedParameter()
+    {
+        TestGuiHelper.RunInProjectContext(
+            nameof(PasteElementsAsync_FunctionInstanceRestoresEmbeddedParameter),
+            (runtime, user, projectSession) =>
+            {
+                CommandError? error = null;
+                Assert.IsTrue(projectSession.CreateNewModelSystem(user, "SourceModel", out var sourceHeader, out error),
+                    error?.Message);
+                Assert.IsTrue(projectSession.CreateNewModelSystem(user, "TargetModel", out var targetHeader, out error),
+                    error?.Message);
+
+                string? snapshot = null;
+                Assert.IsTrue(projectSession.EditModelSystem(user, sourceHeader!, out var sourceSession, out error)
+                    .UsingIf(sourceSession, () =>
+                    {
+                        Assert.IsNotNull(sourceSession);
+                        var sourceTemplate = BuildTemplate(
+                            user,
+                            sourceSession!,
+                            "EmbeddedTemplate",
+                            new Rectangle(20, 20, 260, 160),
+                            new Rectangle(30, 40, 160, 60),
+                            new Rectangle(50, 120, 150, 50));
+                        Assert.IsTrue(sourceSession!.ExportFunctionTemplateSnapshot(sourceTemplate, out snapshot, out error),
+                            error?.Message);
+                    }), error?.Message);
+
+                Assert.IsTrue(projectSession.EditModelSystem(user, targetHeader!, out var targetSession, out error)
+                    .UsingIf(targetSession, () =>
+                    {
+                        Assert.IsNotNull(targetSession);
+                        using var vmEditor = new ModelSystemEditorViewModel(targetSession!, user, runController: null);
+                        var payload = new CanvasClipboardPayload(
+                            Source: "XTMF2Canvas",
+                            Version: 1,
+                            Elements:
+                            [
+                                new CanvasElementDto(
+                                    Kind: CanvasElementKind.FunctionInstance,
+                                    X: 100f,
+                                    Y: 120f,
+                                    W: 160f,
+                                    H: 70f,
+                                    Name: "InstanceWithParameter",
+                                    TemplateName: "EmbeddedTemplate",
+                                    EmbeddedTemplateSnapshot: snapshot!,
+                                    InlinedChildren:
+                                    [
+                                        new InlinedChildDto(
+                                            "Input",
+                                            new CanvasElementDto(
+                                                Kind: CanvasElementKind.Node,
+                                                X: -1f,
+                                                Y: -1f,
+                                                W: 120f,
+                                                H: 50f,
+                                                Name: "EmbeddedInput",
+                                                TypeName: typeof(BasicParameter<string>).AssemblyQualifiedName,
+                                                ParameterValue: "copied-value"))
+                                    ])
+                            ]);
+
+                        vmEditor.PasteElementsAsync(payload, anchorX: 0, anchorY: 0)
+                            .GetAwaiter().GetResult();
+
+                        var instance = targetSession!.ModelSystem.GlobalBoundary.FunctionInstances.Single();
+                        var embedded = targetSession.ModelSystem.GlobalBoundary.Modules
+                            .Single(node => node.Name == "EmbeddedInput");
+                        Assert.AreEqual(Rectangle.Hidden, embedded.Location);
+                        Assert.AreEqual("copied-value", embedded.ParameterValue?.Representation);
+                        Assert.IsTrue(targetSession.ModelSystem.GlobalBoundary.Links
+                            .OfType<SingleLink>()
+                            .Any(link => ReferenceEquals(link.Origin, instance)
+                                && ReferenceEquals(link.Destination, embedded)));
+                    }), error?.Message);
+            });
+    }
+
+    [TestMethod]
     public void PasteElementsAsync_FunctionInstanceReferencedTemplate_ReusesExistingEquivalentTemplate()
     {
         TestGuiHelper.RunInModelSystemContext(

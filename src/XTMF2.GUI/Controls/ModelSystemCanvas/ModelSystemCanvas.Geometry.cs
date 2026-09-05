@@ -162,6 +162,10 @@ partial class ModelSystemCanvas
         {
             spineX = sharedSpineX.Value;
         }
+        else if (link.UnderlyingLink.OrthogonalBreakpointX is { } persistedSpineX)
+        {
+            spineX = persistedSpineX;
+        }
         else
         {
             // p2 needs to be estimated with the approach direction from p1's side.

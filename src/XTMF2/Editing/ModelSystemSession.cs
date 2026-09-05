@@ -3542,6 +3542,94 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Sets the persisted orthogonal-routing breakpoint on a link and records the change in the undo buffer.
+        /// </summary>
+        public bool SetLinkOrthogonalBreakpointX(User user, Link link, double? breakpointX,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(link);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var previousBreakpointX = link.OrthogonalBreakpointX;
+                if (link.SetOrthogonalBreakpointX(breakpointX, out error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (link.SetOrthogonalBreakpointX(previousBreakpointX, out var undoError), undoError);
+                    }, () =>
+                    {
+                        return (link.SetOrthogonalBreakpointX(breakpointX, out var redoError), redoError);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>Sets the orthogonal-routing breakpoint on multiple links as one undoable action.</summary>
+        public bool SetLinksOrthogonalBreakpointX(User user, IEnumerable<Link> links, double? breakpointX,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(links);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var linksToChange = links.Where(l => l is not null)
+                    .Distinct()
+                    .Where(l => l.OrthogonalBreakpointX != breakpointX)
+                    .ToList();
+                if (linksToChange.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var previousBreakpoints = linksToChange
+                    .Select(linkToChange => (Link: linkToChange, BreakpointX: linkToChange.OrthogonalBreakpointX))
+                    .ToList();
+                var batch = new CommandBatch();
+                foreach (var linkToChange in linksToChange)
+                {
+                    if (!linkToChange.SetOrthogonalBreakpointX(breakpointX, out error))
+                    {
+                        foreach (var (changedLink, previousBreakpointX) in previousBreakpoints)
+                            _ = changedLink.SetOrthogonalBreakpointX(previousBreakpointX, out _);
+                        return false;
+                    }
+
+                    var previousBreakpoint = previousBreakpoints
+                        .First(previous => ReferenceEquals(previous.Link, linkToChange)).BreakpointX;
+                    batch.Add(new Command(() =>
+                    {
+                        return (linkToChange.SetOrthogonalBreakpointX(previousBreakpoint, out var undoError), undoError);
+                    }, () =>
+                    {
+                        return (linkToChange.SetOrthogonalBreakpointX(breakpointX, out var redoError), redoError);
+                    }));
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
+            }
+        }
+
         /// <summary>Sets the orthogonal-routing flag on multiple links as one undoable action.</summary>
         public bool SetLinksOrthogonal(User user, IEnumerable<Link> links, bool orthogonal,
             [NotNullWhen(false)] out CommandError? error)

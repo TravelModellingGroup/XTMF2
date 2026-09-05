@@ -58,6 +58,8 @@ public sealed partial class LinkViewModel : ObservableObject
     /// </summary>
     public bool IsOrthogonal => UnderlyingLink.IsOrthogonal;
 
+    public double? OrthogonalBreakpointX => UnderlyingLink.OrthogonalBreakpointX;
+
     /// <summary>
     /// Whether this rendered destination branch should be hidden on the canvas.
     /// </summary>
@@ -86,6 +88,9 @@ public sealed partial class LinkViewModel : ObservableObject
     {
         if (e.PropertyName is nameof(XTMF2.Link.IsOrthogonal))
             OnPropertyChanged(nameof(IsOrthogonal));
+
+        if (e.PropertyName is nameof(XTMF2.Link.OrthogonalBreakpointX))
+            OnPropertyChanged(nameof(OrthogonalBreakpointX));
 
         if (e.PropertyName is nameof(XTMF2.ModelSystemConstruct.SingleLink.DestinationHidden)
             or nameof(XTMF2.ModelSystemConstruct.MultiLink.Destinations))

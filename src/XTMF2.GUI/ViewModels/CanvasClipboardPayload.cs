@@ -76,7 +76,8 @@ internal sealed record CanvasClipboardPayload(
 /// </param>
 /// <param name="InlinedChildren">
 /// Hidden (inlined) child parameter nodes attached to this node's hooks.
-/// Applies to <see cref="CanvasElementKind.Node"/>.
+/// Applies to <see cref="CanvasElementKind.Node"/> and
+/// <see cref="CanvasElementKind.FunctionInstance"/>.
 /// </param>
 /// <param name="TemplateName">
 /// Name of the referenced function template.

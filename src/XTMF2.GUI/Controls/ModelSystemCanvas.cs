@@ -418,6 +418,9 @@ public sealed partial class ModelSystemCanvas : Control
     // ── Drag state ────────────────────────────────────────────────────────
     /// <summary>The element currently being dragged (left-button), or <c>null</c> when idle.</summary>
     private ICanvasElement? _dragging;
+    private LinkViewModel? _orthogonalBreakpointDragLink;
+    private readonly HashSet<XTMF2.Link> _orthogonalBreakpointDragLinks = new(ReferenceEqualityComparer.Instance);
+    private double _orthogonalBreakpointPreviewX;
     /// <summary>Offset from the element's top-left corner to the pointer position at drag start.</summary>
     private Point _dragOffset;
     /// <summary>

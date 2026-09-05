@@ -32,11 +32,12 @@ public sealed class SingleLink : Link
     public bool DestinationHidden { get; private set; }
 
     public SingleLink(Node origin, NodeHook hook, Node destination, bool disabled, bool orthogonal = false,
-        bool destinationHidden = false, Guid id = default)
+        bool destinationHidden = false, Guid id = default, double? breakpointX = null)
         : base(origin, hook, disabled, orthogonal, id)
     {
         Destination = destination;
         DestinationHidden = destinationHidden;
+        OrthogonalBreakpointX = breakpointX;
     }
 
     internal bool SetDestination(Node destination, out CommandError? error)
@@ -61,6 +62,10 @@ public sealed class SingleLink : Link
         if (IsOrthogonal)
         {
             writer.WriteBoolean(OrthogonalProperty, true);
+        }
+        if (OrthogonalBreakpointX.HasValue)
+        {
+            writer.WriteNumber(BreakpointXProperty, OrthogonalBreakpointX.Value);
         }
         if (DestinationHidden)
         {
