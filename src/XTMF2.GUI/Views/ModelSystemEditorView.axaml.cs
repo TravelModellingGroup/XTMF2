@@ -76,6 +76,12 @@ public partial class ModelSystemEditorView : UserControl
         TheCanvas.InvalidateVisual();
     }
 
+    private void OnNavigateBackClick(object? sender, RoutedEventArgs e)
+    {
+        TheCanvas.NavigateBackToPreviousBoundary();
+        e.Handled = true;
+    }
+
     // -- Scroll-position memory -------------------------------------------------
 
     private void OnCanvasScrollChanged(object? sender, EventArgs e)

@@ -50,6 +50,22 @@ namespace XTMF2.GUI.Controls;
 /// </summary>
 public sealed partial class ModelSystemCanvas : Control
 {
+    public static readonly DirectProperty<ModelSystemCanvas, bool> CanNavigateBackProperty =
+        AvaloniaProperty.RegisterDirect<ModelSystemCanvas, bool>(nameof(CanNavigateBack), o => o.CanNavigateBack);
+
+    private bool _canNavigateBack;
+    public bool CanNavigateBack => _canNavigateBack;
+
+    private void UpdateCanNavigateBack()
+    {
+        var canNavigateBack = _boundaryNavigationHistory.Count > 0;
+        if (_canNavigateBack == canNavigateBack)
+            return;
+
+        var previousValue = _canNavigateBack;
+        _canNavigateBack = canNavigateBack;
+        RaisePropertyChanged(CanNavigateBackProperty, previousValue, canNavigateBack);
+    }
 
     // ── ViewModel ─────────────────────────────────────────────────────────
     private ModelSystemEditorViewModel? _vm;
@@ -437,6 +453,10 @@ public sealed partial class ModelSystemCanvas : Control
     private readonly Dictionary<XTMF2.Link, double> _movingOrthogonalBreakpointPreviews =
         new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ICanvasElement, double> _groupDragStartX = new();
+    private readonly List<(Boundary Boundary, Vector Offset)> _boundaryNavigationHistory = new();
+    private Boundary? _navigationBoundary;
+    private bool _restoringBoundaryNavigation;
+    private Vector? _pendingBoundaryNavigationOffset;
     /// <summary>Offset from the element's top-left corner to the pointer position at drag start.</summary>
     private Point _dragOffset;
     /// <summary>
@@ -536,6 +556,11 @@ public sealed partial class ModelSystemCanvas : Control
         base.OnDataContextChanged(e);
         Detach();
         _vm = DataContext as ModelSystemEditorViewModel;
+        _boundaryNavigationHistory.Clear();
+        UpdateCanNavigateBack();
+        _navigationBoundary = _vm?.CurrentBoundary;
+        _pendingBoundaryNavigationOffset = null;
+        _restoringBoundaryNavigation = false;
         Attach();
         InvalidateAndMeasure();
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -614,6 +639,11 @@ public sealed partial class ModelSystemCanvas : Control
         _vm.FunctionInstances.CollectionChanged -= OnCollectionChanged;
         _vm.FunctionParameterVMs.CollectionChanged -= OnCollectionChanged;
         _vm.PropertyChanged -= OnViewModelPropertyChanged;
+        _boundaryNavigationHistory.Clear();
+        UpdateCanNavigateBack();
+        _navigationBoundary = null;
+        _pendingBoundaryNavigationOffset = null;
+        _restoringBoundaryNavigation = false;
 
         foreach (var n in _vm.Nodes) ((INotifyPropertyChanged)n).PropertyChanged -= OnElementPropertyChanged;
         foreach (var s in _vm.Starts) ((INotifyPropertyChanged)s).PropertyChanged -= OnElementPropertyChanged;
@@ -736,9 +766,26 @@ public sealed partial class ModelSystemCanvas : Control
         // Clearing it forces Ctrl+V to use the viewport-centre fallback in the new boundary.
         if (e.PropertyName is nameof(ModelSystemEditorViewModel.CurrentBoundary))
         {
+            if (_navigationBoundary is not null && !_restoringBoundaryNavigation)
+            {
+                var offset = GetScrollViewer()?.Offset ?? default;
+                _boundaryNavigationHistory.Add((_navigationBoundary, offset));
+                if (_boundaryNavigationHistory.Count > 50)
+                    _boundaryNavigationHistory.RemoveAt(0);
+                UpdateCanNavigateBack();
+            }
+            _navigationBoundary = _vm!.CurrentBoundary;
             _lastCanvasMousePos = null;
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
+                if (_pendingBoundaryNavigationOffset is { } restoreOffset)
+                {
+                    var scrollViewer = GetScrollViewer();
+                    if (scrollViewer is not null)
+                        scrollViewer.Offset = restoreOffset;
+                    _pendingBoundaryNavigationOffset = null;
+                    _restoringBoundaryNavigation = false;
+                }
                 if (!IsKeyboardFocusWithin)
                     Focus();
                 EnsureCanvasFocusAndSelection();

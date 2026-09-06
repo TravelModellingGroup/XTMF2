@@ -127,6 +127,11 @@ partial class ModelSystemCanvas
             }, Avalonia.Threading.DispatcherPriority.Render);
             e.Handled = true;
         }
+        else if (e.Key == Key.Left && (e.KeyModifiers & KeyModifiers.Alt) != 0)
+        {
+            NavigateBackToPreviousBoundary();
+            e.Handled = true;
+        }
         else if (e.Key == Key.C && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
             _ = CopySelectedElementsAsync();
@@ -386,7 +391,7 @@ partial class ModelSystemCanvas
         // ── Mouse back button (XButton1): navigate to parent scope ───────────────
         if (e.GetCurrentPoint(this).Properties.PointerUpdateKind == PointerUpdateKind.XButton1Pressed)
         {
-            _vm.NavigateUpCommand.Execute(null);
+            NavigateBackToPreviousBoundary();
             e.Handled = true;
             return;
         }
@@ -1617,6 +1622,19 @@ partial class ModelSystemCanvas
         _linkCurrentPos = default;
         _autoScrollTimer.Stop();
         pointer?.Capture(null);
+    }
+
+    public void NavigateBackToPreviousBoundary()
+    {
+        if (_vm is null || _boundaryNavigationHistory.Count == 0)
+            return;
+
+        var previous = _boundaryNavigationHistory[^1];
+        _boundaryNavigationHistory.RemoveAt(_boundaryNavigationHistory.Count - 1);
+        UpdateCanNavigateBack();
+        _pendingBoundaryNavigationOffset = previous.Offset;
+        _restoringBoundaryNavigation = true;
+        _vm.SwitchToBoundary(previous.Boundary);
     }
 
     // ── Keyboard navigation (arrow keys) ──────────────────────────────────
