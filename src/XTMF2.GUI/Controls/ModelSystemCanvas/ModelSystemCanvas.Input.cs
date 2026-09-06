@@ -99,6 +99,11 @@ partial class ModelSystemCanvas
                 _vm.OpenFunctionTemplateOfInstance(fivm);
                 e.Handled = true;
             }
+            else if (_vm.SelectedElement is GhostNodeViewModel ghost)
+            {
+                _vm.NavigateToElementById(ghost.ReferencedNode.Id);
+                e.Handled = true;
+            }
         }
         else if (e.Key == Key.F2 && _vm?.SelectedElement is not null)
         {

@@ -958,7 +958,10 @@ partial class ModelSystemCanvas
         // ── Move to Boundary (ghost nodes) ────────────────────────────────────
         if (element is GhostNodeViewModel capturedGhost)
         {
-            var goToRepresentedItem = new MenuItem { Header = "Go to Represented Element" };
+            var goToRepresentedItem = new MenuItem
+            {
+                Header = CreateShortcutMenuHeader("Go to Represented Element", "Ctrl+Enter")
+            };
             goToRepresentedItem.Click += (_, _) =>
             {
                 vm.NavigateToElementById(capturedGhost.ReferencedNode.Id);
