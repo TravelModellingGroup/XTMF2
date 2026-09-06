@@ -361,10 +361,15 @@ partial class ModelSystemCanvas
                     new Point(ft.X, rowY),
                     new Point(ft.X + rw, rowY));
 
-                // Dot on the left edge (acts like a hook anchor) — orange to signal FunctionParameter
+                var dotBrush = fp.IsRequired
+                    ? (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush)
+                    : (_isLight ? HookConnectedBrushL : HookConnectedBrush);
+
+                // Dot on the left edge (acts like a hook anchor), using the same
+                // required/optional colours as the exposed FunctionInstance hooks.
                 double dotCx = ft.X + HookDotRadius + 4.0;
                 double dotCy = rowY + FtHookRowHeight / 2.0;
-                ctx.DrawEllipse(Brushes.OrangeRed, null,
+                ctx.DrawEllipse(dotBrush, null,
                     new Point(dotCx, dotCy), HookDotRadius, HookDotRadius);
 
                 // "Parameter: <name>"
@@ -420,7 +425,7 @@ partial class ModelSystemCanvas
         foreach (var fi in _vm!.FunctionInstances)
         {
             double rw = fi.Width;
-            double rh = fi.Height;
+            double rh = FunctionInstanceRenderHeight(fi);
             var rect = new Rect(fi.X, fi.Y, rw, rh);
             bool isDisabled = fi.UnderlyingInstance.IsDisabled;
 
@@ -453,15 +458,19 @@ partial class ModelSystemCanvas
             using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
                 ctx.DrawText(labelFtText, new Point(lx, ly));
 
-            // Template subtitle (small, muted) at the bottom of the header
-            var subText = MakeText(
-                "[" + fi.TemplateName + "]" + (fi.EntryNodeTypeName.Length > 0 ? " : " + fi.EntryNodeTypeName : ""),
-                HookFontSize,
-                isDisabled ? (_isLight ? DisabledSubTextBrushL : DisabledSubTextBrush) : (_isLight ? FiSubTextBrushL : FiSubTextBrush));
-            double subX = fi.X + rw - subText.Width - 8.0;
-            double subY = fi.Y + (FtHeaderHeight - subText.Height) / 2.0;
-            using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
-                ctx.DrawText(subText, new Point(Math.Max(lx + labelFtText.Width + 4, subX), subY));
+            if (!_vm.ShowAllHooks && fi.FunctionParameters.Count > 0)
+            {
+                var iconRect = FunctionInstanceHookToggleIconRect(fi);
+                var iconBg = fi.ShowHooks ? (_isLight ? HookToggleActiveBgL : HookToggleActiveBg)
+                                          : (_isLight ? HookToggleBgL : HookToggleBg);
+                ctx.DrawRectangle(iconBg, null, iconRect, 3.0, 3.0);
+                var glyph = fi.ShowHooks ? "\u25BE" : "\u25B8";
+                var iconFt = MakeText(glyph, HookFontSize + 1.0,
+                    _isLight ? HookToggleTextL : HookToggleText);
+                ctx.DrawText(iconFt, new Point(
+                    iconRect.X + (iconRect.Width - iconFt.Width) / 2.0,
+                    iconRect.Y + (iconRect.Height - iconFt.Height) / 2.0));
+            }
 
             // ── Resize grip (bottom-right corner) ─────────────────────────
             {
@@ -478,7 +487,7 @@ partial class ModelSystemCanvas
                 }
             }
 
-            if (fi.FunctionParameters.Count == 0)
+            if (!_fiVisibleHooks.TryGetValue(fi, out var visibleFiHooks) || visibleFiHooks.Count == 0)
                 continue;
 
             // ── FunctionParameter hook rows — same layout logic as Node hook rows ───
@@ -487,22 +496,24 @@ partial class ModelSystemCanvas
                 new Point(fi.X + rw - 1, fi.Y + FtHeaderHeight));
 
             double rowY = fi.Y + FtHeaderHeight;
-            var fiHooks = fi.UnderlyingInstance.Hooks;
             _fiConnectedHooks.TryGetValue(fi, out var fiConnected);
-            for (int fi_i = 0; fi_i < fi.FunctionParameters.Count; fi_i++)
+            for (int fi_i = 0; fi_i < visibleFiHooks.Count; fi_i++)
             {
-                var fp = fi.FunctionParameters[fi_i];
-                var fpHook = fi_i < fiHooks.Count ? fiHooks[fi_i] as FunctionParameterHook : null;
+                var fpHook = visibleFiHooks[fi_i];
+                var fp = fpHook.Parameter;
                 bool fpConn = fiConnected is not null && fpHook is not null && fiConnected.Contains(fpHook);
                 NodeViewModel? inlinedFiParam = null;
                 bool hasInlinedFi = fpHook is not null
                     && _fiHookInlinedParam.TryGetValue((fi, fpHook), out inlinedFiParam);
-                bool fpUnsatisfied = !fpConn && !hasInlinedFi;
+                bool fpRequired = fpHook is not null
+                    && (fpHook.Cardinality == HookCardinality.Single
+                        || fpHook.Cardinality == HookCardinality.AtLeastOne);
+                bool fpUnsatisfied = fpRequired && !fpConn && !hasInlinedFi;
 
                 double rowTopY = rowY;
                 double dotCy   = rowY + HookRowHeight / 2.0;
 
-                // Row tint: amber for inlined param, red wash for unsatisfied (all FP hooks required).
+                // Row tint: amber for inlined param, red wash for unsatisfied required hooks.
                 if (!isDisabled && hasInlinedFi)
                     ctx.DrawRectangle(InlineParamRowBg, null,
                         new Rect(fi.X + 1, rowTopY, rw - 2, HookRowHeight));
@@ -530,6 +541,20 @@ partial class ModelSystemCanvas
                         new Point(fi.X, dotCy), HookDotRadius, HookDotRadius);
                 }
 
+                bool canInlineFi = fpHook is not null
+                    && _fiHookCanInlineParam.ContainsKey((fi, fpHook));
+                if (canInlineFi)
+                {
+                    var inlineRect = InlineFiMinimizeButtonRect(fi, fi_i);
+                    ctx.DrawRectangle(_isLight ? MinimizeBtnBgL : MinimizeBtnBg, null,
+                        inlineRect, 3.0, 3.0);
+                    var inlineFt = MakeText("\u229f", HookFontSize,
+                        _isLight ? MinimizeBtnTextL : MinimizeBtnText);
+                    var inlineGlyphX = inlineRect.X + (inlineRect.Width - inlineFt.Width) / 2.0;
+                    var inlineGlyphY = inlineRect.Y + (inlineRect.Height - inlineFt.Height) / 2.0;
+                    ctx.DrawText(inlineFt, new Point(inlineGlyphX, inlineGlyphY));
+                }
+
                 // Label: prefix with ≡ (BasicParameter) or ƒ (ScriptedParameter) when inlined.
                 const double textPad = 6.0;
                 string hookLabel = hasInlinedFi && inlinedFiParam is not null
@@ -545,10 +570,11 @@ partial class ModelSystemCanvas
                         ? (_isLight ? ScriptParamAccentBrushL : ScriptParamAccentBrush)
                     : (_isLight ? ParamValueTextBrushL : ParamValueTextBrush);
                 var hookNameFt = MakeText(hookLabel, HookFontSize, hookTextBrush);
-                double maxW  = rw - textPad * 2 - HookDotRadius * 2;
+                double labelLeft = canInlineFi ? InlineMinimizeButtonSize + 8.0 : textPad;
+                double maxW  = rw - labelLeft - textPad - HookDotRadius * 2;
                 double hookTy = dotCy - hookNameFt.Height / 2.0;
-                using (ctx.PushClip(new Rect(fi.X + textPad, hookTy, Math.Max(0, maxW), hookNameFt.Height + 1)))
-                    ctx.DrawText(hookNameFt, new Point(fi.X + textPad, hookTy));
+                using (ctx.PushClip(new Rect(fi.X + labelLeft, hookTy, Math.Max(0, maxW), hookNameFt.Height + 1)))
+                    ctx.DrawText(hookNameFt, new Point(fi.X + labelLeft, hookTy));
 
                 rowY += HookRowHeight;
             }

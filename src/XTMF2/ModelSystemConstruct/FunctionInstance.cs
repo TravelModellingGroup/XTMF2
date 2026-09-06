@@ -133,10 +133,16 @@ namespace XTMF2.ModelSystemConstruct
                             hook = new FunctionParameterHook(fp, idx);
                             _functionParameterHooks.Add(fp, hook);
                         }
+                        hook.RefreshCardinality();
                         list.Add(hook);
                         idx++;
                     }
                     _cachedHooks = list.AsReadOnly();
+                }
+                else
+                {
+                    foreach (var hook in _functionParameterHooks.Values)
+                        hook.RefreshCardinality();
                 }
                 return _cachedHooks;
             }

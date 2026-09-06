@@ -184,6 +184,13 @@ public sealed partial class ModelSystemCanvas : Control
     private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), NodeViewModel>
         _fiHookInlinedParam = new();
     /// <summary>
+    /// Maps eligible visible FI hooks to the parameter node that can be collapsed into them.
+    /// </summary>
+    private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), NodeViewModel>
+        _fiHookCanInlineParam = new();
+    private readonly Dictionary<FunctionInstanceViewModel, IReadOnlyList<FunctionParameterHook>>
+        _fiVisibleHooks = new();
+    /// <summary>
     /// Stores the maximum scroll offset (model-space px) for each comment block, computed during
     /// render. Used by the wheel handler to clamp scroll without recomputing the text layout.
     /// </summary>

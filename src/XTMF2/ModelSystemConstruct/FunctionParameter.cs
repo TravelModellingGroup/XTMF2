@@ -19,6 +19,7 @@
 using System;
 using System.Text.Json;
 using System.Collections.Generic;
+using System.Linq;
 using System.Diagnostics.CodeAnalysis;
 using XTMF2.Editing;
 
@@ -57,6 +58,22 @@ namespace XTMF2.ModelSystemConstruct
         /// The <see cref="FunctionTemplate"/> that owns this parameter.
         /// </summary>
         public FunctionTemplate Template { get; }
+
+        /// <summary>
+        /// Whether at least one internal destination of this parameter requires a module.
+        /// </summary>
+        public bool IsRequired
+            => Template.InternalModules.Links.Any(link => link switch
+            {
+                SingleLink single => ReferenceEquals(single.Destination, this)
+                    && IsRequiredCardinality(single.OriginHook.Cardinality),
+                MultiLink multi => multi.Destinations.Contains(this)
+                    && IsRequiredCardinality(multi.OriginHook.Cardinality),
+                _ => false
+            });
+
+        private static bool IsRequiredCardinality(HookCardinality cardinality)
+            => cardinality is HookCardinality.Single or HookCardinality.AtLeastOne;
 
         /// <summary>
         /// Constructs a new <see cref="FunctionParameter"/> owned by <paramref name="template"/>.

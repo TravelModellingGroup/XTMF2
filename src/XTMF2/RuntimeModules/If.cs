@@ -21,164 +21,191 @@ using System.Collections.Generic;
 using System.Text;
 
 namespace XTMF2.RuntimeModules;
-    [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
+
+[Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
-    public sealed class IfF<Return> : BaseFunction<Return>
+public sealed class IfF<Return> : BaseFunction<Return>
+{
+    [Parameter(Required = true, Name = "Condition",
+Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
+    public IFunction<bool>? Condition;
+
+    [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
+    public IFunction<Return>? ToInvokeIfTrue;
+
+    [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
+    public IFunction<Return>? ToInvokeIfFalse;
+
+    public override Return Invoke()
     {
-        [Parameter(Required = true, Name = "Condition",
-    Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
-        public IFunction<bool>? Condition;
-
-        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
-        public IFunction<Return>? ToInvokeIfTrue;
-
-        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
-        public IFunction<Return>? ToInvokeIfFalse;
-
-        public override Return Invoke()
+        if (Condition!.Invoke())
         {
-            if(Condition!.Invoke())
-            {
-                return ToInvokeIfTrue!.Invoke();
-            }
-            else
-            {
-                return ToInvokeIfFalse!.Invoke();
-            }
+            return ToInvokeIfTrue!.Invoke();
+        }
+        else
+        {
+            return ToInvokeIfFalse!.Invoke();
         }
     }
+}
 
-    [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
+[Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
-    public sealed class IfF<Context,Return> : BaseFunction<Context,Return>
+public sealed class IfF<Context, Return> : BaseFunction<Context, Return>
+{
+    [Parameter(Required = true, Name = "Condition",
+        Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
+    public IFunction<bool>? Condition;
+
+    [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
+    public IFunction<Context, Return>? ToInvokeIfTrue;
+
+    [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
+    public IFunction<Context, Return>? ToInvokeIfFalse;
+
+    public override Return Invoke(Context context)
     {
-        [Parameter(Required = true, Name = "Condition",
-            Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
-        public IFunction<bool>? Condition;
-
-        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
-        public IFunction<Context, Return>? ToInvokeIfTrue;
-
-        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
-        public IFunction<Context, Return>? ToInvokeIfFalse;
-
-        public override Return Invoke(Context context)
+        if (Condition!.Invoke())
         {
-            if (Condition!.Invoke())
-            {
-                return ToInvokeIfTrue!.Invoke(context);
-            }
-            else
-            {
-                return ToInvokeIfFalse!.Invoke(context);
-            }
+            return ToInvokeIfTrue!.Invoke(context);
+        }
+        else
+        {
+            return ToInvokeIfFalse!.Invoke(context);
         }
     }
+}
 
-    [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
+[Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
-    public sealed class IfWithContextF<Context, Return> : BaseFunction<Context, Return>
+public sealed class IfWithContextF<Context, Return> : BaseFunction<Context, Return>
+{
+    [Parameter(Required = true, Name = "Condition",
+Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
+    public IFunction<Context, bool>? Condition;
+
+    [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
+    public IFunction<Context, Return>? ToInvokeIfTrue;
+
+    [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
+    public IFunction<Context, Return>? ToInvokeIfFalse;
+
+    public override Return Invoke(Context context)
     {
-        [Parameter(Required = true, Name = "Condition",
-    Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
-        public IFunction<Context, bool>? Condition;
-
-        [SubModule(Required = true, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
-        public IFunction<Context, Return>? ToInvokeIfTrue;
-
-        [SubModule(Required = true, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
-        public IFunction<Context, Return>? ToInvokeIfFalse;
-
-        public override Return Invoke(Context context)
+        if (Condition!.Invoke(context))
         {
-            if (Condition!.Invoke(context))
-            {
-                return ToInvokeIfTrue!.Invoke(context);
-            }
-            else
-            {
-                return ToInvokeIfFalse!.Invoke(context);
-            }
+            return ToInvokeIfTrue!.Invoke(context);
+        }
+        else
+        {
+            return ToInvokeIfFalse!.Invoke(context);
         }
     }
+}
 
-    [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
+[Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
-    public sealed class IfA : BaseAction
+public sealed class IfA : BaseAction
+{
+    [Parameter(Required = true, Name = "Condition",
+Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
+    public IFunction<bool>? Condition;
+
+    [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
+    public IAction? ToInvokeIfTrue;
+
+    [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
+    public IAction? ToInvokeIfFalse;
+
+    public override void Invoke()
     {
-        [Parameter(Required = true, Name = "Condition",
-    Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
-        public IFunction<bool>? Condition;
-
-        [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
-        public IAction? ToInvokeIfTrue;
-
-        [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
-        public IAction? ToInvokeIfFalse;
-
-        public override void Invoke()
+        if (Condition!.Invoke())
         {
-            if (Condition!.Invoke())
-            {
-                ToInvokeIfTrue?.Invoke();
-            }
-            else
-            {
-                ToInvokeIfFalse?.Invoke();
-            }
+            ToInvokeIfTrue?.Invoke();
+        }
+        else
+        {
+            ToInvokeIfFalse?.Invoke();
         }
     }
+}
 
-    [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
+[Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
-    public sealed class IfA<Context> : BaseAction<Context>
+public sealed class IfA<Context> : BaseAction<Context>
+{
+    [Parameter(Required = true, Name = "Condition",
+Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
+    public IFunction<bool>? Condition;
+
+    [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
+    public IAction<Context>? ToInvokeIfTrue;
+
+    [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
+    public IAction<Context>? ToInvokeIfFalse;
+
+    public override void Invoke(Context context)
     {
-        [Parameter(Required = true, Name = "Condition",
-    Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
-        public IFunction<bool>? Condition;
-
-        [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
-        public IAction<Context>? ToInvokeIfTrue;
-
-        [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
-        public IAction<Context>? ToInvokeIfFalse;
-
-        public override void Invoke(Context context)
+        if (Condition!.Invoke())
         {
-            if (Condition!.Invoke())
-            {
-                ToInvokeIfTrue?.Invoke(context);
-            }
-            else
-            {
-                ToInvokeIfFalse?.Invoke(context);
-            }
+            ToInvokeIfTrue?.Invoke(context);
+        }
+        else
+        {
+            ToInvokeIfFalse?.Invoke(context);
         }
     }
+}
 
-    [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
+[Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
-    public sealed class IfWithContextA<Context> : BaseAction<Context>
+public sealed class IfWithContextA<Context> : BaseAction<Context>
+{
+    [Parameter(Required = true, Name = "Condition",
+Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
+    public IFunction<Context, bool>? Condition;
+
+    [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
+    public IAction<Context>? ToInvokeIfTrue;
+
+    [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
+    public IAction<Context>? ToInvokeIfFalse;
+
+    public override void Invoke(Context context)
     {
-        [Parameter(Required = true, Name = "Condition",
-    Description = "The condition to invoke to see if the true or false path is taken.", DefaultValue = "true", Index = 0)]
-        public IFunction<Context, bool>? Condition;
-
-        [SubModule(Required = false, Name = "If True", Description = "The logic to invoke if true", Index = 1, PassesExecution = true)]
-        public IAction<Context>? ToInvokeIfTrue;
-
-        [SubModule(Required = false, Name = "If False", Description = "The logic to invoke if false", Index = 2, PassesExecution = true)]
-        public IAction<Context>? ToInvokeIfFalse;
-
-        public override void Invoke(Context context)
+        if (Condition!.Invoke(context))
         {
-            if (Condition!.Invoke(context))
-            {
-                ToInvokeIfTrue?.Invoke(context);
-            }
-            else
-            {
-                ToInvokeIfFalse?.Invoke(context);
-            }
+            ToInvokeIfTrue?.Invoke(context);
+        }
+        else
+        {
+            ToInvokeIfFalse?.Invoke(context);
         }
     }
+}
+
+[Module(Name = "If Unset", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
+Description = "Provides a way to conditionally execute logic if a value is unset.  This is often used if we want a default value in " +
+ "a FunctionTemplate or for the value to be allowed to be overriden.")
+
+]
+public sealed class IfUnset<Return> : BaseFunction<Return>
+{
+    [SubModule(Required = false, Name = "Value", Description = "The value to check if it is unset.", Index = 0)]
+    public IFunction<Return>? Value;
+
+    [SubModule(Required = true, Name = "If Unset", Description = "The value to return if the original value is unset.", Index = 1)]
+    public IFunction<Return> DefaultValue = null!;
+
+    public override Return Invoke()
+    {
+        if (Value is not null)
+        {
+            return Value.Invoke();
+        }
+        else
+        {
+            return DefaultValue.Invoke();
+        }
+    }
+}

@@ -51,6 +51,47 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void FunctionParameterRequirednessFollowsInternalDestinations()
+        {
+            TestHelper.RunInModelSystemContext(nameof(FunctionParameterRequirednessFollowsInternalDestinations),
+                (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var boundary = mSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, boundary, "MyFT",
+                    out var template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, template!.InternalModules, "Optional",
+                    typeof(XTMF2.UnitTests.Modules.SimpleSubModuleModule), Rectangle.Hidden,
+                    out var optionalNode, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template,
+                    "P1", optionalNode!.Hooks[0].Type, Rectangle.Hidden, out var parameter,
+                    out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, optionalNode, optionalNode.Hooks[0],
+                    parameter!, out _, out error), error?.Message);
+
+                Assert.IsFalse(parameter.IsRequired);
+
+                Assert.IsTrue(mSession.AddFunctionInstance(user, boundary, template, "Instance1",
+                    Rectangle.Hidden, out var instance1, out error), error?.Message);
+                Assert.AreEqual(HookCardinality.SingleOptional,
+                    instance1!.Hooks[0].Cardinality);
+
+                Assert.IsTrue(mSession.AddNode(user, template.InternalModules, "Required",
+                    typeof(XTMF2.UnitTests.Modules.SimpleParameterModule), Rectangle.Hidden,
+                    out var requiredNode, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, requiredNode!, requiredNode.Hooks[0],
+                    parameter!, out _, out error), error?.Message);
+
+                Assert.IsTrue(parameter.IsRequired);
+                Assert.AreEqual(HookCardinality.Single, instance1.Hooks[0].Cardinality);
+
+                Assert.IsTrue(mSession.AddFunctionInstance(user, boundary, template, "Instance2",
+                    Rectangle.Hidden, out var instance2, out error), error?.Message);
+                Assert.AreEqual(HookCardinality.Single, instance2!.Hooks[0].Cardinality);
+            });
+        }
+
+        [TestMethod]
         public void TestAddFunctionParameterUndo()
         {
             TestHelper.RunInModelSystemContext(nameof(TestAddFunctionParameterUndo), (user, pSession, mSession) =>

@@ -80,6 +80,7 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
 
     [ObservableProperty] private string _name        = string.Empty;
     [ObservableProperty] private bool   _isSelected;
+    [ObservableProperty] private bool   _showHooks;
 
     /// <summary>
     /// The short display name of the referenced <see cref="FunctionTemplate"/>

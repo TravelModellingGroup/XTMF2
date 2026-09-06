@@ -486,6 +486,19 @@ partial class ModelSystemCanvas
                 e.Handled = true;
                 return;
             }
+
+            var fiMinimizeHit = HitTestFiMinimizeButton(mpos);
+            if (fiMinimizeHit is { } fiInline)
+            {
+                if (_editingParamNode is not null) CommitParamEdit();
+                if (_editingCommentBlock is not null) CommitCommentEdit();
+                if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
+                if (_editingNameElement is not null) CommitNameEdit();
+                fiInline.Parameter.InlineBasicParameter();
+                InvalidateAndMeasure();
+                e.Handled = true;
+                return;
+            }
         }
 
         // ── Inline parameter value edit (single left click on param row) ──
@@ -567,6 +580,15 @@ partial class ModelSystemCanvas
             if (toggleHit is not null)
             {
                 toggleHit.ShowHooks = !toggleHit.ShowHooks;
+                InvalidateAndMeasure();
+                e.Handled = true;
+                return;
+            }
+
+            var fiToggleHit = HitTestFunctionInstanceHookToggleIcon(mpos);
+            if (fiToggleHit is not null)
+            {
+                fiToggleHit.ShowHooks = !fiToggleHit.ShowHooks;
                 InvalidateAndMeasure();
                 e.Handled = true;
                 return;
@@ -1190,7 +1212,7 @@ partial class ModelSystemCanvas
                 }
                 foreach (var fi in _vm.FunctionInstances)
                 {
-                    var fir = new Rect(fi.X, fi.Y, fi.Width, fi.Height);
+                    var fir = new Rect(fi.X, fi.Y, fi.Width, FunctionInstanceRenderHeight(fi));
                     if (finalRect.Intersects(fir))
                     {
                         _multiSelection.Add(fi);

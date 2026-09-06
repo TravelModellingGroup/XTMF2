@@ -490,7 +490,7 @@ partial class ModelSystemCanvas
 
         if (element is FunctionInstanceViewModel fivm)
         {
-            var rect = new Rect(fivm.X, fivm.Y, fivm.Width, fivm.Height);
+            var rect = new Rect(fivm.X, fivm.Y, fivm.Width, FunctionInstanceRenderHeight(fivm));
             return ClipLineToRect(other, rect);
         }
 
