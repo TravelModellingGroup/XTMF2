@@ -434,6 +434,9 @@ public sealed partial class ModelSystemCanvas : Control
     private LinkViewModel? _orthogonalBreakpointDragLink;
     private readonly HashSet<XTMF2.Link> _orthogonalBreakpointDragLinks = new(ReferenceEqualityComparer.Instance);
     private double _orthogonalBreakpointPreviewX;
+    private readonly Dictionary<XTMF2.Link, double> _movingOrthogonalBreakpointPreviews =
+        new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ICanvasElement, double> _groupDragStartX = new();
     /// <summary>Offset from the element's top-left corner to the pointer position at drag start.</summary>
     private Point _dragOffset;
     /// <summary>

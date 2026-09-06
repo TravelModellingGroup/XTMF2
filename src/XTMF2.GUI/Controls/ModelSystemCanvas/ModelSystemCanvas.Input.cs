@@ -844,6 +844,12 @@ partial class ModelSystemCanvas
             _dragging = hit;
             _dragOffset = new Point(mpos.X - hit.X, mpos.Y - hit.Y);
             _groupDragLastPos = mpos;
+            _groupDragStartX.Clear();
+            if (_multiSelection.Count > 1 && _multiSelection.Contains(hit))
+            {
+                foreach (var selected in _multiSelection)
+                    _groupDragStartX[selected] = selected.X;
+            }
             e.Pointer.Capture(this);
         }
         else
@@ -997,6 +1003,7 @@ partial class ModelSystemCanvas
                 double ny = Math.Max(0, el.Y + dy);
                 el.MoveToPreview(nx, ny);
             }
+            UpdateMovingOrthogonalBreakpointPreviews();
         }
         else
         {
@@ -1295,6 +1302,7 @@ partial class ModelSystemCanvas
             var commentMoves = new List<(CommentBlock, Rectangle)>();
             var templateMoves = new List<(FunctionTemplate, Rectangle)>();
             var instanceMoves = new List<(FunctionInstance, Rectangle)>();
+            var movedElements = new Dictionary<ICanvasElement, (double OldX, double NewX)>();
 
             foreach (var el in _multiSelection)
             {
@@ -1302,43 +1310,64 @@ partial class ModelSystemCanvas
                 {
                     var r = gnvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         nodeMoves.Add((gnvm.UnderlyingNode, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is StartViewModel gsvm)
                 {
                     var r = gsvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         nodeMoves.Add((gsvm.UnderlyingStart, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is CommentBlockViewModel gcvm)
                 {
                     var r = gcvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         commentMoves.Add((gcvm.UnderlyingBlock, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is GhostNodeViewModel ggvm)
                 {
                     var r = ggvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         nodeMoves.Add((ggvm.UnderlyingGhostNode, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is FunctionTemplateViewModel gftvm)
                 {
                     var r = gftvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         templateMoves.Add((gftvm.UnderlyingTemplate, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is FunctionInstanceViewModel gfivm)
                 {
                     var r = gfivm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         instanceMoves.Add((gfivm.UnderlyingInstance, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is FunctionParameterViewModel gfpvm)
                 {
                     var r = gfpvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         nodeMoves.Add((gfpvm.UnderlyingParameter, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
             }
 
@@ -1349,6 +1378,8 @@ partial class ModelSystemCanvas
                 templateMoves.Count > 0 ? templateMoves : null,
                 instanceMoves.Count > 0 ? instanceMoves : null,
                 out _);
+
+            UpdateMovedOrthogonalBreakpoints(movedElements);
         }
         else
         {
@@ -1359,6 +1390,130 @@ partial class ModelSystemCanvas
         InvalidateAndMeasure();
         e.Handled = true;
     }
+
+    private void UpdateMovedOrthogonalBreakpoints(
+        IReadOnlyDictionary<ICanvasElement, (double OldX, double NewX)> movedElements)
+    {
+        if (_vm is null) return;
+
+        var breakpointUpdates = new Dictionary<XTMF2.Link, double>(ReferenceEqualityComparer.Instance);
+        foreach (var linkGroup in _vm.Links
+            .Where(link => link.UnderlyingLink.IsOrthogonal
+                && link.UnderlyingLink.OrthogonalBreakpointX.HasValue)
+            .GroupBy(link => link.UnderlyingLink))
+        {
+            var branches = linkGroup.ToList();
+            var origin = branches[0].Origin;
+            if (!TryGetMovedEndpoint(origin, movedElements, out var originMove)) continue;
+
+            var destinations = branches
+                .Select(link => link.Destination)
+                .OfType<ICanvasElement>()
+                .Distinct()
+                .ToList();
+            if (destinations.Count == 0
+                || !destinations.All(destination => TryGetMovedEndpoint(destination, movedElements, out _))) continue;
+
+            breakpointUpdates[linkGroup.Key] = linkGroup.Key.OrthogonalBreakpointX!.Value
+                + originMove.NewX - originMove.OldX;
+        }
+
+        foreach (var updateGroup in breakpointUpdates.GroupBy(update => update.Value))
+            _vm.Session.SetLinksOrthogonalBreakpointX(
+                _vm.User, updateGroup.Select(update => update.Key), updateGroup.Key, out _);
+    }
+
+    private void UpdateMovingOrthogonalBreakpointPreviews()
+    {
+        _movingOrthogonalBreakpointPreviews.Clear();
+        if (_vm is null) return;
+
+        foreach (var linkGroup in _vm.Links
+            .Where(link => link.UnderlyingLink.IsOrthogonal
+                && link.UnderlyingLink.OrthogonalBreakpointX.HasValue)
+            .GroupBy(link => link.UnderlyingLink))
+        {
+            var branches = linkGroup.ToList();
+            var origin = branches[0].Origin;
+            if (!TryGetMovingEndpointDelta(origin, out var originDelta)) continue;
+
+            var destinations = branches
+                .Select(link => link.Destination)
+                .OfType<ICanvasElement>()
+                .Distinct()
+                .ToList();
+            if (destinations.Count == 0
+                || !destinations.All(destination => TryGetMovingEndpointDelta(destination, out _))) continue;
+
+            _movingOrthogonalBreakpointPreviews[linkGroup.Key] =
+                linkGroup.Key.OrthogonalBreakpointX!.Value + originDelta;
+        }
+    }
+
+    private bool TryGetMovedEndpoint(
+        ICanvasElement endpoint,
+        IReadOnlyDictionary<ICanvasElement, (double OldX, double NewX)> movedElements,
+        out (double OldX, double NewX) movement)
+    {
+        if (movedElements.TryGetValue(endpoint, out movement))
+            return true;
+
+        var referencedNode = GetReferencedNode(endpoint);
+        if (referencedNode is null)
+        {
+            movement = default;
+            return false;
+        }
+
+        foreach (var moved in movedElements)
+        {
+            if (moved.Key is GhostNodeViewModel ghost
+                && ReferenceEquals(ghost.ReferencedNode, referencedNode))
+            {
+                movement = moved.Value;
+                return true;
+            }
+        }
+
+        movement = default;
+        return false;
+    }
+
+    private bool TryGetMovingEndpointDelta(ICanvasElement endpoint, out double delta)
+    {
+        if (_groupDragStartX.TryGetValue(endpoint, out var startX))
+        {
+            delta = endpoint.X - startX;
+            return true;
+        }
+
+        var referencedNode = GetReferencedNode(endpoint);
+        if (referencedNode is not null)
+        {
+            foreach (var selected in _groupDragStartX)
+            {
+                if (selected.Key is GhostNodeViewModel ghost
+                    && ReferenceEquals(ghost.ReferencedNode, referencedNode))
+                {
+                    delta = ghost.X - selected.Value;
+                    return true;
+                }
+            }
+        }
+
+        delta = 0;
+        return false;
+    }
+
+    private static Node? GetReferencedNode(ICanvasElement element)
+        => element switch
+        {
+            GhostNodeViewModel ghost => ghost.ReferencedNode,
+            NodeViewModel node => node.UnderlyingNode,
+            FunctionInstanceViewModel instance => instance.UnderlyingInstance,
+            FunctionParameterViewModel parameter => parameter.UnderlyingParameter,
+            _ => null
+        };
 
     private bool LinkIntersectsSelectionRect(LinkViewModel link, Rect selectionRect)
     {
@@ -1449,6 +1604,8 @@ partial class ModelSystemCanvas
     {
         _orthogonalBreakpointDragLink = null;
         _orthogonalBreakpointDragLinks.Clear();
+        _movingOrthogonalBreakpointPreviews.Clear();
+        _groupDragStartX.Clear();
         _dragging = null;
         _resizing = null;
         _resizingElements.Clear();

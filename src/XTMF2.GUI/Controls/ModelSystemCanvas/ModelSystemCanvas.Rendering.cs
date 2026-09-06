@@ -708,7 +708,11 @@ partial class ModelSystemCanvas
             // p1 is the same for every sibling (shared origin hook).
             var p1 = ComputeOrthogonalOriginPoint(siblings[0]);
 
-            if (_orthogonalBreakpointDragLinks.Contains(siblings[0].UnderlyingLink))
+            if (_movingOrthogonalBreakpointPreviews.TryGetValue(siblings[0].UnderlyingLink, out var movingSpineX))
+            {
+                _orthogonalSpineX[(XTMF2.Link)group.Key!] = movingSpineX;
+            }
+            else if (_orthogonalBreakpointDragLinks.Contains(siblings[0].UnderlyingLink))
             {
                 _orthogonalSpineX[(XTMF2.Link)group.Key!] = _orthogonalBreakpointPreviewX;
             }
@@ -742,7 +746,8 @@ partial class ModelSystemCanvas
             }
 
             if (siblings[0].UnderlyingLink.OrthogonalBreakpointX is null
-                && !_orthogonalBreakpointDragLinks.Contains(siblings[0].UnderlyingLink))
+                && !_orthogonalBreakpointDragLinks.Contains(siblings[0].UnderlyingLink)
+                && !_movingOrthogonalBreakpointPreviews.ContainsKey(siblings[0].UnderlyingLink))
                 _orthogonalSpineX[(XTMF2.Link)group.Key!] = sharedSpineX;
             _orthogonalTrunkRange[(XTMF2.Link)group.Key!] = (trunkTopY, trunkBottomY);
         }
@@ -811,9 +816,12 @@ partial class ModelSystemCanvas
                 // Use a shared spine X for multi-link groups so all branches overlap on the trunk.
                 _orthogonalSpineX.TryGetValue(link.UnderlyingLink, out var spineX);
                 bool hasSharedSpine = spineX > 0;
-                double? previewSpine = _orthogonalBreakpointDragLinks.Contains(link.UnderlyingLink)
-                    ? _orthogonalBreakpointPreviewX
-                    : hasSharedSpine ? spineX : null;
+                double? previewSpine = _movingOrthogonalBreakpointPreviews.TryGetValue(
+                    link.UnderlyingLink, out var movingSpine)
+                    ? movingSpine
+                    : _orthogonalBreakpointDragLinks.Contains(link.UnderlyingLink)
+                        ? _orthogonalBreakpointPreviewX
+                        : hasSharedSpine ? spineX : null;
                 var pts = ComputeOrthogonalPath(link, previewSpine);
                 // pts = [p1, corner1, corner2, p2]  (always 4 points)
                 bp2 = pts[^1];
