@@ -468,6 +468,8 @@ public sealed partial class ModelSystemCanvas : Control
     // ── Resize drag state ─────────────────────────────────────────────────
     /// <summary>The canvas element being resized, or <c>null</c> when not resizing.</summary>
     private ICanvasElement? _resizing;
+    /// <summary>Elements receiving the active resize preview and commit.</summary>
+    private readonly List<ICanvasElement> _resizingElements = new();
     /// <summary><c>true</c> while a drag or resize operation is in progress (used to prevent inline editor close on focus loss).</summary>
     private bool _inDragOrResize;
     /// <summary>Pointer position at the start of the resize drag.</summary>

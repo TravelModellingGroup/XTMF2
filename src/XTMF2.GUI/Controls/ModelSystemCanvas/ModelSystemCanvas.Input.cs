@@ -374,14 +374,7 @@ partial class ModelSystemCanvas
             if (_editingNameElement is not null) CommitNameEdit();
         }
 
-        ClearMultiSelection();
-        _resizing = resizeHit;
-        _resizeStartPos = mpos;
-        _resizeStartW = ElementRenderWidth(resizeHit);
-        _resizeStartH = ElementRenderHeight(resizeHit);
-        _vm.SelectElementCommand.Execute(resizeHit);
-        e.Pointer.Capture(this);
-        Focus();
+        BeginResize(resizeHit, mpos, e);
         e.Handled = true;
     }
 
@@ -458,14 +451,7 @@ partial class ModelSystemCanvas
                     if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
                     if (_editingNameElement is not null) CommitNameEdit();
                 }
-                ClearMultiSelection();
-                _resizing = resizeHit;
-                _resizeStartPos = mpos;
-                _resizeStartW = ElementRenderWidth(resizeHit);
-                _resizeStartH = ElementRenderHeight(resizeHit);
-                _vm.SelectElementCommand.Execute(resizeHit);
-                e.Pointer.Capture(this);
-                Focus();
+                BeginResize(resizeHit, mpos, e);
                 e.Handled = true;
                 return;
             }
@@ -924,7 +910,10 @@ partial class ModelSystemCanvas
             _inDragOrResize = true;
             var dw = mpos.X - _resizeStartPos.X;
             var dh = mpos.Y - _resizeStartPos.Y;
-            _resizing.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
+            double previewWidth = _resizeStartW + dw;
+            double previewHeight = _resizeStartH + dh;
+            foreach (var element in _resizingElements)
+                element.ResizeToPreview(previewWidth, previewHeight);
             // Only sync inline editor if it's the element being resized
             if (ReferenceEquals(_resizing, _editingParamNode) || 
                 ReferenceEquals(_resizing, _editingNameElement) || 
@@ -1283,7 +1272,9 @@ partial class ModelSystemCanvas
         // ── Left-button release: end element resize ──────────────────────
         if (_resizing is not null)
         {
-            _resizing.CommitResize();
+            foreach (var element in _resizingElements)
+                element.CommitResize();
+            _resizingElements.Clear();
             _resizing = null;
             e.Pointer.Capture(null);
             InvalidateAndMeasure();
@@ -1426,6 +1417,27 @@ partial class ModelSystemCanvas
             && ((third > Epsilon && fourth < -Epsilon) || (third < -Epsilon && fourth > Epsilon));
     }
 
+    private void BeginResize(ICanvasElement resizeHit, Point mpos, PointerPressedEventArgs e)
+    {
+        bool resizeSelection = _multiSelection.Count > 1 && _multiSelection.Contains(resizeHit);
+        if (!resizeSelection)
+            ClearMultiSelection();
+
+        _resizingElements.Clear();
+        if (resizeSelection)
+            _resizingElements.AddRange(_multiSelection);
+        else
+            _resizingElements.Add(resizeHit);
+
+        _resizing = resizeHit;
+        _resizeStartPos = mpos;
+        _resizeStartW = ElementRenderWidth(resizeHit);
+        _resizeStartH = ElementRenderHeight(resizeHit);
+        _vm!.SelectElementCommand.Execute(resizeHit);
+        e.Pointer.Capture(this);
+        Focus();
+    }
+
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);
@@ -1439,6 +1451,7 @@ partial class ModelSystemCanvas
         _orthogonalBreakpointDragLinks.Clear();
         _dragging = null;
         _resizing = null;
+        _resizingElements.Clear();
         _panning = false;
         _rightClickPending = false;
         _selRectStart = null;
