@@ -1395,6 +1395,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     public async Task CreateNodeFromHookAsync(
         NodeViewModel originNode, NodeHook hook, double hookAnchorX, double hookAnchorY)
+        => await CreateNodeFromHookAsync(originNode.UnderlyingNode, hook, hookAnchorX, hookAnchorY);
+
+    /// <summary>
+    /// Double-clicking a FunctionInstance hook follows the same compatible-node creation path
+    /// as double-clicking a regular node hook.
+    /// </summary>
+    public async Task CreateNodeFromHookAsync(
+        FunctionInstanceViewModel originInstance, FunctionParameterHook hook,
+        double hookAnchorX, double hookAnchorY)
+        => await CreateNodeFromHookAsync(originInstance.UnderlyingInstance, hook, hookAnchorX, hookAnchorY);
+
+    private async Task CreateNodeFromHookAsync(
+        Node originNode, NodeHook hook, double hookAnchorX, double hookAnchorY)
     {
         if (ParentWindow is null) return;
 
@@ -1451,7 +1464,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         // Wire the hook to the new node.
-        if (!Session.AddLink(User, originNode.UnderlyingNode, hook, newNode!, out _, out var linkError))
+        if (!Session.AddLink(User, originNode, hook, newNode!, out _, out var linkError))
             await ShowError("Create Link Failed", linkError);
     }
 

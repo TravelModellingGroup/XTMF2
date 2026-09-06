@@ -616,6 +616,31 @@ partial class ModelSystemCanvas
                 return;
             }
 
+            var fiInlinedParamHit = HitTestInlinedParamRow(mpos);
+            if (fiInlinedParamHit is { } fiInlinedParam
+                && fiInlinedParam.originEl is FunctionInstanceViewModel)
+            {
+                _vm.SelectElementCommand.Execute(fiInlinedParam.originEl);
+                BeginParamEdit(fiInlinedParam.paramNode,
+                    fiInlinedParam.rowX, fiInlinedParam.rowY, fiInlinedParam.rowW,
+                    fiInlinedParam.originEl, fiInlinedParam.hook);
+                e.Handled = true;
+                return;
+            }
+
+            var fiHookHit = HitTestFiHook(mpos);
+            if (fiHookHit is { } fih)
+            {
+                var anchor = _fiHookAnchors.TryGetValue((fih.fi, fih.hook), out var hookAnchor)
+                    ? hookAnchor
+                    : new Point(fih.fi.X + fih.fi.Width,
+                        fih.fi.Y + FtHeaderHeight + FtHookRowHeight / 2.0);
+                _ = _vm.CreateNodeFromHookAsync(fih.fi, fih.hook,
+                    anchor.X, anchor.Y);
+                e.Handled = true;
+                return;
+            }
+
             // ── Double-click on a parameter node: open the value editor ────
             var nodeHit = HitTest(mpos, testComments: false) as NodeViewModel;
             if (nodeHit is { IsParameterNode: true })

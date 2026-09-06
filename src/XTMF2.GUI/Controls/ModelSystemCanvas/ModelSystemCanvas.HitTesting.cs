@@ -312,9 +312,11 @@ partial class ModelSystemCanvas
         {
             if (link.Destination is not NodeViewModel dstCount || !dstCount.IsParameterNode) continue;
             var originHookCount = link.UnderlyingLink.OriginHook;
-            bool eligible = originHookCount.Cardinality == HookCardinality.Single
-                         && (link.Origin is NodeViewModel
-                             || link.Origin is FunctionInstanceViewModel && originHookCount is FunctionParameterHook);
+            bool eligible = link.Origin is NodeViewModel
+                ? originHookCount.Cardinality == HookCardinality.Single
+                : link.Origin is FunctionInstanceViewModel
+                    && originHookCount is FunctionParameterHook
+                    && originHookCount.Cardinality is HookCardinality.Single or HookCardinality.SingleOptional;
             if (!eligible) continue;
             paramDestCount.TryGetValue(dstCount, out var c);
             paramDestCount[dstCount] = c + 1;
@@ -336,7 +338,7 @@ partial class ModelSystemCanvas
             }
             else if (link.Origin is FunctionInstanceViewModel originFiVm
                      && link.UnderlyingLink.OriginHook is FunctionParameterHook fpHookInline
-                     && fpHookInline.Cardinality == HookCardinality.Single)
+                     && fpHookInline.Cardinality is HookCardinality.Single or HookCardinality.SingleOptional)
             {
                 if (destVm.IsInlined)
                     _fiHookInlinedParam[(originFiVm, fpHookInline)] = destVm;
