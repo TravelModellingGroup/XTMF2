@@ -527,6 +527,7 @@ public sealed partial class ModelSystemCanvas : Control
     /// <see cref="ICanvasElement.IsSelected"/> = <c>true</c>).
     /// </summary>
     private readonly HashSet<ICanvasElement> _multiSelection = new();
+    private readonly List<ICanvasElement> _multiSelectionOrder = new();
     /// <summary>
     /// All underlying links currently in the extended multi-selection.
     /// We track model links (not view models) so MultiLink groups are treated as one unit.

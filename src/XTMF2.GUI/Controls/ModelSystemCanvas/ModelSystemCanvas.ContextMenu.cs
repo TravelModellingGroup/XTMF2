@@ -87,6 +87,7 @@ partial class ModelSystemCanvas
             el.IsSelected = false;
         }
         _multiSelection.Clear();
+        _multiSelectionOrder.Clear();
 
         if (_vm?.SelectedElement is { } primary)
         {
@@ -1185,6 +1186,17 @@ partial class ModelSystemCanvas
                 _ = CopySelectedElementsAsync();
             };
             menu.Items.Add(copyItem);
+        }
+
+        if (_multiSelectionOrder.Count > 1 && element is not null && _multiSelection.Contains(element))
+        {
+            var bulkLinkItem = new MenuItem
+            {
+                Header = CreateShortcutMenuHeader("Link to All Selected…", "Ctrl+L")
+            };
+            var selectedForBulkLink = _multiSelectionOrder.ToList();
+            bulkLinkItem.Click += (_, _) => _ = vm.BulkLinkSelectedAsync(selectedForBulkLink);
+            menu.Items.Add(bulkLinkItem);
         }
 
         // ── Align (multi-selection only) ──────────────────────────────────────

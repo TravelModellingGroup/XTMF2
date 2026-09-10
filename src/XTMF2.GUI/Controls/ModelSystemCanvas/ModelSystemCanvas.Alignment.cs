@@ -245,6 +245,18 @@ partial class ModelSystemCanvas
         ClearLinkMultiSelectionOnly();
     }
 
+    private void AddToMultiSelection(ICanvasElement element)
+    {
+        if (_multiSelection.Add(element))
+            _multiSelectionOrder.Add(element);
+    }
+
+    private void RemoveFromMultiSelection(ICanvasElement element)
+    {
+        if (_multiSelection.Remove(element))
+            _multiSelectionOrder.Remove(element);
+    }
+
     /// <summary>Returns a <see cref="Rect"/> that always has non-negative width and height,
     /// regardless of the relative order of <paramref name="p1"/> and <paramref name="p2"/>.</summary>
     private static Rect NormalizeRect(Point p1, Point p2) =>

@@ -154,6 +154,12 @@ partial class ModelSystemCanvas
             _ = CopySelectedElementsAsync();
             e.Handled = true;
         }
+        else if (e.Key == Key.L && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            if (_multiSelectionOrder.Count > 1 && _vm is not null)
+                _ = _vm.BulkLinkSelectedAsync(_multiSelectionOrder.ToList());
+            e.Handled = true;
+        }
         else if (e.Key == Key.D && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
             bool toggledModules = TryToggleSelectedModulesDisabled();
@@ -784,14 +790,14 @@ partial class ModelSystemCanvas
                 if (_multiSelection.Count == 0 && _vm.SelectedElement is not null
                     && !ReferenceEquals(_vm.SelectedElement, hit))
                 {
-                    _multiSelection.Add(_vm.SelectedElement);
+                    AddToMultiSelection(_vm.SelectedElement);
                     // _vm.SelectedElement.IsSelected is already true — no change needed
                 }
 
                 if (_multiSelection.Contains(hit))
                 {
                     // Toggle off: remove from multi-selection.
-                    _multiSelection.Remove(hit);
+                    RemoveFromMultiSelection(hit);
                     hit.IsSelected = false;
                     // If the deselected element was the primary, pick the next available.
                     if (ReferenceEquals(_vm.SelectedElement, hit))
@@ -800,7 +806,7 @@ partial class ModelSystemCanvas
                 else
                 {
                     // Toggle on: add to multi-selection.
-                    _multiSelection.Add(hit);
+                    AddToMultiSelection(hit);
                     hit.IsSelected = true;
                     // Reflect the most recently touched element in the property panel.
                     _vm.SelectedElement = hit;
@@ -1183,7 +1189,7 @@ partial class ModelSystemCanvas
                     var nr = new Rect(node.X, node.Y, NodeRenderWidth(node), NodeRenderHeight(node));
                     if (finalRect.Intersects(nr))
                     {
-                        _multiSelection.Add(node);
+                        AddToMultiSelection(node);
                         node.IsSelected = true;
                         firstHit ??= node;
                     }
@@ -1216,7 +1222,7 @@ partial class ModelSystemCanvas
                     var cr = new Rect(comment.X, comment.Y, comment.Width, comment.Height);
                     if (finalRect.Intersects(cr))
                     {
-                        _multiSelection.Add(comment);
+                        AddToMultiSelection(comment);
                         comment.IsSelected = true;
                         firstHit ??= comment;
                     }
@@ -1226,7 +1232,7 @@ partial class ModelSystemCanvas
                     var gr = new Rect(ghost.X, ghost.Y, ghost.Width, ghost.Height);
                     if (finalRect.Intersects(gr))
                     {
-                        _multiSelection.Add(ghost);
+                        AddToMultiSelection(ghost);
                         ghost.IsSelected = true;
                         firstHit ??= ghost;
                     }
@@ -1236,7 +1242,7 @@ partial class ModelSystemCanvas
                     var sr = new Rect(startVm.X, startVm.Y, startVm.Diameter, startVm.Diameter);
                     if (finalRect.Intersects(sr))
                     {
-                        _multiSelection.Add(startVm);
+                        AddToMultiSelection(startVm);
                         startVm.IsSelected = true;
                         firstHit ??= startVm;
                     }
@@ -1246,7 +1252,7 @@ partial class ModelSystemCanvas
                     var ftr = new Rect(ft.X, ft.Y, ft.Width, ft.Height);
                     if (finalRect.Intersects(ftr))
                     {
-                        _multiSelection.Add(ft);
+                        AddToMultiSelection(ft);
                         ft.IsSelected = true;
                         firstHit ??= ft;
                     }
@@ -1256,7 +1262,7 @@ partial class ModelSystemCanvas
                     var fir = new Rect(fi.X, fi.Y, fi.Width, FunctionInstanceRenderHeight(fi));
                     if (finalRect.Intersects(fir))
                     {
-                        _multiSelection.Add(fi);
+                        AddToMultiSelection(fi);
                         fi.IsSelected = true;
                         firstHit ??= fi;
                     }
@@ -1266,7 +1272,7 @@ partial class ModelSystemCanvas
                     var fpr = new Rect(fp.X, fp.Y, fp.Width, fp.Height);
                     if (finalRect.Intersects(fpr))
                     {
-                        _multiSelection.Add(fp);
+                        AddToMultiSelection(fp);
                         fp.IsSelected = true;
                         firstHit ??= fp;
                     }

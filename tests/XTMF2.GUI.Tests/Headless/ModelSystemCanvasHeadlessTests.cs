@@ -146,6 +146,47 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void ModelSystemCanvas_ContextMenu_ShowsBulkLinkForOrderedMultiSelection()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ContextMenu_ShowsBulkLinkForOrderedMultiSelection),
+            (user, _, session) =>
+            {
+                var boundary = session.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(session.AddNode(user, boundary, "Origin",
+                    typeof(MultiLinkedGuiTestModule), new Rectangle(20, 20, 160, 60),
+                    out var origin, out var originError), originError?.Message);
+                Assert.IsTrue(session.AddNode(user, boundary, "Destination",
+                    typeof(SimpleGuiTestModule), new Rectangle(240, 20, 160, 60),
+                    out var destination, out var destinationError), destinationError?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(session, user, runController: null);
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var originVm = vm.Nodes.Single(node => node.UnderlyingNode == origin);
+                    var destinationVm = vm.Nodes.Single(node => node.UnderlyingNode == destination);
+                    var addToSelection = typeof(ModelSystemCanvas).GetMethod(
+                        "AddToMultiSelection", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var showMenu = typeof(ModelSystemCanvas).GetMethod(
+                        "ShowContextMenu", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(addToSelection);
+                    Assert.IsNotNull(showMenu);
+
+                    addToSelection!.Invoke(canvas, new object[] { originVm });
+                    addToSelection.Invoke(canvas, new object[] { destinationVm });
+                    showMenu!.Invoke(canvas, new object?[] { originVm, null });
+
+                    var bulkLinkItem = canvas.ContextMenu!.Items.OfType<MenuItem>().FirstOrDefault(item =>
+                        item.Header is Grid grid
+                        && grid.Children.OfType<TextBlock>().Any(text => text.Text == "Link to All Selected…")
+                        && grid.Children.OfType<TextBlock>().Any(text => text.Text == "Ctrl+L"));
+                    Assert.IsNotNull(bulkLinkItem);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void ModelSystemCanvas_ArrowKeys_DoNotNavigateWhileEditingParameterOrComment()
     {
         TestGuiHelper.RunInModelSystemContext(

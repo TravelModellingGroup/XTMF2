@@ -1744,6 +1744,100 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         return dialog.SelectedHook;
     }
 
+    /// <summary>
+    /// Links the first selected module or function instance to every subsequent selected
+    /// module or function instance using one hook shared by all destinations.
+    /// </summary>
+    internal async Task BulkLinkSelectedAsync(IReadOnlyList<ICanvasElement> selected)
+    {
+        if (selected.Count < 2)
+        {
+            ShowToast("Select an origin and at least one destination.", isError: true, durationMs: 4000);
+            return;
+        }
+
+        var originElement = selected[0];
+        Node? originNode = originElement switch
+        {
+            NodeViewModel nvm => nvm.UnderlyingNode,
+            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+            GhostNodeViewModel ghost => ghost.ReferencedNode,
+            _ => null
+        };
+        if (originNode is null)
+        {
+            ShowToast("The first selected element must be a module, function instance, or ghost node.",
+                isError: true, durationMs: 5000);
+            return;
+        }
+
+        var destinations = new List<(ICanvasElement Element, Node Node, Type Type)>();
+        foreach (var element in selected.Skip(1))
+        {
+            Node? destination = element switch
+            {
+                NodeViewModel nvm => nvm.UnderlyingNode,
+                FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+                _ => null
+            };
+            if (destination is null)
+            {
+                ShowToast("All selected destinations must be modules or function instances.",
+                    isError: true, durationMs: 5000);
+                return;
+            }
+
+            var destinationType = destination.Type;
+            if (element is FunctionInstanceViewModel && destinationType == typeof(object))
+            {
+                ShowToast($"'{element.Name}' has no entry node and cannot be a destination.",
+                    isError: true, durationMs: 5000);
+                return;
+            }
+            if (destinationType is null)
+            {
+                ShowToast($"'{element.Name}' has no type and cannot be a destination.",
+                    isError: true, durationMs: 5000);
+                return;
+            }
+
+            destinations.Add((element, destination, destinationType));
+        }
+
+        var sharedHooks = originNode.Hooks
+            .Where(hook => destinations.All(destination =>
+                GetCompatibleHooks(originNode, destination.Type).Contains(hook)))
+            .ToList();
+        if (sharedHooks.Count == 0)
+        {
+            ShowToast($"No single hook on '{originNode.Name}' is compatible with all selected destinations.",
+                isError: true, durationMs: 6000);
+            return;
+        }
+
+        var selectedHook = await SelectHookAsync(sharedHooks, originNode.Name, "all selected destinations");
+        if (selectedHook is null) return;
+
+        if (selectedHook.Cardinality is HookCardinality.Single or HookCardinality.SingleOptional)
+        {
+            ShowToast($"Hook '{selectedHook.Name}' accepts only one destination.",
+                isError: true, durationMs: 5000);
+            return;
+        }
+
+        if (!Session.AddLinks(User, originNode, selectedHook,
+                destinations.Select(destination => destination.Node).ToList(),
+                out _, out var addError))
+        {
+            ShowToast(addError?.Message ?? "Unable to create all selected links.",
+                isError: true, durationMs: 6000);
+            return;
+        }
+
+        ShowToast($"Linked {destinations.Count} destinations from '{originNode.Name}'.",
+            durationMs: 4000);
+    }
+
     private async Task<bool> TryCreateReversedLinkAsync(Node originNode, Node destinationNode, string destinationName)
     {
         var reversedHooks = GetCompatibleHooks(destinationNode, originNode.Type);
