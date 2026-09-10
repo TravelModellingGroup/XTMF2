@@ -54,8 +54,10 @@ public partial class ModelSystemEditorView : UserControl
         // F2 anywhere in this view fires inline rename on the canvas.
         KeyDown += OnViewKeyDown;
 
-        // Enter / dropdown-closed in the node search box navigates the canvas.
+        // Selection changes, Enter, and dropdown-close in the node search box navigate the canvas.
         NodeSearchBox.KeyDown += OnNodeSearchBoxKeyDown;
+        NodeSearchBox.GotFocus += OnNodeSearchBoxGotFocus;
+        NodeSearchBox.SelectionChanged += OnNodeSearchBoxSelectionChanged;
         NodeSearchBox.DropDownClosed += OnNodeSearchBoxDropDownClosed;
 
         // Boundary navigation dropdown.
@@ -175,6 +177,7 @@ public partial class ModelSystemEditorView : UserControl
         {
             _vm.PropertyChanged -= OnVmPropertyChanged;
             _vm.ScrollToElementRequested -= OnScrollToElementRequested;
+            _vm.ScrollToElementPreviewRequested -= OnScrollToElementPreviewRequested;
         }
 
         _vm = DataContext as ModelSystemEditorViewModel;
@@ -184,6 +187,7 @@ public partial class ModelSystemEditorView : UserControl
             _vm.ParentWindow = TopLevel.GetTopLevel(this) as Window;
             _vm.PropertyChanged += OnVmPropertyChanged;
             _vm.ScrollToElementRequested += OnScrollToElementRequested;
+            _vm.ScrollToElementPreviewRequested += OnScrollToElementPreviewRequested;
             // Drain any scroll that was requested before this view was attached.
             // Post at Loaded priority so layout has completed and the viewport
             // dimensions are valid before we compute the scroll offset.
@@ -201,6 +205,12 @@ public partial class ModelSystemEditorView : UserControl
     }
 
     private void OnScrollToElementRequested(ICanvasElement element)
+        => ScrollToElement(element, focusCanvas: true);
+
+    private void OnScrollToElementPreviewRequested(ICanvasElement element)
+        => ScrollToElement(element, focusCanvas: false);
+
+    private void ScrollToElement(ICanvasElement element, bool focusCanvas)
     {
         // Post at ApplicationIdle priority so the canvas has completed its layout pass
         // (which may have just been triggered by a boundary switch) before we
@@ -214,7 +224,8 @@ public partial class ModelSystemEditorView : UserControl
             CanvasScrollViewer.Offset = new Vector(
                 Math.Max(0, offsetX),
                 Math.Max(0, offsetY));
-            TheCanvas.Focus();
+            if (focusCanvas)
+                TheCanvas.Focus();
         }, DispatcherPriority.ApplicationIdle);
     }
 
@@ -223,17 +234,44 @@ public partial class ModelSystemEditorView : UserControl
     // -- Node search box --------------------------------------------------------
 
     private bool _suppressNextDropDownClose;
+    private ICanvasElement? _searchSelectionBeforeNavigation;
+
+    private void OnNodeSearchBoxGotFocus(object? sender, GotFocusEventArgs e)
+        => _searchSelectionBeforeNavigation = _vm?.SelectedElement;
 
     private void OnNodeSearchBoxDropDownClosed(object? sender, EventArgs e)
     {
         if (_suppressNextDropDownClose) { _suppressNextDropDownClose = false; return; }
         if (NodeSearchBox.SelectedItem is ICanvasElement element && _vm is not null)
-            _vm.CanvasSearchSelection = element;
+        {
+            _vm.NavigateToSearchResult(element, focusCanvas: true);
+            _searchSelectionBeforeNavigation = null;
+        }
+    }
+
+    private void OnNodeSearchBoxSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_vm is null || NodeSearchBox.SelectedItem is not ICanvasElement element) return;
+        _vm.NavigateToSearchResult(element, focusCanvas: false);
     }
 
     private void OnNodeSearchBoxKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter || _vm is null) return;
+        if (_vm is null) return;
+
+        if (e.Key == Key.Escape)
+        {
+            _suppressNextDropDownClose = true;
+            if (_searchSelectionBeforeNavigation is not null)
+                _vm.NavigateToSearchResult(_searchSelectionBeforeNavigation, focusCanvas: true);
+            else
+                TheCanvas.Focus();
+            _searchSelectionBeforeNavigation = null;
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Enter) return;
 
         var element = NodeSearchBox.SelectedItem as ICanvasElement
                       ?? _vm.SearchItems.FirstOrDefault(n =>
@@ -243,10 +281,11 @@ public partial class ModelSystemEditorView : UserControl
         _suppressNextDropDownClose = true;
 
         if (element is not null)
-            _vm.CanvasSearchSelection = element;
+            _vm.NavigateToSearchResult(element, focusCanvas: true);
         else
             TheCanvas.Focus();
 
+        _searchSelectionBeforeNavigation = null;
         e.Handled = true;
     }
 

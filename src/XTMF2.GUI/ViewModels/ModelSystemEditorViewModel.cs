@@ -300,6 +300,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>Fires when the user picks an element from the search box; the view should scroll to it.</summary>
     public event Action<ICanvasElement>? ScrollToElementRequested;
 
+    /// <summary>Fires while previewing a highlighted search result without taking focus from the search box.</summary>
+    public event Action<ICanvasElement>? ScrollToElementPreviewRequested;
+
     /// <summary>
     /// Holds an element that <see cref="NavigateToElementById"/> wanted to scroll to but could
     /// not because no view was subscribed yet (e.g. the tab was just opened).
@@ -333,9 +336,17 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     partial void OnCanvasSearchSelectionChanged(ICanvasElement? value)
     {
         if (value is null) return;
-        SelectElement(value);
-        ScrollToElementRequested?.Invoke(value);
+        NavigateToSearchResult(value, focusCanvas: true);
         CanvasSearchSelection = null; // reset so the box is ready for the next search
+    }
+
+    public void NavigateToSearchResult(ICanvasElement element, bool focusCanvas)
+    {
+        SelectElement(element);
+        if (focusCanvas)
+            ScrollToElementRequested?.Invoke(element);
+        else
+            ScrollToElementPreviewRequested?.Invoke(element);
     }
 
     // ── SearchItems tracking ──────────────────────────────────────────────
