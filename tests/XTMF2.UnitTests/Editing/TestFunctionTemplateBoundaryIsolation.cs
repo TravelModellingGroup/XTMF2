@@ -210,5 +210,31 @@ namespace XTMF2.UnitTests.Editing
                 Assert.AreSame(internalChild, ghost!.ContainedWithin);
             });
         }
+
+        [TestMethod]
+        public void TestMoveElementsToBoundary_UndoRedoMovesSelectionAsOneCommand()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestMoveElementsToBoundary_UndoRedoMovesSelectionAsOneCommand),
+            (user, _, ms) =>
+            {
+                var root = ms.ModelSystem.GlobalBoundary;
+                var destination = AddChildBoundary(user, ms, root, "Destination");
+                var first = AddNode(user, ms, root, "First");
+                var second = AddNode(user, ms, root, "Second");
+
+                Assert.IsTrue(ms.MoveElementsToBoundary(user, destination,
+                    new[] { first, second }, null, null, null, out var error), error?.Message);
+                Assert.AreSame(destination, first.ContainedWithin);
+                Assert.AreSame(destination, second.ContainedWithin);
+
+                Assert.IsTrue(ms.Undo(user, out error), error?.Message);
+                Assert.AreSame(root, first.ContainedWithin);
+                Assert.AreSame(root, second.ContainedWithin);
+
+                Assert.IsTrue(ms.Redo(user, out error), error?.Message);
+                Assert.AreSame(destination, first.ContainedWithin);
+                Assert.AreSame(destination, second.ContainedWithin);
+            });
+        }
     }
 }

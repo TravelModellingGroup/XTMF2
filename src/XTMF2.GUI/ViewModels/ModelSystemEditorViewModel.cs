@@ -1646,6 +1646,51 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Shows one boundary picker and moves all selected elements supported by the
+    /// move-to-boundary command to the chosen boundary.
+    /// </summary>
+    internal async Task MoveSelectedElementsToBoundaryAsync(
+        ICanvasElement clickedElement,
+        IReadOnlyCollection<ICanvasElement> selectedElements)
+    {
+        if (ParentWindow is null) return;
+
+        var elements = selectedElements.Count > 1 && selectedElements.Contains(clickedElement)
+            ? selectedElements
+            : new[] { clickedElement };
+        var dialog = new Views.BoundaryPickerDialog(GetAllBoundaries(GlobalBoundary), _currentBoundary);
+        await dialog.ShowDialog(ParentWindow);
+        if (dialog.Result != Views.BoundaryPickerResult.Navigate || dialog.SelectedBoundary is null) return;
+
+        var nodes = new List<Node>();
+        var ghostNodes = new List<GhostNode>();
+        var templates = new List<FunctionTemplate>();
+        var instances = new List<FunctionInstance>();
+        foreach (var element in elements)
+        {
+            switch (element)
+            {
+                case NodeViewModel nvm when !nvm.IsInlined:
+                    nodes.Add(nvm.UnderlyingNode);
+                    break;
+                case GhostNodeViewModel gvm:
+                    ghostNodes.Add(gvm.UnderlyingGhostNode);
+                    break;
+                case FunctionTemplateViewModel ftvm:
+                    templates.Add(ftvm.UnderlyingTemplate);
+                    break;
+                case FunctionInstanceViewModel fivm:
+                    instances.Add(fivm.UnderlyingInstance);
+                    break;
+            }
+        }
+
+        if (!Session.MoveElementsToBoundary(User, dialog.SelectedBoundary,
+                nodes, ghostNodes, templates, instances, out var error))
+            ShowToast(error?.Message ?? "Failed to move one or more elements.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>
     /// Shows a boundary picker and moves the given ghost node reference to the chosen boundary.
     /// </summary>
     internal async Task MoveGhostNodeToBoundaryAsync(GhostNodeViewModel gvm)

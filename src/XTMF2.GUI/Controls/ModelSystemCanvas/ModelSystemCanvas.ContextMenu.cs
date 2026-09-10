@@ -918,7 +918,7 @@ partial class ModelSystemCanvas
             var moveNodeItem = new MenuItem { Header = "Move to Boundary…" };
             moveNodeItem.Click += async (_, _) =>
             {
-                await vm.MoveNodeToBoundaryAsync(capturedGhostSource);
+                await vm.MoveSelectedElementsToBoundaryAsync(capturedGhostSource, _multiSelection);
                 InvalidateAndMeasure();
             };
 
@@ -972,7 +972,7 @@ partial class ModelSystemCanvas
             var moveGhostItem = new MenuItem { Header = "Move to Boundary…" };
             moveGhostItem.Click += async (_, _) =>
             {
-                await vm.MoveGhostNodeToBoundaryAsync(capturedGhost);
+                await vm.MoveSelectedElementsToBoundaryAsync(capturedGhost, _multiSelection);
                 InvalidateAndMeasure();
             };
             menu.Items.Add(new Separator());
@@ -1003,7 +1003,7 @@ partial class ModelSystemCanvas
             var moveFtItem = new MenuItem { Header = "Move to Boundary…" };
             moveFtItem.Click += async (_, _) =>
             {
-                await vm.MoveFunctionTemplateToBoundaryAsync(capturedFt);
+                await vm.MoveSelectedElementsToBoundaryAsync(capturedFt, _multiSelection);
                 InvalidateAndMeasure();
             };
 
@@ -1060,7 +1060,7 @@ partial class ModelSystemCanvas
             var moveFiItem = new MenuItem { Header = "Move to Boundary…" };
             moveFiItem.Click += async (_, _) =>
             {
-                await vm.MoveFunctionInstanceToBoundaryAsync(capturedFi);
+                await vm.MoveSelectedElementsToBoundaryAsync(capturedFi, _multiSelection);
                 InvalidateAndMeasure();
             };
 

@@ -5172,6 +5172,69 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Moves a heterogeneous collection of elements to one boundary as a single
+        /// undoable operation. If any move fails, all earlier moves are rolled back.
+        /// </summary>
+        public bool MoveElementsToBoundary(
+            User user,
+            Boundary targetBoundary,
+            IReadOnlyList<Node>? nodes,
+            IReadOnlyList<GhostNode>? ghostNodes,
+            IReadOnlyList<FunctionTemplate>? templates,
+            IReadOnlyList<FunctionInstance>? instances,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(targetBoundary);
+
+            if (!_session.HasAccess(user))
+            {
+                error = new CommandError("The user does not have access to this project.", true);
+                return false;
+            }
+
+            Buffer.BeginAggregateBatch();
+
+            // Instances must move before their templates so a selected template can
+            // validate against the instances' intended destination scope.
+            if (instances is not null)
+                foreach (var instance in instances)
+                    if (!MoveFunctionInstanceToBoundary(user, instance, targetBoundary, out error))
+                    {
+                        Buffer.AbortAggregateBatch(out _);
+                        return false;
+                    }
+
+            if (templates is not null)
+                foreach (var template in templates)
+                    if (!MoveFunctionTemplate(user, template, template.Parent, targetBoundary, out error))
+                    {
+                        Buffer.AbortAggregateBatch(out _);
+                        return false;
+                    }
+
+            if (nodes is not null)
+                foreach (var node in nodes)
+                    if (!MoveNodeToBoundary(user, node, targetBoundary, out error))
+                    {
+                        Buffer.AbortAggregateBatch(out _);
+                        return false;
+                    }
+
+            if (ghostNodes is not null)
+                foreach (var ghostNode in ghostNodes)
+                    if (!MoveGhostNodeToBoundary(user, ghostNode, targetBoundary, out error))
+                    {
+                        Buffer.AbortAggregateBatch(out _);
+                        return false;
+                    }
+
+            Buffer.CommitAggregateBatch();
+            error = null;
+            return true;
+        }
+
+        /// <summary>
         /// Renames <paramref name="instance"/>.
         /// </summary>
         public bool RenameFunctionInstance(User user, FunctionInstance instance, string newName,
