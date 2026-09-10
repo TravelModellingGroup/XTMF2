@@ -685,6 +685,38 @@ partial class ModelSystemCanvas
     /// </summary>
     private readonly Dictionary<XTMF2.Link, (double TopY, double BottomY)> _orthogonalTrunkRange = new(ReferenceEqualityComparer.Instance);
 
+    private void DrawSharedOrthogonalTrunk(
+        DrawingContext ctx,
+        LinkViewModel link,
+        Point[] points,
+        double spineX,
+        Pen glowOuter,
+        Pen glowInner,
+        Pen pen,
+        Point shaftEnd,
+        bool reverse)
+    {
+        var origin = points[0];
+        var corner = points[1];
+        _orthogonalTrunkRange.TryGetValue(link.UnderlyingLink, out var range);
+        var spineTop = new Point(spineX, range.TopY);
+        var spineBot = new Point(spineX, range.BottomY);
+
+        var glowMain = MakePolyGeo([origin, corner, spineTop]);
+        var glowExtension = MakeSegGeo(corner, spineBot);
+        foreach (var trunkPen in new[] { glowOuter, glowInner })
+        {
+            ctx.DrawGeometry(null, trunkPen, glowMain);
+            ctx.DrawGeometry(null, trunkPen, glowExtension);
+        }
+
+        var shaftMain = reverse
+            ? MakePolyGeo([spineTop, corner, shaftEnd])
+            : glowMain;
+        ctx.DrawGeometry(null, pen, shaftMain);
+        ctx.DrawGeometry(null, pen, glowExtension);
+    }
+
     private void RenderLinks(DrawingContext ctx)
     {
         // ── Precompute shared spine-X for every orthogonal multi-link group ──────
@@ -726,8 +758,6 @@ partial class ModelSystemCanvas
             // when no explicit breakpoint was persisted.
             const double MinStub = 24.0;
             double sharedSpineX = p1.X + MinStub;
-            double trunkTopY = p1.Y;
-            double trunkBottomY = p1.Y;
             foreach (var sib in siblings)
             {
                 var renderedDestination = RenderedDestination(sib);
@@ -739,16 +769,29 @@ partial class ModelSystemCanvas
                 double indivMid = (p1.X + p2.X) * 0.5;
                 if (indivMid < p1.X + MinStub) indivMid = p1.X + MinStub;
                 if (indivMid > sharedSpineX) sharedSpineX = indivMid;
-
-                // Track the full Y range so the spine covers every destination.
-                if (p2.Y < trunkTopY) trunkTopY = p2.Y;
-                if (p2.Y > trunkBottomY) trunkBottomY = p2.Y;
             }
 
             if (siblings[0].UnderlyingLink.OrthogonalBreakpointX is null
                 && !_orthogonalBreakpointDragLinks.Contains(siblings[0].UnderlyingLink)
                 && !_movingOrthogonalBreakpointPreviews.ContainsKey(siblings[0].UnderlyingLink))
                 _orthogonalSpineX[(XTMF2.Link)group.Key!] = sharedSpineX;
+
+            // Recompute the trunk extent from the exact routed paths. The initial
+            // points above are only estimates and do not account for ghost hook
+            // anchors or the final side selected by ComputeOrthogonalPath.
+            var trunkSpineX = _orthogonalSpineX.TryGetValue(
+                (XTMF2.Link)group.Key!, out var resolvedSpineX)
+                ? resolvedSpineX
+                : sharedSpineX;
+            double trunkTopY = p1.Y;
+            double trunkBottomY = p1.Y;
+            foreach (var sib in siblings)
+            {
+                var routedPoints = ComputeOrthogonalPath(sib, trunkSpineX);
+                var branchY = routedPoints[^2].Y;
+                if (branchY < trunkTopY) trunkTopY = branchY;
+                if (branchY > trunkBottomY) trunkBottomY = branchY;
+            }
             _orthogonalTrunkRange[(XTMF2.Link)group.Key!] = (trunkTopY, trunkBottomY);
         }
 
@@ -836,34 +879,8 @@ partial class ModelSystemCanvas
                         // For multi-link groups the trunk is identical for every sibling.
                         // Draw trunk glow + stroke only once to avoid stacking alpha.
                         if (_orthogonalTrunkDrawn.Add(link.UnderlyingLink))
-                        {
-                            // Build the full-extent trunk from the precomputed range.
-                            // The trunk is two segments that share the junction at (spineX, p1.Y):
-                            //   1. Horizontal exit:  p1 → (spineX, p1.Y)
-                            //   2. Full vertical:    (spineX, topY) → (spineX, bottomY)
-                            // Drawing them as one polyline works when p1.Y is at one extreme;
-                            // for the mixed case (branches above AND below) we draw two
-                            // segments so the spine covers the complete range.
-                            var p1Trunk = pts[0];   // hook anchor
-                            var corner1 = pts[1];   // (spineX, p1.Y)
-                            _orthogonalTrunkRange.TryGetValue(link.UnderlyingLink, out var range);
-                            var spineTop = new Point(spineX, range.TopY);
-                            var spineBot = new Point(spineX, range.BottomY);
-
-                            // Horizontal exit + vertical spine as a joined polyline.
-                            // The vertical goes from spineTop down to spineBot; corner1 is
-                            // somewhere along it, so we route: p1 → corner1 → spineTop
-                            // then a separate segment corner1 → spineBot (the other direction).
-                            // This draws the T/L shape correctly with a single extra segment.
-                            var mainTrunkGeo = MakePolyGeo([p1Trunk, corner1, spineTop]);
-                            var extGeo = MakeSegGeo(corner1, spineBot);
-
-                            foreach (var trunkPen in new[] { glowOuter, glowInner, pen })
-                            {
-                                ctx.DrawGeometry(null, trunkPen, mainTrunkGeo);
-                                ctx.DrawGeometry(null, trunkPen, extGeo);
-                            }
-                        }
+                            DrawSharedOrthogonalTrunk(ctx, link, pts, spineX,
+                                glowOuter, glowInner, pen, shaftEnd, reverse: false);
 
                         // Branch segment: corner2 → p2  (glow) and corner2 → shaftEnd (stroke).
                         var branchGlowGeo = MakeSegGeo(pts[^2], pts[^1]);
@@ -889,11 +906,25 @@ partial class ModelSystemCanvas
                     shaftEnd = DrawArrow(ctx, brush, arrowFrom, revPts[^1]);
                     labelFrom = revPts[1];
 
-                    var glowGeo = MakePolyGeo(revPts);
-                    var shaftGeo = ReplacePolyGeoLastPoint(revPts, shaftEnd);
-                    ctx.DrawGeometry(null, glowOuter, glowGeo);
-                    ctx.DrawGeometry(null, glowInner, glowGeo);
-                    ctx.DrawGeometry(null, pen, shaftGeo);
+                    if (hasSharedSpine)
+                    {
+                        if (_orthogonalTrunkDrawn.Add(link.UnderlyingLink))
+                            DrawSharedOrthogonalTrunk(ctx, link, pts, spineX,
+                                glowOuter, glowInner, pen, shaftEnd, reverse: true);
+
+                        var branchGeo = MakeSegGeo(revPts[0], revPts[1]);
+                        ctx.DrawGeometry(null, glowOuter, branchGeo);
+                        ctx.DrawGeometry(null, glowInner, branchGeo);
+                        ctx.DrawGeometry(null, pen, branchGeo);
+                    }
+                    else
+                    {
+                        var glowGeo = MakePolyGeo(revPts);
+                        var shaftGeo = ReplacePolyGeoLastPoint(revPts, shaftEnd);
+                        ctx.DrawGeometry(null, glowOuter, glowGeo);
+                        ctx.DrawGeometry(null, glowInner, glowGeo);
+                        ctx.DrawGeometry(null, pen, shaftGeo);
+                    }
                 }
             }
             else

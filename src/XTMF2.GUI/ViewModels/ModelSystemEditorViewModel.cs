@@ -76,6 +76,7 @@ internal sealed record NodePasteEntry(
 public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisposable
 {
     private bool _disposed;
+    private bool _suppressSearchRebuild;
 
     // ── Session / model ────────────────────────────────────────────────────
     /// <summary>The active editing session for the model system.</summary>
@@ -346,6 +347,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     private void RebuildSearchItems()
     {
+        if (_suppressSearchRebuild) return;
+
         SearchItems.Clear();
         foreach (var nvm in Nodes)
             if (!nvm.IsInlined)
@@ -359,6 +362,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         foreach (var fpvm in FunctionParameterVMs)
             SearchItems.Add(fpvm);
     }
+
+    private void OnSearchCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => RebuildSearchItems();
 
     private void OnNodesCollectionChangedForSearch(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -820,10 +826,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Keep SearchItems in sync with the canvas collections.
         // Nodes: also handles per-node IsInlined tracking.
         Nodes.CollectionChanged            += OnNodesCollectionChangedForSearch;
-        Starts.CollectionChanged           += (_, _) => RebuildSearchItems();
-        FunctionTemplates.CollectionChanged += (_, _) => RebuildSearchItems();
-        FunctionInstances.CollectionChanged += (_, _) => RebuildSearchItems();
-        FunctionParameterVMs.CollectionChanged += (_, _) => RebuildSearchItems();
+        Starts.CollectionChanged           += OnSearchCollectionChanged;
+        FunctionTemplates.CollectionChanged += OnSearchCollectionChanged;
+        FunctionInstances.CollectionChanged += OnSearchCollectionChanged;
+        FunctionParameterVMs.CollectionChanged += OnSearchCollectionChanged;
         // Subscribe to nodes already populated by BuildFromBoundary.
         foreach (var nvm in Nodes)
             if (_searchTrackedNodes.Add(nvm))
@@ -954,7 +960,16 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         NavigateUpCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanNavigateUp));
         SubscribeToBoundary(_currentBoundary);
-        BuildFromBoundary(_currentBoundary);
+        _suppressSearchRebuild = true;
+        try
+        {
+            BuildFromBoundary(_currentBoundary);
+        }
+        finally
+        {
+            _suppressSearchRebuild = false;
+            RebuildSearchItems();
+        }
         RebuildBoundaryNavItems();
     }
 
