@@ -464,7 +464,8 @@ namespace XTMF2
                 var nodes = new Dictionary<int, Node>();
                 List<(Node toAssignTo, string parameterExpression)> scriptedParameters = new();
                 List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes = new();
-                List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId, double? BreakpointX)> deferredLinks = new();
+                List<Link.PendingLoad> deferredLinks = new();
+                List<FunctionInstance.PendingLoad> deferredFunctionInstances = new();
                 while (reader.Read())
                 {
                     if (reader.TokenType == JsonTokenType.PropertyName)
@@ -478,7 +479,7 @@ namespace XTMF2
                         }
                         else if (reader.ValueTextEquals(BoundariesProperty))
                         {
-                            if (!LoadBoundaries(modules, typeLookup, nodes, scriptedParameters, deferredGhostNodes, ref reader, modelSystem.GlobalBoundary, ref error, capturedWarnings, deferredLinks))
+                            if (!LoadBoundaries(modules, typeLookup, nodes, scriptedParameters, deferredGhostNodes, ref reader, modelSystem.GlobalBoundary, ref error, capturedWarnings, deferredLinks, deferredFunctionInstances))
                             {
                                 return null;
                             }
@@ -529,6 +530,27 @@ namespace XTMF2
                         // Unknown properties are silently skipped for forward compatibility.
                     }
                 }
+                var functionTemplates = new Dictionary<Guid, FunctionTemplate>();
+                modelSystem.GlobalBoundary.CollectFunctionTemplates(functionTemplates);
+                foreach (var pending in deferredFunctionInstances)
+                {
+                    if (!pending.TemplateId.HasValue
+                        || !functionTemplates.TryGetValue(pending.TemplateId.Value, out var template))
+                    {
+                        error = pending.TemplateId.HasValue
+                            ? $"FunctionInstance '{pending.Name}' references unknown FunctionTemplate '{pending.TemplateName}' ({pending.TemplateId.Value})."
+                            : $"FunctionInstance '{pending.Name}' is missing its TemplateId.";
+                        return null;
+                    }
+
+                    var instance = new FunctionInstance(pending.Name, template, pending.ParentBoundary,
+                        pending.Location, pending.Id);
+                    if (pending.Disabled)
+                        _ = instance.SetDisabled(true, out _);
+                    pending.ParentBoundary.AddFunctionInstance(instance, out _);
+                    if (pending.Index >= 0)
+                        nodes[pending.Index] = instance;
+                }
                 // Resolve deferred ghost nodes now that all boundaries and nodes are loaded.
                 foreach (var (containedIn, refIndex, selfIndex, location, id) in deferredGhostNodes)
                 {
@@ -541,22 +563,38 @@ namespace XTMF2
                 }
                 // Resolve deferred links (e.g. inner FunctionTemplate links whose destination
                 // FunctionInstance was not yet in the node dictionary when the link was first parsed).
-                foreach (var (containedIn, origin, hookName, destIdx, disabled, orthogonal, destHidden, linkId, breakpointX) in deferredLinks)
+                foreach (var pendingLink in deferredLinks)
                 {
-                    if (!nodes.TryGetValue(destIdx, out var destination))
+                    var resolvedOrigin = pendingLink.Origin;
+                    if (resolvedOrigin is null && !nodes.TryGetValue(pendingLink.OriginIndex, out resolvedOrigin))
                     {
-                        capturedWarnings?.Add($"Deferred link from '{origin.Name}' via '{hookName}' could not be resolved: destination index {destIdx} not found.");
+                        capturedWarnings?.Add($"Deferred link via '{pendingLink.HookName}' could not be resolved: origin index {pendingLink.OriginIndex} not found.");
                         continue;
                     }
-                    var hook = origin is FunctionInstance dfi
-                        ? dfi.Hooks.FirstOrDefault(h => h.Name.Equals(hookName, StringComparison.OrdinalIgnoreCase))
-                        : modules[origin.Type!].Hooks?.FirstOrDefault(h => h.Name.Equals(hookName, StringComparison.OrdinalIgnoreCase));
+
+                    var destinations = pendingLink.DestinationIndices
+                        .Where(nodes.ContainsKey)
+                        .Select(index => nodes[index])
+                        .ToList();
+                    if (destinations.Count == 0)
+                    {
+                        capturedWarnings?.Add($"Deferred link from '{resolvedOrigin.Name}' via '{pendingLink.HookName}' could not be resolved: destination nodes were not found.");
+                        continue;
+                    }
+                    var hook = resolvedOrigin is FunctionInstance dfi
+                        ? dfi.Hooks.FirstOrDefault(h => h.Name.Equals(pendingLink.HookName, StringComparison.OrdinalIgnoreCase))
+                        : modules[resolvedOrigin.Type!].Hooks?.FirstOrDefault(h => h.Name.Equals(pendingLink.HookName, StringComparison.OrdinalIgnoreCase));
                     if (hook is null)
                     {
-                        capturedWarnings?.Add($"Deferred link from '{origin.Name}': hook '{hookName}' not found.");
+                        capturedWarnings?.Add($"Deferred link from '{resolvedOrigin.Name}': hook '{pendingLink.HookName}' not found.");
                         continue;
                     }
-                    containedIn.AddLink(new SingleLink(origin, hook, destination, disabled, orthogonal, destHidden, linkId, breakpointX), out _);
+                    Link link = pendingLink.DestinationIndices.Count > 1
+                        ? new MultiLink(resolvedOrigin, hook, destinations, pendingLink.Disabled,
+                            pendingLink.Orthogonal, pendingLink.HiddenDestinations?.ToList(), pendingLink.LinkId, pendingLink.BreakpointX)
+                        : new SingleLink(resolvedOrigin, hook, destinations[0], pendingLink.Disabled,
+                            pendingLink.Orthogonal, pendingLink.SingleHiddenDestination, pendingLink.LinkId, pendingLink.BreakpointX);
+                    pendingLink.ContainedIn.AddLink(link, out _);
                 }
                 // Expose the node index mapping for the optimisation loop.
                 modelSystem.NodesByLoadIndex = new System.Collections.ObjectModel.ReadOnlyDictionary<int, Node>(nodes);
@@ -701,7 +739,8 @@ namespace XTMF2
             List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
             ref Utf8JsonReader reader, Boundary global, [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
-            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId, double? BreakpointX)>? deferredLinks = null)
+            List<Link.PendingLoad>? deferredLinks = null,
+            List<FunctionInstance.PendingLoad>? deferredFunctionInstances = null)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {
@@ -713,7 +752,7 @@ namespace XTMF2
                 return FailWith(out error, "Unexpected end of file when loading boundaries!");
             }
 
-            if (!global.Load(modules, typeLookup, nodes, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings, deferredLinks))
+            if (!global.Load(modules, typeLookup, nodes, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings, deferredLinks, deferredFunctionInstances))
             {
                 return false;
             }

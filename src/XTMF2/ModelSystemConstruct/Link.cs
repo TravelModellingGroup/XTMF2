@@ -34,6 +34,19 @@ namespace XTMF2
     /// </summary>
     public abstract class Link : INotifyPropertyChanged
     {
+        internal readonly record struct PendingLoad(
+            Boundary ContainedIn,
+            Node? Origin,
+            int OriginIndex,
+            string HookName,
+            IReadOnlyList<int> DestinationIndices,
+            bool Disabled,
+            bool Orthogonal,
+            IReadOnlyList<bool>? HiddenDestinations,
+            bool SingleHiddenDestination,
+            Guid LinkId,
+            double? BreakpointX);
+
         protected const string OriginProperty = "Origin";
         protected const string HookProperty = "Hook";
         protected const string DestinationProperty = "Destination";
@@ -100,11 +113,11 @@ namespace XTMF2
         /// <param name="link">The created link, null if there is a warning!</param>
         /// <param name="error">The error message if creation fails.</param>
         /// <param name="warnings">Optional list of warnings.</param>
-        /// <param name="deferredLinks">When provided, links whose destination index is not yet in <paramref name="nodes"/> are added here instead of being dropped. Resolved after all nodes are loaded.</param>
+        /// <param name="deferredLinks">When provided, links whose origin or destination index is not yet in <paramref name="nodes"/> are added here instead of being dropped. Resolved after all nodes are loaded.</param>
         /// <param name="containedIn">The boundary that owns this link; required when <paramref name="deferredLinks"/> is provided.</param>
         /// <returns>True if the link was created successfully or if there was only a warning; otherwise, false.</returns>
         internal static bool Create(ModuleRepository modules, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, out Link? link, [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
-            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId, double? BreakpointX)>? deferredLinks = null,
+            List<PendingLoad>? deferredLinks = null,
             Boundary? containedIn = null)
         {
             if(reader.TokenType != JsonTokenType.StartObject)
@@ -116,6 +129,8 @@ namespace XTMF2
             string? hookName = null;
             bool disabled = false;
             int rawDestinationIndex = -1;
+            int rawOriginIndex = -1;
+            List<int>? rawDestinationIndices = null;
             bool orthogonal = false;
             bool singleHiddenDestination = false;
             List<bool>? hiddenDestinations = null;
@@ -141,8 +156,8 @@ namespace XTMF2
                 else if(reader.ValueTextEquals(OriginProperty))
                 {
                     reader.Read();
-                    var index = reader.GetInt32();
-                    nodes.TryGetValue(index, out origin);
+                    rawOriginIndex = reader.GetInt32();
+                    nodes.TryGetValue(rawOriginIndex, out origin);
                 }
                 else if(reader.ValueTextEquals(HookProperty))
                 {
@@ -167,9 +182,12 @@ namespace XTMF2
                         case JsonTokenType.StartArray:
                             {
                                 destinations = new List<Node>();
+                                rawDestinationIndices = new List<int>();
                                 while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                                 {
-                                    if (nodes.TryGetValue(reader.GetInt32(), out var dest))
+                                    var index = reader.GetInt32();
+                                    rawDestinationIndices.Add(index);
+                                    if (nodes.TryGetValue(index, out var dest))
                                         destinations.Add(dest);
                                 }
                             }
@@ -237,6 +255,16 @@ namespace XTMF2
             // ensure all of the types were filled out
             if(origin == null)
             {
+                if (deferredLinks is not null && containedIn is not null
+                    && hookName is not null && rawOriginIndex >= 0
+                    && (rawDestinationIndex >= 0 || rawDestinationIndices is { Count: > 0 }))
+                {
+                    deferredLinks.Add(new PendingLoad(containedIn, null, rawOriginIndex, hookName,
+                        rawDestinationIndices ?? [rawDestinationIndex], disabled, orthogonal,
+                        hiddenDestinations, singleHiddenDestination, linkId, breakpointX));
+                    link = null;
+                    return true;
+                }
                 // Origin node was not found – likely skipped because its type was missing.
                 link = null;
                 warnings?.Add("A link could not be loaded because its origin node was not found (possibly skipped due to a missing type) and will be skipped.");
@@ -252,10 +280,12 @@ namespace XTMF2
                 // a FunctionInstance that hasn't been added to the node dictionary yet (they are
                 // loaded after FunctionTemplates). Defer rather than drop.
                 if (deferredLinks is not null && containedIn is not null
-                    && origin is not null && hookName is not null && rawDestinationIndex >= 0)
+                    && origin is not null && hookName is not null
+                    && (rawDestinationIndex >= 0 || rawDestinationIndices is { Count: > 0 }))
                 {
-                    deferredLinks.Add((containedIn, origin, hookName, rawDestinationIndex,
-                        disabled, orthogonal, singleHiddenDestination, linkId, breakpointX));
+                    deferredLinks.Add(new PendingLoad(containedIn, origin, rawOriginIndex, hookName,
+                        rawDestinationIndices ?? [rawDestinationIndex], disabled, orthogonal, hiddenDestinations,
+                        singleHiddenDestination, linkId, breakpointX));
                     link = null;
                     return true;
                 }

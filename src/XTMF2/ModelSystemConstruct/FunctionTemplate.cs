@@ -509,7 +509,7 @@ namespace XTMF2.ModelSystemConstruct
             ref Utf8JsonReader reader, Boundary parent, [NotNullWhen(true)] out FunctionTemplate? template, [NotNullWhen(false)] ref string? error, List<string>? warnings = null)
         {
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes = new();
-            return Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, parent, out template, ref error, warnings, deferredLinks: null);
+            return Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, parent, out template, ref error, warnings, deferredLinks: null, deferredFunctionInstances: null);
         }
 
         internal static bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node,
@@ -518,7 +518,8 @@ namespace XTMF2.ModelSystemConstruct
             ref Utf8JsonReader reader, Boundary parent,
             [NotNullWhen(true)] out FunctionTemplate? template,
             [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
-            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId, double? BreakpointX)>? deferredLinks = null)
+            List<Link.PendingLoad>? deferredLinks = null,
+            List<FunctionInstance.PendingLoad>? deferredFunctionInstances = null)
         {
             template = null;
             Guid? id = null;
@@ -595,7 +596,7 @@ namespace XTMF2.ModelSystemConstruct
                 else if (reader.ValueTextEquals(nameof(InternalModules)))
                 {
                     reader.Read();
-                    if (!innerModules.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings, deferredLinks))
+                    if (!innerModules.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings, deferredLinks, deferredFunctionInstances))
                         return false;
                 }
                 else if (reader.ValueTextEquals(EntryNodeProperty))
