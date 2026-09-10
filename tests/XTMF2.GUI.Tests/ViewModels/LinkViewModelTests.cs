@@ -152,6 +152,116 @@ public class LinkViewModelTests
     }
 
     [TestMethod]
+    public void CrossBoundaryLink_ProjectsThroughClosestGhostInDestinationBoundary()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(CrossBoundaryLink_ProjectsThroughClosestGhostInDestinationBoundary),
+            (user, _, msSession) =>
+            {
+                CommandError? error = null;
+                var root = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddBoundary(user, root, "Source",
+                    out var sourceBoundary, out error), error?.Message);
+                Assert.IsTrue(msSession.AddBoundary(user, root, "Destination",
+                    out var destinationBoundary, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddNode(user, sourceBoundary!, "Origin",
+                    typeof(LinkedGuiTestModule), new Rectangle(20, 20, 120, 50),
+                    out var origin, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, destinationBoundary!, "Destination",
+                    typeof(SimpleGuiTestModule), new Rectangle(400, 100, 120, 50),
+                    out var destination, out error), error?.Message);
+
+                var hook = origin!.Hooks.First(h => h.Name == "Child");
+                XTMF2.Link? link = null;
+                Assert.IsTrue(msSession.AddLink(user, origin, hook, destination!,
+                    out link, out error), error?.Message);
+
+                using var vmEditor = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                vmEditor.SwitchToBoundary(destinationBoundary!);
+                Assert.IsFalse(vmEditor.Links.Any(lvm => ReferenceEquals(lvm.UnderlyingLink, link)));
+
+                GhostNode? farGhost = null;
+                Assert.IsTrue(msSession.AddGhostNode(user, destinationBoundary!, origin,
+                    new Rectangle(40, 100, 120, 50), out farGhost, out error), error?.Message);
+                Assert.IsNotNull(farGhost);
+                GhostNode? closeGhost = null;
+                Assert.IsTrue(msSession.AddGhostNode(user, destinationBoundary!, origin,
+                    new Rectangle(300, 100, 120, 50), out closeGhost, out error), error?.Message);
+                Assert.IsNotNull(closeGhost);
+
+                var linkViewModel = vmEditor.Links.Single(lvm => ReferenceEquals(lvm.UnderlyingLink, link));
+                Assert.AreSame(destination, ((NodeViewModel)linkViewModel.Destination!).UnderlyingNode);
+                Assert.AreSame(closeGhost, ((GhostNodeViewModel)linkViewModel.Origin).UnderlyingGhostNode);
+            });
+    }
+
+    [TestMethod]
+    public void CrossBoundaryLink_DoesNotProjectWhenDisabled()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(CrossBoundaryLink_DoesNotProjectWhenDisabled),
+            (user, _, msSession) =>
+            {
+                CommandError? error = null;
+                var root = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddBoundary(user, root, "Source",
+                    out var sourceBoundary, out error), error?.Message);
+                Assert.IsTrue(msSession.AddBoundary(user, root, "Destination",
+                    out var destinationBoundary, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, sourceBoundary!, "Origin",
+                    typeof(LinkedGuiTestModule), new Rectangle(20, 20, 120, 50),
+                    out var origin, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, destinationBoundary!, "Destination",
+                    typeof(SimpleGuiTestModule), new Rectangle(400, 100, 120, 50),
+                    out var destination, out error), error?.Message);
+
+                var hook = origin!.Hooks.First(h => h.Name == "Child");
+                XTMF2.Link? link = null;
+                Assert.IsTrue(msSession.AddLink(user, origin, hook, destination!,
+                    out link, out error), error?.Message);
+                Assert.IsTrue(msSession.SetLinkDisabled(user, link!, true, out error), error?.Message);
+                GhostNode? disabledGhost = null;
+                Assert.IsTrue(msSession.AddGhostNode(user, destinationBoundary!, origin,
+                    new Rectangle(300, 100, 120, 50), out disabledGhost, out error), error?.Message);
+
+                using var vmEditor = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                vmEditor.SwitchToBoundary(destinationBoundary!);
+
+                Assert.IsFalse(vmEditor.Links.Any(lvm => ReferenceEquals(lvm.UnderlyingLink, link)));
+            });
+    }
+
+    [TestMethod]
+    public void RenamingReferencedNode_UpdatesGhostName()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(RenamingReferencedNode_UpdatesGhostName),
+            (user, _, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(user, boundary, "Original",
+                    typeof(SimpleGuiTestModule), new Rectangle(20, 20, 120, 50),
+                    out var node, out var nodeError), nodeError?.Message);
+                Assert.IsNotNull(node);
+                GhostNode? ghost = null;
+                Assert.IsTrue(msSession.AddGhostNode(user, boundary, node!,
+                    new Rectangle(220, 20, 120, 50), out ghost, out var ghostError), ghostError?.Message);
+                Assert.IsNotNull(ghost);
+
+                using var vmEditor = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var ghostVm = vmEditor.GhostNodes.Single();
+                Assert.AreEqual("Original", ghostVm.Name);
+
+                Assert.IsTrue(msSession.SetNodeName(user, node!, "Renamed", out var renameError),
+                    renameError?.Message);
+
+                Assert.AreEqual("Renamed", ghost!.Name);
+                Assert.AreEqual("Renamed", ghostVm.Name);
+            });
+    }
+
+    [TestMethod]
     public void CreateLinkAsync_ReversesDirectionWhenForwardIsIncompatible()
     {
         TestGuiHelper.RunInModelSystemContext(nameof(CreateLinkAsync_ReversesDirectionWhenForwardIsIncompatible),

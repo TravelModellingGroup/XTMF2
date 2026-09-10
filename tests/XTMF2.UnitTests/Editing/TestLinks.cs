@@ -31,6 +31,59 @@ namespace XTMF2.UnitTests.Editing
     public class TestLinks
     {
         [TestMethod]
+        public void SetOrthogonalBreakpointUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext("SetOrthogonalBreakpointUndoRedo", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                CommandError error = null;
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Parameter", typeof(BasicParameter<string>), Rectangle.Hidden,
+                    out var parameter, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Module", typeof(SimpleParameterModule), Rectangle.Hidden,
+                    out var module, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, module, module.Hooks[0], parameter, out var link, out error), error?.Message);
+
+                Assert.IsNull(link.OrthogonalBreakpointX);
+                Assert.IsTrue(mSession.SetLinkOrthogonalBreakpointX(user, link, 180.0, out error), error?.Message);
+                Assert.AreEqual(180.0, link.OrthogonalBreakpointX);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.IsNull(link.OrthogonalBreakpointX);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.AreEqual(180.0, link.OrthogonalBreakpointX);
+            });
+        }
+
+        [TestMethod]
+        public void SetMultipleOrthogonalBreakpointsUndoRedoAsOneAction()
+        {
+            TestHelper.RunInModelSystemContext("SetMultipleOrthogonalBreakpointsUndoRedoAsOneAction", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                CommandError error = null;
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Parameter1", typeof(BasicParameter<string>), Rectangle.Hidden,
+                    out var parameter1, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Module1", typeof(SimpleParameterModule), Rectangle.Hidden,
+                    out var module1, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Parameter2", typeof(BasicParameter<string>), Rectangle.Hidden,
+                    out var parameter2, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Module2", typeof(SimpleParameterModule), Rectangle.Hidden,
+                    out var module2, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, module1, module1.Hooks[0], parameter1, out var link1, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, module2, module2.Hooks[0], parameter2, out var link2, out error), error?.Message);
+
+                Assert.IsTrue(mSession.SetLinksOrthogonalBreakpointX(user, new[] { link1, link2 }, 240.0, out error), error?.Message);
+                Assert.AreEqual(240.0, link1.OrthogonalBreakpointX);
+                Assert.AreEqual(240.0, link2.OrthogonalBreakpointX);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.IsNull(link1.OrthogonalBreakpointX);
+                Assert.IsNull(link2.OrthogonalBreakpointX);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.AreEqual(240.0, link1.OrthogonalBreakpointX);
+                Assert.AreEqual(240.0, link2.OrthogonalBreakpointX);
+            });
+        }
+
+        [TestMethod]
         public void UndoAddLink()
         {
             TestHelper.RunInModelSystemContext("UndoAddLink", (user, pSession, mSession) =>
@@ -138,6 +191,36 @@ namespace XTMF2.UnitTests.Editing
                 Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
                 Assert.HasCount(1, ms.GlobalBoundary.Links);
                 Assert.AreSame(link, ms.GlobalBoundary.Links[0]);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
+            });
+        }
+
+        [TestMethod]
+        public void UndoRemoveMultipleLinksAsOneAction()
+        {
+            TestHelper.RunInModelSystemContext("UndoRemoveMultipleLinksAsOneAction", (user, pSession, mSession) =>
+            {
+                var ms = mSession.ModelSystem;
+                CommandError error = null;
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Parameter1", typeof(BasicParameter<string>), Rectangle.Hidden,
+                    out var parameter1, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Module1", typeof(SimpleParameterModule), Rectangle.Hidden,
+                    out var module1, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Parameter2", typeof(BasicParameter<string>), Rectangle.Hidden,
+                    out var parameter2, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "Module2", typeof(SimpleParameterModule), Rectangle.Hidden,
+                    out var module2, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, module1, module1.Hooks[0], parameter1, out var link1, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, module2, module2.Hooks[0], parameter2, out var link2, out error), error?.Message);
+                Assert.HasCount(2, ms.GlobalBoundary.Links);
+
+                Assert.IsTrue(mSession.RemoveLinks(user, new[] { link1, link2 }, out error), error?.Message);
+                Assert.IsEmpty(ms.GlobalBoundary.Links);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.HasCount(2, ms.GlobalBoundary.Links);
+                Assert.Contains(link1, ms.GlobalBoundary.Links);
+                Assert.Contains(link2, ms.GlobalBoundary.Links);
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.IsEmpty(ms.GlobalBoundary.Links);
             });

@@ -76,6 +76,7 @@ internal sealed record NodePasteEntry(
 public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisposable
 {
     private bool _disposed;
+    private bool _suppressSearchRebuild;
 
     // ── Session / model ────────────────────────────────────────────────────
     /// <summary>The active editing session for the model system.</summary>
@@ -182,6 +183,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     private readonly Dictionary<SingleLink, System.ComponentModel.PropertyChangedEventHandler> _singleLinkDestHandlers = new();
 
+    /// <summary>Link view-models projected into this boundary through matching ghost nodes.</summary>
+    private readonly HashSet<LinkViewModel> _projectedLinkViewModels = new();
+
     /// <summary>Observable wrappers around <see cref="Boundary.CommentBlocks"/>.</summary>
     public ObservableCollection<CommentBlockViewModel> CommentBlocks { get; } = new();
 
@@ -203,7 +207,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     /// <summary>
     /// Flat, searchable list of all visible canvas elements in the current boundary view:
-    /// non-inlined <see cref="NodeViewModel"/>s, <see cref="StartViewModel"/>s,
+    /// non-inlined <see cref="NodeViewModel"/>s, <see cref="GhostNodeViewModel"/>s,
+    /// <see cref="StartViewModel"/>s,
     /// <see cref="FunctionTemplateViewModel"/>s, <see cref="FunctionInstanceViewModel"/>s,
     /// and <see cref="FunctionParameterViewModel"/>s.
     /// Rebuilt automatically whenever any constituent collection or a node's inline state changes.
@@ -295,6 +300,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>Fires when the user picks an element from the search box; the view should scroll to it.</summary>
     public event Action<ICanvasElement>? ScrollToElementRequested;
 
+    /// <summary>Fires while previewing a highlighted search result without taking focus from the search box.</summary>
+    public event Action<ICanvasElement>? ScrollToElementPreviewRequested;
+
     /// <summary>
     /// Holds an element that <see cref="NavigateToElementById"/> wanted to scroll to but could
     /// not because no view was subscribed yet (e.g. the tab was just opened).
@@ -328,9 +336,17 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     partial void OnCanvasSearchSelectionChanged(ICanvasElement? value)
     {
         if (value is null) return;
-        SelectElement(value);
-        ScrollToElementRequested?.Invoke(value);
+        NavigateToSearchResult(value, focusCanvas: true);
         CanvasSearchSelection = null; // reset so the box is ready for the next search
+    }
+
+    public void NavigateToSearchResult(ICanvasElement element, bool focusCanvas)
+    {
+        SelectElement(element);
+        if (focusCanvas)
+            ScrollToElementRequested?.Invoke(element);
+        else
+            ScrollToElementPreviewRequested?.Invoke(element);
     }
 
     // ── SearchItems tracking ──────────────────────────────────────────────
@@ -338,15 +354,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     /// <summary>
     /// Rebuilds <see cref="SearchItems"/> from the current boundary's VM collections.
-    /// Non-inlined nodes and all Starts, FunctionTemplates, FunctionInstances,
-    /// and FunctionParameters are included.
+    /// Non-inlined nodes, ghost nodes, and all Starts, FunctionTemplates,
+    /// FunctionInstances, and FunctionParameters are included.
     /// </summary>
     private void RebuildSearchItems()
     {
+        if (_suppressSearchRebuild) return;
+
         SearchItems.Clear();
         foreach (var nvm in Nodes)
             if (!nvm.IsInlined)
                 SearchItems.Add(nvm);
+        foreach (var gvm in GhostNodes)
+            SearchItems.Add(gvm);
         foreach (var svm in Starts)
             SearchItems.Add(svm);
         foreach (var ftvm in FunctionTemplates)
@@ -356,6 +376,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         foreach (var fpvm in FunctionParameterVMs)
             SearchItems.Add(fpvm);
     }
+
+    private void OnSearchCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => RebuildSearchItems();
 
     private void OnNodesCollectionChangedForSearch(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -412,11 +435,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public string SelectedElementFieldLabel =>
         SelectedElement is CommentBlockViewModel ? "Comment" : "Name";
 
+    private ICanvasElement? SelectedMetadataElement => SelectedElement switch
+    {
+        GhostNodeViewModel ghost when ghost.ReferencedFunctionInstanceViewModel is not null
+            => ghost.ReferencedFunctionInstanceViewModel,
+        GhostNodeViewModel ghost => ghost.ReferencedNodeViewModel,
+        _ => SelectedElement
+    };
+
     /// <summary>
     /// True when the selected element is a <see cref="NodeViewModel"/>,
     /// used to gate the Change Type button in the property panel.
     /// </summary>
-    public bool SelectedElementIsNode => SelectedElement is NodeViewModel;
+    public bool SelectedElementIsNode => SelectedMetadataElement is NodeViewModel;
 
     /// <summary>True when the selected element is a <see cref="CommentBlockViewModel"/>.</summary>
     public bool SelectedElementIsComment => SelectedElement is CommentBlockViewModel;
@@ -429,7 +460,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// used to gate the parameter value editor in the property panel.
     /// </summary>
     public bool SelectedElementIsParameter
-        => SelectedElement is NodeViewModel pnvm && pnvm.IsParameterNode;
+        => SelectedMetadataElement is NodeViewModel pnvm && pnvm.IsParameterNode;
 
     /// <summary>
     /// Mutable copy of the selected parameter node's current value string,
@@ -442,7 +473,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// Human-readable type string shown in the property panel's "Type:" row.
     /// Automatically updates when the node's type changes.
     /// </summary>
-    public string SelectedElementTypeName => SelectedElement switch
+    public string SelectedElementTypeName => SelectedMetadataElement switch
     {
         StartViewModel             => "Start (entry point)",
         NodeViewModel nvm          => $"Module\n{nvm.TypeName}",
@@ -477,7 +508,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         => !string.IsNullOrWhiteSpace(SelectedSidePanelDocumentationLink);
 
     /// <summary>True when the selected element is a <see cref="FunctionInstanceViewModel"/>.</summary>
-    public bool SelectedSidePanelHasTemplateLink => SelectedElement is FunctionInstanceViewModel;
+    public bool SelectedSidePanelHasTemplateLink => SelectedMetadataElement is FunctionInstanceViewModel;
 
     /// <summary>The button text used to open the selected function instance's template.</summary>
     public string SelectedFunctionInstanceTemplateActionText
@@ -496,21 +527,21 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public bool SelectedElementIsFunctionTemplate => SelectedElement is FunctionTemplateViewModel;
 
     /// <summary>True when the selected element is a <see cref="FunctionInstanceViewModel"/>.</summary>
-    public bool SelectedElementIsFunctionInstance => SelectedElement is FunctionInstanceViewModel;
+    public bool SelectedElementIsFunctionInstance => SelectedMetadataElement is FunctionInstanceViewModel;
 
     /// <summary>
     /// The name of the template referenced by the currently selected function instance,
     /// or an empty string when nothing (or a non-instance element) is selected.
     /// </summary>
     public string SelectedFunctionInstanceTemplateName
-        => (SelectedElement as FunctionInstanceViewModel)?.TemplateName ?? string.Empty;
+        => (SelectedMetadataElement as FunctionInstanceViewModel)?.TemplateName ?? string.Empty;
 
     /// <summary>
     /// The <see cref="FunctionParameter"/> list of the template referenced by the currently
     /// selected function instance, or an empty collection.
     /// </summary>
     public System.Collections.Generic.IEnumerable<ModelSystemConstruct.FunctionParameter> SelectedFunctionInstanceFunctionParameters
-        => (SelectedElement as FunctionInstanceViewModel)?.FunctionParameters
+        => (SelectedMetadataElement as FunctionInstanceViewModel)?.FunctionParameters
            ?? System.Linq.Enumerable.Empty<ModelSystemConstruct.FunctionParameter>();
 
     /// <summary>
@@ -518,7 +549,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// drives the "(none)" hint text in the properties panel.
     /// </summary>
     public bool SelectedFunctionInstanceHasNoFunctionParameters
-        => SelectedElement is not FunctionInstanceViewModel fi || fi.FunctionParameters.Count == 0;
+        => SelectedMetadataElement is not FunctionInstanceViewModel fi || fi.FunctionParameters.Count == 0;
 
     /// <summary>
     /// The <see cref="FunctionParameter"/> list of the currently selected function template,
@@ -553,6 +584,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     [ObservableProperty]
     private bool _renderAllHiddenDestinationLinks;
+
+    /// <summary>When true, same-boundary ghosts are connected to their referenced elements.</summary>
+    [ObservableProperty]
+    private bool _showGhostCorrespondenceLines = true;
 
     // ── Undo / Redo state ─────────────────────────────────────────────────
     /// <summary>True when there is at least one undoable command.</summary>
@@ -606,7 +641,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         OnPropertyChanged(nameof(SelectedSidePanelHasTemplateLink));
         OnPropertyChanged(nameof(SelectedSidePanelHasFunctionParameterContext));
         SelectedElementParameterValue =
-            value is NodeViewModel pnvm && pnvm.IsParameterNode
+            SelectedMetadataElement is NodeViewModel pnvm && pnvm.IsParameterNode
                 ? pnvm.ParameterValueRepresentation
                 : string.Empty;
     }
@@ -616,6 +651,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (e.PropertyName is nameof(NodeViewModel.TypeName)
             or nameof(FunctionParameterViewModel.TypeName)
             or nameof(FunctionInstanceViewModel.TemplateName)
+            or nameof(FunctionInstanceViewModel.Description)
+            or nameof(GhostNodeViewModel.TypeName)
+            or nameof(GhostNodeViewModel.ParameterValueRepresentation)
             or nameof(ICanvasElement.Name))
         {
             OnPropertyChanged(nameof(SelectedElementTypeName));
@@ -633,7 +671,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
         if (e.PropertyName == nameof(NodeViewModel.ParameterValueRepresentation))
         {
-            if (SelectedElement is NodeViewModel nvm && nvm.IsParameterNode)
+            if (SelectedMetadataElement is NodeViewModel nvm && nvm.IsParameterNode)
                 SelectedElementParameterValue = nvm.ParameterValueRepresentation;
         }
     }
@@ -662,19 +700,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     [RelayCommand]
     private void OpenSelectedFunctionTemplate()
     {
-        if (SelectedElement is FunctionInstanceViewModel fivm)
+        if (SelectedMetadataElement is FunctionInstanceViewModel fivm)
             OpenFunctionTemplateOfInstance(fivm);
     }
 
     private bool TryGetSelectedSidePanelMetadata(out (string moduleName, string typeName, string description, string documentationLink) metadata)
     {
-        metadata = SelectedElement switch
+        metadata = SelectedMetadataElement switch
         {
             null => ("No module selected", string.Empty, string.Empty, string.Empty),
             CommentBlockViewModel comment => ("Comment Block", "Comment", comment.Name, string.Empty),
             NodeViewModel node => BuildModuleMetadata(node.Name, node.UnderlyingNode.Type),
             FunctionTemplateViewModel template => BuildModuleMetadata(template.Name, template.UnderlyingTemplate.Type),
-            FunctionInstanceViewModel instance => BuildModuleMetadata(instance.Name, instance.UnderlyingInstance.Template.Type),
+            FunctionInstanceViewModel instance => BuildFunctionInstanceMetadata(instance),
             FunctionParameterViewModel parameter => (
                 parameter.Name,
                 FormatTypeNameWithGenerics(parameter.UnderlyingParameter.Type),
@@ -684,6 +722,18 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         };
 
         return true;
+    }
+
+    private static (string moduleName, string typeName, string description, string documentationLink)
+        BuildFunctionInstanceMetadata(FunctionInstanceViewModel instance)
+    {
+        var metadata = BuildModuleMetadata(instance.Name, instance.UnderlyingInstance.Template.Type);
+        var templateDescription = instance.UnderlyingInstance.Template.Description;
+        return (
+            metadata.moduleName,
+            metadata.typeName,
+            string.IsNullOrWhiteSpace(templateDescription) ? metadata.description : templateDescription,
+            metadata.documentationLink);
     }
 
     private static (string moduleName, string typeName, string description, string documentationLink) BuildModuleMetadata(string moduleName, Type? moduleType)
@@ -790,10 +840,11 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Keep SearchItems in sync with the canvas collections.
         // Nodes: also handles per-node IsInlined tracking.
         Nodes.CollectionChanged            += OnNodesCollectionChangedForSearch;
-        Starts.CollectionChanged           += (_, _) => RebuildSearchItems();
-        FunctionTemplates.CollectionChanged += (_, _) => RebuildSearchItems();
-        FunctionInstances.CollectionChanged += (_, _) => RebuildSearchItems();
-        FunctionParameterVMs.CollectionChanged += (_, _) => RebuildSearchItems();
+        GhostNodes.CollectionChanged        += OnSearchCollectionChanged;
+        Starts.CollectionChanged           += OnSearchCollectionChanged;
+        FunctionTemplates.CollectionChanged += OnSearchCollectionChanged;
+        FunctionInstances.CollectionChanged += OnSearchCollectionChanged;
+        FunctionParameterVMs.CollectionChanged += OnSearchCollectionChanged;
         // Subscribe to nodes already populated by BuildFromBoundary.
         foreach (var nvm in Nodes)
             if (_searchTrackedNodes.Add(nvm))
@@ -827,6 +878,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             foreach (var fp in _currentFunctionTemplate.UnderlyingTemplate.FunctionParameters)
                 FunctionParameterVMs.Add(new FunctionParameterViewModel(fp, Session, User));
         foreach (var link in boundary.Links)          TryAddLinkViewModel(link);
+        RebuildProjectedLinkViewModels();
         foreach (var cb in boundary.CommentBlocks)
             if (!CommentBlocks.Any(v => ReferenceEquals(v.UnderlyingBlock, cb)))
                 CommentBlocks.Add(new CommentBlockViewModel(cb, Session, User));
@@ -885,6 +937,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         UnsubscribeFromBoundary(_currentBoundary);
         foreach (var lvm in Links) lvm.Detach();
+        _projectedLinkViewModels.Clear();
         // Unsubscribe all SingleLink destination-change handlers tracked for the old boundary.
         foreach (var (sl, h) in _singleLinkDestHandlers)
             sl.PropertyChanged -= h;
@@ -922,7 +975,16 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         NavigateUpCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanNavigateUp));
         SubscribeToBoundary(_currentBoundary);
-        BuildFromBoundary(_currentBoundary);
+        _suppressSearchRebuild = true;
+        try
+        {
+            BuildFromBoundary(_currentBoundary);
+        }
+        finally
+        {
+            _suppressSearchRebuild = false;
+            RebuildSearchItems();
+        }
         RebuildBoundaryNavItems();
     }
 
@@ -1057,6 +1119,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 var vm = GhostNodes.FirstOrDefault(v => v.UnderlyingGhostNode == g);
                 if (vm is not null) GhostNodes.Remove(vm);
             }
+
+            RebuildProjectedLinkViewModels();
     }
 
     private void OnFunctionTemplatesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1197,6 +1261,69 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         RebuildMultiLinkViewModels(ml, originElement);
     }
 
+    private void RebuildProjectedLinkViewModels()
+    {
+        foreach (var linkViewModel in _projectedLinkViewModels)
+        {
+            linkViewModel.Detach();
+            Links.Remove(linkViewModel);
+        }
+        _projectedLinkViewModels.Clear();
+
+        foreach (var link in GlobalBoundary.GetLinksGoingToBoundary(_currentBoundary))
+        {
+            if (link.IsDisabled)
+                continue;
+
+            var destinations = link switch
+            {
+                SingleLink single when single.Destination?.ContainedWithin == _currentBoundary
+                    => [(single.Destination, 0)],
+                MultiLink multi
+                    => multi.Destinations
+                        .Select((destination, index) => (destination, index))
+                        .Where(item => item.destination.ContainedWithin == _currentBoundary),
+                _ => []
+            };
+
+            foreach (var (destination, destinationIndex) in destinations)
+            {
+                var destinationElement = ResolveElement(destination);
+                if (destinationElement is null)
+                    continue;
+
+                var originElement = FindClosestGhostFor(link.Origin, destinationElement);
+                if (originElement is null)
+                    continue;
+
+                var linkViewModel = new LinkViewModel(link, originElement, destinationElement, destinationIndex);
+                Links.Add(linkViewModel);
+                _projectedLinkViewModels.Add(linkViewModel);
+            }
+        }
+    }
+
+    private GhostNodeViewModel? FindClosestGhostFor(Node representedNode, ICanvasElement opposite)
+    {
+        GhostNodeViewModel? closest = null;
+        var closestDistance = double.PositiveInfinity;
+        foreach (var ghost in GhostNodes)
+        {
+            if (!ReferenceEquals(ghost.UnderlyingGhostNode.ReferencedNode, representedNode))
+                continue;
+
+            var dx = ghost.CenterX - opposite.CenterX;
+            var dy = ghost.CenterY - opposite.CenterY;
+            var distance = dx * dx + dy * dy;
+            if (distance < closestDistance)
+            {
+                closest = ghost;
+                closestDistance = distance;
+            }
+        }
+        return closest;
+    }
+
     private ICanvasElement? ResolveElement(Node? node)
     {
         if (node is null) return null;
@@ -1298,6 +1425,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     public async Task CreateNodeFromHookAsync(
         NodeViewModel originNode, NodeHook hook, double hookAnchorX, double hookAnchorY)
+        => await CreateNodeFromHookAsync(originNode.UnderlyingNode, hook, hookAnchorX, hookAnchorY);
+
+    /// <summary>
+    /// Double-clicking a FunctionInstance hook follows the same compatible-node creation path
+    /// as double-clicking a regular node hook.
+    /// </summary>
+    public async Task CreateNodeFromHookAsync(
+        FunctionInstanceViewModel originInstance, FunctionParameterHook hook,
+        double hookAnchorX, double hookAnchorY)
+        => await CreateNodeFromHookAsync(originInstance.UnderlyingInstance, hook, hookAnchorX, hookAnchorY);
+
+    private async Task CreateNodeFromHookAsync(
+        Node originNode, NodeHook hook, double hookAnchorX, double hookAnchorY)
     {
         if (ParentWindow is null) return;
 
@@ -1354,7 +1494,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         // Wire the hook to the new node.
-        if (!Session.AddLink(User, originNode.UnderlyingNode, hook, newNode!, out _, out var linkError))
+        if (!Session.AddLink(User, originNode, hook, newNode!, out _, out var linkError))
             await ShowError("Create Link Failed", linkError);
     }
 
@@ -1550,6 +1690,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             NodeViewModel nvm => nvm.UnderlyingNode,
             StartViewModel svm => svm.UnderlyingStart,
             FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+            GhostNodeViewModel ghost => ghost.ReferencedNode,
             _ => null
         };
 
@@ -1703,6 +1844,32 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (selectedHook is null) return;
 
         if (!Session.AddLink(User, originNode, selectedHook, fp, out _, out var error))
+            await ShowError("Create Link Failed", error);
+    }
+
+    /// <summary>
+    /// Creates a link from a compatible node hook to <paramref name="sourceFpVm"/>.
+    /// This is the reverse operation used when a user drags from a FunctionParameter
+    /// onto a node, since FunctionParameters are link destinations in the model.
+    /// </summary>
+    public async Task CreateLinkAsync(FunctionParameterViewModel sourceFpVm, NodeViewModel destinationNodeVm)
+    {
+        if (ParentWindow is null || _currentFunctionTemplate is null) return;
+
+        var parameter = sourceFpVm.UnderlyingParameter;
+        var compatible = GetCompatibleHooks(destinationNodeVm.UnderlyingNode, parameter.Type);
+        if (compatible.Count == 0)
+        {
+            await ShowError("Incompatible Types",
+                new CommandError($"No hooks on '{destinationNodeVm.Name}' are compatible with FunctionParameter type '{parameter.Type?.Name ?? "Unknown"}'."));
+            return;
+        }
+
+        var selectedHook = await SelectHookAsync(compatible, destinationNodeVm.Name, parameter.Name);
+        if (selectedHook is null) return;
+
+        if (!Session.AddLink(User, destinationNodeVm.UnderlyingNode, selectedHook,
+                             parameter, out _, out var error))
             await ShowError("Create Link Failed", error);
     }
 
@@ -2960,6 +3127,16 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             await ShowError("Create Link Failed", linkError);
     }
 
+            /// <summary>Converts a BasicParameter node in the current template into a FunctionParameter.</summary>
+            public void ConvertBasicParameterToFunctionParameter(NodeViewModel nodeVm)
+            {
+            if (!IsInsideFunctionTemplate) return;
+
+            if (!Session.ConvertBasicParameterToFunctionParameter(User, nodeVm.UnderlyingNode,
+                out _, out var error))
+                ShowToast(error?.Message ?? "Unable to create Function Parameter.", isError: true, durationMs: 6000);
+            }
+
     /// <summary>
     /// Removes a <see cref="FunctionParameter"/> from the current function template.
     /// </summary>
@@ -3280,7 +3457,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (ParentWindow is null) return;
 
-        var dialog = new BoundaryPickerDialog(GetAllBoundaries(GlobalBoundary), _currentBoundary);
+        var dialog = new BoundaryPickerDialog(
+            GetAllBoundaries(GlobalBoundary),
+            _currentBoundary,
+            DeleteBoundaryFromPickerAsync);
         await dialog.ShowDialog(ParentWindow);
 
         switch (dialog.Result)
@@ -3305,6 +3485,23 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 }
                 break;
         }
+    }
+
+    private async Task<bool> DeleteBoundaryFromPickerAsync(Boundary boundary)
+    {
+        if (boundary.Parent is null)
+            return false;
+
+        if (!Session.RemoveBoundary(User, boundary.Parent, boundary, out var error))
+        {
+            await ShowError("Delete Boundary Failed", error);
+            return false;
+        }
+
+        RebuildBoundaryNavItems();
+        if (ReferenceEquals(_currentBoundary, boundary))
+            SwitchToBoundary(boundary.Parent);
+        return true;
     }
 
     // ── Toast helper ──────────────────────────────────────────────────────
@@ -3562,7 +3759,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     internal void ToggleLinkOrthogonal(Link link)
     {
-        if (!Session.SetLinkOrthogonal(User, link, !link.IsOrthogonal, out var error) && error is not null)
+        if (!Session.SetLinksOrthogonal(User, new[] { link }, !link.IsOrthogonal, out var error) && error is not null)
+            ShowToast(error.Message ?? "Could not change link routing.", isError: true, durationMs: 4000);
+    }
+
+    internal void ToggleLinksOrthogonal(IReadOnlyList<Link> links, bool orthogonal)
+    {
+        if (!Session.SetLinksOrthogonal(User, links, orthogonal, out var error) && error is not null)
             ShowToast(error.Message ?? "Could not change link routing.", isError: true, durationMs: 4000);
     }
 
@@ -3649,6 +3852,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         if (firstError is not null)
             ShowToast(firstError.Message ?? "Delete failed.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>Deletes multiple links as one undoable action.</summary>
+    public async Task DeleteMultipleLinksAsync(IReadOnlyList<Link> links)
+    {
+        SelectLink(null);
+        if (!Session.RemoveLinks(User, links, out var error) && error is not null)
+            ShowToast(error.Message ?? "Delete failed.", isError: true, durationMs: 4000);
     }
 
     /// <summary>Delete whichever element or link is currently selected.</summary>

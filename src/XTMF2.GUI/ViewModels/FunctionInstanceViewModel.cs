@@ -80,6 +80,7 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
 
     [ObservableProperty] private string _name        = string.Empty;
     [ObservableProperty] private bool   _isSelected;
+    [ObservableProperty] private bool   _showHooks;
 
     /// <summary>
     /// The short display name of the referenced <see cref="FunctionTemplate"/>
@@ -94,6 +95,9 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
     /// </summary>
     public string EntryNodeTypeName
         => UnderlyingInstance.Template.Type?.Name ?? string.Empty;
+
+    /// <summary>Description inherited from the referenced FunctionTemplate.</summary>
+    public string Description => UnderlyingInstance.Template.Description;
 
     /// <summary>
     /// Live-synced list of <see cref="FunctionParameter"/> objects derived from the referenced template.
@@ -144,6 +148,8 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
     {
         if (e.PropertyName == nameof(FunctionTemplate.Type))
             OnPropertyChanged(nameof(EntryNodeTypeName));
+        else if (e.PropertyName == nameof(FunctionTemplate.Description))
+            OnPropertyChanged(nameof(Description));
     }
 
     private void OnFunctionParametersChanged(object? sender, NotifyCollectionChangedEventArgs e)

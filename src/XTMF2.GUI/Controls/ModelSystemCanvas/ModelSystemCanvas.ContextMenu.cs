@@ -378,6 +378,19 @@ partial class ModelSystemCanvas
             };
             bgMenu.Items.Add(showHiddenTempItem);
 
+            var showGhostLinesItem = new MenuItem
+            {
+                Header = "Show Ghost Correspondence Lines",
+                ToggleType = MenuItemToggleType.CheckBox,
+                IsChecked = _vm.ShowGhostCorrespondenceLines
+            };
+            showGhostLinesItem.Click += (_, _) =>
+            {
+                _vm.ShowGhostCorrespondenceLines = showGhostLinesItem.IsChecked;
+                InvalidateVisual();
+            };
+            bgMenu.Items.Add(showGhostLinesItem);
+
             ContextMenu = bgMenu;
             ContextMenu.Open(this);
             return;
@@ -419,6 +432,13 @@ partial class ModelSystemCanvas
                                          isError: true, durationMs: 6000);
                     };
                     menu.Items.Add(switchItem);
+                }
+
+                if (vm.IsInsideFunctionTemplate && capturedParam.IsBasicParameter)
+                {
+                    var convertItem = new MenuItem { Header = "Create Function Parameter from Basic Parameter" };
+                    convertItem.Click += (_, _) => vm.ConvertBasicParameterToFunctionParameter(capturedParam);
+                    menu.Items.Add(convertItem);
                 }
 
                 menu.Items.Add(new Separator());
@@ -532,7 +552,9 @@ partial class ModelSystemCanvas
                 ? "Switch to Curved Routing"
                 : "Switch to Orthogonal Routing";
             var routingItem = new MenuItem { Header = routingHeader };
-            routingItem.Click += (_, _) => vm.ToggleLinkOrthogonal(capturedRoutingLink.UnderlyingLink);
+            var routingTargets = GetDisableTargetsForClickedLink(capturedRoutingLink);
+            routingItem.Click += (_, _) => vm.ToggleLinksOrthogonal(
+                routingTargets, !capturedRoutingLink.UnderlyingLink.IsOrthogonal);
             menu.Items.Add(routingItem);
 
             bool nextDestinationHidden = !link.IsDestinationBranchHidden;
@@ -621,6 +643,35 @@ partial class ModelSystemCanvas
         }
 
         // ── Standard Delete ───────────────────────────────────────────────
+        if (element is CommentBlockViewModel commentVm
+            && vm.CurrentFunctionTemplate is { } currentTemplate
+            && currentTemplate.UnderlyingTemplate.InternalModules.CommentBlocks.Contains(commentVm.UnderlyingBlock))
+        {
+            bool isDescription = ReferenceEquals(currentTemplate.UnderlyingTemplate.DescriptionComment,
+                                                  commentVm.UnderlyingBlock);
+            var descriptionItem = new MenuItem
+            {
+                Header = isDescription
+                    ? "Clear Function Template Description"
+                    : "Use as Function Template Description"
+            };
+            descriptionItem.Click += (_, _) =>
+            {
+                if (!vm.Session.SetFunctionTemplateDescriptionComment(
+                        vm.User,
+                        currentTemplate.UnderlyingTemplate,
+                        isDescription ? null : commentVm.UnderlyingBlock,
+                        out var error))
+                {
+                    vm.ShowToast(error?.Message ?? "Unable to update the function template description.",
+                        isError: true, durationMs: 5000);
+                }
+                InvalidateAndMeasure();
+            };
+            menu.Items.Add(descriptionItem);
+            menu.Items.Add(new Separator());
+        }
+
         var deleteItem = new MenuItem { Header = "Delete" };
         deleteItem.Click += (_, _) =>
         {
@@ -697,6 +748,14 @@ partial class ModelSystemCanvas
                                      isError: true, durationMs: 6000);
                 };
                 menu.Items.Add(switchItem);
+            }
+
+            if (vm.IsInsideFunctionTemplate && paramNode.IsBasicParameter)
+            {
+                var capturedBasicParameter = paramNode;
+                var convertItem = new MenuItem { Header = "Create Function Parameter from Basic Parameter" };
+                convertItem.Click += (_, _) => vm.ConvertBasicParameterToFunctionParameter(capturedBasicParameter);
+                menu.Items.Add(convertItem);
             }
 
             menu.Items.Add(new Separator());
@@ -899,6 +958,16 @@ partial class ModelSystemCanvas
         // ── Move to Boundary (ghost nodes) ────────────────────────────────────
         if (element is GhostNodeViewModel capturedGhost)
         {
+            var goToRepresentedItem = new MenuItem
+            {
+                Header = CreateShortcutMenuHeader("Go to Represented Element", "Ctrl+Enter")
+            };
+            goToRepresentedItem.Click += (_, _) =>
+            {
+                vm.NavigateToElementById(capturedGhost.ReferencedNode.Id);
+                InvalidateAndMeasure();
+            };
+
             var moveGhostItem = new MenuItem { Header = "Move to Boundary…" };
             moveGhostItem.Click += async (_, _) =>
             {
@@ -906,6 +975,7 @@ partial class ModelSystemCanvas
                 InvalidateAndMeasure();
             };
             menu.Items.Add(new Separator());
+            menu.Items.Add(goToRepresentedItem);
             menu.Items.Add(moveGhostItem);
         }
 

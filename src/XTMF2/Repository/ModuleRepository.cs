@@ -388,7 +388,7 @@ namespace XTMF2.Repository
                                 continue;
                             }
                             // all parameters are required
-                            hooks.Add(new FieldHook(parameter.Name!, field, true, parameter.Index, true, parameter.DefaultValue, parameter.PassesExecution));
+                            hooks.Add(new FieldHook(parameter.Name!, field, true, parameter.Index, true, parameter.DefaultValue, parameter.PassesExecution, parameter.Description));
                         }
                         else if (attributes.First() is SubModuleAttribute subModule)
                         {
@@ -396,7 +396,7 @@ namespace XTMF2.Repository
                             {
                                 continue;
                             }
-                            hooks.Add(new FieldHook(subModule.Name!, field, subModule.Required, subModule.Index, false, null, subModule.PassesExecution));
+                            hooks.Add(new FieldHook(subModule.Name!, field, subModule.Required, subModule.Index, false, null, subModule.PassesExecution, subModule.Description));
                         }
                         else
                         {
@@ -488,7 +488,7 @@ namespace XTMF2.Repository
                                 continue;
                             }
                             // all parameters are required
-                            hooks.Add(new PropertyHook(parameter.Name!, property, true, parameter.Index, true, parameter.DefaultValue, parameter.PassesExecution));
+                            hooks.Add(new PropertyHook(parameter.Name!, property, true, parameter.Index, true, parameter.DefaultValue, parameter.PassesExecution, parameter.Description));
                         }
                         else if (attributes.First() is SubModuleAttribute subModule)
                         {
@@ -496,7 +496,7 @@ namespace XTMF2.Repository
                             {
                                 continue;
                             }
-                            hooks.Add(new PropertyHook(subModule.Name!, property, subModule.Required, subModule.Index, false, null, subModule.PassesExecution));
+                            hooks.Add(new PropertyHook(subModule.Name!, property, subModule.Required, subModule.Index, false, null, subModule.PassesExecution, subModule.Description));
                         }
                         else
                         {

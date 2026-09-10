@@ -51,6 +51,47 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void FunctionParameterRequirednessFollowsInternalDestinations()
+        {
+            TestHelper.RunInModelSystemContext(nameof(FunctionParameterRequirednessFollowsInternalDestinations),
+                (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var boundary = mSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, boundary, "MyFT",
+                    out var template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, template!.InternalModules, "Optional",
+                    typeof(XTMF2.UnitTests.Modules.SimpleSubModuleModule), Rectangle.Hidden,
+                    out var optionalNode, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template,
+                    "P1", optionalNode!.Hooks[0].Type, Rectangle.Hidden, out var parameter,
+                    out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, optionalNode, optionalNode.Hooks[0],
+                    parameter!, out _, out error), error?.Message);
+
+                Assert.IsFalse(parameter.IsRequired);
+
+                Assert.IsTrue(mSession.AddFunctionInstance(user, boundary, template, "Instance1",
+                    Rectangle.Hidden, out var instance1, out error), error?.Message);
+                Assert.AreEqual(HookCardinality.SingleOptional,
+                    instance1!.Hooks[0].Cardinality);
+
+                Assert.IsTrue(mSession.AddNode(user, template.InternalModules, "Required",
+                    typeof(XTMF2.UnitTests.Modules.SimpleParameterModule), Rectangle.Hidden,
+                    out var requiredNode, out error), error?.Message);
+                Assert.IsTrue(mSession.AddLink(user, requiredNode!, requiredNode.Hooks[0],
+                    parameter!, out _, out error), error?.Message);
+
+                Assert.IsTrue(parameter.IsRequired);
+                Assert.AreEqual(HookCardinality.Single, instance1.Hooks[0].Cardinality);
+
+                Assert.IsTrue(mSession.AddFunctionInstance(user, boundary, template, "Instance2",
+                    Rectangle.Hidden, out var instance2, out error), error?.Message);
+                Assert.AreEqual(HookCardinality.Single, instance2!.Hooks[0].Cardinality);
+            });
+        }
+
+        [TestMethod]
         public void TestAddFunctionParameterUndo()
         {
             TestHelper.RunInModelSystemContext(nameof(TestAddFunctionParameterUndo), (user, pSession, mSession) =>
@@ -69,6 +110,27 @@ namespace XTMF2.UnitTests.Editing
 
                 Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
                 Assert.HasCount(1, template.FunctionParameters, "Redo should restore the FunctionParameter.");
+            });
+        }
+
+        [TestMethod]
+        public void TestFunctionParameterDescriptionUndoRedo()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestFunctionParameterDescriptionUndoRedo), (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var ms = mSession.ModelSystem;
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, "MyFT",
+                    out FunctionTemplate template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionParameter(user, template, "P1",
+                    typeof(XTMF2.IModule), Rectangle.Hidden, out var fp, out error), error?.Message);
+
+                Assert.IsTrue(mSession.SetFunctionParameterDescription(user, fp, "Input description", out error), error?.Message);
+                Assert.AreEqual("Input description", fp.Description);
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.AreEqual(string.Empty, fp.Description);
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.AreEqual("Input description", fp.Description);
             });
         }
 
@@ -240,6 +302,56 @@ namespace XTMF2.UnitTests.Editing
                 // The link should now exist in the template's InternalModules.
                 Assert.IsTrue(template.InternalModules.Links.Any(l => l is SingleLink sl && sl.Destination == fp),
                     "InternalModules should contain a link whose destination is the FunctionParameter.");
+            });
+        }
+
+        [TestMethod]
+        public void TestConvertBasicParameterToFunctionParameter()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestConvertBasicParameterToFunctionParameter), (user, pSession, mSession) =>
+            {
+                CommandError error = null;
+                var ms = mSession.ModelSystem;
+                Assert.IsTrue(mSession.AddFunctionTemplate(user, ms.GlobalBoundary, "FT",
+                    out FunctionTemplate template, out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, template.InternalModules, "Value",
+                    typeof(XTMF2.RuntimeModules.BasicParameter<string>), Rectangle.Hidden,
+                    out var basicParameter, out error), error?.Message);
+                Assert.IsTrue(mSession.SetParameterValue(user, basicParameter!, "Hello", out error), error?.Message);
+                Assert.IsTrue(mSession.AddNode(user, template.InternalModules, "Inner",
+                    typeof(XTMF2.UnitTests.Modules.SimpleParameterModule), new Rectangle(10f, 20f, 120f, 50f),
+                    out var innerNode, out error), error?.Message);
+                var hook = innerNode!.Hooks.First(h => h.Name == "Real Function");
+                Assert.IsTrue(mSession.AddLink(user, innerNode, hook, basicParameter!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(mSession.AddFunctionInstance(user, ms.GlobalBoundary, template, "FI",
+                    Rectangle.Hidden, out var instance, out error), error?.Message);
+
+                Assert.IsTrue(mSession.ConvertBasicParameterToFunctionParameter(user, basicParameter!,
+                    out var parameter, out error), error?.Message);
+
+                Assert.IsNotNull(parameter);
+                Assert.AreEqual("Real Function", parameter!.Name);
+                Assert.AreEqual(typeof(XTMF2.RuntimeModules.BasicParameter<string>), parameter!.Type);
+                Assert.AreEqual(160f, parameter.Location.X);
+                Assert.AreEqual(20f, parameter.Location.Y);
+                Assert.AreEqual(250f, parameter.Location.Width);
+                Assert.AreEqual(50f, parameter.Location.Height);
+                Assert.DoesNotContain(basicParameter!, template.InternalModules.Modules);
+                Assert.IsTrue(template.InternalModules.Links.Any(link =>
+                    link is SingleLink single && single.Destination == parameter));
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
+                var provider = ms.GlobalBoundary.Modules[0];
+                Assert.AreEqual("Hello", provider.ParameterValue!.Representation);
+                Assert.IsTrue(ms.GlobalBoundary.Links.Any(link =>
+                    link.Origin == instance && link.DestinationCount == 1
+                    && link is SingleLink single
+                    && single.Destination == provider));
+
+                Assert.IsTrue(mSession.Undo(user, out error), error?.Message);
+                Assert.Contains(basicParameter!, template.InternalModules.Modules);
+                Assert.DoesNotContain(parameter, template.FunctionParameters);
+                Assert.IsEmpty(ms.GlobalBoundary.Modules);
             });
         }
 

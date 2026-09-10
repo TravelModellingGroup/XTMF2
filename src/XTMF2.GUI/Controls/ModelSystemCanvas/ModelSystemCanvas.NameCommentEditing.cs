@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -27,6 +28,71 @@ namespace XTMF2.GUI.Controls;
 
 partial class ModelSystemCanvas
 {
+    private void BeginDescriptionEdit(FunctionParameterViewModel parameter)
+    {
+        CommitParamEdit();
+        CommitCommentEdit();
+        CommitCommentHeaderEdit();
+        CommitNameEdit();
+
+        _editingDescriptionParameter = parameter;
+        _descriptionEditorX = parameter.X;
+        _descriptionEditorY = parameter.Y + FtHeaderHeight + FpTypeRowHeight;
+        _descriptionEditorW = parameter.Width;
+        _descriptionEditorH = FpDescriptionRowHeight;
+        _descriptionEditor.Text = parameter.Description;
+        _descriptionEditor.IsVisible = true;
+        InvalidateMeasure();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _descriptionEditor.Focus();
+            _descriptionEditor.SelectAll();
+        }, Avalonia.Threading.DispatcherPriority.Render);
+    }
+
+    private void CommitDescriptionEdit()
+    {
+        if (_editingDescriptionParameter is null) return;
+        var parameter = _editingDescriptionParameter;
+        _editingDescriptionParameter = null;
+        _descriptionEditor.IsVisible = false;
+        var description = (_descriptionEditor.Text ?? string.Empty).Trim();
+        if (!parameter.SetDescription(description, out var error))
+        {
+            _vm?.ShowToast(error?.Message ?? "Failed to set description.", isError: true, durationMs: 4000);
+        }
+        InvalidateAndMeasure();
+    }
+
+    private void CancelDescriptionEdit()
+    {
+        _editingDescriptionParameter = null;
+        _descriptionEditor.IsVisible = false;
+        InvalidateAndMeasure();
+        Focus();
+    }
+
+    private void OnDescriptionEditorKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Enter or Key.Return)
+        {
+            CommitDescriptionEdit();
+            Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CancelDescriptionEdit();
+            e.Handled = true;
+        }
+    }
+
+    private void OnDescriptionEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (!_inDragOrResize && _editingDescriptionParameter is not null)
+            CommitDescriptionEdit();
+    }
+
     // ── Inline name editor helpers ───────────────────────────────────────────
 
     /// <summary>Opens the single-line name editor over <paramref name="element"/> (node or start).</summary>
@@ -111,6 +177,7 @@ partial class ModelSystemCanvas
                 FunctionTemplateViewModel ftvm => ftvm.SetName(name, out renameError),
                 FunctionInstanceViewModel fivm => fivm.SetName(name, out renameError),
                 FunctionParameterViewModel fpvmC => fpvmC.SetName(name, out renameError),
+                GhostNodeViewModel gvm => gvm.SetName(name, out renameError),
                 _ => true,
             };
             if (!ok)

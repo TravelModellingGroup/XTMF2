@@ -386,7 +386,7 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         /// <param name="boundary">The boundary to get links to.</param>
         /// <returns>A list of all links going to the given boundary.</returns>
-        internal List<Link> GetLinksGoingToBoundary(Boundary boundary)
+        public List<Link> GetLinksGoingToBoundary(Boundary boundary)
         {
             var ret = new List<Link>();
             var stack = new Stack<Boundary>();
@@ -653,6 +653,54 @@ namespace XTMF2.ModelSystemConstruct
             if (boundary is null) return null;
             return boundary._functionTemplates.FirstOrDefault(ft =>
                 ft.Name.Equals(templateName, StringComparison.Ordinal));
+        }
+
+        /// <summary>
+        /// Resolves a <see cref="FunctionTemplate"/> by its stable identifier within
+        /// <paramref name="root"/> and its child boundaries.
+        /// </summary>
+        public static FunctionTemplate? ResolveTemplate(Boundary root, Guid id)
+        {
+            var template = root._functionTemplates.FirstOrDefault(ft => ft.Id == id);
+            if (template is not null) return template;
+
+            foreach (var child in root._boundaries)
+            {
+                template = ResolveTemplate(child, id);
+                if (template is not null) return template;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Resolves a function template by name across the model-system boundary tree.
+        /// Returns <see langword="null"/> unless exactly one matching template exists.
+        /// </summary>
+        public static FunctionTemplate? ResolveUniqueTemplateByName(Boundary root, string name)
+        {
+            FunctionTemplate? match = null;
+            int matchCount = 0;
+            foreach (var template in EnumerateFunctionTemplates(root))
+            {
+                if (!template.Name.Equals(name, StringComparison.Ordinal)) continue;
+                match = template;
+                if (++matchCount > 1) return null;
+            }
+
+            return match;
+        }
+
+        private static IEnumerable<FunctionTemplate> EnumerateFunctionTemplates(Boundary boundary)
+        {
+            foreach (var template in boundary._functionTemplates)
+                yield return template;
+
+            foreach (var child in boundary._boundaries)
+            {
+                foreach (var template in EnumerateFunctionTemplates(child))
+                    yield return template;
+            }
         }
 
         private static Boundary? ResolveBoundary(Boundary root, string path)
@@ -964,7 +1012,7 @@ namespace XTMF2.ModelSystemConstruct
         internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
             ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
-            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId)>? deferredLinks = null)
+            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId, double? BreakpointX)>? deferredLinks = null)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
             {

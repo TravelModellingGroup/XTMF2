@@ -19,6 +19,7 @@
 using System;
 using System.Text.Json;
 using System.Collections.Generic;
+using System.Linq;
 using System.Diagnostics.CodeAnalysis;
 using XTMF2.Editing;
 
@@ -45,6 +46,7 @@ namespace XTMF2.ModelSystemConstruct
         // ── JSON property names ───────────────────────────────────────────
         internal const string FpIdProperty    = "Id";
         internal const string FpNameProperty  = "Name";
+        internal const string FpDescriptionProperty = "Description";
         internal const string FpTypeProperty  = "Type";
         internal const string FpIndexProperty = "Index";
         internal const string FpXProperty     = "X";
@@ -56,6 +58,22 @@ namespace XTMF2.ModelSystemConstruct
         /// The <see cref="FunctionTemplate"/> that owns this parameter.
         /// </summary>
         public FunctionTemplate Template { get; }
+
+        /// <summary>
+        /// Whether at least one internal destination of this parameter requires a module.
+        /// </summary>
+        public bool IsRequired
+            => Template.InternalModules.Links.Any(link => link switch
+            {
+                SingleLink single => ReferenceEquals(single.Destination, this)
+                    && IsRequiredCardinality(single.OriginHook.Cardinality),
+                MultiLink multi => multi.Destinations.Contains(this)
+                    && IsRequiredCardinality(multi.OriginHook.Cardinality),
+                _ => false
+            });
+
+        private static bool IsRequiredCardinality(HookCardinality cardinality)
+            => cardinality is HookCardinality.Single or HookCardinality.AtLeastOne;
 
         /// <summary>
         /// Constructs a new <see cref="FunctionParameter"/> owned by <paramref name="template"/>.
@@ -87,6 +105,7 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteStartObject();
             writer.WriteString(FpIdProperty, Id);
             writer.WriteString(FpNameProperty, Name);
+            writer.WriteString(FpDescriptionProperty, Description);
             writer.WriteNumber(FpTypeProperty, typeDictionary[Type!]);
             writer.WriteNumber(FpIndexProperty, myIndex);
             writer.WriteNumber(FpXProperty, Location.X);
@@ -117,6 +136,7 @@ namespace XTMF2.ModelSystemConstruct
             }
 
             string? name     = null;
+            string description = string.Empty;
             Type?   type     = null;
             int     fpIndex  = -1;
             Guid    id       = Guid.Empty;
@@ -135,6 +155,11 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     reader.Read();
                     name = reader.GetString();
+                }
+                else if (reader.ValueTextEquals(FpDescriptionProperty))
+                {
+                    reader.Read();
+                    description = reader.GetString() ?? string.Empty;
                 }
                 else if (reader.ValueTextEquals(FpTypeProperty))
                 {
@@ -175,6 +200,7 @@ namespace XTMF2.ModelSystemConstruct
             }
 
             parameter = new FunctionParameter(name, type, owningTemplate, new Rectangle(x, y, w, h), id);
+            parameter.SetDescription(description);
             nodeDictionary[fpIndex] = parameter;
             error = null;
             return true;

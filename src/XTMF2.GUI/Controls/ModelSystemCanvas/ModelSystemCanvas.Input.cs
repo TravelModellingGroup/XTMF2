@@ -54,7 +54,13 @@ partial class ModelSystemCanvas
         }
         else if (e.Key is Key.Delete or Key.Back)
         {
-            if (_multiSelection.Count > 1)
+            if (_multiLinkSelection.Count > 1)
+            {
+                var linksToDelete = _multiLinkSelection.ToList();
+                ClearMultiSelection();
+                _ = _vm.DeleteMultipleLinksAsync(linksToDelete);
+            }
+            else if (_multiSelection.Count > 1)
             {
                 // Snapshot the set before clearing so deletions don't mutate it mid-loop.
                 var toDelete = _multiSelection.ToList();
@@ -93,6 +99,11 @@ partial class ModelSystemCanvas
                 _vm.OpenFunctionTemplateOfInstance(fivm);
                 e.Handled = true;
             }
+            else if (_vm.SelectedElement is GhostNodeViewModel ghost)
+            {
+                _vm.NavigateToElementById(ghost.ReferencedNode.Id);
+                e.Handled = true;
+            }
         }
         else if (e.Key == Key.F2 && _vm?.SelectedElement is not null)
         {
@@ -119,6 +130,11 @@ partial class ModelSystemCanvas
             {
                 Focus();
             }, Avalonia.Threading.DispatcherPriority.Render);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Left && (e.KeyModifiers & KeyModifiers.Alt) != 0)
+        {
+            NavigateBackToPreviousBoundary();
             e.Handled = true;
         }
         else if (e.Key == Key.C && (e.KeyModifiers & KeyModifiers.Control) != 0)
@@ -219,6 +235,14 @@ partial class ModelSystemCanvas
         }
         else if (e.Key == Key.Tab && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0)
         {
+            if ((e.KeyModifiers & KeyModifiers.Shift) == 0
+                && _vm?.SelectedElement is FunctionParameterViewModel functionParameter)
+            {
+                BeginDescriptionEdit(functionParameter);
+                e.Handled = true;
+                return;
+            }
+
             // For comment blocks, Tab toggles header/body editing.
             bool commentTabContext = _editingCommentBlock is not null
                                   || _editingCommentHeaderBlock is not null
@@ -247,6 +271,8 @@ partial class ModelSystemCanvas
 
     private bool IsParameterOrCommentEditing =>
         _editingParamNode is not null
+        || _editingDescriptionParameter is not null
+        || _editingNameElement is not null
         || _editingCommentBlock is not null
         || _editingCommentHeaderBlock is not null;
 
@@ -358,14 +384,7 @@ partial class ModelSystemCanvas
             if (_editingNameElement is not null) CommitNameEdit();
         }
 
-        ClearMultiSelection();
-        _resizing = resizeHit;
-        _resizeStartPos = mpos;
-        _resizeStartW = ElementRenderWidth(resizeHit);
-        _resizeStartH = ElementRenderHeight(resizeHit);
-        _vm.SelectElementCommand.Execute(resizeHit);
-        e.Pointer.Capture(this);
-        Focus();
+        BeginResize(resizeHit, mpos, e);
         e.Handled = true;
     }
 
@@ -377,7 +396,7 @@ partial class ModelSystemCanvas
         // ── Mouse back button (XButton1): navigate to parent scope ───────────────
         if (e.GetCurrentPoint(this).Properties.PointerUpdateKind == PointerUpdateKind.XButton1Pressed)
         {
-            _vm.NavigateUpCommand.Execute(null);
+            NavigateBackToPreviousBoundary();
             e.Handled = true;
             return;
         }
@@ -393,6 +412,34 @@ partial class ModelSystemCanvas
 
         // Right-click begins a link-creation drag.  Ctrl+left-click is reserved for multi-selection.
         bool isLinkDrag = isRightButton;
+
+        if (!isLinkDrag && !isCtrlLeft && point.Properties.IsLeftButtonPressed)
+        {
+            var breakpointHit = HitTestOrthogonalBreakpoint(mpos);
+            if (breakpointHit is not null)
+            {
+                bool preserveMultiLinkSelection = _multiLinkSelection.Count > 1
+                    && _multiLinkSelection.Contains(breakpointHit.UnderlyingLink);
+                var selectedLinks = preserveMultiLinkSelection
+                    ? _multiLinkSelection.ToList()
+                    : new List<XTMF2.Link> { breakpointHit.UnderlyingLink };
+                if (!preserveMultiLinkSelection)
+                    ClearMultiSelection();
+                _vm.SelectLinkCommand.Execute(breakpointHit);
+                if (preserveMultiLinkSelection)
+                    RefreshMultiLinkSelectionVisuals();
+                _orthogonalBreakpointDragLink = breakpointHit;
+                _orthogonalBreakpointDragLinks.Clear();
+                foreach (var selectedLink in selectedLinks.Where(link => link.IsOrthogonal))
+                    _orthogonalBreakpointDragLinks.Add(selectedLink);
+                _orthogonalBreakpointPreviewX = ComputeOrthogonalPath(breakpointHit,
+                    GetSharedSpineX(breakpointHit))[1].X;
+                e.Pointer.Capture(this);
+                Focus();
+                e.Handled = true;
+                return;
+            }
+        }
 
         // ── Resize handle press (left button) ────────────────────────────
         if (!isLinkDrag && !isCtrlLeft)
@@ -414,14 +461,7 @@ partial class ModelSystemCanvas
                     if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
                     if (_editingNameElement is not null) CommitNameEdit();
                 }
-                ClearMultiSelection();
-                _resizing = resizeHit;
-                _resizeStartPos = mpos;
-                _resizeStartW = ElementRenderWidth(resizeHit);
-                _resizeStartH = ElementRenderHeight(resizeHit);
-                _vm.SelectElementCommand.Execute(resizeHit);
-                e.Pointer.Capture(this);
-                Focus();
+                BeginResize(resizeHit, mpos, e);
                 e.Handled = true;
                 return;
             }
@@ -442,12 +482,46 @@ partial class ModelSystemCanvas
                 e.Handled = true;
                 return;
             }
+
+            var fiMinimizeHit = HitTestFiMinimizeButton(mpos);
+            if (fiMinimizeHit is { } fiInline)
+            {
+                if (_editingParamNode is not null) CommitParamEdit();
+                if (_editingCommentBlock is not null) CommitCommentEdit();
+                if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
+                if (_editingNameElement is not null) CommitNameEdit();
+                fiInline.Parameter.InlineBasicParameter();
+                InvalidateAndMeasure();
+                e.Handled = true;
+                return;
+            }
         }
 
         // ── Inline parameter value edit (single left click on param row) ──
         if (!isLinkDrag && !isCtrlLeft)
         {
+            var functionParameterHit = HitTest(mpos, testComments: false) as FunctionParameterViewModel;
+            if (functionParameterHit is not null
+                && mpos.Y >= functionParameterHit.Y + FtHeaderHeight + FpTypeRowHeight
+                && mpos.Y < functionParameterHit.Y + FtHeaderHeight + FpTypeRowHeight + FpDescriptionRowHeight)
+            {
+                _vm.SelectElementCommand.Execute(functionParameterHit);
+                BeginDescriptionEdit(functionParameterHit);
+                e.Handled = true;
+                return;
+            }
+
             // Regular parameter value row (node is visible on canvas).
+            var ghostParamRowHit = HitTestGhostParamValueRow(mpos);
+            if (ghostParamRowHit is { } ghostParam)
+            {
+                _vm.SelectElementCommand.Execute(ghostParam.ghost);
+                BeginParamEdit(ghostParam.node, ghostParam.ghost.X,
+                    ghostParam.ghost.Y + NodeHeaderHeight, ghostParam.ghost.Width,
+                    ghostParam.ghost, SelfParameterNavigationKey);
+                e.Handled = true;
+                return;
+            }
             var paramRowHit = HitTestParamValueRow(mpos);
             if (paramRowHit is not null)
             {
@@ -506,6 +580,15 @@ partial class ModelSystemCanvas
                 e.Handled = true;
                 return;
             }
+
+            var fiToggleHit = HitTestFunctionInstanceHookToggleIcon(mpos);
+            if (fiToggleHit is not null)
+            {
+                fiToggleHit.ShowHooks = !fiToggleHit.ShowHooks;
+                InvalidateAndMeasure();
+                e.Handled = true;
+                return;
+            }
         }
 
         // ── Double-click on a hook dot: create + auto-link a new node ─────
@@ -529,11 +612,45 @@ partial class ModelSystemCanvas
                 return;
             }
 
+            var fiInlinedParamHit = HitTestInlinedParamRow(mpos);
+            if (fiInlinedParamHit is { } fiInlinedParam
+                && fiInlinedParam.originEl is FunctionInstanceViewModel)
+            {
+                _vm.SelectElementCommand.Execute(fiInlinedParam.originEl);
+                BeginParamEdit(fiInlinedParam.paramNode,
+                    fiInlinedParam.rowX, fiInlinedParam.rowY, fiInlinedParam.rowW,
+                    fiInlinedParam.originEl, fiInlinedParam.hook);
+                e.Handled = true;
+                return;
+            }
+
+            var fiHookHit = HitTestFiHook(mpos);
+            if (fiHookHit is { } fih)
+            {
+                var anchor = _fiHookAnchors.TryGetValue((fih.fi, fih.hook), out var hookAnchor)
+                    ? hookAnchor
+                    : new Point(fih.fi.X + fih.fi.Width,
+                        fih.fi.Y + FtHeaderHeight + FtHookRowHeight / 2.0);
+                _ = _vm.CreateNodeFromHookAsync(fih.fi, fih.hook,
+                    anchor.X, anchor.Y);
+                e.Handled = true;
+                return;
+            }
+
             // ── Double-click on a parameter node: open the value editor ────
             var nodeHit = HitTest(mpos, testComments: false) as NodeViewModel;
             if (nodeHit is { IsParameterNode: true })
             {
                 _ = _vm.EditParameterNodeAsync(nodeHit);
+                e.Handled = true;
+                return;
+            }
+            if (HitTest(mpos, testComments: false) is GhostNodeViewModel ghostHit)
+            {
+                if (ghostHit.IsParameterNode)
+                    _ = _vm.EditParameterNodeAsync(new NodeViewModel(ghostHit.ReferencedNode, _vm.Session, _vm.User));
+                else
+                    BeginNameEdit(ghostHit);
                 e.Handled = true;
                 return;
             }
@@ -629,8 +746,9 @@ partial class ModelSystemCanvas
 
             // Begin link-creation drag from a node, start, or function instance (via its FunctionParameterHooks).
             // Comment blocks are not valid link origins.
-            if (hit is NodeViewModel or StartViewModel
-                || (hit is FunctionInstanceViewModel hitFi && hitFi.FunctionParameters.Count > 0))
+            if (hit is NodeViewModel or StartViewModel or GhostNodeViewModel
+                || (hit is FunctionInstanceViewModel hitFi && hitFi.FunctionParameters.Count > 0)
+                || hit is FunctionParameterViewModel)
             {
                 _linkOrigin = hit;
                 _linkCurrentPos = mpos;
@@ -736,6 +854,12 @@ partial class ModelSystemCanvas
             _dragging = hit;
             _dragOffset = new Point(mpos.X - hit.X, mpos.Y - hit.Y);
             _groupDragLastPos = mpos;
+            _groupDragStartX.Clear();
+            if (_multiSelection.Count > 1 && _multiSelection.Contains(hit))
+            {
+                foreach (var selected in _multiSelection)
+                    _groupDragStartX[selected] = selected.X;
+            }
             e.Pointer.Capture(this);
         }
         else
@@ -772,6 +896,15 @@ partial class ModelSystemCanvas
         var pos = e.GetCurrentPoint(this).Position;  // screen coords
         var mpos = ToCanvasPos(pos);                  // model coords
         _lastCanvasMousePos = mpos;
+        UpdateHookTooltip(mpos);
+
+        if (_orthogonalBreakpointDragLink is not null)
+        {
+            _orthogonalBreakpointPreviewX = mpos.X;
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
 
         // Capture ScrollViewer-local position now for auto-scroll use later.
         var svForScroll = GetScrollViewer();
@@ -793,7 +926,10 @@ partial class ModelSystemCanvas
             _inDragOrResize = true;
             var dw = mpos.X - _resizeStartPos.X;
             var dh = mpos.Y - _resizeStartPos.Y;
-            _resizing.ResizeToPreview(_resizeStartW + dw, _resizeStartH + dh);
+            double previewWidth = _resizeStartW + dw;
+            double previewHeight = _resizeStartH + dh;
+            foreach (var element in _resizingElements)
+                element.ResizeToPreview(previewWidth, previewHeight);
             // Only sync inline editor if it's the element being resized
             if (ReferenceEquals(_resizing, _editingParamNode) || 
                 ReferenceEquals(_resizing, _editingNameElement) || 
@@ -836,9 +972,30 @@ partial class ModelSystemCanvas
 
         // ── Cursor feedback while idle ────────────────────────────────────
         if (_dragging is null)
-            Cursor = HitTestResizeHandle(mpos) is not null
-                ? new Cursor(StandardCursorType.SizeAll)
-                : Cursor.Default;
+        {
+            if (HitTestOrthogonalBreakpoint(mpos) is not null)
+            {
+                Cursor = new Cursor(StandardCursorType.SizeWestEast);
+            }
+            else if (HitTestResizeHandle(mpos) is not null)
+            {
+                Cursor = new Cursor(StandardCursorType.SizeAll);
+            }
+            else
+            {
+                var functionParameterHit = HitTest(mpos, testComments: false) as FunctionParameterViewModel;
+                bool overDescription = functionParameterHit is not null
+                    && mpos.Y >= functionParameterHit.Y + FtHeaderHeight + FpTypeRowHeight
+                    && mpos.Y < functionParameterHit.Y + FtHeaderHeight
+                        + FpTypeRowHeight + FpDescriptionRowHeight;
+                bool overEditableParameter = overDescription
+                    || HitTestParamValueRow(mpos) is not null
+                    || HitTestInlinedParamRow(mpos) is not null;
+                Cursor = overEditableParameter
+                    ? new Cursor(StandardCursorType.Ibeam)
+                    : Cursor.Default;
+            }
+        }
 
         if (_dragging is null) return;
 
@@ -856,6 +1013,7 @@ partial class ModelSystemCanvas
                 double ny = Math.Max(0, el.Y + dy);
                 el.MoveToPreview(nx, ny);
             }
+            UpdateMovingOrthogonalBreakpointPreviews();
         }
         else
         {
@@ -886,6 +1044,35 @@ partial class ModelSystemCanvas
         InvalidateAndMeasure();
         TryAutoScrollForDrag(svPos);
         e.Handled = true;
+    }
+
+    private void UpdateHookTooltip(Point canvasPosition)
+    {
+        var hookDescription = HitTestHook(canvasPosition)?.hook.Description;
+        if (hookDescription is null)
+        {
+            var functionInstanceHook = HitTestFiHook(canvasPosition)?.hook;
+            hookDescription = functionInstanceHook?.Parameter.Description;
+        }
+        if (hookDescription is null)
+        {
+            var ghostHook = HitTestGhostOriginHook(canvasPosition)?.hook;
+            hookDescription = ghostHook is FunctionParameterHook functionParameterHook
+                ? functionParameterHook.Parameter.Description
+                : ghostHook?.Description;
+        }
+        if (hookDescription is null)
+            hookDescription = HitTestFunctionTemplateHook(canvasPosition)?.Description;
+        if (hookDescription is null)
+        {
+            hookDescription = HitTest(canvasPosition, testComments: false) switch
+            {
+                FunctionTemplateViewModel functionTemplate => functionTemplate.Description,
+                FunctionInstanceViewModel functionInstance => functionInstance.UnderlyingInstance.Template.Description,
+                _ => null
+            };
+        }
+        ToolTip.SetTip(this, string.IsNullOrWhiteSpace(hookDescription) ? null : hookDescription);
     }
 
     /// <summary>
@@ -935,12 +1122,27 @@ partial class ModelSystemCanvas
             {
                 var releasePos = ToCanvasPos(e.GetCurrentPoint(this).Position);
                 var destHit = HitTest(releasePos, testComments: false);
-                if (destHit is NodeViewModel destNode && !ReferenceEquals(destNode, origin))
+                if (origin is FunctionParameterViewModel originFp
+                    && destHit is NodeViewModel targetNode
+                    && !ReferenceEquals(targetNode, origin))
+                    _ = _vm.CreateLinkAsync(originFp, targetNode);
+                else if (origin is FunctionParameterViewModel originGhostFp
+                         && destHit is GhostNodeViewModel targetGhostForFp)
+                    _ = _vm.CreateLinkAsync(originGhostFp,
+                        targetGhostForFp.ReferencedNodeViewModel);
+                else if (destHit is NodeViewModel destNode && !ReferenceEquals(destNode, origin))
                     _ = _vm.CreateLinkAsync(origin, destNode);
                 else if (destHit is FunctionInstanceViewModel destFi && !ReferenceEquals(destFi, origin))
                     _ = _vm.CreateLinkAsync(origin, destFi);
                 else if (destHit is FunctionParameterViewModel destFp && !ReferenceEquals(destFp, origin))
                     _ = _vm.CreateLinkAsync(origin, destFp);
+                else if (destHit is GhostNodeViewModel destGhost)
+                {
+                    if (destGhost.ReferencedFunctionInstanceViewModel is { } ghostFi)
+                        _ = _vm.CreateLinkAsync(origin, ghostFi);
+                    else
+                        _ = _vm.CreateLinkAsync(origin, destGhost.ReferencedNodeViewModel);
+                }
             }
 
             InvalidateVisual();
@@ -976,6 +1178,29 @@ partial class ModelSystemCanvas
                         firstHit ??= node;
                     }
                 }
+
+                if (firstHit is null)
+                {
+                    LinkViewModel? firstLinkHit = null;
+                    foreach (var link in _vm.Links)
+                    {
+                        if (link.IsDestinationBranchHidden && !_vm.RenderAllHiddenDestinationLinks)
+                            continue;
+                        if (link.Destination is null
+                            || link.Destination is NodeViewModel destinationNode && destinationNode.IsInlined)
+                            continue;
+                        if (!LinkIntersectsSelectionRect(link, finalRect))
+                            continue;
+
+                        _multiLinkSelection.Add(link.UnderlyingLink);
+                        link.IsSelected = true;
+                        firstLinkHit ??= link;
+                    }
+
+                    if (firstLinkHit is not null)
+                        _vm.SelectLinkCommand.Execute(firstLinkHit);
+                }
+
                 foreach (var comment in _vm.CommentBlocks)
                 {
                     var cr = new Rect(comment.X, comment.Y, comment.Width, comment.Height);
@@ -1018,7 +1243,7 @@ partial class ModelSystemCanvas
                 }
                 foreach (var fi in _vm.FunctionInstances)
                 {
-                    var fir = new Rect(fi.X, fi.Y, fi.Width, fi.Height);
+                    var fir = new Rect(fi.X, fi.Y, fi.Width, FunctionInstanceRenderHeight(fi));
                     if (finalRect.Intersects(fir))
                     {
                         _multiSelection.Add(fi);
@@ -1047,9 +1272,26 @@ partial class ModelSystemCanvas
         }
 
         // ── Left-button release: end element resize ──────────────────────
+        if (_orthogonalBreakpointDragLink is not null)
+        {
+            var links = _orthogonalBreakpointDragLinks.ToList();
+            var breakpointX = _orthogonalBreakpointPreviewX;
+            _orthogonalBreakpointDragLink = null;
+            _orthogonalBreakpointDragLinks.Clear();
+            e.Pointer.Capture(null);
+            if (_vm is not null)
+                _vm.Session.SetLinksOrthogonalBreakpointX(_vm.User, links, breakpointX, out _);
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
+        // ── Left-button release: end element resize ──────────────────────
         if (_resizing is not null)
         {
-            _resizing.CommitResize();
+            foreach (var element in _resizingElements)
+                element.CommitResize();
+            _resizingElements.Clear();
             _resizing = null;
             e.Pointer.Capture(null);
             InvalidateAndMeasure();
@@ -1070,6 +1312,7 @@ partial class ModelSystemCanvas
             var commentMoves = new List<(CommentBlock, Rectangle)>();
             var templateMoves = new List<(FunctionTemplate, Rectangle)>();
             var instanceMoves = new List<(FunctionInstance, Rectangle)>();
+            var movedElements = new Dictionary<ICanvasElement, (double OldX, double NewX)>();
 
             foreach (var el in _multiSelection)
             {
@@ -1077,43 +1320,64 @@ partial class ModelSystemCanvas
                 {
                     var r = gnvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         nodeMoves.Add((gnvm.UnderlyingNode, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is StartViewModel gsvm)
                 {
                     var r = gsvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         nodeMoves.Add((gsvm.UnderlyingStart, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is CommentBlockViewModel gcvm)
                 {
                     var r = gcvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         commentMoves.Add((gcvm.UnderlyingBlock, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is GhostNodeViewModel ggvm)
                 {
                     var r = ggvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         nodeMoves.Add((ggvm.UnderlyingGhostNode, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is FunctionTemplateViewModel gftvm)
                 {
                     var r = gftvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         templateMoves.Add((gftvm.UnderlyingTemplate, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is FunctionInstanceViewModel gfivm)
                 {
                     var r = gfivm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         instanceMoves.Add((gfivm.UnderlyingInstance, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
                 else if (el is FunctionParameterViewModel gfpvm)
                 {
                     var r = gfpvm.TakePendingMoveRect();
                     if (r.HasValue)
+                    {
                         nodeMoves.Add((gfpvm.UnderlyingParameter, r.Value));
+                        movedElements[el] = (el.X, r.Value.X);
+                    }
                 }
             }
 
@@ -1124,6 +1388,8 @@ partial class ModelSystemCanvas
                 templateMoves.Count > 0 ? templateMoves : null,
                 instanceMoves.Count > 0 ? instanceMoves : null,
                 out _);
+
+            UpdateMovedOrthogonalBreakpoints(movedElements);
         }
         else
         {
@@ -1135,16 +1401,224 @@ partial class ModelSystemCanvas
         e.Handled = true;
     }
 
+    private void UpdateMovedOrthogonalBreakpoints(
+        IReadOnlyDictionary<ICanvasElement, (double OldX, double NewX)> movedElements)
+    {
+        if (_vm is null) return;
+
+        var breakpointUpdates = new Dictionary<XTMF2.Link, double>(ReferenceEqualityComparer.Instance);
+        foreach (var linkGroup in _vm.Links
+            .Where(link => link.UnderlyingLink.IsOrthogonal
+                && link.UnderlyingLink.OrthogonalBreakpointX.HasValue)
+            .GroupBy(link => link.UnderlyingLink))
+        {
+            var branches = linkGroup.ToList();
+            var origin = branches[0].Origin;
+            if (!TryGetMovedEndpoint(origin, movedElements, out var originMove)) continue;
+
+            var destinations = branches
+                .Select(link => link.Destination)
+                .OfType<ICanvasElement>()
+                .Distinct()
+                .ToList();
+            if (destinations.Count == 0
+                || !destinations.All(destination => TryGetMovedEndpoint(destination, movedElements, out _))) continue;
+
+            breakpointUpdates[linkGroup.Key] = linkGroup.Key.OrthogonalBreakpointX!.Value
+                + originMove.NewX - originMove.OldX;
+        }
+
+        foreach (var updateGroup in breakpointUpdates.GroupBy(update => update.Value))
+            _vm.Session.SetLinksOrthogonalBreakpointX(
+                _vm.User, updateGroup.Select(update => update.Key), updateGroup.Key, out _);
+    }
+
+    private void UpdateMovingOrthogonalBreakpointPreviews()
+    {
+        _movingOrthogonalBreakpointPreviews.Clear();
+        if (_vm is null) return;
+
+        foreach (var linkGroup in _vm.Links
+            .Where(link => link.UnderlyingLink.IsOrthogonal
+                && link.UnderlyingLink.OrthogonalBreakpointX.HasValue)
+            .GroupBy(link => link.UnderlyingLink))
+        {
+            var branches = linkGroup.ToList();
+            var origin = branches[0].Origin;
+            if (!TryGetMovingEndpointDelta(origin, out var originDelta)) continue;
+
+            var destinations = branches
+                .Select(link => link.Destination)
+                .OfType<ICanvasElement>()
+                .Distinct()
+                .ToList();
+            if (destinations.Count == 0
+                || !destinations.All(destination => TryGetMovingEndpointDelta(destination, out _))) continue;
+
+            _movingOrthogonalBreakpointPreviews[linkGroup.Key] =
+                linkGroup.Key.OrthogonalBreakpointX!.Value + originDelta;
+        }
+    }
+
+    private bool TryGetMovedEndpoint(
+        ICanvasElement endpoint,
+        IReadOnlyDictionary<ICanvasElement, (double OldX, double NewX)> movedElements,
+        out (double OldX, double NewX) movement)
+    {
+        if (movedElements.TryGetValue(endpoint, out movement))
+            return true;
+
+        var referencedNode = GetReferencedNode(endpoint);
+        if (referencedNode is null)
+        {
+            movement = default;
+            return false;
+        }
+
+        foreach (var moved in movedElements)
+        {
+            if (moved.Key is GhostNodeViewModel ghost
+                && ReferenceEquals(ghost.ReferencedNode, referencedNode))
+            {
+                movement = moved.Value;
+                return true;
+            }
+        }
+
+        movement = default;
+        return false;
+    }
+
+    private bool TryGetMovingEndpointDelta(ICanvasElement endpoint, out double delta)
+    {
+        if (_groupDragStartX.TryGetValue(endpoint, out var startX))
+        {
+            delta = endpoint.X - startX;
+            return true;
+        }
+
+        var referencedNode = GetReferencedNode(endpoint);
+        if (referencedNode is not null)
+        {
+            foreach (var selected in _groupDragStartX)
+            {
+                if (selected.Key is GhostNodeViewModel ghost
+                    && ReferenceEquals(ghost.ReferencedNode, referencedNode))
+                {
+                    delta = ghost.X - selected.Value;
+                    return true;
+                }
+            }
+        }
+
+        delta = 0;
+        return false;
+    }
+
+    private static Node? GetReferencedNode(ICanvasElement element)
+        => element switch
+        {
+            GhostNodeViewModel ghost => ghost.ReferencedNode,
+            NodeViewModel node => node.UnderlyingNode,
+            FunctionInstanceViewModel instance => instance.UnderlyingInstance,
+            FunctionParameterViewModel parameter => parameter.UnderlyingParameter,
+            _ => null
+        };
+
+    private bool LinkIntersectsSelectionRect(LinkViewModel link, Rect selectionRect)
+    {
+        if (link.UnderlyingLink.IsOrthogonal)
+        {
+            _orthogonalSpineX.TryGetValue(link.UnderlyingLink, out var spineX);
+            var points = ComputeOrthogonalPath(link, spineX > 0 ? spineX : (double?)null);
+            for (int i = 1; i < points.Length; i++)
+            {
+                if (SegmentIntersectsRect(points[i - 1], points[i], selectionRect))
+                    return true;
+            }
+            return false;
+        }
+
+        var (p1, c1, c2, p2) = ComputeSCurve(link);
+        const int SelectionSamples = 16;
+        var previous = p1;
+        for (int sample = 1; sample <= SelectionSamples; sample++)
+        {
+            var next = SampleCubicBezier(p1, c1, c2, p2, sample / (double)SelectionSamples);
+            if (SegmentIntersectsRect(previous, next, selectionRect))
+                return true;
+            previous = next;
+        }
+        return false;
+    }
+
+    private static bool SegmentIntersectsRect(Point start, Point end, Rect rect)
+    {
+        if (rect.Contains(start) || rect.Contains(end))
+            return true;
+
+        var topLeft = new Point(rect.Left, rect.Top);
+        var topRight = new Point(rect.Right, rect.Top);
+        var bottomRight = new Point(rect.Right, rect.Bottom);
+        var bottomLeft = new Point(rect.Left, rect.Bottom);
+        return SegmentsIntersect(start, end, topLeft, topRight)
+            || SegmentsIntersect(start, end, topRight, bottomRight)
+            || SegmentsIntersect(start, end, bottomRight, bottomLeft)
+            || SegmentsIntersect(start, end, bottomLeft, topLeft);
+    }
+
+    private static bool SegmentsIntersect(Point firstStart, Point firstEnd, Point secondStart, Point secondEnd)
+    {
+        static double Cross(Point a, Point b, Point c) =>
+            (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+
+        var first = Cross(firstStart, firstEnd, secondStart);
+        var second = Cross(firstStart, firstEnd, secondEnd);
+        var third = Cross(secondStart, secondEnd, firstStart);
+        var fourth = Cross(secondStart, secondEnd, firstEnd);
+        const double Epsilon = 0.000001;
+
+        return ((first > Epsilon && second < -Epsilon) || (first < -Epsilon && second > Epsilon))
+            && ((third > Epsilon && fourth < -Epsilon) || (third < -Epsilon && fourth > Epsilon));
+    }
+
+    private void BeginResize(ICanvasElement resizeHit, Point mpos, PointerPressedEventArgs e)
+    {
+        bool resizeSelection = _multiSelection.Count > 1 && _multiSelection.Contains(resizeHit);
+        if (!resizeSelection)
+            ClearMultiSelection();
+
+        _resizingElements.Clear();
+        if (resizeSelection)
+            _resizingElements.AddRange(_multiSelection);
+        else
+            _resizingElements.Add(resizeHit);
+
+        _resizing = resizeHit;
+        _resizeStartPos = mpos;
+        _resizeStartW = ElementRenderWidth(resizeHit);
+        _resizeStartH = ElementRenderHeight(resizeHit);
+        _vm!.SelectElementCommand.Execute(resizeHit);
+        e.Pointer.Capture(this);
+        Focus();
+    }
+
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);
         EndPointerInteraction(e.Pointer);
+        InvalidateVisual();
     }
 
     private void EndPointerInteraction(IPointer? pointer)
     {
+        _orthogonalBreakpointDragLink = null;
+        _orthogonalBreakpointDragLinks.Clear();
+        _movingOrthogonalBreakpointPreviews.Clear();
+        _groupDragStartX.Clear();
         _dragging = null;
         _resizing = null;
+        _resizingElements.Clear();
         _panning = false;
         _rightClickPending = false;
         _selRectStart = null;
@@ -1153,6 +1627,19 @@ partial class ModelSystemCanvas
         _linkCurrentPos = default;
         _autoScrollTimer.Stop();
         pointer?.Capture(null);
+    }
+
+    public void NavigateBackToPreviousBoundary()
+    {
+        if (_vm is null || _boundaryNavigationHistory.Count == 0)
+            return;
+
+        var previous = _boundaryNavigationHistory[^1];
+        _boundaryNavigationHistory.RemoveAt(_boundaryNavigationHistory.Count - 1);
+        UpdateCanNavigateBack();
+        _pendingBoundaryNavigationOffset = previous.Offset;
+        _restoringBoundaryNavigation = true;
+        _vm.SwitchToBoundary(previous.Boundary);
     }
 
     // ── Keyboard navigation (arrow keys) ──────────────────────────────────

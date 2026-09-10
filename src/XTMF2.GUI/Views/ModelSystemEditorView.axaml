@@ -186,6 +186,20 @@
                         </Style>
                     </StackPanel.Styles>
 
+                    <!-- Back: return to the previous boundary and canvas position -->
+                        <Button Click="OnNavigateBackClick"
+                            IsEnabled="{Binding #TheCanvas.CanNavigateBack}"
+                            ToolTip.Tip="Return to the previous boundary and restore its canvas position (Alt+Left or Mouse Back)">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="20" Height="20">
+                                <Path Data="M 17,10 H 5 M 10,4 L 4,10 L 10,16"
+                                      Stroke="{DynamicResource NeonIconPrimary}"
+                                      StrokeThickness="1.8" StrokeLineCap="Round"
+                                      StrokeJoin="Round" Fill="Transparent"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
                     <!-- Step Out: exit function template or ascend to parent boundary -->
                     <Button Command="{Binding NavigateUpCommand}"
                             ToolTip.Tip="Step out to parent scope  (Alt+↑ / Mouse Back)">

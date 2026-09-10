@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -82,6 +83,7 @@ public partial class BoundaryPickerDialog : Window, INotifyPropertyChanged
 
     // The boundary used as parent when no list item is selected.
     private readonly Boundary _defaultParent;
+    private readonly Func<Boundary, Task<bool>>? _deleteBoundary;
 
     // ── Construction ──────────────────────────────────────────────────────
     public BoundaryPickerDialog()
@@ -95,11 +97,13 @@ public partial class BoundaryPickerDialog : Window, INotifyPropertyChanged
     /// <param name="currentBoundary">Boundary currently being viewed (pre-selected in the list).</param>
     public BoundaryPickerDialog(
         IReadOnlyList<(Boundary Boundary, int Depth)> allBoundaries,
-        Boundary currentBoundary)
+        Boundary currentBoundary,
+        Func<Boundary, Task<bool>>? deleteBoundary = null)
     {
         InitializeComponent();
         DataContext    = this;
         _defaultParent = currentBoundary;
+        _deleteBoundary = deleteBoundary;
         AddHandler(KeyDownEvent, (_, ke) =>
         {
             if (ke.Key != Key.Escape) return;
@@ -133,6 +137,7 @@ public partial class BoundaryPickerDialog : Window, INotifyPropertyChanged
 
         SearchBox.TextChanged += SearchBox_TextChanged;
         SearchBox.KeyDown     += SearchBox_KeyDown;
+        NewBoundaryNameBox.KeyDown += NewBoundaryNameBox_KeyDown;
     }
 
     // ── Search ────────────────────────────────────────────────────────────
@@ -196,6 +201,52 @@ public partial class BoundaryPickerDialog : Window, INotifyPropertyChanged
         NewBoundaryName    = name;
         Close();
     }
+
+    private void NewBoundaryNameBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+
+        CreateBoundary_Click(sender, new RoutedEventArgs());
+        e.Handled = true;
+    }
+
+    private async void DeleteBoundary_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_deleteBoundary is null || sender is not Button { DataContext: BoundaryBrowseItem item })
+            return;
+
+        var boundary = item.Boundary;
+        if (boundary.Parent is null)
+            return;
+
+        if (HasContent(boundary))
+        {
+            var confirm = new ConfirmDialog(
+                "Delete Boundary",
+                $"The boundary '{boundary.Name}' is not empty. Are you sure you want to delete it?");
+            await confirm.ShowDialog(this);
+            if (!confirm.Result)
+                return;
+        }
+
+        if (!await _deleteBoundary(boundary))
+            return;
+
+        BrowseItems.Remove(item);
+        _allBrowseItems.Remove(item);
+        if (ReferenceEquals(SelectedBrowseItem, item))
+            SelectedBrowseItem = BrowseItems.Count > 0 ? BrowseItems[0] : null;
+    }
+
+    private static bool HasContent(Boundary boundary) =>
+        boundary.Modules.Count > 0 ||
+        boundary.Starts.Count > 0 ||
+        boundary.Boundaries.Count > 0 ||
+        boundary.Links.Count > 0 ||
+        boundary.GhostNodes.Count > 0 ||
+        boundary.CommentBlocks.Count > 0 ||
+        boundary.FunctionTemplates.Count > 0 ||
+        boundary.FunctionInstances.Count > 0;
 
     private void Cancel_Click(object? sender, RoutedEventArgs e)
     {

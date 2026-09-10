@@ -50,6 +50,22 @@ namespace XTMF2.GUI.Controls;
 /// </summary>
 public sealed partial class ModelSystemCanvas : Control
 {
+    public static readonly DirectProperty<ModelSystemCanvas, bool> CanNavigateBackProperty =
+        AvaloniaProperty.RegisterDirect<ModelSystemCanvas, bool>(nameof(CanNavigateBack), o => o.CanNavigateBack);
+
+    private bool _canNavigateBack;
+    public bool CanNavigateBack => _canNavigateBack;
+
+    private void UpdateCanNavigateBack()
+    {
+        var canNavigateBack = _boundaryNavigationHistory.Count > 0;
+        if (_canNavigateBack == canNavigateBack)
+            return;
+
+        var previousValue = _canNavigateBack;
+        _canNavigateBack = canNavigateBack;
+        RaisePropertyChanged(CanNavigateBackProperty, previousValue, canNavigateBack);
+    }
 
     // ── ViewModel ─────────────────────────────────────────────────────────
     private ModelSystemEditorViewModel? _vm;
@@ -79,6 +95,12 @@ public sealed partial class ModelSystemCanvas : Control
     /// Rebuilt each frame by <see cref="BuildHookAnchorCache"/>.
     /// </summary>
     private readonly HashSet<(NodeViewModel, NodeHook)> _leftGoingHooks = new();
+
+    /// <summary>
+    /// Per-frame set of ghost hook rows whose links depart leftward. Rebuilt by
+    /// <see cref="BuildHookAnchorCache"/> so ghost hook dots match regular nodes.
+    /// </summary>
+    private readonly HashSet<(GhostNodeViewModel, NodeHook)> _leftGoingGhostHooks = new();
 
     /// <summary>
     /// Per-frame set of (fi, hook) pairs for FunctionInstance hooks where at least one
@@ -159,6 +181,11 @@ public sealed partial class ModelSystemCanvas : Control
     /// <summary>Model-space position and size of the name editor overlay.</summary>
     private double _nameEditorX, _nameEditorY, _nameEditorW, _nameEditorH;
 
+    // ── Inline FunctionParameter description editor ─────────────────────
+    private readonly TextBox _descriptionEditor;
+    private FunctionParameterViewModel? _editingDescriptionParameter;
+    private double _descriptionEditorX, _descriptionEditorY, _descriptionEditorW, _descriptionEditorH;
+
     // ── Inlined BasicParameter caches (rebuilt by BuildHookAnchorCache) ───
     /// <summary>
     /// Maps (origin node, hook) → the BasicParameter node that is currently inlined
@@ -172,6 +199,13 @@ public sealed partial class ModelSystemCanvas : Control
     /// </summary>
     private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), NodeViewModel>
         _fiHookInlinedParam = new();
+    /// <summary>
+    /// Maps eligible visible FI hooks to the parameter node that can be collapsed into them.
+    /// </summary>
+    private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), NodeViewModel>
+        _fiHookCanInlineParam = new();
+    private readonly Dictionary<FunctionInstanceViewModel, IReadOnlyList<FunctionParameterHook>>
+        _fiVisibleHooks = new();
     /// <summary>
     /// Stores the maximum scroll offset (model-space px) for each comment block, computed during
     /// render. Used by the wheel handler to clamp scroll without recomputing the text layout.
@@ -316,6 +350,24 @@ public sealed partial class ModelSystemCanvas : Control
         LogicalChildren.Add(_nameEditor);
         VisualChildren.Add(_nameEditor);
 
+        _descriptionEditor = new TextBox
+        {
+            FontFamily = new Avalonia.Media.FontFamily("Segoe UI, Arial, sans-serif"),
+            FontSize = HookFontSize,
+            Foreground = Brushes.White,
+            Background = new SolidColorBrush(Color.FromRgb(0x18, 0x28, 0x38)),
+            BorderThickness = new Thickness(1),
+            BorderBrush = FpBorderBrush,
+            Padding = new Thickness(4, 0, 4, 0),
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            IsVisible = false,
+        };
+        _descriptionEditor.AddHandler(InputElement.KeyDownEvent, OnDescriptionEditorKeyDown,
+                                      Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        _descriptionEditor.LostFocus += OnDescriptionEditorLostFocus;
+        LogicalChildren.Add(_descriptionEditor);
+        VisualChildren.Add(_descriptionEditor);
+
         // ── Zoom control (pinned to viewport bottom-right) ────────────────
         _zoomTextBox = new TextBox
         {
@@ -395,6 +447,16 @@ public sealed partial class ModelSystemCanvas : Control
     // ── Drag state ────────────────────────────────────────────────────────
     /// <summary>The element currently being dragged (left-button), or <c>null</c> when idle.</summary>
     private ICanvasElement? _dragging;
+    private LinkViewModel? _orthogonalBreakpointDragLink;
+    private readonly HashSet<XTMF2.Link> _orthogonalBreakpointDragLinks = new(ReferenceEqualityComparer.Instance);
+    private double _orthogonalBreakpointPreviewX;
+    private readonly Dictionary<XTMF2.Link, double> _movingOrthogonalBreakpointPreviews =
+        new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ICanvasElement, double> _groupDragStartX = new();
+    private readonly List<(Boundary Boundary, Vector Offset)> _boundaryNavigationHistory = new();
+    private Boundary? _navigationBoundary;
+    private bool _restoringBoundaryNavigation;
+    private Vector? _pendingBoundaryNavigationOffset;
     /// <summary>Offset from the element's top-left corner to the pointer position at drag start.</summary>
     private Point _dragOffset;
     /// <summary>
@@ -429,6 +491,8 @@ public sealed partial class ModelSystemCanvas : Control
     // ── Resize drag state ─────────────────────────────────────────────────
     /// <summary>The canvas element being resized, or <c>null</c> when not resizing.</summary>
     private ICanvasElement? _resizing;
+    /// <summary>Elements receiving the active resize preview and commit.</summary>
+    private readonly List<ICanvasElement> _resizingElements = new();
     /// <summary><c>true</c> while a drag or resize operation is in progress (used to prevent inline editor close on focus loss).</summary>
     private bool _inDragOrResize;
     /// <summary>Pointer position at the start of the resize drag.</summary>
@@ -492,6 +556,11 @@ public sealed partial class ModelSystemCanvas : Control
         base.OnDataContextChanged(e);
         Detach();
         _vm = DataContext as ModelSystemEditorViewModel;
+        _boundaryNavigationHistory.Clear();
+        UpdateCanNavigateBack();
+        _navigationBoundary = _vm?.CurrentBoundary;
+        _pendingBoundaryNavigationOffset = null;
+        _restoringBoundaryNavigation = false;
         Attach();
         InvalidateAndMeasure();
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -570,6 +639,11 @@ public sealed partial class ModelSystemCanvas : Control
         _vm.FunctionInstances.CollectionChanged -= OnCollectionChanged;
         _vm.FunctionParameterVMs.CollectionChanged -= OnCollectionChanged;
         _vm.PropertyChanged -= OnViewModelPropertyChanged;
+        _boundaryNavigationHistory.Clear();
+        UpdateCanNavigateBack();
+        _navigationBoundary = null;
+        _pendingBoundaryNavigationOffset = null;
+        _restoringBoundaryNavigation = false;
 
         foreach (var n in _vm.Nodes) ((INotifyPropertyChanged)n).PropertyChanged -= OnElementPropertyChanged;
         foreach (var s in _vm.Starts) ((INotifyPropertyChanged)s).PropertyChanged -= OnElementPropertyChanged;
@@ -682,7 +756,8 @@ public sealed partial class ModelSystemCanvas : Control
         if (e.PropertyName is nameof(ModelSystemEditorViewModel.SelectedElement)
                            or nameof(ModelSystemEditorViewModel.SelectedLink)
                            or nameof(ModelSystemEditorViewModel.ShowAllHooks)
-                           or nameof(ModelSystemEditorViewModel.RenderAllHiddenDestinationLinks))
+                           or nameof(ModelSystemEditorViewModel.RenderAllHiddenDestinationLinks)
+                           or nameof(ModelSystemEditorViewModel.ShowGhostCorrespondenceLines))
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateAndMeasure);
         }
@@ -691,9 +766,26 @@ public sealed partial class ModelSystemCanvas : Control
         // Clearing it forces Ctrl+V to use the viewport-centre fallback in the new boundary.
         if (e.PropertyName is nameof(ModelSystemEditorViewModel.CurrentBoundary))
         {
+            if (_navigationBoundary is not null && !_restoringBoundaryNavigation)
+            {
+                var offset = GetScrollViewer()?.Offset ?? default;
+                _boundaryNavigationHistory.Add((_navigationBoundary, offset));
+                if (_boundaryNavigationHistory.Count > 50)
+                    _boundaryNavigationHistory.RemoveAt(0);
+                UpdateCanNavigateBack();
+            }
+            _navigationBoundary = _vm!.CurrentBoundary;
             _lastCanvasMousePos = null;
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
+                if (_pendingBoundaryNavigationOffset is { } restoreOffset)
+                {
+                    var scrollViewer = GetScrollViewer();
+                    if (scrollViewer is not null)
+                        scrollViewer.Offset = restoreOffset;
+                    _pendingBoundaryNavigationOffset = null;
+                    _restoringBoundaryNavigation = false;
+                }
                 if (!IsKeyboardFocusWithin)
                     Focus();
                 EnsureCanvasFocusAndSelection();
@@ -800,6 +892,10 @@ public sealed partial class ModelSystemCanvas : Control
         {
             _nameEditor.Measure(new Size(_nameEditorW * _scale, _nameEditorH * _scale));
         }
+        if (_editingDescriptionParameter is not null)
+        {
+            _descriptionEditor.Measure(new Size(_descriptionEditorW * _scale, _descriptionEditorH * _scale));
+        }
         // Measure the zoom bar so ArrangeOverride can use its desired size.
         _zoomBar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         return new Size(maxX * _scale, maxY * _scale);
@@ -888,6 +984,15 @@ public sealed partial class ModelSystemCanvas : Control
                 _nameEditorW * _scale,
                 _nameEditorH * _scale));
         }
+            if (_editingDescriptionParameter is not null)
+            {
+                _descriptionEditor.FontSize = HookFontSize * _scale;
+                _descriptionEditor.Arrange(new Rect(
+                _descriptionEditorX * _scale,
+                _descriptionEditorY * _scale,
+                _descriptionEditorW * _scale,
+                _descriptionEditorH * _scale));
+            }
         // Pin the zoom control to the bottom-right of the visible viewport.
         var sv = GetScrollViewer();
         var zw = _zoomBar.DesiredSize.Width;

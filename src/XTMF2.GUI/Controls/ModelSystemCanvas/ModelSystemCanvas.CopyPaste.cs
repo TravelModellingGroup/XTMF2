@@ -162,6 +162,20 @@ partial class ModelSystemCanvas
                     case FunctionInstanceViewModel fi:
                         nodeToDtoIndex[fi.UnderlyingInstance] = dtos.Count;
                         _vm.TryExportFunctionTemplateSnapshot(fi.UnderlyingInstance.Template, out var instanceTemplateSnapshot);
+                        List<InlinedChildDto>? embeddedParameters = null;
+                        foreach (var kvp in _fiHookInlinedParam)
+                        {
+                            if (!ReferenceEquals(kvp.Key.Item1, fi)) continue;
+                            embeddedParameters ??= [];
+                            var childDto = BuildNodeDto(kvp.Value) with
+                            {
+                                X = kvp.Value.UnderlyingNode.Location.X,
+                                Y = kvp.Value.UnderlyingNode.Location.Y,
+                                W = (float)NodeRenderWidth(kvp.Value),
+                                H = (float)NodeRenderHeight(kvp.Value),
+                            };
+                            embeddedParameters.Add(new InlinedChildDto(kvp.Key.Item2.Name, childDto));
+                        }
                         dto = new CanvasElementDto(
                             CanvasElementKind.FunctionInstance,
                             (float)fi.X, (float)fi.Y,
@@ -169,6 +183,7 @@ partial class ModelSystemCanvas
                             Name: fi.Name,
                             TemplateName: fi.TemplateName,
                             EmbeddedTemplateSnapshot: instanceTemplateSnapshot,
+                            InlinedChildren: embeddedParameters,
                             OriginalId: fi.UnderlyingInstance.Id);
                         break;
 

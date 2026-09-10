@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -492,6 +493,52 @@ namespace XTMF2.UnitTests.Editing
 
                 Assert.AreSame(templateA, instanceA.Template);
                 Assert.AreSame(templateB, instanceB.Template);
+            });
+        }
+
+        [TestMethod]
+        public void TestFunctionInstancePreservesFunctionParameterHookIdentity()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestFunctionInstancePreservesFunctionParameterHookIdentity),
+                (user, pSession, mSession) =>
+                {
+                    var template = AddTemplate(user, mSession);
+                    var instance = AddInstance(user, mSession, template);
+                    Assert.IsTrue(mSession.AddFunctionParameter(user, template, "First", typeof(IModule),
+                        Rectangle.Hidden, out var first, out var error), error?.Message);
+                    var firstHook = instance.Hooks[0];
+
+                    Assert.IsTrue(mSession.AddFunctionParameter(user, template, "Second", typeof(IModule),
+                        Rectangle.Hidden, out _, out error), error?.Message);
+
+                    Assert.AreSame(first, ((FunctionParameterHook)instance.Hooks[0]).Parameter);
+                    Assert.AreSame(firstHook, instance.Hooks[0]);
+                });
+        }
+
+        [TestMethod]
+        public void TestFunctionTemplateResolvesById()
+        {
+            TestHelper.RunInModelSystemContext("TestFunctionTemplateResolvesById", (user, pSession, mSession) =>
+            {
+                var template = AddTemplate(user, mSession, "TemplateA");
+
+                Assert.AreSame(template,
+                    Boundary.ResolveTemplate(mSession.ModelSystem.GlobalBoundary, template.Id));
+            });
+        }
+
+        [TestMethod]
+        public void TestFunctionTemplateResolvesByUniqueNameAcrossModelSystem()
+        {
+            TestHelper.RunInModelSystemContext("TestFunctionTemplateResolvesByUniqueNameAcrossModelSystem", (user, pSession, mSession) =>
+            {
+                var template = AddTemplate(user, mSession, "TemplateA");
+
+                Assert.AreSame(template, Boundary.ResolveUniqueTemplateByName(
+                    mSession.ModelSystem.GlobalBoundary, "TemplateA"));
+                Assert.IsNull(Boundary.ResolveUniqueTemplateByName(
+                    mSession.ModelSystem.GlobalBoundary, "MissingTemplate"));
             });
         }
 

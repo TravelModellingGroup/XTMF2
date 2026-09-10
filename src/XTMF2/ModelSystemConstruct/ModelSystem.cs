@@ -464,7 +464,7 @@ namespace XTMF2
                 var nodes = new Dictionary<int, Node>();
                 List<(Node toAssignTo, string parameterExpression)> scriptedParameters = new();
                 List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes = new();
-                List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId)> deferredLinks = new();
+                List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId, double? BreakpointX)> deferredLinks = new();
                 while (reader.Read())
                 {
                     if (reader.TokenType == JsonTokenType.PropertyName)
@@ -541,7 +541,7 @@ namespace XTMF2
                 }
                 // Resolve deferred links (e.g. inner FunctionTemplate links whose destination
                 // FunctionInstance was not yet in the node dictionary when the link was first parsed).
-                foreach (var (containedIn, origin, hookName, destIdx, disabled, orthogonal, destHidden, linkId) in deferredLinks)
+                foreach (var (containedIn, origin, hookName, destIdx, disabled, orthogonal, destHidden, linkId, breakpointX) in deferredLinks)
                 {
                     if (!nodes.TryGetValue(destIdx, out var destination))
                     {
@@ -556,7 +556,7 @@ namespace XTMF2
                         capturedWarnings?.Add($"Deferred link from '{origin.Name}': hook '{hookName}' not found.");
                         continue;
                     }
-                    containedIn.AddLink(new SingleLink(origin, hook, destination, disabled, orthogonal, destHidden, linkId), out _);
+                    containedIn.AddLink(new SingleLink(origin, hook, destination, disabled, orthogonal, destHidden, linkId, breakpointX), out _);
                 }
                 // Expose the node index mapping for the optimisation loop.
                 modelSystem.NodesByLoadIndex = new System.Collections.ObjectModel.ReadOnlyDictionary<int, Node>(nodes);
@@ -701,7 +701,7 @@ namespace XTMF2
             List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
             ref Utf8JsonReader reader, Boundary global, [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
-            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId)>? deferredLinks = null)
+            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId, double? BreakpointX)>? deferredLinks = null)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
             {

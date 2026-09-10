@@ -242,7 +242,7 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (_session.RenameModelSystem(_user, SelectedModelSystem, newName, out var error))
+        if (RenameSelectedModelSystem(newName, out var error))
         {
             // Success
         }
@@ -251,6 +251,22 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
             // Show error
             await ShowError(Strings.ModelSystems_RenameFailedTitle, error?.Message ?? Strings.ModelSystems_UnknownError);
         }
+    }
+
+    internal bool RenameSelectedModelSystem(string newName, out CommandError? error)
+    {
+        if (SelectedModelSystem is null)
+        {
+            error = new CommandError("No model system is selected.");
+            return false;
+        }
+
+        if (!_session.RenameModelSystem(_user, SelectedModelSystem, newName, out error))
+        {
+            return false;
+        }
+
+        return _session.Save(out error);
     }
 
     private bool CanRenameModelSystem() => SelectedModelSystem != null;

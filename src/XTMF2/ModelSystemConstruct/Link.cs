@@ -41,6 +41,7 @@ namespace XTMF2
         protected const string IdProperty = "Id";
         protected const string DisabledProperty = "Disabled";
         protected const string OrthogonalProperty = "Orthogonal";
+        protected const string BreakpointXProperty = "BreakpointX";
         protected const string HiddenDestinationsProperty = "HiddenDestinations";
 
         public Node Origin { get; }
@@ -58,6 +59,8 @@ namespace XTMF2
         /// routing instead of the default smooth cubic Bézier curve.
         /// </summary>
         public bool IsOrthogonal { get; private set; }
+
+        public double? OrthogonalBreakpointX { get; protected set; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -101,7 +104,7 @@ namespace XTMF2
         /// <param name="containedIn">The boundary that owns this link; required when <paramref name="deferredLinks"/> is provided.</param>
         /// <returns>True if the link was created successfully or if there was only a warning; otherwise, false.</returns>
         internal static bool Create(ModuleRepository modules, Dictionary<int, Node> nodes, ref Utf8JsonReader reader, out Link? link, [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
-            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId)>? deferredLinks = null,
+            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId, double? BreakpointX)>? deferredLinks = null,
             Boundary? containedIn = null)
         {
             if(reader.TokenType != JsonTokenType.StartObject)
@@ -117,6 +120,7 @@ namespace XTMF2
             bool singleHiddenDestination = false;
             List<bool>? hiddenDestinations = null;
             Guid linkId = Guid.Empty;
+            double? breakpointX = null;
             int listIndex = 0;
             // read in the values
             while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -188,6 +192,15 @@ namespace XTMF2
                     reader.Read();
                     orthogonal = reader.GetBoolean();
                 }
+                else if (reader.ValueTextEquals(BreakpointXProperty))
+                {
+                    reader.Read();
+                    if (reader.TokenType != JsonTokenType.Number)
+                    {
+                        return FailWith(out link, out error, "Invalid breakpoint-x payload when loading a link.");
+                    }
+                    breakpointX = reader.GetDouble();
+                }
                 else if(reader.ValueTextEquals(HiddenDestinationsProperty))
                 {
                     if (!reader.Read())
@@ -242,7 +255,7 @@ namespace XTMF2
                     && origin is not null && hookName is not null && rawDestinationIndex >= 0)
                 {
                     deferredLinks.Add((containedIn, origin, hookName, rawDestinationIndex,
-                        disabled, orthogonal, singleHiddenDestination, linkId));
+                        disabled, orthogonal, singleHiddenDestination, linkId, breakpointX));
                     link = null;
                     return true;
                 }
@@ -266,12 +279,12 @@ namespace XTMF2
                 {
                     singleHiddenDestination = hiddenDestinations[0];
                 }
-                link = new SingleLink(origin, hook, destination, disabled, orthogonal, singleHiddenDestination, linkId);
+                link = new SingleLink(origin, hook, destination, disabled, orthogonal, singleHiddenDestination, linkId, breakpointX);
             }
             else
             {
                 // destinations can not be null if destination was.
-                link = new MultiLink(origin, hook, destinations!, disabled, orthogonal, hiddenDestinations, linkId);
+                link = new MultiLink(origin, hook, destinations!, disabled, orthogonal, hiddenDestinations, linkId, breakpointX);
             }
             return true;
         }
@@ -290,6 +303,14 @@ namespace XTMF2
         {
             IsOrthogonal = orthogonal;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsOrthogonal)));
+            error = null;
+            return true;
+        }
+
+        internal bool SetOrthogonalBreakpointX(double? breakpointX, [NotNullWhen(false)] out CommandError? error)
+        {
+            OrthogonalBreakpointX = breakpointX;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OrthogonalBreakpointX)));
             error = null;
             return true;
         }

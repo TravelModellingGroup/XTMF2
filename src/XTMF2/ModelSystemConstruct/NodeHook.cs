@@ -31,6 +31,8 @@ namespace XTMF2
     {
         public virtual string Name { get; protected set; }
 
+        public string Description { get; }
+
         public HookCardinality Cardinality { get; private set; }
 
         public int Index { get; private set; }
@@ -55,14 +57,21 @@ namespace XTMF2
         /// </summary>
         public bool PassesExecution { get; private set; }
 
-        public NodeHook(string name, HookCardinality cardinality, int index, bool isParameter, string? defaultValue, bool passesExecution = false)
+        public NodeHook(string name, HookCardinality cardinality, int index, bool isParameter, string? defaultValue,
+            bool passesExecution = false, string? description = null)
         {
             Name = name;
+            Description = description ?? string.Empty;
             Cardinality = cardinality;
             Index = index;
             IsParameter = isParameter;
             DefaultValue = defaultValue;
             PassesExecution = passesExecution;
+        }
+
+        internal void SetCardinality(HookCardinality cardinality)
+        {
+            Cardinality = cardinality;
         }
 
         protected static HookCardinality GetCardinality(Type type, bool required)
@@ -121,8 +130,9 @@ namespace XTMF2
     sealed class PropertyHook : NodeHook
     {
         readonly PropertyInfo Property;
-        public PropertyHook(string name, PropertyInfo property, bool required, int index, bool isParameter, string? defaultValue, bool passesExecution = false)
-            : base(name, GetCardinality(property, required), index, isParameter, defaultValue, passesExecution)
+        public PropertyHook(string name, PropertyInfo property, bool required, int index, bool isParameter, string? defaultValue,
+            bool passesExecution = false, string? description = null)
+            : base(name, GetCardinality(property, required), index, isParameter, defaultValue, passesExecution, description)
         {
             Property = property;
         }
@@ -206,8 +216,9 @@ namespace XTMF2
     sealed class FieldHook : NodeHook
     {
         readonly FieldInfo Field;
-        public FieldHook(string name, FieldInfo field, bool required, int index, bool isParameter, string? defaultValue, bool passesExecution = false)
-            : base(name, GetCardinality(field, required), index, isParameter, defaultValue, passesExecution)
+        public FieldHook(string name, FieldInfo field, bool required, int index, bool isParameter, string? defaultValue,
+            bool passesExecution = false, string? description = null)
+            : base(name, GetCardinality(field, required), index, isParameter, defaultValue, passesExecution, description)
         {
             Field = field;
         }
@@ -302,9 +313,17 @@ namespace XTMF2
         /// <param name="parameter">The function-parameter slot this hook exposes.</param>
         /// <param name="index">Ordinal position among the template's FunctionParameters.</param>
         public FunctionParameterHook(ModelSystemConstruct.FunctionParameter parameter, int index)
-            : base(parameter.Name, HookCardinality.SingleOptional, index, isParameter: false, defaultValue: null, passesExecution: false)
+            : base(parameter.Name, GetCardinality(parameter), index, isParameter: false, defaultValue: null, passesExecution: false)
         {
             Parameter = parameter;
+        }
+
+        private static HookCardinality GetCardinality(ModelSystemConstruct.FunctionParameter parameter)
+            => parameter.IsRequired ? HookCardinality.Single : HookCardinality.SingleOptional;
+
+        internal void RefreshCardinality()
+        {
+            SetCardinality(GetCardinality(Parameter));
         }
 
         /// <summary>

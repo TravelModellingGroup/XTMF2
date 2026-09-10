@@ -74,6 +74,9 @@ public sealed class BoundaryBrowseItem
     /// <summary>Left margin that indents the row by <see cref="Depth"/> levels.</summary>
     public Avalonia.Thickness ItemMargin => new(Depth * 16, 0, 0, 0);
 
+    /// <summary>Whether this boundary has a parent and can be removed.</summary>
+    public bool CanDelete => Boundary.Parent is not null;
+
     public BoundaryBrowseItem(Boundary boundary, int depth)
     {
         Boundary = boundary;

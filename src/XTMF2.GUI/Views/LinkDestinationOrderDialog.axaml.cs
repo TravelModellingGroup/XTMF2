@@ -119,6 +119,7 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
     private DestinationOrderItem? _dragSource;
     private bool                  _isDragging;
     private Point                 _dragStartPos;
+    private IReadOnlyList<DestinationOrderItem> _dragItems = [];
 
     // ── Design-time / XAMLC-required parameterless constructor ──────────
     public LinkDestinationOrderDialog() : this([]) { }
@@ -131,6 +132,17 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
     {
         InitializeComponent();
         DataContext = this;
+        // ListBoxItems handle bubbling pointer presses for selection before the
+        // ListBox can start a reorder gesture. Tunnel from the ListBox first so
+        // every row can establish drag state reliably.
+        DestListBox.AddHandler(InputElement.PointerPressedEvent, OnListPointerPressed,
+            RoutingStrategies.Tunnel);
+        DestListBox.AddHandler(InputElement.PointerMovedEvent, OnListPointerMoved,
+            RoutingStrategies.Tunnel);
+        DestListBox.AddHandler(InputElement.PointerReleasedEvent, OnListPointerReleased,
+            RoutingStrategies.Tunnel);
+        DestListBox.AddHandler(InputElement.PointerCaptureLostEvent, OnListPointerCaptureLost,
+            RoutingStrategies.Tunnel);
         AddHandler(KeyDownEvent, (_, ke) =>
         {
             if (ke.Key != Key.Escape) return;
@@ -153,29 +165,16 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
 
     private void MoveUp_Click(object? sender, RoutedEventArgs e)
     {
-        if (_selectedItem is null) return;
-        int idx = Items.IndexOf(_selectedItem);
-        if (idx <= 0) return;
-        var item = _selectedItem;
-        Items.Move(idx, idx - 1);
-        UpdateDisplayIndices();
-        // Re-assert selection explicitly — the collection-change event can clear it.
-        DestListBox.SelectedItem = item;
-        Notify(nameof(CanMoveUp));
-        Notify(nameof(CanMoveDown));
+        var selected = GetSelectedItems();
+        if (selected.Count == 0 || Items.IndexOf(selected[0]) <= 0) return;
+        MoveSelectedItems(-1, selected);
     }
 
     private void MoveDown_Click(object? sender, RoutedEventArgs e)
     {
-        if (_selectedItem is null) return;
-        int idx = Items.IndexOf(_selectedItem);
-        if (idx < 0 || idx >= Items.Count - 1) return;
-        var item = _selectedItem;
-        Items.Move(idx, idx + 1);
-        UpdateDisplayIndices();
-        DestListBox.SelectedItem = item;
-        Notify(nameof(CanMoveUp));
-        Notify(nameof(CanMoveDown));
+        var selected = GetSelectedItems();
+        if (selected.Count == 0 || Items.IndexOf(selected[^1]) >= Items.Count - 1) return;
+        MoveSelectedItems(1, selected);
     }
 
     private void Remove_Click(object? sender, RoutedEventArgs e)
@@ -210,7 +209,7 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
         Close();
     }
 
-    // ── Drag-to-reorder (pointer events wired in AXAML) ─────────────────
+    // ── Drag-to-reorder ─────────────────────────────────────────────────
 
     private void OnListPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -223,12 +222,10 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
         _dragSource   = item;
         _dragStartPos = pos;
         _isDragging   = false;
-
-        // Select the pressed row immediately.
-        SelectedItem = item;
-
-        e.Pointer.Capture(DestListBox);
-        e.Handled = true;
+        var selected = GetSelectedItems();
+        _dragItems = selected.Contains(item) && selected.Count > 1
+            ? selected
+            : [item];
     }
 
     private void OnListPointerMoved(object? sender, PointerEventArgs e)
@@ -244,23 +241,21 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
             var dy = pos.Y - _dragStartPos.Y;
             if (Math.Sqrt(dx * dx + dy * dy) < DragThreshold) return;
             _isDragging = true;
+            e.Pointer.Capture(DestListBox);
             DestListBox.Cursor = new Cursor(StandardCursorType.SizeNorthSouth);
         }
 
         // Find which row the pointer is currently over.
         var target = GetItemAtPoint(pos);
-        if (target is null || ReferenceEquals(target, _dragSource)) return;
+        if (target is null || _dragItems.Contains(target)) return;
 
-        int fromIdx = Items.IndexOf(_dragSource);
-        int toIdx   = Items.IndexOf(target);
-        if (fromIdx < 0 || toIdx < 0 || fromIdx == toIdx) return;
-
-        // Live-reorder: the drag source physically moves to wherever the pointer is.
-        Items.Move(fromIdx, toIdx);
-        UpdateDisplayIndices();
-        DestListBox.SelectedItem = _dragSource;
-        Notify(nameof(CanMoveUp));
-        Notify(nameof(CanMoveDown));
+        int targetIndex = Items.IndexOf(target);
+        int firstSelectedIndex = _dragItems.Min(Items.IndexOf);
+        int lastSelectedIndex = _dragItems.Max(Items.IndexOf);
+        if (targetIndex < firstSelectedIndex)
+            MoveSelectedItems(-1, _dragItems);
+        else if (targetIndex > lastSelectedIndex)
+            MoveSelectedItems(1, _dragItems);
 
         e.Handled = true;
     }
@@ -280,6 +275,7 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
         }
         _dragSource = null;
         _isDragging = false;
+        _dragItems = [];
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -312,6 +308,65 @@ public partial class LinkDestinationOrderDialog : Window, INotifyPropertyChanged
     {
         for (int i = 0; i < Items.Count; i++)
             Items[i].DisplayIndex = (i + 1).ToString();
+    }
+
+    private List<DestinationOrderItem> GetSelectedItems()
+    {
+        if (DestListBox.SelectedItems is not { } selectedItems)
+            return [];
+        return selectedItems
+            .OfType<DestinationOrderItem>()
+            .OrderBy(item => Items.IndexOf(item))
+            .ToList();
+    }
+
+    private void MoveSelectedItems(int direction, IReadOnlyList<DestinationOrderItem>? selectedItems = null)
+    {
+        var selected = selectedItems ?? GetSelectedItems();
+        if (selected.Count == 0) return;
+        var activeItem = _selectedItem is not null && selected.Contains(_selectedItem)
+            ? _selectedItem
+            : selected[0];
+
+        if (direction < 0)
+        {
+            if (Items.IndexOf(selected[0]) == 0) return;
+            foreach (var item in selected)
+                Items.Move(Items.IndexOf(item), Items.IndexOf(item) - 1);
+        }
+        else
+        {
+            if (Items.IndexOf(selected[^1]) == Items.Count - 1) return;
+            for (int i = selected.Count - 1; i >= 0; i--)
+            {
+                var item = selected[i];
+                Items.Move(Items.IndexOf(item), Items.IndexOf(item) + 1);
+            }
+        }
+
+        UpdateDisplayIndices();
+        RestoreSelection(selected, activeItem);
+        Notify(nameof(CanMoveUp));
+        Notify(nameof(CanMoveDown));
+    }
+
+    private void RestoreSelection(IReadOnlyList<DestinationOrderItem> selected,
+        DestinationOrderItem activeItem)
+    {
+        if (DestListBox.SelectedItems is { } selectedItems)
+        {
+            selectedItems.Clear();
+            foreach (var item in selected)
+                selectedItems.Add(item);
+        }
+        // Keep the button target locally; assigning the bound SelectedItem after
+        // restoring SelectedItems would collapse Avalonia's multi-selection.
+        _selectedItem = activeItem;
+        Notify(nameof(SelectedItem));
+        Notify(nameof(CanMoveUp));
+        Notify(nameof(CanMoveDown));
+        Notify(nameof(CanRemove));
+        DestListBox.Focus(NavigationMethod.Unspecified, KeyModifiers.None);
     }
 
     private void Notify(string prop)

@@ -793,14 +793,24 @@ namespace XTMF2.Editing
                     error = new CommandError("The user does not have access to this project.", true);
                     return false;
                 }
+                var owningTemplate = boundary.OwningFunctionTemplate;
+                var wasDescriptionComment = owningTemplate?.DescriptionComment == block;
                 if (boundary.RemoveCommentBlock(block, out error))
                 {
+                    if (wasDescriptionComment)
+                        owningTemplate!.SetDescriptionComment(null);
                     Buffer.AddUndo(new Command(() =>
                     {
-                        return (boundary.AddCommentBlock(block, out var e), e);
+                        var restored = boundary.AddCommentBlock(block, out var e);
+                        if (restored && wasDescriptionComment)
+                            owningTemplate!.SetDescriptionComment(block);
+                        return (restored, e);
                     }, () =>
                     {
-                        return (boundary.RemoveCommentBlock(block, out var e), e);
+                        var removed = boundary.RemoveCommentBlock(block, out var e);
+                        if (removed && wasDescriptionComment)
+                            owningTemplate!.SetDescriptionComment(null);
+                        return (removed, e);
                     }));
                     return true;
                 }
@@ -931,6 +941,16 @@ namespace XTMF2.Editing
                 if (!_session.HasAccess(user))
                 {
                     error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                var externalReferences = GetExternalFunctionInstancesOf(boundary);
+                if (externalReferences.Count > 0)
+                {
+                    var names = string.Join(", ", externalReferences.Select(fi => $"'{fi.Name}'"));
+                    error = new CommandError(
+                        $"Cannot remove boundary '{boundary.Name}' because it contains a " +
+                        $"FunctionTemplate referenced by the following function instance(s): {names}. " +
+                        "Remove those instances first.");
                     return false;
                 }
                 var linksGoingToRemovedBoundary = ModelSystem.GlobalBoundary.GetLinksGoingToBoundary(boundary);
@@ -1914,6 +1934,38 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>Sets a FunctionParameter description with undo support.</summary>
+        public bool SetFunctionParameterDescription(User user, FunctionParameter parameter, string description,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(parameter);
+            ArgumentNullException.ThrowIfNull(description);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var oldDescription = parameter.Description;
+                parameter.SetDescription(description);
+                Buffer.AddUndo(new Command(() =>
+                {
+                    parameter.SetDescription(oldDescription);
+                    return (true, (CommandError?)null);
+                }, () =>
+                {
+                    parameter.SetDescription(description);
+                    return (true, (CommandError?)null);
+                }));
+                error = null;
+                return true;
+            }
+        }
+
         /// <summary>
         /// Returns all nodes whose <see cref="ParameterExpression"/> is a
         /// <see cref="ScriptedParameter"/> that textually references <paramref name="oldName"/>
@@ -2240,6 +2292,36 @@ namespace XTMF2.Editing
                         result.Add(fi);
             }
             return result;
+        }
+
+        private List<FunctionInstance> GetExternalFunctionInstancesOf(Boundary boundary)
+        {
+            var templates = new HashSet<FunctionTemplate>();
+            var boundaries = new Stack<Boundary>();
+            boundaries.Push(boundary);
+            while (boundaries.Count > 0)
+            {
+                var current = boundaries.Pop();
+                foreach (var child in current.Boundaries)
+                    boundaries.Push(child);
+                foreach (var template in current.FunctionTemplates)
+                {
+                    templates.Add(template);
+                    boundaries.Push(template.InternalModules);
+                }
+            }
+
+            var externalInstances = new List<FunctionInstance>();
+            foreach (var template in templates)
+            {
+                foreach (var instance in GetAllFunctionInstancesOf(template))
+                {
+                    var containingBoundary = instance.ContainedWithin;
+                    if (containingBoundary != boundary && !boundary.Contains(containingBoundary))
+                        externalInstances.Add(instance);
+                }
+            }
+            return externalInstances;
         }
 
         private List<GhostNode> GetAllGhostNodesOf(Node realNode)
@@ -3501,6 +3583,146 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Sets the persisted orthogonal-routing breakpoint on a link and records the change in the undo buffer.
+        /// </summary>
+        public bool SetLinkOrthogonalBreakpointX(User user, Link link, double? breakpointX,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(link);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var previousBreakpointX = link.OrthogonalBreakpointX;
+                if (link.SetOrthogonalBreakpointX(breakpointX, out error))
+                {
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        return (link.SetOrthogonalBreakpointX(previousBreakpointX, out var undoError), undoError);
+                    }, () =>
+                    {
+                        return (link.SetOrthogonalBreakpointX(breakpointX, out var redoError), redoError);
+                    }));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>Sets the orthogonal-routing breakpoint on multiple links as one undoable action.</summary>
+        public bool SetLinksOrthogonalBreakpointX(User user, IEnumerable<Link> links, double? breakpointX,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(links);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var linksToChange = links.Where(l => l is not null)
+                    .Distinct()
+                    .Where(l => l.OrthogonalBreakpointX != breakpointX)
+                    .ToList();
+                if (linksToChange.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var previousBreakpoints = linksToChange
+                    .Select(linkToChange => (Link: linkToChange, BreakpointX: linkToChange.OrthogonalBreakpointX))
+                    .ToList();
+                var batch = new CommandBatch();
+                foreach (var linkToChange in linksToChange)
+                {
+                    if (!linkToChange.SetOrthogonalBreakpointX(breakpointX, out error))
+                    {
+                        foreach (var (changedLink, previousBreakpointX) in previousBreakpoints)
+                            _ = changedLink.SetOrthogonalBreakpointX(previousBreakpointX, out _);
+                        return false;
+                    }
+
+                    var previousBreakpoint = previousBreakpoints
+                        .First(previous => ReferenceEquals(previous.Link, linkToChange)).BreakpointX;
+                    batch.Add(new Command(() =>
+                    {
+                        return (linkToChange.SetOrthogonalBreakpointX(previousBreakpoint, out var undoError), undoError);
+                    }, () =>
+                    {
+                        return (linkToChange.SetOrthogonalBreakpointX(breakpointX, out var redoError), redoError);
+                    }));
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>Sets the orthogonal-routing flag on multiple links as one undoable action.</summary>
+        public bool SetLinksOrthogonal(User user, IEnumerable<Link> links, bool orthogonal,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(links);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var linksToChange = links.Where(l => l is not null)
+                    .Distinct()
+                    .Where(l => l.IsOrthogonal != orthogonal)
+                    .ToList();
+                if (linksToChange.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var changedLinks = new List<Link>(linksToChange.Count);
+                var batch = new CommandBatch();
+                foreach (var linkToChange in linksToChange)
+                {
+                    if (!linkToChange.SetOrthogonal(orthogonal, out error))
+                    {
+                        foreach (var changed in changedLinks)
+                            _ = changed.SetOrthogonal(!orthogonal, out _);
+                        return false;
+                    }
+
+                    changedLinks.Add(linkToChange);
+                    batch.Add(new Command(() =>
+                    {
+                        return (linkToChange.SetOrthogonal(!orthogonal, out var undoError), undoError);
+                    }, () =>
+                    {
+                        return (linkToChange.SetOrthogonal(orthogonal, out var redoError), redoError);
+                    }));
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Save the model system
         /// </summary>
         /// <param name="error">An error message in case the save fails.</param>
@@ -3576,6 +3798,64 @@ namespace XTMF2.Editing
                 {
                     return false;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Removes multiple links as one undoable action.
+        /// </summary>
+        public bool RemoveLinks(User user, IEnumerable<Link> links, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(links);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var targets = links.Where(l => l is not null).Distinct().ToList();
+                if (targets.Count == 0)
+                {
+                    error = null;
+                    return true;
+                }
+
+                var removed = new List<(Link Link, Boundary Boundary)>(targets.Count);
+                var batch = new CommandBatch();
+                foreach (var linkToRemove in targets)
+                {
+                    var boundary = linkToRemove.Origin?.ContainedWithin;
+                    if (boundary is null)
+                    {
+                        error = new CommandError("The link does not belong to a boundary.");
+                        foreach (var (removedLink, removedBoundary) in removed)
+                            removedBoundary.AddLink(removedLink, out _);
+                        return false;
+                    }
+                    if (!boundary.RemoveLink(linkToRemove, out error))
+                    {
+                        foreach (var (removedLink, removedBoundary) in removed)
+                            removedBoundary.AddLink(removedLink, out _);
+                        return false;
+                    }
+
+                    removed.Add((linkToRemove, boundary));
+                    batch.Add(new Command(() =>
+                    {
+                        return (boundary.AddLink(linkToRemove, out var undoError), undoError);
+                    }, () =>
+                    {
+                        return (boundary.RemoveLink(linkToRemove, out var redoError), redoError);
+                    }));
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
             }
         }
 
@@ -4037,6 +4317,40 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>Assigns a contained comment block as a function template description.</summary>
+        public bool SetFunctionTemplateDescriptionComment(User user, FunctionTemplate template,
+            CommentBlock? comment, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(template);
+            error = null;
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (comment is not null && !template.InternalModules.CommentBlocks.Contains(comment))
+                {
+                    error = new CommandError("The description comment must be contained within the function template.");
+                    return false;
+                }
+                var oldComment = template.DescriptionComment;
+                template.SetDescriptionComment(comment);
+                Buffer.AddUndo(new Command(() =>
+                {
+                    template.SetDescriptionComment(oldComment);
+                    return (true, null);
+                }, () =>
+                {
+                    template.SetDescriptionComment(comment);
+                    return (true, null);
+                }));
+                return true;
+            }
+        }
+
         /// <summary>
         /// Adds a new <see cref="FunctionParameter"/> to <paramref name="template"/>.
         /// The parameter becomes a valid link destination inside the template and a hook
@@ -4072,6 +4386,198 @@ namespace XTMF2.Editing
                     return (true, null);
                 }));
                 return true;
+            }
+        }
+
+        /// <summary>
+        /// Replaces a BasicParameter inside a function template with a FunctionParameter.
+        /// Existing internal links are redirected to the new FunctionParameter, and every
+        /// FunctionInstance receives a BasicParameter provider containing the old value.
+        /// </summary>
+        public bool ConvertBasicParameterToFunctionParameter(User user, Node basicParameter,
+            out FunctionParameter? parameter, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(basicParameter);
+            parameter = null;
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var type = basicParameter.Type;
+                if (type is null || !type.IsGenericType
+                    || type.GetGenericTypeDefinition() != typeof(RuntimeModules.BasicParameter<>))
+                {
+                    error = new CommandError("Only BasicParameter nodes can be converted to FunctionParameters.");
+                    return false;
+                }
+
+                var internalBoundary = basicParameter.ContainedWithin;
+                var template = internalBoundary?.OwningFunctionTemplate;
+                if (internalBoundary is null || template is null)
+                {
+                    error = new CommandError("The BasicParameter must be inside a FunctionTemplate.");
+                    return false;
+                }
+
+                var value = basicParameter.ParameterValue?.Representation;
+                if (value is null)
+                {
+                    error = new CommandError($"BasicParameter '{basicParameter.Name}' has no value to expose.");
+                    return false;
+                }
+
+                var linked = internalBoundary.Links
+                    .Where(link => link.HasDestination(basicParameter))
+                    .ToList();
+                var parameterLocation = basicParameter.Location;
+                var parameterBaseName = basicParameter.Name;
+                if (parameterLocation.Equals(Rectangle.Hidden))
+                {
+                    parameterBaseName = linked.FirstOrDefault()?.OriginHook.Name ?? parameterBaseName;
+                    var containingElement = linked
+                        .Select(link => link.Origin)
+                        .FirstOrDefault(origin => !origin.Location.Equals(Rectangle.Hidden));
+                    parameterLocation = containingElement is not null
+                        ? new Rectangle(containingElement.Location.X + containingElement.Location.Width + 30f,
+                            containingElement.Location.Y, 250f, 50f)
+                        : new Rectangle(40f, 40f, 250f, 50f);
+                }
+                    var parameterName = MakeUniqueFunctionParameterName(template, parameterBaseName);
+                var instances = EnumerateBoundaries(ModelSystem.GlobalBoundary)
+                    .SelectMany(boundary => boundary.FunctionInstances)
+                    .Where(instance => ReferenceEquals(instance.Template, template))
+                    .ToList();
+                var providers = new List<(FunctionInstance Instance, Node Provider, Link Link)>();
+
+                if (!template.AddFunctionParameter(parameterName, type, parameterLocation,
+                        out parameter, out error))
+                    return false;
+
+                var capturedParameter = parameter;
+                bool Apply()
+                {
+                    CommandError? localError;
+                    foreach (var link in linked)
+                        internalBoundary.RemoveLink(link, out localError);
+                    internalBoundary.RemoveNode(basicParameter, out localError);
+
+                    foreach (var link in linked)
+                    {
+                        if (link is SingleLink single)
+                        {
+                            single.SetDestination(capturedParameter, out localError);
+                        }
+                        else if (link is MultiLink multi)
+                        {
+                            for (int i = 0; i < multi.Destinations.Count; i++)
+                            {
+                                if (ReferenceEquals(multi.Destinations[i], basicParameter))
+                                    multi.ReplaceDestination(i, capturedParameter, out localError);
+                            }
+                        }
+                        internalBoundary.AddLink(link, out localError);
+                    }
+
+                    foreach (var instance in instances)
+                    {
+                        var providerName = MakeUniqueNodeName(instance.ContainedWithin!, parameterName);
+                        if (!instance.ContainedWithin!.AddNode(GetModuleRepository(), providerName, type,
+                                Rectangle.Hidden, out var provider, out localError))
+                            return false;
+                        if (!provider!.SetParameterValue(ParameterExpression.CreateParameter(value, type.GenericTypeArguments[0]),
+                                out localError))
+                            return false;
+
+                        var hook = instance.Hooks.OfType<FunctionParameterHook>()
+                            .FirstOrDefault(candidate => ReferenceEquals(candidate.Parameter, capturedParameter));
+                        if (hook is null || !instance.ContainedWithin.AddLink(instance, hook, provider,
+                                out var providerLink, out localError))
+                            return false;
+                        providers.Add((instance, provider, providerLink!));
+                    }
+
+                    return true;
+                }
+
+                void Restore()
+                {
+                    CommandError? localError;
+                    foreach (var (_, provider, providerLink) in providers)
+                    {
+                        provider.ContainedWithin!.RemoveLink(providerLink, out localError);
+                        provider.ContainedWithin.RemoveNode(provider, out localError);
+                    }
+                    providers.Clear();
+
+                    foreach (var link in linked)
+                        internalBoundary.RemoveLink(link, out localError);
+                    foreach (var link in linked)
+                    {
+                        if (link is SingleLink single)
+                            single.SetDestination(basicParameter, out localError);
+                        else if (link is MultiLink multi)
+                        {
+                            for (int i = 0; i < multi.Destinations.Count; i++)
+                            {
+                                if (ReferenceEquals(multi.Destinations[i], capturedParameter))
+                                    multi.ReplaceDestination(i, basicParameter, out localError);
+                            }
+                        }
+                        internalBoundary.AddLink(link, out localError);
+                    }
+                    internalBoundary.AddNode(basicParameter, out localError);
+                    template.RemoveFunctionParameter(capturedParameter, out localError);
+                }
+
+                if (!Apply())
+                {
+                    Restore();
+                    error = new CommandError("Unable to create FunctionParameter providers for all FunctionInstances.");
+                    parameter = null;
+                    return false;
+                }
+
+                Buffer.AddUndo(new Command(
+                    () => { Restore(); return (true, null); },
+                    () => { return (Apply(), (CommandError?)null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        private static string MakeUniqueFunctionParameterName(FunctionTemplate template, string baseName)
+        {
+            var name = baseName;
+            int index = 2;
+            while (template.FunctionParameters.Any(parameter =>
+                parameter.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                name = $"{baseName}{index++}";
+            return name;
+        }
+
+        private static string MakeUniqueNodeName(Boundary boundary, string baseName)
+        {
+            var name = baseName;
+            int index = 2;
+            while (boundary.Modules.Any(node => node.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                || boundary.FunctionInstances.Any(instance => instance.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                name = $"{baseName}{index++}";
+            return name;
+        }
+
+        private static IEnumerable<Boundary> EnumerateBoundaries(Boundary boundary)
+        {
+            yield return boundary;
+            foreach (var child in boundary.Boundaries)
+            {
+                foreach (var nested in EnumerateBoundaries(child))
+                    yield return nested;
             }
         }
 

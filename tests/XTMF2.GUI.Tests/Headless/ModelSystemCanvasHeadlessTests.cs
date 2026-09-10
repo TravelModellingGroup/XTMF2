@@ -470,7 +470,6 @@ public class ModelSystemCanvasHeadlessTests
                     {
                         DataContext = vm
                     };
-
                     var beginNameEdit = typeof(ModelSystemCanvas).GetMethod(
                         "BeginNameEdit",
                         BindingFlags.Instance | BindingFlags.NonPublic);
@@ -500,6 +499,99 @@ public class ModelSystemCanvasHeadlessTests
 
                     Assert.IsEmpty(boundary.Modules,
                         "The edited node should be deleted from the model.");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_GhostLinkUsesReplicatedHookAnchor()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_GhostLinkUsesReplicatedHookAnchor),
+            (user, _, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(user, boundary, "Origin",
+                    typeof(LinkedGuiTestModule), new Rectangle(20, 20, 160, 60),
+                    out var origin, out var nodeError), nodeError?.Message);
+                Assert.IsNotNull(origin);
+                GhostNode? ghost = null;
+                Assert.IsTrue(msSession.AddGhostNode(user, boundary, origin!,
+                    new Rectangle(300, 100, 160, 60), out ghost, out var ghostError), ghostError?.Message);
+                Assert.IsNotNull(ghost);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var ghostVm = vm.GhostNodes.Single();
+                var hook = ghostVm.Hooks.First(h => h.Name == "Child");
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var ghostHookAnchor = typeof(ModelSystemCanvas).GetMethod(
+                        "GhostHookAnchor", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(ghostHookAnchor);
+
+                    var anchor = (Avalonia.Point)ghostHookAnchor!.Invoke(canvas,
+                        new object[] { ghostVm, hook, new Avalonia.Point(500, 130) })!;
+                    Assert.AreEqual(ghostVm.X + ghostVm.Width, anchor.X, 1e-9);
+                    Assert.AreEqual(ghostVm.Y + 28.0 + 8.0, anchor.Y, 1e-9);
+
+                    var leftAnchor = (Avalonia.Point)ghostHookAnchor.Invoke(canvas,
+                        new object[] { ghostVm, hook, new Avalonia.Point(100, 130) })!;
+                    Assert.AreEqual(ghostVm.X, leftAnchor.X, 1e-9);
+                    Assert.AreEqual(anchor.Y, leftAnchor.Y, 1e-9);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_OrthogonalBreakpointSelectsOriginHookSide()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_OrthogonalBreakpointSelectsOriginHookSide),
+            (user, _, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddNode(user, boundary, "Origin",
+                    typeof(LinkedGuiTestModule), new Rectangle(200, 20, 160, 60),
+                    out var origin, out var nodeError), nodeError?.Message);
+                Assert.IsNotNull(origin);
+                Assert.IsTrue(msSession.AddNode(user, boundary, "Destination",
+                    typeof(SimpleGuiTestModule), new Rectangle(500, 100, 160, 60),
+                    out var destination, out var destinationError), destinationError?.Message);
+                Assert.IsNotNull(destination);
+
+                var hook = origin!.Hooks.First(h => h.Name == "Child");
+                Assert.IsTrue(msSession.AddLink(user, origin, hook, destination!,
+                    out var link, out var linkError), linkError?.Message);
+                Assert.IsNotNull(link);
+                Assert.IsTrue(msSession.SetLinkOrthogonal(user, link!, true, out var orthogonalError),
+                    orthogonalError?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var originVm = vm.Nodes.Single(node => ReferenceEquals(node.UnderlyingNode, origin));
+                var linkVm = vm.Links.Single(lvm => ReferenceEquals(lvm.UnderlyingLink, link));
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var buildCache = typeof(ModelSystemCanvas).GetMethod(
+                        "BuildHookAnchorCache", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var computeOrigin = typeof(ModelSystemCanvas).GetMethod(
+                        "ComputeOrthogonalOriginPoint", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(buildCache);
+                    Assert.IsNotNull(computeOrigin);
+                    buildCache!.Invoke(canvas, null);
+
+                    Assert.IsTrue(msSession.SetLinkOrthogonalBreakpointX(user, link!, 100,
+                        out var leftError), leftError?.Message);
+                    var leftPoint = (Avalonia.Point)computeOrigin!.Invoke(canvas, new object[] { linkVm })!;
+                    Assert.AreEqual(originVm.X, leftPoint.X, 1e-9);
+
+                    Assert.IsTrue(msSession.SetLinkOrthogonalBreakpointX(user, link!, 500,
+                        out var rightError), rightError?.Message);
+                    var rightPoint = (Avalonia.Point)computeOrigin.Invoke(canvas, new object[] { linkVm })!;
+                    Assert.AreEqual(originVm.X + originVm.Width, rightPoint.X, 1e-9);
                 }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
             });
     }

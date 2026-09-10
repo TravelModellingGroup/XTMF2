@@ -50,6 +50,7 @@ namespace XTMF2.ModelSystemConstruct
         private const string FunctionParametersProperty = "FunctionParameters";
         private const string EntryNodeProperty          = "EntryNode";
         private const string LocalVariablesProperty     = "LocalVariables";
+        private const string DescriptionCommentProperty = "DescriptionComment";
         private const string LocationXProperty          = "X";
         private const string LocationYProperty          = "Y";
         private const string LocationWProperty          = "Width";
@@ -73,6 +74,32 @@ namespace XTMF2.ModelSystemConstruct
                 _name = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
             }
+        }
+
+        private CommentBlock? _descriptionComment;
+
+        /// <summary>The contained comment block whose text describes this template.</summary>
+        public CommentBlock? DescriptionComment => _descriptionComment;
+
+        /// <summary>The current description text, or an empty string when no comment is assigned.</summary>
+        public string Description => _descriptionComment?.Comment ?? string.Empty;
+
+        internal void SetDescriptionComment(CommentBlock? comment)
+        {
+            if (ReferenceEquals(_descriptionComment, comment)) return;
+            if (_descriptionComment is not null)
+                _descriptionComment.PropertyChanged -= OnDescriptionCommentChanged;
+            _descriptionComment = comment;
+            if (_descriptionComment is not null)
+                _descriptionComment.PropertyChanged += OnDescriptionCommentChanged;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DescriptionComment)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
+        }
+
+        private void OnDescriptionCommentChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(CommentBlock.Comment))
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description)));
         }
 
         // ── Entry node ───────────────────────────────────────────────────
@@ -419,6 +446,8 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteStartObject();
             writer.WriteString(NameProperty, Name);
             writer.WriteString(IdProperty, Id);
+            if (_descriptionComment is not null)
+                writer.WriteString(DescriptionCommentProperty, _descriptionComment.Id);
             // Location
             writer.WritePropertyName(LocationProperty);
             writer.WriteStartObject();
@@ -489,10 +518,11 @@ namespace XTMF2.ModelSystemConstruct
             ref Utf8JsonReader reader, Boundary parent,
             [NotNullWhen(true)] out FunctionTemplate? template,
             [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
-            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId)>? deferredLinks = null)
+            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId, double? BreakpointX)>? deferredLinks = null)
         {
             template = null;
             Guid? id = null;
+            Guid? descriptionCommentId = null;
             string? name = null;
             Rectangle location = new Rectangle(40, 40, 200, 120);
             var innerModules = new Boundary(parent);
@@ -522,6 +552,12 @@ namespace XTMF2.ModelSystemConstruct
                     name = reader.GetString();
                     if (partialTemplate is null && name is not null)
                         partialTemplate = new FunctionTemplate(name, parent, innerModules);
+                }
+                else if (reader.ValueTextEquals(DescriptionCommentProperty))
+                {
+                    reader.Read();
+                    if (reader.TryGetGuid(out var commentId))
+                        descriptionCommentId = commentId;
                 }
                 else if (reader.ValueTextEquals(LocationProperty))
                 {
@@ -612,6 +648,13 @@ namespace XTMF2.ModelSystemConstruct
                     if (node.TryGetValue(idx, out var lvNode))
                         template._localVariables.Add(lvNode);
                 }
+            }
+
+            if (descriptionCommentId is Guid commentGuid)
+            {
+                var comment = template.InternalModules.CommentBlocks
+                    .FirstOrDefault(c => c.Id == commentGuid);
+                template.SetDescriptionComment(comment);
             }
 
             return true;

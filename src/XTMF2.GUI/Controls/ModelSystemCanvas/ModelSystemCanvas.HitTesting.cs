@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using XTMF2.GUI.ViewModels;
+using XTMF2.ModelSystemConstruct;
 using System.Collections.ObjectModel;
 
 namespace XTMF2.GUI.Controls;
@@ -84,6 +85,36 @@ partial class ModelSystemCanvas
         return null;
     }
 
+    private LinkViewModel? HitTestOrthogonalBreakpoint(Point pos)
+    {
+        if (_vm is null) return null;
+        const double BreakpointHitTolerance = 8.0;
+        foreach (var link in _vm.Links)
+        {
+            if (link.IsDestinationBranchHidden && !_vm.RenderAllHiddenDestinationLinks)
+                continue;
+            if (link.Destination is null || !link.UnderlyingLink.IsOrthogonal)
+                continue;
+
+            var points = ComputeOrthogonalPath(link,
+                ReferenceEquals(link, _orthogonalBreakpointDragLink)
+                    ? _orthogonalBreakpointPreviewX
+                    : GetSharedSpineX(link));
+            var spine = points[1].X;
+            var top = Math.Min(points[1].Y, points[2].Y) - BreakpointHitTolerance;
+            var bottom = Math.Max(points[1].Y, points[2].Y) + BreakpointHitTolerance;
+            if (Math.Abs(pos.X - spine) <= BreakpointHitTolerance
+                && pos.Y >= top && pos.Y <= bottom)
+                return link;
+        }
+        return null;
+    }
+
+    private double? GetSharedSpineX(LinkViewModel link)
+        => _orthogonalSpineX.TryGetValue(link.UnderlyingLink, out var spineX) && spineX > 0
+            ? spineX
+            : null;
+
     /// <summary>
     /// Returns the <see cref="NodeViewModel"/> and <see cref="NodeHook"/> whose rendered
     /// row rectangle contains <paramref name="pos"/>, or <c>null</c> when the point lies
@@ -126,19 +157,83 @@ partial class ModelSystemCanvas
         foreach (var fi in _vm.FunctionInstances)
         {
             if (pos.X < fi.X || pos.X > fi.X + fi.Width) continue;
-            var fps = fi.FunctionParameters;
-            for (int i = 0; i < fps.Count; i++)
+            if (!_fiVisibleHooks.TryGetValue(fi, out var visibleHooks)) continue;
+            for (int i = 0; i < visibleHooks.Count; i++)
             {
                 double rowTop = fi.Y + FtHeaderHeight + i * FtHookRowHeight;
                 if (pos.Y >= rowTop && pos.Y < rowTop + FtHookRowHeight)
-                {
-                    // Retrieve the corresponding FunctionParameterHook from the underlying instance.
-                    var hooks = fi.UnderlyingInstance.Hooks;
-                    if (i < hooks.Count && hooks[i] is FunctionParameterHook fph)
-                    {
-                        return (fi, fph);
-                    }
-                }
+                    return (fi, visibleHooks[i]);
+            }
+        }
+        return null;
+    }
+
+    private (GhostNodeViewModel ghost, NodeHook hook)? HitTestGhostOriginHook(Point pos)
+    {
+        if (_vm is null) return null;
+        foreach (var ghost in _vm.GhostNodes)
+        {
+            var hooks = ghost.Hooks;
+            for (int i = 0; i < hooks.Count; i++)
+            {
+                double rowTop = ghost.Y + NodeHeaderHeight
+                    + (ghost.IsParameterNode ? HookRowHeight : 0)
+                    + i * HookRowHeight;
+                if (pos.X >= ghost.X && pos.X <= ghost.X + ghost.Width
+                    && pos.Y >= rowTop && pos.Y < rowTop + HookRowHeight)
+                    return (ghost, hooks[i]);
+            }
+        }
+        return null;
+    }
+
+    private (GhostNodeViewModel ghost, NodeViewModel node)? HitTestGhostParamValueRow(Point pos)
+    {
+        if (_vm is null) return null;
+        foreach (var ghost in _vm.GhostNodes)
+        {
+            if (!ghost.IsParameterNode) continue;
+            var rowRect = new Rect(ghost.X, ghost.Y + NodeHeaderHeight, ghost.Width, HookRowHeight);
+            if (rowRect.Contains(pos))
+                return (ghost, ghost.ReferencedNodeViewModel);
+        }
+        return null;
+    }
+
+    private (GhostNodeViewModel ghost, FunctionParameterHook hook)? HitTestGhostFunctionInstanceHook(Point pos)
+    {
+        if (_vm is null) return null;
+        foreach (var ghost in _vm.GhostNodes)
+        {
+            if (!ghost.IsFunctionInstance) continue;
+            var hooks = ghost.ReferencedNode.Hooks;
+            for (int i = 0; i < hooks.Count; i++)
+            {
+                if (hooks[i] is not FunctionParameterHook hook) continue;
+                var rowTop = ghost.Y + NodeHeaderHeight + i * HookRowHeight;
+                if (pos.X >= ghost.X && pos.X <= ghost.X + ghost.Width
+                    && pos.Y >= rowTop && pos.Y < rowTop + HookRowHeight)
+                    return (ghost, hook);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the FunctionParameter whose hook row contains <paramref name="pos"/>
+    /// on a FunctionTemplate, or <c>null</c> when the point is outside its hook rows.
+    /// </summary>
+    private FunctionParameter? HitTestFunctionTemplateHook(Point pos)
+    {
+        if (_vm is null) return null;
+        foreach (var template in _vm.FunctionTemplates)
+        {
+            if (pos.X < template.X || pos.X > template.X + template.Width) continue;
+            for (int i = 0; i < template.FunctionParameters.Count; i++)
+            {
+                double rowTop = template.Y + FtHeaderHeight + i * FtHookRowHeight;
+                if (pos.Y >= rowTop && pos.Y < rowTop + FtHookRowHeight)
+                    return template.FunctionParameters[i];
             }
         }
         return null;
@@ -161,11 +256,14 @@ partial class ModelSystemCanvas
         _nodeConnectedHooks.Clear();
         _hookInlinedParam.Clear();
         _fiHookInlinedParam.Clear();
+        _fiHookCanInlineParam.Clear();
+        _fiVisibleHooks.Clear();
         _canInlineNodes.Clear();
         _fiHookAnchors.Clear();
         _fiConnectedHooks.Clear();
         _leftGoingHooks.Clear();
         _leftGoingFiHooks.Clear();
+        _leftGoingGhostHooks.Clear();
         if (_vm is null) return;
 
         // Which hooks on each node have a live link?
@@ -182,6 +280,13 @@ partial class ModelSystemCanvas
                 if ((!link.IsDestinationBranchHidden || _vm.RenderAllHiddenDestinationLinks)
                     && link.Destination is not null && link.X2 < originVm.X)
                     _leftGoingHooks.Add((originVm, link.UnderlyingLink.OriginHook));
+            }
+            if (link.Origin is GhostNodeViewModel ghostOriginVm
+                && link.Destination is not null
+                && (!link.IsDestinationBranchHidden || _vm.RenderAllHiddenDestinationLinks)
+                && link.X2 < ghostOriginVm.X)
+            {
+                _leftGoingGhostHooks.Add((ghostOriginVm, link.UnderlyingLink.OriginHook));
             }
             // Which FunctionParameterHooks on each FI have a live link?
             if (link.Origin is FunctionInstanceViewModel fiOriginVm
@@ -207,8 +312,11 @@ partial class ModelSystemCanvas
         {
             if (link.Destination is not NodeViewModel dstCount || !dstCount.IsParameterNode) continue;
             var originHookCount = link.UnderlyingLink.OriginHook;
-            bool eligible = (link.Origin is NodeViewModel && originHookCount.Cardinality == HookCardinality.Single)
-                         || (link.Origin is FunctionInstanceViewModel && originHookCount is FunctionParameterHook);
+            bool eligible = link.Origin is NodeViewModel
+                ? originHookCount.Cardinality == HookCardinality.Single
+                : link.Origin is FunctionInstanceViewModel
+                    && originHookCount is FunctionParameterHook
+                    && originHookCount.Cardinality is HookCardinality.Single or HookCardinality.SingleOptional;
             if (!eligible) continue;
             paramDestCount.TryGetValue(dstCount, out var c);
             paramDestCount[dstCount] = c + 1;
@@ -229,12 +337,16 @@ partial class ModelSystemCanvas
                     _canInlineNodes.Add(destVm);
             }
             else if (link.Origin is FunctionInstanceViewModel originFiVm
-                     && link.UnderlyingLink.OriginHook is FunctionParameterHook fpHookInline)
+                     && link.UnderlyingLink.OriginHook is FunctionParameterHook fpHookInline
+                     && fpHookInline.Cardinality is HookCardinality.Single or HookCardinality.SingleOptional)
             {
                 if (destVm.IsInlined)
                     _fiHookInlinedParam[(originFiVm, fpHookInline)] = destVm;
                 else
+                {
                     _canInlineNodes.Add(destVm);
+                    _fiHookCanInlineParam[(originFiVm, fpHookInline)] = destVm;
+                }
             }
         }
 
@@ -278,13 +390,22 @@ partial class ModelSystemCanvas
         foreach (var fi in _vm.FunctionInstances)
         {
             var fiHooks = fi.UnderlyingInstance.Hooks;
-            for (int i = 0; i < fiHooks.Count; i++)
+            _fiConnectedHooks.TryGetValue(fi, out var connectedFiHooks);
+            var visibleFiHooks = fiHooks
+                .OfType<FunctionParameterHook>()
+                .Where(hook => _vm.ShowAllHooks
+                    || fi.ShowHooks
+                    || hook.Cardinality == HookCardinality.Single
+                    || hook.Cardinality == HookCardinality.AtLeastOne
+                    || (connectedFiHooks is not null && connectedFiHooks.Contains(hook)))
+                .ToArray();
+            _fiVisibleHooks[fi] = visibleFiHooks;
+
+            for (int i = 0; i < visibleFiHooks.Length; i++)
             {
-                if (fiHooks[i] is FunctionParameterHook fph)
-                {
-                    double rowMidY = fi.Y + FtHeaderHeight + i * FtHookRowHeight + FtHookRowHeight / 2.0;
-                    _fiHookAnchors[(fi, fph)] = new Point(fi.X + fi.Width, rowMidY);
-                }
+                var fph = visibleFiHooks[i];
+                double rowMidY = fi.Y + FtHeaderHeight + i * FtHookRowHeight + FtHookRowHeight / 2.0;
+                _fiHookAnchors[(fi, fph)] = new Point(fi.X + fi.Width, rowMidY);
             }
         }
     }
@@ -308,6 +429,17 @@ partial class ModelSystemCanvas
         return Math.Max(node.Height, NodeHeaderHeight);
     }
 
+    private double FunctionInstanceRenderHeight(FunctionInstanceViewModel fi)
+    {
+        if (!_fiVisibleHooks.TryGetValue(fi, out var visibleHooks))
+            return fi.Height;
+
+        var storedHeight = fi.UnderlyingInstance.Location.Height is 0
+            ? 50.0
+            : fi.UnderlyingInstance.Location.Height;
+        return Math.Max(storedHeight, FtHeaderHeight + visibleHooks.Count * FtHookRowHeight);
+    }
+
     /// <summary>Returns the rendered width of any resizable canvas element.</summary>
     private double ElementRenderWidth(ICanvasElement el) =>
         el is NodeViewModel nvm ? NodeRenderWidth(nvm)
@@ -324,7 +456,7 @@ partial class ModelSystemCanvas
         : el is CommentBlockViewModel cvm ? cvm.Height
         : el is GhostNodeViewModel gnvm ? gnvm.Height
         : el is FunctionTemplateViewModel ftvm ? ftvm.Height
-        : el is FunctionInstanceViewModel fivm ? fivm.Height
+        : el is FunctionInstanceViewModel fivm ? FunctionInstanceRenderHeight(fivm)
         : el is FunctionParameterViewModel fpvm ? fpvm.Height
         : 0;
 
@@ -424,6 +556,29 @@ partial class ModelSystemCanvas
             size);
     }
 
+    private static Rect FunctionInstanceHookToggleIconRect(FunctionInstanceViewModel fi)
+    {
+        const double margin = 4.0;
+        double size = HookToggleIconSize;
+        return new Rect(
+            fi.X + fi.Width - size - margin,
+            fi.Y + (FtHeaderHeight - size) / 2.0,
+            size,
+            size);
+    }
+
+    private FunctionInstanceViewModel? HitTestFunctionInstanceHookToggleIcon(Point pos)
+    {
+        if (_vm is null || _vm.ShowAllHooks) return null;
+        foreach (var fi in _vm.FunctionInstances)
+        {
+            if (fi.FunctionParameters.Count > 0
+                && FunctionInstanceHookToggleIconRect(fi).Contains(pos))
+                return fi;
+        }
+        return null;
+    }
+
     /// <summary>
     /// Returns the bounding rectangle of the "minimize to inline" button that appears
     /// in the top-left header of a <see cref="_canInlineNodes"/> BasicParameter node.
@@ -437,6 +592,18 @@ partial class ModelSystemCanvas
         return new Rect(
             node.X + margin,
             node.Y + (NodeHeaderHeight - size) / 2.0,
+            size,
+            size);
+    }
+
+    private static Rect InlineFiMinimizeButtonRect(FunctionInstanceViewModel fi, int hookIndex)
+    {
+        const double margin = 4.0;
+        double size = InlineMinimizeButtonSize;
+        return new Rect(
+            fi.X + margin,
+            fi.Y + FtHeaderHeight + hookIndex * FtHookRowHeight
+                + (FtHookRowHeight - size) / 2.0,
             size,
             size);
     }
@@ -459,6 +626,27 @@ partial class ModelSystemCanvas
         return null;
     }
 
+    private (FunctionInstanceViewModel Fi, FunctionParameterHook Hook, NodeViewModel Parameter)?
+        HitTestFiMinimizeButton(Point pos)
+    {
+        foreach (var ((fi, hook), parameter) in _fiHookCanInlineParam)
+        {
+            int hookIndex = -1;
+            var hooks = fi.UnderlyingInstance.Hooks;
+            for (int i = 0; i < hooks.Count; i++)
+            {
+                if (ReferenceEquals(hooks[i], hook))
+                {
+                    hookIndex = i;
+                    break;
+                }
+            }
+            if (hookIndex >= 0 && InlineFiMinimizeButtonRect(fi, hookIndex).Contains(pos))
+                return (fi, hook, parameter);
+        }
+        return null;
+    }
+
     /// <summary>
     /// Returns information about an inlined-param hook row that contains
     /// <paramref name="pos"/>, or <c>null</c> when no such row is hit.
@@ -468,6 +656,8 @@ partial class ModelSystemCanvas
     /// </summary>
     private (ICanvasElement? originEl, NodeHook hook, NodeViewModel paramNode, double rowX, double rowY, double rowW)? HitTestInlinedParamRow(Point pos)
     {
+        if (_vm is null) return null;
+
         foreach (var ((originNode, hook), paramNode) in _hookInlinedParam)
         {
             if (!_nodeVisibleHooks.TryGetValue(originNode, out var hooks)) continue;
@@ -501,6 +691,40 @@ partial class ModelSystemCanvas
 
             if (rowRect.Contains(pos))
                 return (fi, fpHook, paramNode, fi.X, rowTop, rw);
+        }
+
+        foreach (var ghost in _vm.GhostNodes)
+        {
+            if (!ghost.IsFunctionInstance)
+            {
+                for (int i = 0; i < ghost.Hooks.Count; i++)
+                {
+                    var hook = ghost.Hooks[i];
+                    var embedded = ghost.GetEmbeddedParameter(hook);
+                    if (embedded is null) continue;
+                    var paramNode = _vm.Nodes.FirstOrDefault(node => node.UnderlyingNode == embedded)
+                        ?? new NodeViewModel(embedded, _vm.Session, _vm.User);
+                    var rowTop = ghost.Y + NodeHeaderHeight
+                        + (ghost.IsParameterNode ? 1 : 0) * HookRowHeight
+                        + i * HookRowHeight;
+                    if (new Rect(ghost.X, rowTop, ghost.Width, HookRowHeight).Contains(pos))
+                        return (ghost, hook, paramNode, ghost.X, rowTop, ghost.Width);
+                }
+            }
+
+            if (!ghost.IsFunctionInstance) continue;
+            for (int i = 0; i < ghost.ReferencedNode.Hooks.Count; i++)
+            {
+                if (ghost.ReferencedNode.Hooks[i] is not FunctionParameterHook hook) continue;
+                var embedded = ghost.GetEmbeddedParameter(hook);
+                if (embedded is null) continue;
+                var paramNode = _vm.Nodes.FirstOrDefault(node => node.UnderlyingNode == embedded)
+                    ?? new NodeViewModel(embedded, _vm.Session, _vm.User);
+
+                double rowTop = ghost.Y + NodeHeaderHeight + i * HookRowHeight;
+                if (new Rect(ghost.X, rowTop, ghost.Width, HookRowHeight).Contains(pos))
+                    return (ghost, hook, paramNode, ghost.X, rowTop, ghost.Width);
+            }
         }
 
         return null;

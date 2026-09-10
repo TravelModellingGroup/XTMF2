@@ -30,11 +30,7 @@
                 <ListBox x:Name="DestListBox"
                          ItemsSource="{Binding Items}"
                          SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-                         SelectionMode="Single"
-                         PointerPressed="OnListPointerPressed"
-                         PointerMoved="OnListPointerMoved"
-                         PointerReleased="OnListPointerReleased"
-                         PointerCaptureLost="OnListPointerCaptureLost">
+                         SelectionMode="Multiple">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="local:DestinationOrderItem">
                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,4">

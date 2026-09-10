@@ -34,7 +34,7 @@ namespace XTMF2.ModelSystemConstruct
         private readonly ReadOnlyObservableCollection<Node> _destinationsView;
 
         public MultiLink(Node origin, NodeHook hook, List<Node> destinations, bool disabled, bool orthogonal = false,
-            List<bool>? hiddenDestinations = null, Guid id = default)
+            List<bool>? hiddenDestinations = null, Guid id = default, double? breakpointX = null)
             : base(origin, hook, disabled, orthogonal, id)
         {
             _Destinations     = new ObservableCollection<Node>(destinations);
@@ -42,6 +42,7 @@ namespace XTMF2.ModelSystemConstruct
             _hiddenDestinations = hiddenDestinations is null
                 ? Enumerable.Repeat(false, destinations.Count).ToList()
                 : NormalizeHiddenDestinations(hiddenDestinations, destinations.Count);
+            OrthogonalBreakpointX = breakpointX;
         }
 
         private static List<bool> NormalizeHiddenDestinations(IReadOnlyList<bool> source, int requiredCount)
@@ -100,6 +101,10 @@ namespace XTMF2.ModelSystemConstruct
             if (IsOrthogonal)
             {
                 writer.WriteBoolean(OrthogonalProperty, true);
+            }
+            if (OrthogonalBreakpointX.HasValue)
+            {
+                writer.WriteNumber(BreakpointXProperty, OrthogonalBreakpointX.Value);
             }
             if (_hiddenDestinations.Any(h => h))
             {
@@ -221,6 +226,20 @@ namespace XTMF2.ModelSystemConstruct
         {
             _Destinations.RemoveAt(i);
             _hiddenDestinations.RemoveAt(i);
+        }
+
+        internal bool ReplaceDestination(int index, Node destination, [NotNullWhen(false)] out CommandError? error)
+        {
+            if (index < 0 || index >= _Destinations.Count)
+            {
+                error = new CommandError("Destination index out of range for MultiLink replacement.");
+                return false;
+            }
+
+            _Destinations[index] = destination;
+            Notify(nameof(Destinations));
+            error = null;
+            return true;
         }
 
         /// <summary>Moves the destination at <paramref name="fromIndex"/> to <paramref name="toIndex"/>.</summary>

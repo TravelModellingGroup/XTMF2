@@ -57,8 +57,8 @@ public sealed partial class FunctionParameterViewModel : ObservableObject, ICanv
     /// <summary>Rendered width; defaults to 180 when the stored value is 0.</summary>
     public double Width  => _previewW ?? (UnderlyingParameter.Location.Width  is 0 ? 180.0 : (double)UnderlyingParameter.Location.Width);
 
-    /// <summary>Rendered height; defaults to 40 when the stored value is 0.</summary>
-    public double Height => _previewH ?? (UnderlyingParameter.Location.Height is 0 ? 40.0  : (double)UnderlyingParameter.Location.Height);
+    /// <summary>Rendered height; defaults to 68 when the stored value is 0 and never collapses the description row.</summary>
+    public double Height => _previewH ?? Math.Max(68.0, UnderlyingParameter.Location.Height is 0 ? 68.0 : (double)UnderlyingParameter.Location.Height);
 
     /// <inheritdoc/>
     public double CenterX => X + Width  / 2.0;
@@ -74,6 +74,9 @@ public sealed partial class FunctionParameterViewModel : ObservableObject, ICanv
     /// (e.g. <c>IModule&lt;int&gt;</c> instead of <c>IModule`1</c>).
     /// </summary>
     public string TypeName => FormatTypeName(UnderlyingParameter.Type);
+
+    /// <summary>Description shown when the corresponding FunctionInstance hook is hovered.</summary>
+    public string Description => UnderlyingParameter.Description;
 
     private static string FormatTypeName(Type? type)
     {
@@ -113,6 +116,9 @@ public sealed partial class FunctionParameterViewModel : ObservableObject, ICanv
             case nameof(FunctionParameter.Type):
                 OnPropertyChanged(nameof(TypeName));
                 break;
+            case nameof(FunctionParameter.Description):
+                OnPropertyChanged(nameof(Description));
+                break;
         }
     }
 
@@ -121,6 +127,9 @@ public sealed partial class FunctionParameterViewModel : ObservableObject, ICanv
     /// </summary>
     public bool SetName(string newName, [NotNullWhen(false)] out CommandError? error)
         => _session.RenameFunctionParameter(_user, UnderlyingParameter.Template, UnderlyingParameter, newName, out error);
+
+    public bool SetDescription(string description, [NotNullWhen(false)] out CommandError? error)
+        => _session.SetFunctionParameterDescription(_user, UnderlyingParameter, description, out error);
 
     // ── Drag / resize support ─────────────────────────────────────────────
 

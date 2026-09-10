@@ -60,7 +60,7 @@ public sealed class GhostNode : Node
         if (e.PropertyName == nameof(Name))
         {
             Name = ReferencedNode.Name;
-            // The Name setter in Node already fires PropertyChanged for Name.
+            InvokePropertyChanged(nameof(Name));
         }
     }
 

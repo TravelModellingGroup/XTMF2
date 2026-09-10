@@ -80,6 +80,8 @@ public sealed partial class FunctionTemplateViewModel : ObservableObject, ICanva
     public string EntryNodeTypeName
         => UnderlyingTemplate.Type?.Name ?? string.Empty;
 
+    public string Description => UnderlyingTemplate.Description;
+
     // ── FunctionParameter mirrors (synced from model) ─────────────────────
     /// <summary>
     /// Live list of <see cref="FunctionParameter"/> objects belonging to this template.
@@ -111,6 +113,9 @@ public sealed partial class FunctionTemplateViewModel : ObservableObject, ICanva
                 break;
             case nameof(FunctionTemplate.Type):
                 OnPropertyChanged(nameof(EntryNodeTypeName));
+                break;
+            case nameof(FunctionTemplate.Description):
+                OnPropertyChanged(nameof(Description));
                 break;
             case nameof(FunctionTemplate.Location):
                 OnPropertyChanged(nameof(X));
