@@ -1012,7 +1012,8 @@ namespace XTMF2.ModelSystemConstruct
         internal bool Load(ModuleRepository modules, Dictionary<int, Type> typeLookup, Dictionary<int, Node> node, List<(Node toAssignTo, string parameterExpression)> scriptedParameters,
             List<(Boundary ContainedIn, int RefIndex, int SelfIndex, Rectangle Location, Guid Id)> deferredGhostNodes,
             ref Utf8JsonReader reader, [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
-            List<(Boundary ContainedIn, Node Origin, string HookName, int DestinationIndex, bool Disabled, bool Orthogonal, bool DestinationHidden, Guid LinkId, double? BreakpointX)>? deferredLinks = null)
+            List<Link.PendingLoad>? deferredLinks = null,
+            List<FunctionInstance.PendingLoad>? deferredFunctionInstances = null)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
             {
@@ -1103,7 +1104,7 @@ namespace XTMF2.ModelSystemConstruct
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
                             var boundary = new Boundary(this);
-                            if (!boundary.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings, deferredLinks))
+                            if (!boundary.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, ref error, warnings, deferredLinks, deferredFunctionInstances))
                             {
                                 return false;
                             }
@@ -1159,7 +1160,7 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!FunctionTemplate.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, this, out var template, ref error, warnings, deferredLinks))
+                            if (!FunctionTemplate.Load(modules, typeLookup, node, scriptedParameters, deferredGhostNodes, ref reader, this, out var template, ref error, warnings, deferredLinks, deferredFunctionInstances))
                                 return false;
                             _functionTemplates.Add(template!);
                         }
@@ -1175,11 +1176,12 @@ namespace XTMF2.ModelSystemConstruct
                     {
                         if (reader.TokenType != JsonTokenType.Comment)
                         {
-                            if (!FunctionInstance.Load(ref reader, this, node, out var fi, ref error))
+                            if (!FunctionInstance.Load(ref reader, this, node, out var fi, ref error, deferredFunctionInstances))
                             {
                                 return false;
                             }
-                            _functionInstances.Add(fi!);
+                            if (fi is not null)
+                                _functionInstances.Add(fi);
                         }
                     }
                 }
@@ -1207,6 +1209,18 @@ namespace XTMF2.ModelSystemConstruct
                 }
             }
             return true;
+        }
+
+        internal void CollectFunctionTemplates(Dictionary<Guid, FunctionTemplate> lookup)
+        {
+            foreach (var template in _functionTemplates)
+            {
+                lookup[template.Id] = template;
+                template.InternalModules.CollectFunctionTemplates(lookup);
+            }
+
+            foreach (var child in _boundaries)
+                child.CollectFunctionTemplates(lookup);
         }
 
         internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link? link, [NotNullWhen(false)] out CommandError? error)

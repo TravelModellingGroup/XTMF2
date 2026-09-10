@@ -1744,45 +1744,88 @@ partial class ModelSystemCanvas
     }
 
     /// <summary>
-    /// Returns the best (highest) navigation score across all corner-to-corner vectors
-    /// between <paramref name="current"/> and <paramref name="candidate"/>.
-    /// Returns -1 when no corner pair falls within the requested direction cone.
+    /// Returns the best (highest) navigation score across vectors between the
+    /// facing edges of <paramref name="current"/> and <paramref name="candidate"/>.
+    /// Returns <see cref="double.NaN"/> when no point pair falls within the
+    /// requested direction cone.
     /// </summary>
     private double FindBestNavigationScore(ICanvasElement current, ICanvasElement candidate, NavigationDirection direction)
     {
         double bestScore = double.MinValue;
         bool found = false;
 
-        double dx = candidate.CenterX - current.CenterX;
-        double dy = candidate.CenterY - current.CenterY;
-        double distance = Math.Sqrt(dx * dx + dy * dy);
-        double score = CalculateNavigationScore(dx, dy, distance, direction, HasLinkBetween(current, candidate));
-        if (!double.IsNaN(score) && score > bestScore)
+        var currentPoints = GetElementNavigationPoints(current, direction);
+        var candidatePoints = GetElementNavigationPoints(candidate, Opposite(direction));
+        bool isLinked = HasLinkBetween(current, candidate);
+
+        foreach (var currentPoint in currentPoints)
         {
-            bestScore = score;
-            found = true;
+            foreach (var candidatePoint in candidatePoints)
+            {
+                double dx = candidatePoint.X - currentPoint.X;
+                double dy = candidatePoint.Y - currentPoint.Y;
+                double distance = Math.Sqrt(dx * dx + dy * dy);
+                double score = CalculateNavigationScore(dx, dy, distance, direction, isLinked);
+                if (!double.IsNaN(score) && score > bestScore)
+                {
+                    bestScore = score;
+                    found = true;
+                }
+            }
         }
 
         return found ? bestScore : double.NaN;
     }
 
     /// <summary>
-    /// Returns center + four corners for directional navigation scoring.
+    /// Returns the three points along the edge facing the requested direction.
     /// </summary>
-    private static Point[] GetElementNavigationPoints(ICanvasElement element)
+    private static Point[] GetElementNavigationPoints(ICanvasElement element, NavigationDirection direction)
     {
         double left = element.X;
         double top = element.Y;
         double right = element.X + element.Width;
         double bottom = element.Y + element.Height;
 
-        return new[]
+        return direction switch
         {
-            new Point(element.CenterX, element.CenterY),
-            new Point(left, top),
-            new Point(right, top),
-            new Point(left, bottom),
-            new Point(right, bottom)
+            NavigationDirection.Up => new[]
+            {
+                new Point(left, top),
+                new Point(element.CenterX, top),
+                new Point(right, top)
+            },
+            NavigationDirection.Down => new[]
+            {
+                new Point(left, bottom),
+                new Point(element.CenterX, bottom),
+                new Point(right, bottom)
+            },
+            NavigationDirection.Left => new[]
+            {
+                new Point(left, top),
+                new Point(left, element.CenterY),
+                new Point(left, bottom)
+            },
+            NavigationDirection.Right => new[]
+            {
+                new Point(right, top),
+                new Point(right, element.CenterY),
+                new Point(right, bottom)
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
+        };
+    }
+
+    private static NavigationDirection Opposite(NavigationDirection direction)
+    {
+        return direction switch
+        {
+            NavigationDirection.Up => NavigationDirection.Down,
+            NavigationDirection.Down => NavigationDirection.Up,
+            NavigationDirection.Left => NavigationDirection.Right,
+            NavigationDirection.Right => NavigationDirection.Left,
+            _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
         };
     }
 
@@ -1812,7 +1855,7 @@ partial class ModelSystemCanvas
 
         const double GeometryScale = 100.0;
         const double WrongDirectionPenalty = 2048.0;
-        const double LinkedElementBonus = 200.0;
+        const double LinkedElementBonus = 0.005;
         double score = selectedGeometryScore * GeometryScale;
         if (bestGeometryScore > selectedGeometryScore)
         {
@@ -1854,7 +1897,7 @@ partial class ModelSystemCanvas
 
         // TODO: calibrate these parameters based on user testing to find a good balance between directional fidelity and distance sensitivity.
         const double DistanceWeight = 100.0;
-        const double AnglePenaltyAt45 = 0.20;
+        const double AnglePenaltyAt45 = 0.15;
         const double ReferenceAngle = 45.0;
         // Calibrated angular decay: 45° off-axis yields a 20% penalty
         // (i.e., 80% of the in-direction utility at the same distance).

@@ -38,6 +38,16 @@ namespace XTMF2.ModelSystemConstruct
     /// </summary>
     public sealed class FunctionInstance : Node
     {
+        internal readonly record struct PendingLoad(
+            Boundary ParentBoundary,
+            string Name,
+            string? TemplateName,
+            Guid? TemplateId,
+            int Index,
+            Rectangle Location,
+            Guid Id,
+            bool Disabled);
+
         // ── Additional JSON property names (NameProperty / X / Y / Width / HeightProperty /
         //    IndexProperty are inherited as protected constants from Node) ─────────────
         private const string TemplateNameProperty = "TemplateName";
@@ -186,8 +196,9 @@ namespace XTMF2.ModelSystemConstruct
         /// </summary>
         internal static bool Load(ref Utf8JsonReader reader, Boundary parentBoundary,
             Dictionary<int, Node> node,
-            [NotNullWhen(true)] out FunctionInstance? instance,
-            [NotNullWhen(false)] ref string? error)
+            out FunctionInstance? instance,
+            [NotNullWhen(false)] ref string? error,
+            List<PendingLoad>? deferredLoads = null)
         {
             instance = null;
             if (reader.TokenType != JsonTokenType.StartObject)
@@ -230,6 +241,14 @@ namespace XTMF2.ModelSystemConstruct
             {
                 error = $"FunctionInstance '{name}' is missing its TemplateName.";
                 return false;
+            }
+
+            if (deferredLoads is not null)
+            {
+                deferredLoads.Add(new PendingLoad(parentBoundary, name, templateName, templateId,
+                    fiIndex, new Rectangle(x, y, w, h), id, disabled));
+                error = null;
+                return true;
             }
 
             var template = Boundary.ResolveTemplate(parentBoundary, templateName!);
