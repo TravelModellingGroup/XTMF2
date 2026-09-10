@@ -68,6 +68,53 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        public void RenamedModelSystemProjectPersistence()
+        {
+            var runtime = TestHelper.CreateRuntime("RenamedModelSystemProjectPersistence");
+            var userController = runtime.UserController;
+            var projectController = runtime.ProjectController;
+            CommandError error = null;
+            const string userName = "RenamedModelSystemProjectPersistence";
+            const string projectName = "TestProject";
+            const string modelSystemName = "ModelSystem1";
+            const string renamedModelSystemName = "RenamedModelSystem";
+
+            userController.Delete(userName);
+            Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error), error?.Message);
+            Assert.IsTrue(projectController.CreateNewProject(user, projectName, out var session, out error).UsingIf(session, () =>
+            {
+                Assert.IsTrue(session.CreateNewModelSystem(user, modelSystemName, out var modelSystemHeader, out error), error?.Message);
+                Assert.IsTrue(session.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, out error).UsingIf(modelSystemSession, () =>
+                {
+                    Assert.IsTrue(modelSystemSession.AddNode(user, modelSystemSession.ModelSystem.GlobalBoundary,
+                        "TestNode", typeof(SimpleTestModule), Rectangle.Hidden, out _, out error), error?.Message);
+                    Assert.IsTrue(modelSystemSession.Save(out error), error?.Message);
+                }), error?.Message);
+                Assert.IsTrue(session.RenameModelSystem(user, modelSystemHeader, renamedModelSystemName, out error), error?.Message);
+                Assert.IsTrue(session.Save(out error), error?.Message);
+            }), error?.Message);
+
+            runtime.Shutdown();
+            runtime = TestHelper.CreateRuntime("RenamedModelSystemProjectPersistence");
+            userController = runtime.UserController;
+            projectController = runtime.ProjectController;
+            user = userController.GetUserByName(userName);
+
+            Assert.IsTrue(projectController.GetProject(user, projectName, out var reloadedProject, out error), error?.Message);
+            Assert.AreEqual(projectName, reloadedProject.Name);
+            Assert.IsTrue(projectController.GetProjectSession(user, reloadedProject, out session, out error).UsingIf(session, () =>
+            {
+                Assert.IsTrue(session.GetModelSystemHeader(user, renamedModelSystemName, out var reloadedHeader, out error), error?.Message);
+                Assert.IsTrue(session.EditModelSystem(user, reloadedHeader, out var reloadedModelSystemSession, out error).UsingIf(reloadedModelSystemSession, () =>
+                {
+                    Assert.HasCount(1, reloadedModelSystemSession.ModelSystem.GlobalBoundary.Modules);
+                }), error?.Message);
+            }), error?.Message);
+
+            userController.Delete(user);
+        }
+
+        [TestMethod]
         public void CreateModelSystemOrGet()
         {
             var runtime = TestHelper.CreateRuntime();
