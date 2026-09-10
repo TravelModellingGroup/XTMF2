@@ -33,6 +33,18 @@ partial class ModelSystemCanvas
 
     private bool AltCommendIssued = false;
 
+    protected override void OnPointerEntered(PointerEventArgs e)
+    {
+        _isPointerOverCanvas = true;
+        base.OnPointerEntered(e);
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        _isPointerOverCanvas = false;
+        base.OnPointerExited(e);
+    }
+
     protected override void OnKeyUp(KeyEventArgs e)
     {
         if (AltCommendIssued && (e.Key == Key.LeftAlt || e.Key == Key.RightAlt))
@@ -153,17 +165,15 @@ partial class ModelSystemCanvas
         }
         else if (e.Key == Key.V && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
-            if (_lastCanvasMousePos is { } mousePos)
+            if (_isPointerOverCanvas && _lastCanvasMousePos is { } mousePos)
             {
                 _ = PasteElementsAsync(mousePos.X, mousePos.Y);
             }
             else
             {
                 // Fallback: paste at the centre of the current viewport.
-                var sv = GetScrollViewer();
-                double vx = ((sv?.Offset.X ?? 0) + (sv?.Viewport.Width ?? Bounds.Width) / 2.0) / _scale;
-                double vy = ((sv?.Offset.Y ?? 0) + (sv?.Viewport.Height ?? Bounds.Height) / 2.0) / _scale;
-                _ = PasteElementsAsync(vx, vy);
+                var spawnPt = GetKeyboardSpawnPoint();
+                _ = PasteElementsAsync(spawnPt.X, spawnPt.Y);
             }
             e.Handled = true;
         }
