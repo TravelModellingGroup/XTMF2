@@ -887,6 +887,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     // Cached reference to the current boundary's Boundaries collection so we can
     // reliably unsubscribe (Boundary.Boundaries returns a new wrapper on every call).
     private INotifyCollectionChanged? _subscribedChildBoundaries;
+    private readonly List<INotifyCollectionChanged> _subscribedProjectionLinkCollections = new();
 
     private void SubscribeToBoundary(Boundary boundary)
     {
@@ -901,6 +902,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Keep the same wrapper instance so we can correctly remove the handler later.
         _subscribedChildBoundaries  = boundary.Boundaries;
         _subscribedChildBoundaries.CollectionChanged += OnChildBoundariesChanged;
+
+        SubscribeToProjectionLinkCollections(GlobalBoundary);
     }
 
     private void UnsubscribeFromBoundary(Boundary boundary)
@@ -918,7 +921,26 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             _subscribedChildBoundaries.CollectionChanged -= OnChildBoundariesChanged;
             _subscribedChildBoundaries = null;
         }
+
+        foreach (var links in _subscribedProjectionLinkCollections)
+            links.CollectionChanged -= OnProjectedLinksChanged;
+        _subscribedProjectionLinkCollections.Clear();
     }
+
+    private void SubscribeToProjectionLinkCollections(Boundary boundary)
+    {
+        var links = (INotifyCollectionChanged)boundary.Links;
+        links.CollectionChanged += OnProjectedLinksChanged;
+        _subscribedProjectionLinkCollections.Add(links);
+
+        foreach (var child in boundary.Boundaries)
+            SubscribeToProjectionLinkCollections(child);
+        foreach (var template in boundary.FunctionTemplates)
+            SubscribeToProjectionLinkCollections(template.InternalModules);
+    }
+
+    private void OnProjectedLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => RebuildProjectedLinkViewModels();
 
     private void OnChildBoundariesChanged(object? sender, NotifyCollectionChangedEventArgs e)
         => RebuildBoundaryNavItems();
