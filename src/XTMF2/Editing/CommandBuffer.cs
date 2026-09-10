@@ -154,6 +154,27 @@ namespace XTMF2.Editing
             }
         }
 
+        /// <summary>
+        /// Rolls back commands collected in the active aggregate and discards it.
+        /// </summary>
+        internal bool AbortAggregateBatch(out CommandError? error)
+        {
+            CommandBatch? batch;
+            lock (_executionLock)
+            {
+                batch = _activeBatch;
+                _activeBatch = null;
+            }
+
+            if (batch is null)
+            {
+                error = null;
+                return true;
+            }
+
+            return batch.Undo(out error);
+        }
+
         /// <summary>True when there is at least one undoable command.</summary>
         public bool CanUndo => _undo.Count > 0;
 

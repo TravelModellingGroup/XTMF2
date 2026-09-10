@@ -233,6 +233,40 @@ public class LinkViewModelTests
     }
 
     [TestMethod]
+    public void CrossBoundaryLink_RemovingSourceLinkRemovesProjectedGhostLinkImmediately()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(CrossBoundaryLink_RemovingSourceLinkRemovesProjectedGhostLinkImmediately),
+            (user, _, msSession) =>
+            {
+                CommandError? error = null;
+                var root = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddBoundary(user, root, "Source",
+                    out var sourceBoundary, out error), error?.Message);
+                Assert.IsTrue(msSession.AddBoundary(user, root, "Destination",
+                    out var destinationBoundary, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, sourceBoundary!, "Origin",
+                    typeof(LinkedGuiTestModule), new Rectangle(20, 20, 120, 50),
+                    out var origin, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, destinationBoundary!, "Destination",
+                    typeof(SimpleGuiTestModule), new Rectangle(400, 100, 120, 50),
+                    out var destination, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, origin!, origin!.Hooks.First(h => h.Name == "Child"),
+                    destination!, out var link, out error), error?.Message);
+                Assert.IsTrue(msSession.AddGhostNode(user, destinationBoundary!, origin!,
+                    new Rectangle(240, 100, 120, 50), out var ghost, out error), error?.Message);
+
+                using var vmEditor = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                vmEditor.SwitchToBoundary(destinationBoundary!);
+                Assert.IsTrue(vmEditor.Links.Any(lvm => ReferenceEquals(lvm.UnderlyingLink, link)));
+
+                Assert.IsTrue(msSession.RemoveLink(user, link!, out error), error?.Message);
+
+                Assert.IsFalse(vmEditor.Links.Any(lvm => ReferenceEquals(lvm.UnderlyingLink, link)));
+            });
+    }
+
+    [TestMethod]
     public void RenamingReferencedNode_UpdatesGhostName()
     {
         TestGuiHelper.RunInModelSystemContext(

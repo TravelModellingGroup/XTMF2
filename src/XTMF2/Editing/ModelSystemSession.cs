@@ -3948,6 +3948,86 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Adds several destinations to one multi-cardinality hook as a single undoable command.
+        /// </summary>
+        public bool AddLinks(User user, Node origin, NodeHook originHook,
+            IReadOnlyList<Node> destinations, out MultiLink? link, out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(origin);
+            ArgumentNullException.ThrowIfNull(originHook);
+            ArgumentNullException.ThrowIfNull(destinations);
+            link = null;
+
+            if (destinations.Count == 0)
+            {
+                error = new CommandError("At least one destination is required.");
+                return false;
+            }
+            if (originHook.Cardinality is HookCardinality.Single or HookCardinality.SingleOptional)
+            {
+                error = new CommandError("The selected hook accepts only one destination.");
+                return false;
+            }
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                origin.GetLink(originHook, out var existingLink);
+                if (existingLink is MultiLink existingMultiLink)
+                {
+                    int startIndex = existingMultiLink.DestinationCount;
+                    foreach (var destination in destinations)
+                    {
+                        if (!existingMultiLink.AddDestination(destination, out error))
+                        {
+                            while (existingMultiLink.DestinationCount > startIndex)
+                                existingMultiLink.RemoveDestination(existingMultiLink.DestinationCount - 1);
+                            link = null;
+                            return false;
+                        }
+                    }
+
+                    link = existingMultiLink;
+                    var addedDestinations = destinations.ToArray();
+                    Buffer.AddUndo(new Command(() =>
+                    {
+                        for (int i = 0; i < addedDestinations.Length; i++)
+                            existingMultiLink.RemoveDestination(existingMultiLink.DestinationCount - 1);
+                        return (true, (CommandError?)null);
+                    }, () =>
+                    {
+                        foreach (var destination in addedDestinations)
+                            existingMultiLink.AddDestination(destination, out _);
+                        return (true, (CommandError?)null);
+                    }));
+                    error = null;
+                    return true;
+                }
+
+                var newMultiLink = new MultiLink(origin, originHook, destinations.ToList(), false);
+                if (!origin.ContainedWithin!.AddLink(newMultiLink, out error))
+                    return false;
+
+                link = newMultiLink;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    return (origin.ContainedWithin.RemoveLink(newMultiLink, out var undoError), undoError);
+                }, () =>
+                {
+                    return (origin.ContainedWithin.AddLink(newMultiLink, out var redoError), redoError);
+                }));
+                error = null;
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Add a new function template to a boundary.
         /// </summary>
         /// <param name="user">The user issuing the command.</param>
@@ -5089,6 +5169,69 @@ namespace XTMF2.Editing
                 error = null;
                 return true;
             }
+        }
+
+        /// <summary>
+        /// Moves a heterogeneous collection of elements to one boundary as a single
+        /// undoable operation. If any move fails, all earlier moves are rolled back.
+        /// </summary>
+        public bool MoveElementsToBoundary(
+            User user,
+            Boundary targetBoundary,
+            IReadOnlyList<Node>? nodes,
+            IReadOnlyList<GhostNode>? ghostNodes,
+            IReadOnlyList<FunctionTemplate>? templates,
+            IReadOnlyList<FunctionInstance>? instances,
+            [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(targetBoundary);
+
+            if (!_session.HasAccess(user))
+            {
+                error = new CommandError("The user does not have access to this project.", true);
+                return false;
+            }
+
+            Buffer.BeginAggregateBatch();
+
+            // Instances must move before their templates so a selected template can
+            // validate against the instances' intended destination scope.
+            if (instances is not null)
+                foreach (var instance in instances)
+                    if (!MoveFunctionInstanceToBoundary(user, instance, targetBoundary, out error))
+                    {
+                        Buffer.AbortAggregateBatch(out _);
+                        return false;
+                    }
+
+            if (templates is not null)
+                foreach (var template in templates)
+                    if (!MoveFunctionTemplate(user, template, template.Parent, targetBoundary, out error))
+                    {
+                        Buffer.AbortAggregateBatch(out _);
+                        return false;
+                    }
+
+            if (nodes is not null)
+                foreach (var node in nodes)
+                    if (!MoveNodeToBoundary(user, node, targetBoundary, out error))
+                    {
+                        Buffer.AbortAggregateBatch(out _);
+                        return false;
+                    }
+
+            if (ghostNodes is not null)
+                foreach (var ghostNode in ghostNodes)
+                    if (!MoveGhostNodeToBoundary(user, ghostNode, targetBoundary, out error))
+                    {
+                        Buffer.AbortAggregateBatch(out _);
+                        return false;
+                    }
+
+            Buffer.CommitAggregateBatch();
+            error = null;
+            return true;
         }
 
         /// <summary>

@@ -256,6 +256,20 @@ partial class ModelSystemCanvas
 
         if (dtos.Count == 0) return;
 
+        // Store positions relative to the top-left of the copied payload. Paste can then
+        // apply the destination anchor without carrying source-canvas coordinates along.
+        // Template companions are implementation details added for cross-system paste;
+        // they were not part of the user's selection and must not move its origin.
+        var selectedDtos = dtos.Where(dto => !dto.IsTemplateCompanion).ToList();
+        float minX = selectedDtos.Min(dto => dto.X);
+        float minY = selectedDtos.Min(dto => dto.Y);
+        if (minX != 0f || minY != 0f)
+        {
+            dtos = dtos
+                .Select(dto => dto with { X = dto.X - minX, Y = dto.Y - minY })
+                .ToList();
+        }
+
         var payload = CanvasClipboardSerializer.CreatePayload(dtos);
         var json    = CanvasClipboardSerializer.Serialize(payload);
 

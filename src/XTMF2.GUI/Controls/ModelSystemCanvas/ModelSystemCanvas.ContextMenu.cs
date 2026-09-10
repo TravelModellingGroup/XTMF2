@@ -87,6 +87,7 @@ partial class ModelSystemCanvas
             el.IsSelected = false;
         }
         _multiSelection.Clear();
+        _multiSelectionOrder.Clear();
 
         if (_vm?.SelectedElement is { } primary)
         {
@@ -917,7 +918,7 @@ partial class ModelSystemCanvas
             var moveNodeItem = new MenuItem { Header = "Move to Boundary…" };
             moveNodeItem.Click += async (_, _) =>
             {
-                await vm.MoveNodeToBoundaryAsync(capturedGhostSource);
+                await vm.MoveSelectedElementsToBoundaryAsync(capturedGhostSource, _multiSelection);
                 InvalidateAndMeasure();
             };
 
@@ -971,7 +972,7 @@ partial class ModelSystemCanvas
             var moveGhostItem = new MenuItem { Header = "Move to Boundary…" };
             moveGhostItem.Click += async (_, _) =>
             {
-                await vm.MoveGhostNodeToBoundaryAsync(capturedGhost);
+                await vm.MoveSelectedElementsToBoundaryAsync(capturedGhost, _multiSelection);
                 InvalidateAndMeasure();
             };
             menu.Items.Add(new Separator());
@@ -1002,7 +1003,7 @@ partial class ModelSystemCanvas
             var moveFtItem = new MenuItem { Header = "Move to Boundary…" };
             moveFtItem.Click += async (_, _) =>
             {
-                await vm.MoveFunctionTemplateToBoundaryAsync(capturedFt);
+                await vm.MoveSelectedElementsToBoundaryAsync(capturedFt, _multiSelection);
                 InvalidateAndMeasure();
             };
 
@@ -1059,7 +1060,7 @@ partial class ModelSystemCanvas
             var moveFiItem = new MenuItem { Header = "Move to Boundary…" };
             moveFiItem.Click += async (_, _) =>
             {
-                await vm.MoveFunctionInstanceToBoundaryAsync(capturedFi);
+                await vm.MoveSelectedElementsToBoundaryAsync(capturedFi, _multiSelection);
                 InvalidateAndMeasure();
             };
 
@@ -1185,6 +1186,17 @@ partial class ModelSystemCanvas
                 _ = CopySelectedElementsAsync();
             };
             menu.Items.Add(copyItem);
+        }
+
+        if (_multiSelectionOrder.Count > 1 && element is not null && _multiSelection.Contains(element))
+        {
+            var bulkLinkItem = new MenuItem
+            {
+                Header = CreateShortcutMenuHeader("Link to All Selected…", "Ctrl+L")
+            };
+            var selectedForBulkLink = _multiSelectionOrder.ToList();
+            bulkLinkItem.Click += (_, _) => _ = vm.BulkLinkSelectedAsync(selectedForBulkLink);
+            menu.Items.Add(bulkLinkItem);
         }
 
         // ── Align (multi-selection only) ──────────────────────────────────────

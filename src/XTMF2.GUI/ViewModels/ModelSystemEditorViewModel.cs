@@ -887,6 +887,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     // Cached reference to the current boundary's Boundaries collection so we can
     // reliably unsubscribe (Boundary.Boundaries returns a new wrapper on every call).
     private INotifyCollectionChanged? _subscribedChildBoundaries;
+    private readonly List<INotifyCollectionChanged> _subscribedProjectionLinkCollections = new();
 
     private void SubscribeToBoundary(Boundary boundary)
     {
@@ -901,6 +902,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Keep the same wrapper instance so we can correctly remove the handler later.
         _subscribedChildBoundaries  = boundary.Boundaries;
         _subscribedChildBoundaries.CollectionChanged += OnChildBoundariesChanged;
+
+        SubscribeToProjectionLinkCollections(GlobalBoundary);
     }
 
     private void UnsubscribeFromBoundary(Boundary boundary)
@@ -918,7 +921,26 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             _subscribedChildBoundaries.CollectionChanged -= OnChildBoundariesChanged;
             _subscribedChildBoundaries = null;
         }
+
+        foreach (var links in _subscribedProjectionLinkCollections)
+            links.CollectionChanged -= OnProjectedLinksChanged;
+        _subscribedProjectionLinkCollections.Clear();
     }
+
+    private void SubscribeToProjectionLinkCollections(Boundary boundary)
+    {
+        var links = (INotifyCollectionChanged)boundary.Links;
+        links.CollectionChanged += OnProjectedLinksChanged;
+        _subscribedProjectionLinkCollections.Add(links);
+
+        foreach (var child in boundary.Boundaries)
+            SubscribeToProjectionLinkCollections(child);
+        foreach (var template in boundary.FunctionTemplates)
+            SubscribeToProjectionLinkCollections(template.InternalModules);
+    }
+
+    private void OnProjectedLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => RebuildProjectedLinkViewModels();
 
     private void OnChildBoundariesChanged(object? sender, NotifyCollectionChangedEventArgs e)
         => RebuildBoundaryNavItems();
@@ -1624,6 +1646,51 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Shows one boundary picker and moves all selected elements supported by the
+    /// move-to-boundary command to the chosen boundary.
+    /// </summary>
+    internal async Task MoveSelectedElementsToBoundaryAsync(
+        ICanvasElement clickedElement,
+        IReadOnlyCollection<ICanvasElement> selectedElements)
+    {
+        if (ParentWindow is null) return;
+
+        var elements = selectedElements.Count > 1 && selectedElements.Contains(clickedElement)
+            ? selectedElements
+            : new[] { clickedElement };
+        var dialog = new Views.BoundaryPickerDialog(GetAllBoundaries(GlobalBoundary), _currentBoundary);
+        await dialog.ShowDialog(ParentWindow);
+        if (dialog.Result != Views.BoundaryPickerResult.Navigate || dialog.SelectedBoundary is null) return;
+
+        var nodes = new List<Node>();
+        var ghostNodes = new List<GhostNode>();
+        var templates = new List<FunctionTemplate>();
+        var instances = new List<FunctionInstance>();
+        foreach (var element in elements)
+        {
+            switch (element)
+            {
+                case NodeViewModel nvm when !nvm.IsInlined:
+                    nodes.Add(nvm.UnderlyingNode);
+                    break;
+                case GhostNodeViewModel gvm:
+                    ghostNodes.Add(gvm.UnderlyingGhostNode);
+                    break;
+                case FunctionTemplateViewModel ftvm:
+                    templates.Add(ftvm.UnderlyingTemplate);
+                    break;
+                case FunctionInstanceViewModel fivm:
+                    instances.Add(fivm.UnderlyingInstance);
+                    break;
+            }
+        }
+
+        if (!Session.MoveElementsToBoundary(User, dialog.SelectedBoundary,
+                nodes, ghostNodes, templates, instances, out var error))
+            ShowToast(error?.Message ?? "Failed to move one or more elements.", isError: true, durationMs: 4000);
+    }
+
+    /// <summary>
     /// Shows a boundary picker and moves the given ghost node reference to the chosen boundary.
     /// </summary>
     internal async Task MoveGhostNodeToBoundaryAsync(GhostNodeViewModel gvm)
@@ -1742,6 +1809,100 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         return dialog.SelectedHook;
+    }
+
+    /// <summary>
+    /// Links the first selected module or function instance to every subsequent selected
+    /// module or function instance using one hook shared by all destinations.
+    /// </summary>
+    internal async Task BulkLinkSelectedAsync(IReadOnlyList<ICanvasElement> selected)
+    {
+        if (selected.Count < 2)
+        {
+            ShowToast("Select an origin and at least one destination.", isError: true, durationMs: 4000);
+            return;
+        }
+
+        var originElement = selected[0];
+        Node? originNode = originElement switch
+        {
+            NodeViewModel nvm => nvm.UnderlyingNode,
+            FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+            GhostNodeViewModel ghost => ghost.ReferencedNode,
+            _ => null
+        };
+        if (originNode is null)
+        {
+            ShowToast("The first selected element must be a module, function instance, or ghost node.",
+                isError: true, durationMs: 5000);
+            return;
+        }
+
+        var destinations = new List<(ICanvasElement Element, Node Node, Type Type)>();
+        foreach (var element in selected.Skip(1))
+        {
+            Node? destination = element switch
+            {
+                NodeViewModel nvm => nvm.UnderlyingNode,
+                FunctionInstanceViewModel fivm => fivm.UnderlyingInstance,
+                _ => null
+            };
+            if (destination is null)
+            {
+                ShowToast("All selected destinations must be modules or function instances.",
+                    isError: true, durationMs: 5000);
+                return;
+            }
+
+            var destinationType = destination.Type;
+            if (element is FunctionInstanceViewModel && destinationType == typeof(object))
+            {
+                ShowToast($"'{element.Name}' has no entry node and cannot be a destination.",
+                    isError: true, durationMs: 5000);
+                return;
+            }
+            if (destinationType is null)
+            {
+                ShowToast($"'{element.Name}' has no type and cannot be a destination.",
+                    isError: true, durationMs: 5000);
+                return;
+            }
+
+            destinations.Add((element, destination, destinationType));
+        }
+
+        var sharedHooks = originNode.Hooks
+            .Where(hook => destinations.All(destination =>
+                GetCompatibleHooks(originNode, destination.Type).Contains(hook)))
+            .ToList();
+        if (sharedHooks.Count == 0)
+        {
+            ShowToast($"No single hook on '{originNode.Name}' is compatible with all selected destinations.",
+                isError: true, durationMs: 6000);
+            return;
+        }
+
+        var selectedHook = await SelectHookAsync(sharedHooks, originNode.Name, "all selected destinations");
+        if (selectedHook is null) return;
+
+        if (selectedHook.Cardinality is HookCardinality.Single or HookCardinality.SingleOptional)
+        {
+            ShowToast($"Hook '{selectedHook.Name}' accepts only one destination.",
+                isError: true, durationMs: 5000);
+            return;
+        }
+
+        if (!Session.AddLinks(User, originNode, selectedHook,
+                destinations.Select(destination => destination.Node).ToList(),
+                out _, out var addError))
+        {
+            ShowToast(addError?.Message ?? "Unable to create all selected links.",
+                isError: true, durationMs: 6000);
+            return;
+        }
+
+        ShowToast($"Linked {destinations.Count} destinations from '{originNode.Name}'.",
+            durationMs: 4000);
     }
 
     private async Task<bool> TryCreateReversedLinkAsync(Node originNode, Node destinationNode, string destinationName)
