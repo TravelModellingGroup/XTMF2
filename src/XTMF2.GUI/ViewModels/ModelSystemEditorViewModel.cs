@@ -207,7 +207,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     /// <summary>
     /// Flat, searchable list of all visible canvas elements in the current boundary view:
-    /// non-inlined <see cref="NodeViewModel"/>s, <see cref="StartViewModel"/>s,
+    /// non-inlined <see cref="NodeViewModel"/>s, <see cref="GhostNodeViewModel"/>s,
+    /// <see cref="StartViewModel"/>s,
     /// <see cref="FunctionTemplateViewModel"/>s, <see cref="FunctionInstanceViewModel"/>s,
     /// and <see cref="FunctionParameterViewModel"/>s.
     /// Rebuilt automatically whenever any constituent collection or a node's inline state changes.
@@ -342,8 +343,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     /// <summary>
     /// Rebuilds <see cref="SearchItems"/> from the current boundary's VM collections.
-    /// Non-inlined nodes and all Starts, FunctionTemplates, FunctionInstances,
-    /// and FunctionParameters are included.
+    /// Non-inlined nodes, ghost nodes, and all Starts, FunctionTemplates,
+    /// FunctionInstances, and FunctionParameters are included.
     /// </summary>
     private void RebuildSearchItems()
     {
@@ -353,6 +354,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         foreach (var nvm in Nodes)
             if (!nvm.IsInlined)
                 SearchItems.Add(nvm);
+        foreach (var gvm in GhostNodes)
+            SearchItems.Add(gvm);
         foreach (var svm in Starts)
             SearchItems.Add(svm);
         foreach (var ftvm in FunctionTemplates)
@@ -826,6 +829,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         // Keep SearchItems in sync with the canvas collections.
         // Nodes: also handles per-node IsInlined tracking.
         Nodes.CollectionChanged            += OnNodesCollectionChangedForSearch;
+        GhostNodes.CollectionChanged        += OnSearchCollectionChanged;
         Starts.CollectionChanged           += OnSearchCollectionChanged;
         FunctionTemplates.CollectionChanged += OnSearchCollectionChanged;
         FunctionInstances.CollectionChanged += OnSearchCollectionChanged;
