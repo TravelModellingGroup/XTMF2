@@ -18,6 +18,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Set Parameter", Description = "Sets the value of a parameter to the provided value.",
     DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/SetParameter.html")]
+[AiModuleInstructions("Use Set Parameter as an action under Execute.To Execute to assign a new value during execution. Connect Value to the target SetableParameter and configure New Value with the value to assign; both parameter hooks are required and are not ordinary structural execution links.")]
 public sealed class SetParameter<T> : BaseAction
 {
     [Parameter(Required = true, Name = "Value", Description = "The value to set the parameter to.", Index = 0, PassesExecution = true)]

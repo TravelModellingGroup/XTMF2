@@ -589,7 +589,8 @@ namespace XTMF2
                         capturedWarnings?.Add($"Deferred link from '{resolvedOrigin.Name}': hook '{pendingLink.HookName}' not found.");
                         continue;
                     }
-                    Link link = pendingLink.DestinationIndices.Count > 1
+                    bool isMultiDestinationHook = hook.Cardinality is HookCardinality.AtLeastOne or HookCardinality.AnyNumber;
+                    Link link = isMultiDestinationHook
                         ? new MultiLink(resolvedOrigin, hook, destinations, pendingLink.Disabled,
                             pendingLink.Orthogonal, pendingLink.HiddenDestinations?.ToList(), pendingLink.LinkId, pendingLink.BreakpointX)
                         : new SingleLink(resolvedOrigin, hook, destinations[0], pendingLink.Disabled,

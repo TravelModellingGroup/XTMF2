@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\XTMF2.Client\XTMF2.RunServer.csproj" />
     <ProjectReference Include="..\..\src\XTMF2\XTMF2.csproj" />
+    <ProjectReference Include="..\..\src\XTMF2.AI\XTMF2.AI.csproj" />
     <ProjectReference Include="..\..\src\XTMF2.Interfaces\XTMF2.Interfaces.csproj" />
   </ItemGroup>
 

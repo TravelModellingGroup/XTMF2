@@ -24,6 +24,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Open Read Stream From File", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/OpenReadStreamFromFile.html",
 Description = "Provides the ability to read a file from the path given to it via the context.")]
+[AiModuleInstructions("Configure the required File Path and Check File Exists At Run Start parameter hooks. File Path is resolved at runtime, commonly from the model context; when the check is true, RuntimeValidation fails before execution if the resolved file does not exist. The generated parameter children satisfy these hooks; do not create extra visible BasicParameter nodes unless a separate shared value is intended.")]
 public class OpenReadStreamFromFile : BaseFunction<ReadStream>
 {
     [Parameter(DefaultValue = "true", Description = "True if the file should be checked at runtime to ensure that it exists.", Index=1,

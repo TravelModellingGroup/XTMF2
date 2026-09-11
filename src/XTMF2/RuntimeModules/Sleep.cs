@@ -23,6 +23,7 @@ using System.Threading.Tasks;
 namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Sleep", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Sleep.html", Description = "Pauses execution for a specified duration.")]
+[AiModuleInstructions("Use Sleep as an action under Execute.To Execute when a deliberate pause is needed. Set the required Sleep Duration (ms) parameter to a nonnegative integer; RuntimeValidation rejects negative durations. The parameter is generated automatically when the node is created.")]
 public sealed class Sleep : BaseAction
 {
     [Parameter(DefaultValue = "1000", Description = "The number of milliseconds to sleep for.", Index = 0,

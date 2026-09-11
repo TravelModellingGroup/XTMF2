@@ -22,6 +22,7 @@ namespace XTMF2.RuntimeModules;
 [Module(Name = "Open Read Stream From Memory Pipe",
     Description = "Gets a ReadStream that is backed by memory.",
     DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/OpenReadStreamFromMemoryPipe.html")]
+[AiModuleInstructions("Connect the required Pipe hook to a MemoryPipe-producing module, commonly a BasicParameter<MemoryPipe> or another shared pipe value. This module produces a ReadStream; it is a value-producing function, not an action to place directly under Execute.To Execute.")]
 public sealed class OpenReadStreamFromMemoryPipe : BaseFunction<ReadStream>
 {
     [SubModule(Index=0,Name = "Pipe", Description = "The pipe to read from", Required = true)]

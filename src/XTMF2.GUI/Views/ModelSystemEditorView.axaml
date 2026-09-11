@@ -71,7 +71,7 @@
     <Grid RowDefinitions="Auto,*" Margin="10">
 
         <!-- ── Header ──────────────────────────────────────────────── -->
-        <Grid Grid.Row="0" Margin="0,0,0,8" ColumnDefinitions="*,Auto,Auto">
+        <Grid Grid.Row="0" Margin="0,0,0,8" ColumnDefinitions="*,Auto,Auto,Auto">
             <StackPanel Grid.Column="0">
                 <TextBlock Text="{Binding Title}"
                            FontSize="22"
@@ -125,6 +125,12 @@
                           StrokeLineCap="Round"/>
                 </Canvas>
             </Grid>
+                <Button Grid.Column="3"
+                    Content="AI Assistant"
+                        Click="OpenAiAssistant_Click"
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Center"
+                    ToolTip.Tip="Open the AI assistant in a separate window"/>
         </Grid>
 
         <!-- ── Main content: full-width canvas with floating overlays ─────── -->

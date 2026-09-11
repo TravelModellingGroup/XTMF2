@@ -86,6 +86,7 @@ public sealed class WriteToLogBasedOnContextF<Context, Return> : BaseFunction<Co
 
 [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
     Description = "Writes the provided message to the log and then invokes the next step.")]
+[AiModuleInstructions("Connect the required Log hook to a Log module and place this action under an Execute.To Execute hook when it should run each iteration. Set Message through its generated parameter child or by targeting the owning node with parameterName=Message; do not create a visible BasicParameter solely for this hook.")]
 public sealed class WriteToLogA : BaseAction
 {
     [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]
@@ -107,6 +108,7 @@ public sealed class WriteToLogA : BaseAction
 
 [Module(Name = "Write to Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WriteToLog.html",
     Description = "Writes the provided message to the log and then invokes the next step.")]
+[AiModuleInstructions("Connect the required Log hook to a Log module and place this action under an Execute.To Execute hook when it should run each iteration. Set Message through its generated parameter child or by targeting the owning node with parameterName=Message; do not create a visible BasicParameter solely for this hook.")]
 public sealed class WriteToLogA<Context> : BaseAction<Context>
 {
     [SubModule(Required = true, Name = "Log", Description = "The log that will be written to.", Index = 0)]

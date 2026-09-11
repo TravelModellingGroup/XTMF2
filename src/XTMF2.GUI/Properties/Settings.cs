@@ -74,6 +74,14 @@ public class Settings
     /// Defaults to false so the feature is opt-in.
     /// </summary>
     public bool PlaySystemSounds { get; set; } = false;
+    public string AiProvider { get; set; } = "ollama";
+    public string AiModel { get; set; } = "llama3.2";
+    public string OllamaEndpoint { get; set; } = "http://localhost:11434";
+    public int AiMaxCompactionCycles { get; set; } = 100;
+    public string AiAutonomyPolicy { get; set; } = "SuggestOnly";
+    public bool AiControlEnabled { get; set; }
+    public int AiControlPort { get; set; } = 45678;
+    public string AiControlCredentialKey { get; set; } = "XTMF2/ai-control-token";
 
     public void Save()
     {
@@ -111,6 +119,17 @@ public class Settings
                     settings.Theme = loaded.Theme;
                     settings.Language = loaded.Language;
                     settings.PlaySystemSounds = loaded.PlaySystemSounds;
+                    settings.AiProvider = "ollama";
+                    settings.AiModel = string.IsNullOrWhiteSpace(loaded.AiModel) ? "llama3.2" : loaded.AiModel;
+                    settings.OllamaEndpoint = string.IsNullOrWhiteSpace(loaded.OllamaEndpoint)
+                        ? "http://localhost:11434"
+                        : loaded.OllamaEndpoint;
+                    settings.AiMaxCompactionCycles = loaded.AiMaxCompactionCycles is < 1 or > 100
+                        ? 100
+                        : loaded.AiMaxCompactionCycles;
+                    settings.AiAutonomyPolicy = string.IsNullOrWhiteSpace(loaded.AiAutonomyPolicy)
+                        ? "SuggestOnly"
+                        : loaded.AiAutonomyPolicy;
                 }
             }
         }

@@ -1,5 +1,5 @@
 ﻿/*
-    Copyright 2014 Travel Modelling Group, Department of Civil Engineering, University of Toronto
+    Copyright 2017-2026 Travel Modelling Group, Department of Civil Engineering, University of Toronto
 
     This file is part of XTMF.
 
@@ -24,6 +24,10 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
+[AiModuleInstructions("Set the required Condition parameter and connect at least one execution branch: If True or If False. "
+ + "Connect both branches when both outcomes need behavior.  These branch hooks are PassesExecution and should point to "
+ + "functions with the matching return type; only the selected branch runs.  Condition is a parameter, not a link hook, "
+ + "so configure it with SetBasicParameter or SetScriptedParameter.")]
 public sealed class IfF<Return> : BaseFunction<Return>
 {
     [Parameter(Required = true, Name = "Condition",
@@ -51,6 +55,10 @@ Description = "The condition to invoke to see if the true or false path is taken
 
 [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
+[AiModuleInstructions("Set the required Condition parameter and connect at least one execution branch: If True or If False. "
+ + "Connect both branches when both outcomes need behavior.  These branch hooks are PassesExecution and should point to "
+ + "functions with the matching return type; only the selected branch runs.  Condition is a parameter, not a link hook, "
+ + "so configure it with SetBasicParameter or SetScriptedParameter.")]
 public sealed class IfF<Context, Return> : BaseFunction<Context, Return>
 {
     [Parameter(Required = true, Name = "Condition",
@@ -78,6 +86,10 @@ public sealed class IfF<Context, Return> : BaseFunction<Context, Return>
 
 [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
+[AiModuleInstructions("Set the required Condition parameter and connect at least one execution branch: If True or If False. "
+ + "Connect both branches when both outcomes need behavior.  These branch hooks are PassesExecution and should point to "
+ + "functions with the matching return type; only the selected branch runs.  Condition is a parameter, not a link hook, "
+ + "so configure it with SetBasicParameter or SetScriptedParameter.")]
 public sealed class IfWithContextF<Context, Return> : BaseFunction<Context, Return>
 {
     [Parameter(Required = true, Name = "Condition",
@@ -105,6 +117,10 @@ Description = "The condition to invoke to see if the true or false path is taken
 
 [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
+[AiModuleInstructions("Set the required Condition parameter and connect at least one execution branch: If True or If False. "
+ + "Connect both branches when both outcomes need behavior.  These branch hooks are PassesExecution and should point to "
+ + "functions with the matching return type; only the selected branch runs.  Condition is a parameter, not a link hook, "
+ + "so configure it with SetBasicParameter or SetScriptedParameter.")]
 public sealed class IfA : BaseAction
 {
     [Parameter(Required = true, Name = "Condition",
@@ -132,6 +148,10 @@ Description = "The condition to invoke to see if the true or false path is taken
 
 [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
+[AiModuleInstructions("Set the required Condition parameter and connect at least one execution branch: If True or If False. "
+ + "Connect both branches when both outcomes need behavior.  These branch hooks are PassesExecution and should point to "
+ + "functions with the matching return type; only the selected branch runs.  Condition is a parameter, not a link hook, "
+ + "so configure it with SetBasicParameter or SetScriptedParameter.")]
 public sealed class IfA<Context> : BaseAction<Context>
 {
     [Parameter(Required = true, Name = "Condition",
@@ -159,6 +179,10 @@ Description = "The condition to invoke to see if the true or false path is taken
 
 [Module(Name = "If", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute.  If the condition is true or false different functions will be invoked.")]
+[AiModuleInstructions("Set the required Condition parameter and connect at least one execution branch: If True or If False. "
+ + "Connect both branches when both outcomes need behavior.  These branch hooks are PassesExecution and should point to "
+ + "functions with the matching return type; only the selected branch runs.  Condition is a parameter, not a link hook, "
+ + "so configure it with SetBasicParameter or SetScriptedParameter.")]
 public sealed class IfWithContextA<Context> : BaseAction<Context>
 {
     [Parameter(Required = true, Name = "Condition",
@@ -186,9 +210,7 @@ Description = "The condition to invoke to see if the true or false path is taken
 
 [Module(Name = "If Unset", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/If.html",
 Description = "Provides a way to conditionally execute logic if a value is unset.  This is often used if we want a default value in " +
- "a FunctionTemplate or for the value to be allowed to be overriden.")
-
-]
+ "a FunctionTemplate or for the value to be allowed to be overriden.")]
 public sealed class IfUnset<Return> : BaseFunction<Return>
 {
     [SubModule(Required = false, Name = "Value", Description = "The value to check if it is unset.", Index = 0)]

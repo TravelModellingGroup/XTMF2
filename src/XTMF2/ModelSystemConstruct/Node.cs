@@ -594,14 +594,14 @@ namespace XTMF2.ModelSystemConstruct
             return true;
         }
 
-        internal static Node? Create(ModuleRepository modules, string name, Type type, Boundary boundary, Rectangle location)
+        internal static Node? Create(ModuleRepository modules, string name, Type type, Boundary boundary, Rectangle location, Guid id = default)
         {
             (_, _, var hooks) = modules[type];
             if (hooks == null)
             {
                 return null;
             }
-            return new Node(name, type, boundary, hooks, location);
+            return new Node(name, type, boundary, hooks, location, id);
         }
 
         public Node? GetParameter(ModelSystemSession session, string parameterName)

@@ -25,6 +25,9 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Execute", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Execute.html",
 Description = "Provides a way to execute a series of actions in order, optionally in parallel or with multiple iterations.")]
+[AiModuleInstructions("Use To Execute to connect one or more IAction modules that should run for each iteration. "
++ "The To Execute hook is a multi-destination execution-flow hook; use CreateLink for the first action and AddLinkDestination for additional actions. "
++ "The hook 'Current Iteration' provides the current iteration index during execution, it starts at zero and then increments each iteration.")]
 public class Execute : BaseAction
 {
     [Parameter(DefaultValue = "false", Name = "Parallel Execution", Description = "If true, executes the modules to invoke in parallel instead of in sequence.", Required = false, Index = 0)]
@@ -70,6 +73,7 @@ public class Execute : BaseAction
 
 [Module(Name = "Execute", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Execute.html",
 Description = "Provides a way to execute a series of actions in order, optionally in parallel or with multiple iterations.")]
+[AiModuleInstructions("Use To Execute to connect one or more IAction<Context> modules that should run for each iteration. The To Execute hook is a multi-destination execution-flow hook; use CreateLink for the first action and AddLinkDestination for additional actions.")]
 public class Execute<Context> : BaseAction<Context>
 {
     [Parameter(DefaultValue = "false", Name = "Parallel Execution", Description = "If true, executes the modules to invoke in parallel instead of in sequence.", Required = false, Index = 0)]

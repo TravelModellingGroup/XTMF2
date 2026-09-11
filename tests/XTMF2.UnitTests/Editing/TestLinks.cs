@@ -719,6 +719,39 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void SingleDestinationOnMultiCardinalityHookReloadsAsMultiLink()
+        {
+            TestHelper.RunInModelSystemContext(nameof(SingleDestinationOnMultiCardinalityHookReloadsAsMultiLink),
+                (user, pSession, msSession) =>
+                {
+                    var ms = msSession.ModelSystem;
+                    CommandError error = null;
+
+                    Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Execute", typeof(Execute), Rectangle.Hidden,
+                        out var execute, out error), error?.Message);
+                    Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Destination", typeof(IgnoreResult<string>),
+                        Rectangle.Hidden, out var destination, out error), error?.Message);
+
+                    var hook = TestHelper.GetHook(execute!.Hooks, "To Execute");
+                    Assert.AreEqual(HookCardinality.AnyNumber, hook.Cardinality);
+                    Assert.IsTrue(msSession.AddLink(user, execute, hook, destination!, out var link, out error), error?.Message);
+                    Assert.IsInstanceOfType<MultiLink>(link);
+                    Assert.AreEqual(1, ((MultiLink)link!).DestinationCount);
+                    Assert.IsTrue(msSession.Save(out error), error?.Message);
+                },
+                (user, pSession, msSession) =>
+                {
+                    var execute = msSession.ModelSystem.GlobalBoundary.Modules.First(node => node.Name == "Execute");
+                    var link = msSession.ModelSystem.GlobalBoundary.Links
+                        .Single(candidate => ReferenceEquals(candidate.Origin, execute));
+
+                    Assert.IsInstanceOfType<MultiLink>(link);
+                    Assert.AreEqual(1, ((MultiLink)link).DestinationCount);
+                    Assert.AreEqual("Destination", ((MultiLink)link).Destinations[0].Name);
+                });
+        }
+
+        [TestMethod]
         public void HideIncomingBranchesByDestinationTargetIsSingleUndoRedo()
         {
             TestHelper.RunInModelSystemContext("HideIncomingBranchesByDestinationTargetIsSingleUndoRedo", (user, pSession, msSession) =>

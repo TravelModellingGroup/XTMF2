@@ -23,6 +23,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "With Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/WithContext.html",
     Description = "Provides a way to execute an action with a context loaded from the provided context.")]
+[AiModuleInstructions("Connect Get Context to a function producing Context1 and To Execute to the context-aware action. Context1 must be assignable to Context2; this adapts a context-producing function into an action invocation.")]
 public sealed class WithContext<Context1, Context2> : BaseAction where Context1 : Context2
 {
     [SubModule(Required = true, Name = "Get Context", Description = "The function to get the context to execute with.", Index = 0)]
@@ -40,6 +41,7 @@ public sealed class WithContext<Context1, Context2> : BaseAction where Context1 
 
 [Module(Name = "Return Using Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ReturnUsingContext.html",
     Description = "Provides a way to execute a function with a context loaded from the provided context and return the result.")]
+[AiModuleInstructions("Connect Get Context to a function producing Context and To Execute to a context-aware function returning Return. This is a value-producing adapter and should be connected as a function, not placed directly in Execute.To Execute unless wrapped by an action.")]
 public sealed class ReturnUsingContext<Context, Return> : BaseFunction<Return>
 {
     [SubModule(Required = true, Name = "Get Context", Description = "The function to get the context to execute with.", Index = 0)]

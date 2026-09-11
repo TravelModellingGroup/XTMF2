@@ -20,6 +20,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using System;
 using System.Linq;
 using XTMF2.GUI.Resources;
 
@@ -29,6 +30,10 @@ public partial class SettingsWindow : Window
 {
     private string? _currentTheme;
     private string? _currentLanguage;
+    private string _currentAiProvider = "ollama";
+    private string _currentAiModel = "llama3.2";
+    private string _currentOllamaEndpoint = "http://localhost:11434";
+    private string _currentAiAutonomyPolicy = "SuggestOnly";
 
     public SettingsWindow()
     {
@@ -66,6 +71,22 @@ public partial class SettingsWindow : Window
 
         // Load system sounds preference
         PlaySystemSoundsCheckBox.IsChecked = Properties.Settings.Default.PlaySystemSounds;
+            _currentAiProvider = Properties.Settings.Default.AiProvider;
+            _currentAiModel = Properties.Settings.Default.AiModel;
+            _currentOllamaEndpoint = Properties.Settings.Default.OllamaEndpoint;
+            _currentAiAutonomyPolicy = Properties.Settings.Default.AiAutonomyPolicy;
+            AiProviderComboBox.SelectedItem = AiProviderComboBox.Items
+                .OfType<ComboBoxItem>()
+                .FirstOrDefault(item => item.Tag?.ToString() == _currentAiProvider);
+            AiModelTextBox.Text = _currentAiModel;
+            OllamaEndpointTextBox.Text = _currentOllamaEndpoint;
+            AiMaxCompactionCyclesTextBox.Text = Properties.Settings.Default.AiMaxCompactionCycles.ToString();
+            AiControlEnabledCheckBox.IsChecked = Properties.Settings.Default.AiControlEnabled;
+            AiControlPortTextBox.Text = Properties.Settings.Default.AiControlPort.ToString();
+            AiControlCredentialKeyTextBox.Text = Properties.Settings.Default.AiControlCredentialKey;
+            AiAutonomyPolicyComboBox.SelectedItem = AiAutonomyPolicyComboBox.Items
+                .OfType<ComboBoxItem>()
+                .FirstOrDefault(item => item.Tag?.ToString() == _currentAiAutonomyPolicy);
     }
 
     private void ThemeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -136,6 +157,28 @@ public partial class SettingsWindow : Window
         // Save system sounds preference
         Properties.Settings.Default.PlaySystemSounds =
             PlaySystemSoundsCheckBox.IsChecked == true;
+        if (AiProviderComboBox.SelectedItem is ComboBoxItem providerItem && providerItem.Tag is string provider)
+            Properties.Settings.Default.AiProvider = provider;
+        Properties.Settings.Default.AiModel = string.IsNullOrWhiteSpace(AiModelTextBox.Text)
+            ? "llama3.2"
+            : AiModelTextBox.Text.Trim();
+        Properties.Settings.Default.OllamaEndpoint = string.IsNullOrWhiteSpace(OllamaEndpointTextBox.Text)
+            ? "http://localhost:11434"
+            : OllamaEndpointTextBox.Text.Trim();
+        if (int.TryParse(AiMaxCompactionCyclesTextBox.Text, out var maxCompactionCycles))
+        {
+            Properties.Settings.Default.AiMaxCompactionCycles = Math.Clamp(maxCompactionCycles, 1, 100);
+        }
+        else
+        {
+            Properties.Settings.Default.AiMaxCompactionCycles = 100;
+        }
+        Properties.Settings.Default.AiControlEnabled = AiControlEnabledCheckBox.IsChecked == true;
+        if (int.TryParse(AiControlPortTextBox.Text, out var aiControlPort) && aiControlPort is > 0 and <= 65535)
+            Properties.Settings.Default.AiControlPort = aiControlPort;
+        Properties.Settings.Default.AiControlCredentialKey = AiControlCredentialKeyTextBox.Text?.Trim() ?? string.Empty;
+        if (AiAutonomyPolicyComboBox.SelectedItem is ComboBoxItem policyItem && policyItem.Tag is string policy)
+            Properties.Settings.Default.AiAutonomyPolicy = policy;
 
         Properties.Settings.Default.Save();
 

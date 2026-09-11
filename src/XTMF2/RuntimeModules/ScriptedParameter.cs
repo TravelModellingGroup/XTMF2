@@ -24,6 +24,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Scripted Parameter", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ScriptedParameter.html",
 Description = "Provides the ability to have a value that is calculated in an expression.")]
+[AiModuleInstructions("Use ScriptedParameter when a value should be calculated from a parameter expression. Set its expression with SetScriptedParameter or target the owning parameter hook with the exact parameterName; RuntimeValidation requires a compatible non-empty expression. Do not connect it as a structural execution module.")]
 public sealed class ScriptedParameter<T> : BaseFunction<T>
 {
 #pragma warning disable CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
