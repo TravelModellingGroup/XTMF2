@@ -10,11 +10,11 @@
 - `AiActionProposal` and `AiActionBatch` represent structured model-system edits.
 - `AiPlan` and `AiPlanTask` represent dependency-ordered work that can be executed in small batches.
 - `AiActionExecutionResult.FailedActionId` identifies exactly which proposed action failed validation, so correction feedback can target one action instead of an entire batch.
-- `AiActionPolicy` enforces the configured execution policy before edits are applied.
+- `AiActionValidation` enforces explicit approval and destructive-action confirmation before edits are applied.
 - `AiProviderRegistry` provides deterministic provider lookup and model discovery.
 - `AiAssistantService` connects provider selection, streaming chat, policy validation, and action application.
 
-The default policy is `SuggestOnly`. The other policies are `ApproveBatch` and `Autonomous`. Destructive actions always require a separate explicit approval, including in autonomous mode.
+Ask mode returns ordinary responses. Agent mode returns structured proposals for explicit review and application; destructive actions require a separate explicit approval.
 
 ## Architecture boundary
 
@@ -22,11 +22,9 @@ This project does not reference Avalonia, `ModelSystemSession`, `HostBus`, or `R
 
 Providers must not receive credentials in `AiContextSnapshot`, and this project does not persist credentials. Provider-specific authentication belongs in the adapter or host application's credential-store integration.
 
-`OsCredentialStore` implements `IAiCredentialStore` using Windows Credential Manager, Linux Secret Service through `secret-tool`, or the macOS Keychain through `security`. The store uses the fixed `XTMF2` service name and a caller-provided key; secrets are never serialized into XTMF2 settings. The external control API uses this store for its bearer token.
-
 ## Agent orchestration
 
-XTMF2 has an implemented orchestrator, but it is currently host-owned rather than a standalone class in `XTMF2.AI`. `AiAssistantViewModel` in `XTMF2.GUI` owns the turn state machine and user-facing state; `AiAssistantService` dispatches provider calls and enforces action policy; `ModelSystemContextProjector` supplies the current model-system snapshot; and `ModelSystemActionApplier` translates accepted actions into undoable `ModelSystemSession` commands. The provider remains responsible for inference and structured response parsing, not for mutating the model system.
+XTMF2 has an implemented orchestrator, but it is currently host-owned rather than a standalone class in `XTMF2.AI`. `AiAssistantViewModel` in `XTMF2.GUI` owns the turn state machine and user-facing state; `AiAssistantService` dispatches provider calls and validates approved actions; `ModelSystemContextProjector` supplies the current model-system snapshot; and `ModelSystemActionApplier` translates accepted actions into undoable `ModelSystemSession` commands. The provider remains responsible for inference and structured response parsing, not for mutating the model system.
 
 ### Turn algorithm
 
@@ -41,7 +39,7 @@ An `Agent` turn adds a two-phase workflow:
 
 1. **Design:** send the prompt with the current context and force `SuggestOnly`. The model returns concise prose naming exact module types, node names, and hook names; it must not return actions or a plan.
 2. **Build:** send the prompt again with the same context plus the design summary. The model returns one structured response containing concise text, optional `proposedActions`, and an optional dependency-aware `plan`.
-3. Validate action requests through `AiAssistantService` and the configured `AiAutonomyPolicy`.
+3. Validate action requests through `AiAssistantService` before exposing proposals for review.
 4. Validate the complete proposed action set through the host's non-mutating model-system validator. If a required structural hook is unconnected, ask the model whether it intends to add the link; an unchanged action set confirms that the omission is intentional. Other validation failures are fed back as corrections before exposing proposals.
 5. In `SuggestOnly` or `ApproveBatch`, leave validated proposals visible for review. The user can select individual actions, approve the batch, and apply it through the GUI.
 6. In `Autonomous`, apply non-destructive proposals automatically. If a plan is present, execute only ready tasks in dependency order; otherwise execute the proposed actions as one batch. Stop at the first failed task or action.

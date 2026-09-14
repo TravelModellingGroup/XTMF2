@@ -61,7 +61,6 @@ public partial class MainWindow : Window
     private SettingsWindow? _settingsWindow;
     private readonly HttpClient _aiHttpClient = new();
     private readonly AiProviderRegistry _aiProviders = new();
-    private AiControlServer? _aiControlServer;
 
     /// <summary>
     /// The single RunController instance for this GUI session.
@@ -92,38 +91,6 @@ public partial class MainWindow : Window
         DataContext = this;
         InitializeDock();
         UpdateLoadingState();
-        _ = StartAiControlServerAsync();
-    }
-
-    private async Task StartAiControlServerAsync()
-    {
-        if (!Properties.Settings.Default.AiControlEnabled ||
-            Properties.Settings.Default.AiControlPort is <= 0 or > 65535 ||
-            string.IsNullOrWhiteSpace(Properties.Settings.Default.AiControlCredentialKey))
-        {
-            return;
-        }
-
-        try
-        {
-            var token = await new OsCredentialStore().GetAsync(
-                Properties.Settings.Default.AiControlCredentialKey).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(token) || _allowClose)
-            {
-                return;
-            }
-
-            _aiControlServer = new AiControlServer(
-                () => _activeEditorVm?.AiAssistant?.Service
-                    ?? throw new InvalidOperationException("No active model-system editor is available."),
-                $"http://127.0.0.1:{Properties.Settings.Default.AiControlPort}/",
-                token);
-            _aiControlServer.Start();
-        }
-        catch (Exception exception)
-        {
-            System.Diagnostics.Debug.WriteLine($"AI control server was not started: {exception.Message}");
-        }
     }
 
     private DocumentDock? _documentDock;
@@ -399,12 +366,6 @@ public partial class MainWindow : Window
             service,
             Properties.Settings.Default.AiModel,
             Properties.Settings.Default.AiProvider,
-            Enum.TryParse<AiAutonomyPolicy>(
-                Properties.Settings.Default.AiAutonomyPolicy,
-                ignoreCase: true,
-                out var autonomyPolicy)
-                ? autonomyPolicy
-                : AiAutonomyPolicy.SuggestOnly,
             Properties.Settings.Default.AiMaxCompactionCycles);
     }
 
@@ -573,12 +534,6 @@ public partial class MainWindow : Window
     {
         if (_allowClose)
         {
-            if (_aiControlServer is not null)
-            {
-                await _aiControlServer.DisposeAsync();
-                _aiControlServer = null;
-            }
-
             base.OnClosing(e);
             return;
         }

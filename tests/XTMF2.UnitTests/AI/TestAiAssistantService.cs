@@ -45,7 +45,6 @@ public sealed class TestAiAssistantService
 
         var result = await service.ExecuteAsync(
             batch,
-            AiAutonomyPolicy.SuggestOnly,
             approvalGranted: false,
             destructiveApprovalGranted: false);
 
@@ -68,7 +67,6 @@ public sealed class TestAiAssistantService
 
         var result = await service.ExecuteAsync(
             batch,
-            AiAutonomyPolicy.ApproveBatch,
             approvalGranted: true,
             destructiveApprovalGranted: false);
 

@@ -111,16 +111,9 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
 
     public bool IsAgentMode => Mode == AiAssistantMode.Agent;
 
-    public AiAutonomyPolicy AutonomyPolicy { get; set; } = AiAutonomyPolicy.SuggestOnly;
-
     public string ProviderId { get; }
 
     public AiAssistantService Service => _service;
-
-    private AiAutonomyPolicy EffectiveAutonomyPolicy =>
-        AutonomyPolicy == AiAutonomyPolicy.SuggestOnly
-            ? AiAutonomyPolicy.ApproveBatch
-            : AutonomyPolicy;
 
     public AiAssistantViewModel(
         AiAssistantService service,
@@ -128,7 +121,6 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
         Func<Boundary> currentBoundary,
         string modelId = "llama3.2",
         string providerId = "ollama",
-        AiAutonomyPolicy autonomyPolicy = AiAutonomyPolicy.SuggestOnly,
         int maxCompactionCycles = MaximumAllowedCompactionCycles)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
@@ -136,7 +128,6 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
         _currentBoundary = currentBoundary ?? throw new ArgumentNullException(nameof(currentBoundary));
         ModelId = string.IsNullOrWhiteSpace(modelId) ? "llama3.2" : modelId;
         ProviderId = string.IsNullOrWhiteSpace(providerId) ? "ollama" : providerId;
-        AutonomyPolicy = autonomyPolicy;
         _maxCompactionCycles = Math.Clamp(maxCompactionCycles, 1, MaximumAllowedCompactionCycles);
         ProposedActions.CollectionChanged += OnProposedActionsChanged;
         NewSessionCommand = new RelayCommand(NewSession);
@@ -346,7 +337,6 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
 
         await RunStreamingTurnAsync(
             askMessages,
-            AiAutonomyPolicy.SuggestOnly,
             maxOutputTokens: 1024,
             statusLabel: "Answering",
             askMode: true);
@@ -508,7 +498,7 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
                 "concrete proposedActions and a plan for multi-step requests. Do not defer the actions to a " +
                 "later response.")
         };
-            await RunStreamingTurnAsync(agentMessages, EffectiveAutonomyPolicy, maxOutputTokens: 1024, "Thinking");
+            await RunStreamingTurnAsync(agentMessages, maxOutputTokens: 1024, "Thinking");
 
         if (HasProposedActions)
         {
@@ -531,22 +521,6 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
                 PlanSummary = string.Empty;
                 return AiApplyOutcome.Failed;
             }
-        }
-
-        if (EffectiveAutonomyPolicy == AiAutonomyPolicy.Autonomous && HasProposedActions)
-        {
-            if (HasPlan)
-            {
-                await ApplyReadyPlanTasksAsync();
-            }
-            else
-            {
-                await ApplyActionsCoreAsync(
-                    approvalGranted: true,
-                    destructiveApprovalGranted: true);
-            }
-
-            return string.IsNullOrWhiteSpace(Error) ? AiApplyOutcome.Applied : AiApplyOutcome.Failed;
         }
 
         return AiApplyOutcome.NotApplicable;
@@ -633,7 +607,6 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
 
     private async Task RunStreamingTurnAsync(
         IReadOnlyList<AiMessage> initialMessages,
-        AiAutonomyPolicy requestAutonomyPolicy,
         int maxOutputTokens,
         string statusLabel,
         bool askMode = false)
@@ -679,7 +652,7 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
                     _currentBoundary(),
                     pendingActions: ProposedActions.Select(action => action.Proposal).ToArray(),
                     reservedElementIds: _reservedElementIds),
-                requestAutonomyPolicy,
+                IsAgent: !askMode,
                 MaxOutputTokens: maxOutputTokens);
             UpdateContextUsage(request);
             var wasTruncated = false;
@@ -1123,7 +1096,6 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
             actions);
         return await _service.ExecuteAsync(
             batch,
-            EffectiveAutonomyPolicy,
             approvalGranted,
             destructiveApprovalGranted);
     }

@@ -38,7 +38,7 @@ public sealed class AiAssistantViewModelTests
             Assert.IsNull(viewModel.Error, viewModel.Error);
             Assert.AreEqual("answer", viewModel.Response);
             Assert.IsEmpty(viewModel.Prompt);
-            Assert.AreEqual(AiAutonomyPolicy.SuggestOnly, provider.Requests[0].AutonomyPolicy);
+            Assert.IsFalse(provider.Requests[0].IsAgent);
             Assert.HasCount(2, viewModel.Conversation);
             Assert.IsTrue(viewModel.Conversation[0].IsUser);
             Assert.AreEqual("What nodes are in this model system?", viewModel.Conversation[0].Content);

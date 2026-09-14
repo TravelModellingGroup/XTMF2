@@ -819,7 +819,6 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         AiAssistantService? aiAssistantService = null,
         string aiModel = "llama3.2",
         string aiProvider = "ollama",
-        AiAutonomyPolicy aiAutonomyPolicy = AiAutonomyPolicy.SuggestOnly,
         int aiMaxCompactionCycles = AiAssistantViewModel.MaximumAllowedCompactionCycles)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -838,7 +837,6 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 () => CurrentBoundary,
                 aiModel,
                 aiProvider,
-                aiAutonomyPolicy,
                 aiMaxCompactionCycles);
         }
 

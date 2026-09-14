@@ -45,14 +45,12 @@ public sealed class AiAssistantService
 
     public async Task<AiActionExecutionResult> ExecuteAsync(
         AiActionBatch batch,
-        AiAutonomyPolicy policy,
         bool approvalGranted,
         bool destructiveApprovalGranted,
         CancellationToken cancellationToken = default)
     {
-        var validation = AiActionPolicy.ValidateForExecution(
+        var validation = AiActionValidation.ValidateForExecution(
             batch,
-            policy,
             approvalGranted,
             destructiveApprovalGranted);
         if (!validation.IsValid)

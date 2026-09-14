@@ -7,13 +7,6 @@ using System.Threading.Tasks;
 
 namespace XTMF2.AI;
 
-public enum AiAutonomyPolicy
-{
-    SuggestOnly,
-    ApproveBatch,
-    Autonomous
-}
-
 [Flags]
 public enum AiCapability
 {
@@ -57,11 +50,6 @@ public sealed record AiProviderInfo(
     string Id,
     string DisplayName,
     AiCapability Capabilities);
-
-public sealed record AiCredentialBinding(
-    IAiCredentialStore Store,
-    string Key,
-    string EnvironmentVariable);
 
 public sealed record AcpPermissionOption(
     string OptionId,
@@ -164,7 +152,7 @@ public sealed record AiChatRequest(
     string ModelId,
     IReadOnlyList<AiMessage> Messages,
     AiContextSnapshot? Context = null,
-    AiAutonomyPolicy AutonomyPolicy = AiAutonomyPolicy.SuggestOnly,
+    bool IsAgent = false,
     int MaxOutputTokens = 1024,
     AiGenerationOptions? GenerationOptions = null);
 
@@ -274,11 +262,10 @@ public interface IAiActionValidator
         CancellationToken cancellationToken = default);
 }
 
-public static class AiActionPolicy
+public static class AiActionValidation
 {
     public static AiActionValidationResult ValidateForExecution(
         AiActionBatch batch,
-        AiAutonomyPolicy policy,
         bool approvalGranted,
         bool destructiveApprovalGranted)
     {
@@ -298,13 +285,7 @@ public static class AiActionPolicy
                 $"The action batch contains duplicate action id '{duplicateId.Key}'.");
         }
 
-        if (policy == AiAutonomyPolicy.SuggestOnly)
-        {
-            return AiActionValidationResult.Invalid(
-                "Suggest-only mode does not permit automatic action execution.");
-        }
-
-        if (policy == AiAutonomyPolicy.ApproveBatch && !approvalGranted)
+        if (!approvalGranted)
         {
             return AiActionValidationResult.Invalid(
                 "The action batch requires explicit approval before execution.");

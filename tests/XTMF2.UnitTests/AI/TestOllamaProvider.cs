@@ -189,7 +189,7 @@ public sealed class TestOllamaProvider
         var request = new AiChatRequest(
             "llama3.2",
             [new AiMessage(AiRole.User, "Create one node")],
-            AutonomyPolicy: AiAutonomyPolicy.ApproveBatch);
+            IsAgent: true);
 
         await foreach (var _ in provider.ChatAsync(request))
         {
@@ -217,7 +217,7 @@ public sealed class TestOllamaProvider
         var request = new AiChatRequest(
             "llama3.2",
             [new AiMessage(AiRole.User, "Rename the node")],
-            AutonomyPolicy: AiAutonomyPolicy.ApproveBatch);
+            IsAgent: true);
 
         var chunks = new List<AiResponseChunk>();
         await foreach (var chunk in provider.ChatAsync(request))
@@ -244,7 +244,7 @@ public sealed class TestOllamaProvider
         var request = new AiChatRequest(
             "llama3.2",
             [new AiMessage(AiRole.User, "What is the status?")],
-            AutonomyPolicy: AiAutonomyPolicy.ApproveBatch);
+            IsAgent: true);
 
         var chunks = new List<AiResponseChunk>();
         await foreach (var chunk in provider.ChatAsync(request))
@@ -274,7 +274,7 @@ public sealed class TestOllamaProvider
         var request = new AiChatRequest(
             "llama3.2",
             [new AiMessage(AiRole.User, "Continue")],
-            AutonomyPolicy: AiAutonomyPolicy.ApproveBatch);
+            IsAgent: true);
 
         AiResponseChunk finalChunk = null!;
         await foreach (var chunk in provider.ChatAsync(request))

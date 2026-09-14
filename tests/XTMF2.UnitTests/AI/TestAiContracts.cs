@@ -8,11 +8,11 @@ namespace XTMF2.UnitTests.AI;
 public sealed class TestAiContracts
 {
     [TestMethod]
-    public void ChatRequestDefaultsToSuggestOnly()
+    public void ChatRequestDefaultsToAskMode()
     {
         var request = new AiChatRequest("model", [new AiMessage(AiRole.User, "Inspect this")]);
 
-        Assert.AreEqual(AiAutonomyPolicy.SuggestOnly, request.AutonomyPolicy);
+        Assert.IsFalse(request.IsAgent);
         Assert.IsNull(request.Context);
     }
 

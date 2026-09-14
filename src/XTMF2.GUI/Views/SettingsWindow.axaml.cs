@@ -22,7 +22,10 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using System;
 using System.Linq;
+using System.Net.Http;
+using System.Threading.Tasks;
 using XTMF2.GUI.Resources;
+using XTMF2.AI;
 
 namespace XTMF2.GUI.Views;
 
@@ -33,7 +36,7 @@ public partial class SettingsWindow : Window
     private string _currentAiProvider = "ollama";
     private string _currentAiModel = "llama3.2";
     private string _currentOllamaEndpoint = "http://localhost:11434";
-    private string _currentAiAutonomyPolicy = "SuggestOnly";
+    private readonly HttpClient _aiHttpClient = new();
 
     public SettingsWindow()
     {
@@ -74,19 +77,13 @@ public partial class SettingsWindow : Window
             _currentAiProvider = Properties.Settings.Default.AiProvider;
             _currentAiModel = Properties.Settings.Default.AiModel;
             _currentOllamaEndpoint = Properties.Settings.Default.OllamaEndpoint;
-            _currentAiAutonomyPolicy = Properties.Settings.Default.AiAutonomyPolicy;
             AiProviderComboBox.SelectedItem = AiProviderComboBox.Items
                 .OfType<ComboBoxItem>()
                 .FirstOrDefault(item => item.Tag?.ToString() == _currentAiProvider);
-            AiModelTextBox.Text = _currentAiModel;
             OllamaEndpointTextBox.Text = _currentOllamaEndpoint;
+            AiModelComboBox.SelectedItem = _currentAiModel;
             AiMaxCompactionCyclesTextBox.Text = Properties.Settings.Default.AiMaxCompactionCycles.ToString();
-            AiControlEnabledCheckBox.IsChecked = Properties.Settings.Default.AiControlEnabled;
-            AiControlPortTextBox.Text = Properties.Settings.Default.AiControlPort.ToString();
-            AiControlCredentialKeyTextBox.Text = Properties.Settings.Default.AiControlCredentialKey;
-            AiAutonomyPolicyComboBox.SelectedItem = AiAutonomyPolicyComboBox.Items
-                .OfType<ComboBoxItem>()
-                .FirstOrDefault(item => item.Tag?.ToString() == _currentAiAutonomyPolicy);
+            _ = RefreshModelsAsync();
     }
 
     private void ThemeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -159,9 +156,9 @@ public partial class SettingsWindow : Window
             PlaySystemSoundsCheckBox.IsChecked == true;
         if (AiProviderComboBox.SelectedItem is ComboBoxItem providerItem && providerItem.Tag is string provider)
             Properties.Settings.Default.AiProvider = provider;
-        Properties.Settings.Default.AiModel = string.IsNullOrWhiteSpace(AiModelTextBox.Text)
+        Properties.Settings.Default.AiModel = string.IsNullOrWhiteSpace(AiModelComboBox.Text)
             ? "llama3.2"
-            : AiModelTextBox.Text.Trim();
+            : AiModelComboBox.Text.Trim();
         Properties.Settings.Default.OllamaEndpoint = string.IsNullOrWhiteSpace(OllamaEndpointTextBox.Text)
             ? "http://localhost:11434"
             : OllamaEndpointTextBox.Text.Trim();
@@ -173,17 +170,44 @@ public partial class SettingsWindow : Window
         {
             Properties.Settings.Default.AiMaxCompactionCycles = 100;
         }
-        Properties.Settings.Default.AiControlEnabled = AiControlEnabledCheckBox.IsChecked == true;
-        if (int.TryParse(AiControlPortTextBox.Text, out var aiControlPort) && aiControlPort is > 0 and <= 65535)
-            Properties.Settings.Default.AiControlPort = aiControlPort;
-        Properties.Settings.Default.AiControlCredentialKey = AiControlCredentialKeyTextBox.Text?.Trim() ?? string.Empty;
-        if (AiAutonomyPolicyComboBox.SelectedItem is ComboBoxItem policyItem && policyItem.Tag is string policy)
-            Properties.Settings.Default.AiAutonomyPolicy = policy;
-
         Properties.Settings.Default.Save();
 
         // Theme is already saved via ChangeTheme method
         // which calls SaveThemePreference internally
+    }
+
+    private async void RefreshModels_Click(object? sender, RoutedEventArgs e)
+    {
+        await RefreshModelsAsync();
+    }
+
+    private async Task RefreshModelsAsync()
+    {
+        if (!Uri.TryCreate(OllamaEndpointTextBox.Text?.Trim(), UriKind.Absolute, out var endpoint) ||
+            endpoint.Scheme is not ("http" or "https"))
+        {
+            return;
+        }
+
+        try
+        {
+            var provider = new OllamaProvider(_aiHttpClient, endpoint);
+            var models = await provider.GetModelsAsync();
+            var selectedModel = AiModelComboBox.Text?.Trim();
+            AiModelComboBox.ItemsSource = models.Select(model => model.Id).ToArray();
+            if (!string.IsNullOrWhiteSpace(selectedModel) && models.Any(model => model.Id == selectedModel))
+            {
+                AiModelComboBox.SelectedItem = selectedModel;
+            }
+            else if (models.Count > 0)
+            {
+                AiModelComboBox.SelectedItem = models[0].Id;
+            }
+        }
+        catch
+        {
+            // Keep the configured model when discovery is unavailable.
+        }
     }
 
     public void Window_KeyUp(object? sender, KeyEventArgs e)

@@ -104,36 +104,30 @@
                                   HorizontalAlignment="Left">
                             <ComboBoxItem Content="Ollama" Tag="ollama"/>
                         </ComboBox>
-                        <TextBlock Text="Model" FontWeight="SemiBold"/>
-                        <TextBox x:Name="AiModelTextBox"
-                                 Width="300"
-                                 HorizontalAlignment="Left"/>
                         <TextBlock Text="Ollama endpoint" FontWeight="SemiBold"/>
-                        <TextBox x:Name="OllamaEndpointTextBox"
-                                 Width="420"
-                                 HorizontalAlignment="Left"/>
+                                                <Grid ColumnDefinitions="*,Auto" Width="420" ColumnSpacing="8"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBox x:Name="OllamaEndpointTextBox"
+                                                                         HorizontalContentAlignment="Left"/>
+                            <Button Grid.Column="1" Click="RefreshModels_Click"
+                                    ToolTip.Tip="Refresh models" Width="34" Height="34" Padding="0">
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="M 16,9 A 6,6 0 0 0 5,6" Stroke="{DynamicResource NeonIconPrimary}" StrokeThickness="1.8" StrokeLineCap="Round" Fill="Transparent"/>
+                                        <Path Data="M 5,3.5 V 6 H 7.5" Stroke="{DynamicResource NeonIconSecondary}" StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent"/>
+                                        <Path Data="M 4,11 A 6,6 0 0 0 15,14" Stroke="{DynamicResource NeonIconSecondary}" StrokeThickness="1.8" StrokeLineCap="Round" Fill="Transparent"/>
+                                        <Path Data="M 15,16.5 V 14 H 12.5" Stroke="{DynamicResource NeonIconPrimary}" StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="Model" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="AiModelComboBox" Width="300" HorizontalAlignment="Left"
+                                  IsEditable="True"/>
                         <TextBlock Text="Maximum AI continuations (1-100)" FontWeight="SemiBold"/>
                         <TextBox x:Name="AiMaxCompactionCyclesTextBox"
                                  Width="160"
                                  HorizontalAlignment="Left"/>
-                        <CheckBox x:Name="AiControlEnabledCheckBox"
-                                  Content="Enable authenticated external AI control"/>
-                        <TextBlock Text="External control port" FontWeight="SemiBold"/>
-                        <TextBox x:Name="AiControlPortTextBox"
-                                 Width="160"
-                                 HorizontalAlignment="Left"/>
-                        <TextBlock Text="External control credential-store key" FontWeight="SemiBold"/>
-                        <TextBox x:Name="AiControlCredentialKeyTextBox"
-                                 Width="420"
-                                 HorizontalAlignment="Left"/>
-                        <TextBlock Text="Action policy" FontWeight="SemiBold"/>
-                        <ComboBox x:Name="AiAutonomyPolicyComboBox"
-                                  Width="300"
-                                  HorizontalAlignment="Left">
-                            <ComboBoxItem Content="Suggest only" Tag="SuggestOnly"/>
-                            <ComboBoxItem Content="Approve batch" Tag="ApproveBatch"/>
-                            <ComboBoxItem Content="Autonomous" Tag="Autonomous"/>
-                        </ComboBox>
                     </StackPanel>
                 </Border>
                 

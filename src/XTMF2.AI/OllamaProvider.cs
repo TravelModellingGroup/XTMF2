@@ -174,7 +174,7 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
             });
         }
 
-        if (request.AutonomyPolicy != AiAutonomyPolicy.SuggestOnly)
+        if (request.IsAgent)
         {
             messages.Insert(0, new
             {
@@ -265,7 +265,7 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
         }
 
         var generationOptions = request.GenerationOptions ??
-            (request.AutonomyPolicy == AiAutonomyPolicy.SuggestOnly
+            (!request.IsAgent
                 ? null
                 : new AiGenerationOptions(
                     Temperature: 0.15,
@@ -301,7 +301,7 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
             model = request.ModelId,
             messages,
             options,
-            think = request.AutonomyPolicy != AiAutonomyPolicy.SuggestOnly ? false : (bool?)null,
+            think = request.IsAgent ? false : (bool?)null,
             stream = true
         });
 
@@ -321,10 +321,10 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken)
             .ConfigureAwait(false);
         using var reader = new StreamReader(stream);
-        var completeResponse = request.AutonomyPolicy == AiAutonomyPolicy.SuggestOnly
+        var completeResponse = !request.IsAgent
             ? null
             : new StringBuilder();
-        var completeThinking = request.AutonomyPolicy == AiAutonomyPolicy.SuggestOnly
+        var completeThinking = !request.IsAgent
             ? null
             : new StringBuilder();
         var emittedAgentTextLength = 0;
