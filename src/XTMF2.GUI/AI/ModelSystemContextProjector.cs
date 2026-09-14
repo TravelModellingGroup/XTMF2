@@ -476,6 +476,11 @@ public sealed class ModelSystemContextProjector
 
     private static IEnumerable<Node> EnumerateElements(Boundary boundary)
     {
+        foreach (var start in boundary.Starts)
+        {
+            yield return start;
+        }
+
         foreach (var node in boundary.Modules)
         {
             yield return node;
@@ -497,7 +502,7 @@ public sealed class ModelSystemContextProjector
 
         return new AiContextElement(
             node.Id.ToString(),
-            node is FunctionInstance ? "FunctionInstance" : "Node",
+            node is Start ? "Start" : node is FunctionInstance ? "FunctionInstance" : "Node",
             node.Name,
             node.Type.FullName ?? node.Type.Name,
                 string.IsNullOrWhiteSpace(node.Description) ? null : Limit(node.Description, MaxDescriptionLength),

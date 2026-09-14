@@ -534,8 +534,27 @@ namespace XTMF2
                 modelSystem.GlobalBoundary.CollectFunctionTemplates(functionTemplates);
                 foreach (var pending in deferredFunctionInstances)
                 {
-                    if (!pending.TemplateId.HasValue
-                        || !functionTemplates.TryGetValue(pending.TemplateId.Value, out var template))
+                    FunctionTemplate? template = null;
+                    if (pending.TemplateId.HasValue)
+                        functionTemplates.TryGetValue(pending.TemplateId.Value, out template);
+
+                    // TemplateId is the stable reference, but older/imported files may not
+                    // contain a matching id. TemplateName is saved relative to the instance's
+                    // boundary and provides a deterministic fallback when it is available.
+                    if (template is null && !string.IsNullOrWhiteSpace(pending.TemplateName))
+                    {
+                        template = Boundary.ResolveTemplate(pending.ParentBoundary, pending.TemplateName);
+                        if (template is null)
+                        {
+                            var modelSystemRoot = pending.ParentBoundary;
+                            while (modelSystemRoot.Parent is not null)
+                                modelSystemRoot = modelSystemRoot.Parent;
+                            var templateName = pending.TemplateName[(pending.TemplateName.LastIndexOf('/') + 1)..];
+                            template = Boundary.ResolveUniqueTemplateByName(modelSystemRoot, templateName);
+                        }
+                    }
+
+                    if (template is null)
                     {
                         error = pending.TemplateId.HasValue
                             ? $"FunctionInstance '{pending.Name}' references unknown FunctionTemplate '{pending.TemplateName}' ({pending.TemplateId.Value})."

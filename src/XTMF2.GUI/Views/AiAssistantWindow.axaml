@@ -83,12 +83,39 @@
                           SelectedItem="{Binding Mode, Mode=TwoWay}"
                       MinWidth="120" MinHeight="34"
                       VerticalContentAlignment="Center"/>
-                <Button Grid.Column="4" Classes="dlg-icon" Content="⟳"
+                    <Button Grid.Column="4" Classes="dlg-icon"
                         ToolTip.Tip="Refresh models" Command="{Binding RefreshModelsCommand}"
                     IsEnabled="{Binding IsDiscoveringModels, Converter={x:Static BoolConverters.Not}}"
                     Width="34" Height="34" Padding="0" FontSize="22"
                     HorizontalContentAlignment="Center"
-                    VerticalContentAlignment="Center"/>
+                      VerticalContentAlignment="Center">
+                      <Viewbox Width="20" Height="20">
+                        <Canvas Width="20" Height="20">
+                            <Path Data="M 16,9 A 6,6 0 0 0 5,6"
+                                Stroke="{DynamicResource NeonIconPrimary}"
+                                StrokeThickness="1.8"
+                                StrokeLineCap="Round"
+                                Fill="Transparent"/>
+                            <Path Data="M 5,3.5 V 6 H 7.5"
+                                Stroke="{DynamicResource NeonIconSecondary}"
+                                StrokeThickness="1.8"
+                                StrokeLineCap="Round"
+                                StrokeJoin="Round"
+                                Fill="Transparent"/>
+                            <Path Data="M 4,11 A 6,6 0 0 0 15,14"
+                                Stroke="{DynamicResource NeonIconSecondary}"
+                                StrokeThickness="1.8"
+                                StrokeLineCap="Round"
+                                Fill="Transparent"/>
+                            <Path Data="M 15,16.5 V 14 H 12.5"
+                                Stroke="{DynamicResource NeonIconPrimary}"
+                                StrokeThickness="1.8"
+                                StrokeLineCap="Round"
+                                StrokeJoin="Round"
+                                Fill="Transparent"/>
+                        </Canvas>
+                      </Viewbox>
+                    </Button>
             </Grid>
         </Border>
         <Border Grid.Row="2" Classes="ai-surface" Padding="12,10">
@@ -99,9 +126,25 @@
                             <TextBlock Text="Conversation" FontWeight="SemiBold"/>
                             <TextBlock Text="{Binding StatusText}" FontSize="11" Opacity="0.58"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Classes="dlg-icon" Content="⧉"
+                        <Button Grid.Column="1" Classes="dlg-icon"
                                 ToolTip.Tip="Copy latest response" Click="CopyResponse_Click"
-                                IsEnabled="{Binding Response, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                IsEnabled="{Binding Response, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <Viewbox Width="18" Height="18">
+                                <Canvas Width="20" Height="20">
+                                    <Path Data="M 7,6 H 16 V 15 H 7 Z"
+                                          Stroke="{DynamicResource NeonIconPrimary}"
+                                          StrokeThickness="1.8"
+                                          StrokeJoin="Round"
+                                          Fill="Transparent"/>
+                                    <Path Data="M 4,15 V 4 H 13"
+                                          Stroke="{DynamicResource NeonIconSecondary}"
+                                          StrokeThickness="1.8"
+                                          StrokeLineCap="Round"
+                                          StrokeJoin="Round"
+                                          Fill="Transparent"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
                     </Grid>
                     <ItemsControl ItemsSource="{Binding Conversation}">
                         <ItemsControl.ItemTemplate>

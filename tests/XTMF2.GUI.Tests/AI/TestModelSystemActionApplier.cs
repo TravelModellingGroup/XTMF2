@@ -143,6 +143,28 @@ public sealed class TestModelSystemActionApplier
     }
 
     [TestMethod]
+    public void ContextProjectsBoundaryStartsAsElements()
+    {
+        TestGuiHelper.RunInModelSystemContext(nameof(ContextProjectsBoundaryStartsAsElements),
+            (user, _, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddModelSystemStart(
+                    user, boundary, "Morning Start", new Rectangle(75, 95, 120, 50),
+                    out var start, out var addError), addError?.Message);
+
+                var snapshot = new ModelSystemContextProjector("model", "test", msSession)
+                    .CreateSnapshot(boundary);
+                var projectedStart = snapshot.Elements.Single(element => element.Id == start!.Id.ToString());
+
+                Assert.AreEqual("Start", projectedStart.Kind);
+                Assert.AreEqual("Morning Start", projectedStart.Name);
+                Assert.AreEqual(75, projectedStart.Position!.X);
+                Assert.AreEqual(95, projectedStart.Position.Y);
+            });
+    }
+
+    [TestMethod]
     public void ContextProjectsAndSearchesCommentBlocksSeparatelyFromElements()
     {
         TestGuiHelper.RunInModelSystemContext(nameof(ContextProjectsAndSearchesCommentBlocksSeparatelyFromElements),
