@@ -231,6 +231,35 @@ public sealed class TestOllamaProvider
     }
 
     [TestMethod]
+    public async Task AgentCanReturnPlainUserFacingAnswerWithoutJsonEnvelope()
+    {
+        using var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"message\":{\"content\":\"The model system is ready.\"},\"done\":true}\n",
+                Encoding.UTF8,
+                "application/x-ndjson")
+        });
+        var provider = new OllamaProvider(client, new Uri("http://localhost:11434"));
+        var request = new AiChatRequest(
+            "llama3.2",
+            [new AiMessage(AiRole.User, "What is the status?")],
+            AutonomyPolicy: AiAutonomyPolicy.ApproveBatch);
+
+        var chunks = new List<AiResponseChunk>();
+        await foreach (var chunk in provider.ChatAsync(request))
+        {
+            chunks.Add(chunk);
+        }
+
+        Assert.HasCount(1, chunks);
+        Assert.AreEqual("The model system is ready.", chunks[0].Text);
+        Assert.IsTrue(chunks[0].IsComplete);
+        Assert.IsFalse(chunks[0].IsTruncated);
+        Assert.IsEmpty(chunks[0].ProposedActions);
+    }
+
+    [TestMethod]
     public async Task TruncatedAgentResponsePreservesContinuationContext()
     {
         using var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.OK)

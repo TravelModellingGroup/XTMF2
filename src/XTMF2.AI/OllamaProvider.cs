@@ -180,6 +180,8 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
             {
                 role = "system",
                 content = "For this agent request, return exactly one JSON object with this shape: " +
+                    "When you need the host to execute a tool or apply proposed actions, return exactly one JSON " +
+                    "object using this shape: " +
                     "{\"text\":\"brief explanation\",\"metadataRequests\":[{\"typeName\":\"exact registered module type name\"}],\"connectionRequests\":[{\"firstNodeId\":\"node GUID\",\"secondNodeId\":\"node GUID\"}],\"commentBlockRequests\":[{\"commentBlockId\":\"comment block GUID\",\"query\":\"text to find\"}],\"boundaryRequests\":[{\"boundaryId\":\"boundary GUID\",\"path\":\"boundary path\",\"query\":\"boundary name or text\"}],\"plan\":{\"id\":\"plan-id\",\"summary\":\"plan summary\",\"tasks\":[{" +
                     "\"id\":\"task-id\",\"title\":\"task title\",\"description\":\"task details\",\"dependsOn\":[],\"actionIds\":[\"stable-action-id\"]}]},\"proposedActions\":[{" +
                     "\"id\":\"stable-action-id\",\"kind\":\"CreateNode, CreateLink, AddLinkDestination, UpdateNode, UpdateParameter, SetBasicParameter, SetScriptedParameter, or ConvertBasicParameterToScriptedParameter\",\"summary\":\"what changes\",\"arguments\":{\"id\":\"UUID copied from context ReservedElementIds for the created node or link\",\"boundaryId\":\"boundary GUID for CreateNode\",\"typeName\":\"registered module type for CreateNode\",\"name\":\"node name for CreateNode\",\"x\":0,\"y\":0,\"originId\":\"origin node GUID for CreateLink or AddLinkDestination\",\"hookName\":\"origin hook name for CreateLink or AddLinkDestination\",\"destinationId\":\"destination node GUID for CreateLink or AddLinkDestination\",\"nodeId\":\"node GUID for parameter updates, or owning module GUID when parameterName is supplied\",\"parameterName\":\"generated parameter hook name when nodeId identifies the owning module\",\"value\":\"literal value for SetBasicParameter or expression for SetScriptedParameter or conversion\",\"isExpression\":false},\"isDestructive\":false}]} . " +
@@ -250,7 +252,10 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
                             "For a generated parameter such as Message, either target the generated parameter " +
                             "node ID or target the owning module node ID with parameterName set to the exact " +
                             "hook name Message. " +
-                            "Do not use the generic UpdateParameter action when a specific action applies."
+                            "Do not use the generic UpdateParameter action when a specific action applies. " +
+                            "For a normal user-facing answer that needs no host tool or proposed action, respond " +
+                            "directly in natural language or Markdown and do not wrap it in JSON. The text field is " +
+                            "the user-facing explanation when a JSON tool/action envelope is required."
             });
         }
 
@@ -364,6 +369,16 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
                 if (isComplete)
                 {
                     var structured = ParseAgentResponse(completeResponse.ToString());
+                    if (structured is null && !StartsWithJsonObject(completeResponse.ToString()))
+                    {
+                        yield return new AiResponseChunk(
+                            completeResponse.ToString(),
+                            partialActions,
+                            IsComplete: true,
+                            Thinking: thinkingDelta);
+                        yield break;
+                    }
+
                     var actions = structured is null
                         ? partialActions
                         : TakeNewActions(
@@ -499,6 +514,11 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
         }
 
         return started && objectEnded && !inString && !escaped && objectDepth == 0;
+    }
+
+    private static bool StartsWithJsonObject(string value)
+    {
+        return value.TrimStart().StartsWith('{');
     }
 
     internal static IReadOnlyList<AiActionProposal> ExtractPartialAgentActions(string response)

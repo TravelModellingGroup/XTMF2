@@ -122,7 +122,9 @@ public partial class AiAssistantWindow : Window
 
     private void OnKeyDownTunnel(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter || !e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
+        if (e.Key != Key.Enter ||
+            e.KeyModifiers.HasFlag(KeyModifiers.Shift) ||
+            e.Source is not TextBox { Name: "PromptTextBox" } ||
             DataContext is not AiAssistantViewModel viewModel ||
             !viewModel.SendCommand.CanExecute(null))
         {

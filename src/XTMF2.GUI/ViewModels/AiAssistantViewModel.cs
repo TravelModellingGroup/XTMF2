@@ -1489,10 +1489,12 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
         messages.AddRange(initialMessages);
         messages.Add(new AiMessage(
             AiRole.User,
-            "The previous Agent response was truncated before a complete JSON object was produced. " +
-            "Do not continue or repeat its partial JSON. Use this progress summary, then return one " +
-            "complete JSON object using the required Agent schema. Preserve already emitted action IDs and " +
-            "propose only actions that are not already listed. Keep text to one brief sentence.\n\n" +
+            "The previous Agent response was truncated while producing a structured tool or action request. " +
+            "Do not continue or repeat its partial JSON. Use this progress summary, then return one complete " +
+            "JSON object using the required Agent schema only if a host tool request or proposed action is " +
+            "still needed. Otherwise answer the user directly in natural language or Markdown. Preserve " +
+            "already emitted action IDs and propose only actions that are not already listed. Keep text to one " +
+            "brief sentence when using the JSON envelope.\n\n" +
             continuationContext));
         return messages;
     }

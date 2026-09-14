@@ -7,10 +7,10 @@
         x:CompileBindings="True"
         Classes="neon-dialog"
         Title="AI Assistant"
-        Width="620"
-        Height="720"
-        MinWidth="480"
-        MinHeight="480"
+        Width="680"
+        Height="760"
+        MinWidth="520"
+        MinHeight="520"
         WindowStartupLocation="CenterOwner">
     <Window.Styles>
         <Style Selector="Border.ai-prompt.ai-busy">
@@ -29,116 +29,124 @@
         <Style Selector="CheckBox.destructive">
             <Setter Property="FontWeight" Value="Bold"/>
         </Style>
+        <Style Selector="Border.ai-surface">
+            <Setter Property="Background" Value="#0CFFFFFF"/>
+            <Setter Property="BorderBrush" Value="#2200D4FF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+        <Style Selector="Border.ai-composer">
+            <Setter Property="Background" Value="#1200D4FF"/>
+            <Setter Property="BorderBrush" Value="#7700D4FF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
     </Window.Styles>
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto" Margin="18" RowSpacing="12">
-        <Grid ColumnDefinitions="*,Auto">
-            <StackPanel>
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" Margin="18" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto" Margin="2,0,2,2">
+            <StackPanel Spacing="2">
                 <TextBlock Text="AI Assistant" FontSize="22" FontWeight="Bold"/>
-                <TextBlock Text="Ask questions about the current model system or available modules."
-                           IsVisible="{Binding IsAskMode}"
-                           Opacity="0.65" TextWrapping="Wrap"/>
-                <TextBlock Text="Describe the model-system changes you want to make."
-                           IsVisible="{Binding IsAgentMode}"
-                           Opacity="0.65" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding ProviderId}" FontSize="11" Opacity="0.58"/>
             </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                <Button Content="New session" Command="{Binding NewSessionCommand}"
-                    IsEnabled="{Binding IsBusy, Converter={x:Static BoolConverters.Not}}"/>
-                <Button Content="Cancel" Command="{Binding CancelCommand}"
-                    IsVisible="{Binding IsBusy}"/>
-                </StackPanel>
-        </Grid>
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="10">
-            <TextBlock Text="Model" VerticalAlignment="Center"/>
-            <ComboBox Grid.Column="1" ItemsSource="{Binding AvailableModels}"
-                      SelectedItem="{Binding ModelId, Mode=TwoWay}"
-                      IsEditable="True"/>
-        </Grid>
-        <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="10">
-            <TextBlock Text="Mode" VerticalAlignment="Center"/>
-            <ComboBox Grid.Column="1" ItemsSource="{Binding AvailableModes}"
-                      SelectedItem="{Binding Mode, Mode=TwoWay}"/>
-        </Grid>
-        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <TextBlock Text="{Binding ProviderId}" Opacity="0.65"/>
-                <TextBlock Text="{Binding StatusText}" Foreground="#00D4FF" Opacity="0.85"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                <Button Classes="dlg-icon" ToolTip.Tip="Start a new session"
+                        Command="{Binding NewSessionCommand}"
+                        IsEnabled="{Binding IsBusy, Converter={x:Static BoolConverters.Not}}">
+                    <Viewbox Width="18" Height="18">
+                        <Canvas Width="20" Height="20">
+                            <Path Data="M 10,4 V 16 M 4,10 H 16"
+                                  Stroke="{DynamicResource NeonIconPrimary}"
+                                  StrokeThickness="2.2"
+                                  StrokeLineCap="Round"
+                                  Fill="Transparent"/>
+                            <Ellipse Width="2.8"
+                                     Height="2.8"
+                                     Canvas.Left="8.6"
+                                     Canvas.Top="8.6"
+                                     Fill="{DynamicResource NeonIconSecondary}"/>
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+                <Button Classes="dlg-danger" Content="■" ToolTip.Tip="Cancel request"
+                        Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}"/>
             </StackPanel>
-            <ProgressBar Grid.Column="1" Width="36" Height="4" VerticalAlignment="Center"
-                         IsIndeterminate="True" IsVisible="{Binding IsBusy}"/>
-            <Button Grid.Column="2" Content="Refresh models" Command="{Binding RefreshModelsCommand}"
-                    IsEnabled="{Binding IsDiscoveringModels, Converter={x:Static BoolConverters.Not}}"/>
         </Grid>
-        <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="10">
-            <TextBlock Text="{Binding ModelContextSizeText}" Opacity="0.65" TextWrapping="Wrap"/>
-            <TextBlock Text="{Binding LatestContextUsageText}" Opacity="0.65" TextWrapping="Wrap"/>
-        </StackPanel>
-        <ScrollViewer x:Name="ConversationScrollViewer" Grid.Row="5"
-                  VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="10">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Text="Conversation" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Content="Copy response"
-                            Click="CopyResponse_Click"
-                            IsEnabled="{Binding Response, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                            Padding="10,4"/>
-                </Grid>
-                <ItemsControl ItemsSource="{Binding Conversation}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:AiAssistantMessageViewModel">
-                            <Grid Margin="0,3">
-                                <Border HorizontalAlignment="Right" MaxWidth="460"
-                                        Padding="12,9" CornerRadius="10"
-                                        Background="#2200D4FF"
-                                        IsVisible="{Binding IsUser}">
-                                    <TextBlock Text="{Binding Content}" TextWrapping="Wrap"/>
-                                </Border>
-                                <Border HorizontalAlignment="Left" MaxWidth="540"
-                                        Padding="12,9" CornerRadius="10"
-                                        Background="#18000000"
-                                        IsVisible="{Binding IsAssistant}">
-                                    <StackPanel Spacing="8">
-                                        <TextBlock Text="Thinking..." FontWeight="SemiBold"
-                                                   Opacity="0.65"
-                                                   IsVisible="{Binding HasThinking}"/>
-                                        <TextBlock Text="{Binding Thinking}" TextWrapping="Wrap"
-                                                   FontStyle="Italic" Opacity="0.65"
-                                                   IsVisible="{Binding HasThinking}"/>
-                                        <md:MarkdownScrollViewer Markdown="{Binding Content}"
-                                                                 Loaded="MarkdownViewer_Loaded"
-                                                                 IsVisible="{Binding IsMarkdownVisible}"/>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </ScrollViewer>
-        <Expander Grid.Row="6" Header="Tool activity"
-                  IsExpanded="{Binding IsToolActivityExpanded, Mode=TwoWay}">
-            <Border Padding="12" BorderThickness="1" CornerRadius="6">
-                <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding ToolInvocations}">
+        <Border Grid.Row="1" Classes="ai-surface" Padding="10,8">
+            <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" ColumnSpacing="8">
+                <TextBlock Text="Model" VerticalAlignment="Center" Opacity="0.7"/>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding AvailableModels}"
+                          SelectedItem="{Binding ModelId, Mode=TwoWay}"
+                      IsEditable="True" MinWidth="180"
+                      MinHeight="34" VerticalContentAlignment="Center"/>
+                <TextBlock Grid.Column="2" Text="Mode" VerticalAlignment="Center" Opacity="0.7"/>
+                <ComboBox Grid.Column="3" ItemsSource="{Binding AvailableModes}"
+                          SelectedItem="{Binding Mode, Mode=TwoWay}"
+                      MinWidth="120" MinHeight="34"
+                      VerticalContentAlignment="Center"/>
+                <Button Grid.Column="4" Classes="dlg-icon" Content="⟳"
+                        ToolTip.Tip="Refresh models" Command="{Binding RefreshModelsCommand}"
+                    IsEnabled="{Binding IsDiscoveringModels, Converter={x:Static BoolConverters.Not}}"
+                    Width="34" Height="34" Padding="0" FontSize="22"
+                    HorizontalContentAlignment="Center"
+                    VerticalContentAlignment="Center"/>
+            </Grid>
+        </Border>
+        <Border Grid.Row="2" Classes="ai-surface" Padding="12,10">
+            <ScrollViewer x:Name="ConversationScrollViewer" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Conversation" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding StatusText}" FontSize="11" Opacity="0.58"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Classes="dlg-icon" Content="⧉"
+                                ToolTip.Tip="Copy latest response" Click="CopyResponse_Click"
+                                IsEnabled="{Binding Response, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Conversation}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,2">
-                                    <TextBlock Text="{Binding ToolName}" FontWeight="SemiBold"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding DisplaySummary}"
-                                               TextWrapping="Wrap" Opacity="0.75"/>
-                                    <TextBlock Grid.Column="2" Text="{Binding Status}" Opacity="0.65"/>
+                            <DataTemplate x:DataType="vm:AiAssistantMessageViewModel">
+                                <Grid Margin="0,2">
+                                    <Border HorizontalAlignment="Right" MaxWidth="500"
+                                            Padding="11,8" CornerRadius="8"
+                                            Background="#3300D4FF"
+                                            IsVisible="{Binding IsUser}">
+                                        <TextBlock Text="{Binding Content}" TextWrapping="Wrap"/>
+                                    </Border>
+                                    <Border HorizontalAlignment="Left" MaxWidth="590"
+                                            Padding="11,8" CornerRadius="8"
+                                            Background="#0DFFFFFF"
+                                            IsVisible="{Binding IsAssistant}">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="Thinking..." FontWeight="SemiBold"
+                                                       Opacity="0.58" IsVisible="{Binding HasThinking}"/>
+                                            <TextBlock Text="{Binding Thinking}" TextWrapping="Wrap"
+                                                       FontStyle="Italic" Opacity="0.58"
+                                                       IsVisible="{Binding HasThinking}"/>
+                                            <md:MarkdownScrollViewer Markdown="{Binding Content}"
+                                                                     Loaded="MarkdownViewer_Loaded"
+                                                                     IsVisible="{Binding IsMarkdownVisible}"/>
+                                        </StackPanel>
+                                    </Border>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                </ScrollViewer>
-            </Border>
-        </Expander>
-        <Border Grid.Row="7" Padding="12" BorderThickness="1" CornerRadius="6"
-                IsVisible="{Binding CanShowProposedActions}">
-            <StackPanel Spacing="8">
-                <TextBlock Text="Proposed model-system changes" FontWeight="SemiBold"/>
-                <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+        <Border Grid.Row="3" Classes="ai-surface" Padding="10" IsVisible="{Binding CanShowProposedActions}">
+            <StackPanel Spacing="7">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="Review changes" FontWeight="SemiBold"/>
+                        <TextBlock Text="Select the changes to apply" FontSize="11" Opacity="0.58"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Classes="dlg-primary" Content="Apply"
+                            Command="{Binding ApplyActionsCommand}" IsEnabled="{Binding CanApplyActions}"
+                            Padding="14,6"/>
+                </Grid>
+                <ScrollViewer MaxHeight="130" VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding ProposedActions}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -149,29 +157,30 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
-                <Button Content="Apply selected actions"
-                    Command="{Binding ApplyActionsCommand}"
-                    IsEnabled="{Binding CanApplyActions}"/>
             </StackPanel>
         </Border>
-        <Grid Grid.Row="8" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <Grid Grid.Row="4" ColumnDefinitions="*,Auto" ColumnSpacing="8">
             <StackPanel Spacing="5">
-                <ScrollViewer MaxHeight="96" VerticalScrollBarVisibility="Auto"
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{Binding ModelContextSizeText}" FontSize="11" Opacity="0.5"/>
+                    <TextBlock Text="{Binding LatestContextUsageText}" FontSize="11" Opacity="0.5"/>
+                </StackPanel>
+                <ScrollViewer MaxHeight="72" VerticalScrollBarVisibility="Auto"
                               IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                    <TextBox Text="{Binding Error}" IsReadOnly="True" AcceptsReturn="True"
-                             Foreground="#D04040" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Error}" Foreground="#FF6680" TextWrapping="Wrap"/>
                 </ScrollViewer>
-                <Border Classes="ai-prompt" Classes.ai-busy="{Binding IsBusy}"
-                    BorderBrush="#00D4FF" BorderThickness="1" CornerRadius="4"
-                    Padding="1" Opacity="0.95">
-                    <TextBox Text="{Binding Prompt, Mode=TwoWay}"
-                             Watermark="Ask about this model system or describe changes..."
+                <Border Classes="ai-composer" Classes.ai-busy="{Binding IsBusy}" Padding="2">
+                    <TextBox x:Name="PromptTextBox" Text="{Binding Prompt, Mode=TwoWay}"
+                             Watermark="Ask a question or describe a change..."
                              AcceptsReturn="True" MinHeight="48" TextWrapping="Wrap"/>
                 </Border>
             </StackPanel>
-            <Button Grid.Column="1" Content="Send" Command="{Binding SendCommand}"
+            <Button Grid.Column="1" Classes="dlg-primary" Content="➤" ToolTip.Tip="Send message"
+                    Command="{Binding SendCommand}"
                     IsEnabled="{Binding IsBusy, Converter={x:Static BoolConverters.Not}}"
-                    VerticalAlignment="Bottom" Padding="18,8"/>
+                    VerticalAlignment="Bottom" Height="52" MinWidth="52" Padding="0"
+                    FontSize="20" HorizontalContentAlignment="Center"
+                    VerticalContentAlignment="Center"/>
         </Grid>
     </Grid>
 </Window>
