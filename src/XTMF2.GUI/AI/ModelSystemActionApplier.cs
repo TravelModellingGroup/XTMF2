@@ -174,6 +174,42 @@ public sealed class ModelSystemActionApplier : IAiActionApplier, IAiActionValida
         }
 
         foreach (var operation in operations.Where(operation =>
+                     operation.Kind is AiActionKind.CreateCommentBlock or
+                         AiActionKind.UpdateCommentBlock or AiActionKind.DeleteCommentBlock))
+        {
+            if (operation.Kind == AiActionKind.CreateCommentBlock)
+            {
+                if (FindBoundary(_session.ModelSystem.GlobalBoundary, operation.BoundaryId) is null)
+                {
+                    error = $"Boundary '{operation.BoundaryId}' was not found in the model system.";
+                    failedActionId = operation.ProposalId;
+                    return false;
+                }
+
+                if (operation.Width <= 0 || operation.Height <= 0)
+                {
+                    error = "CreateCommentBlock requires positive width and height.";
+                    failedActionId = operation.ProposalId;
+                    return false;
+                }
+            }
+            else if (FindCommentBlock(_session.ModelSystem.GlobalBoundary, operation.ElementId, out _) is null)
+            {
+                error = $"Comment block '{operation.ElementId}' was not found in the model system.";
+                failedActionId = operation.ProposalId;
+                return false;
+            }
+
+            if (operation.Kind == AiActionKind.UpdateCommentBlock && operation.HasCommentGeometry &&
+                (operation.Width <= 0 || operation.Height <= 0))
+            {
+                error = "UpdateCommentBlock geometry requires positive width and height.";
+                failedActionId = operation.ProposalId;
+                return false;
+            }
+        }
+
+        foreach (var operation in operations.Where(operation =>
                      operation.Kind is AiActionKind.CreateLink or AiActionKind.AddLinkDestination))
         {
             var origin = FindPlannedOrExistingNode(operation.OriginId, plannedNodes);
@@ -299,9 +335,11 @@ public sealed class ModelSystemActionApplier : IAiActionApplier, IAiActionValida
         return operation.Kind switch
         {
             AiActionKind.CreateNode => 0,
+            AiActionKind.CreateCommentBlock => 0,
             AiActionKind.UpdateNode or AiActionKind.UpdateParameter or
                 AiActionKind.SetBasicParameter or AiActionKind.SetScriptedParameter or
-                AiActionKind.ConvertBasicParameterToScriptedParameter => 1,
+                AiActionKind.ConvertBasicParameterToScriptedParameter or
+                AiActionKind.UpdateCommentBlock => 1,
             AiActionKind.CreateLink => 2,
             AiActionKind.AddLinkDestination => 3,
             _ => 3
@@ -311,6 +349,91 @@ public sealed class ModelSystemActionApplier : IAiActionApplier, IAiActionValida
     private bool ApplyOperation(ActionOperation operation, out Guid affectedElementId, out string? error)
     {
         affectedElementId = Guid.Empty;
+        if (operation.Kind == AiActionKind.CreateCommentBlock)
+        {
+            var boundary = FindBoundary(_session.ModelSystem.GlobalBoundary, operation.BoundaryId);
+            if (boundary is null)
+            {
+                error = $"Boundary '{operation.BoundaryId}' was not found in the model system.";
+                return false;
+            }
+
+            var location = new Rectangle(operation.X, operation.Y, operation.Width, operation.Height);
+            if (!_session.AddCommentBlock(_user, boundary, operation.Value, location, out var block, out var addError))
+            {
+                error = addError?.Message ?? "The comment block could not be created.";
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(operation.TypeName) &&
+                !_session.SetCommentBlockHeader(_user, block!, operation.TypeName, out var headerError))
+            {
+                error = headerError?.Message ?? "The comment block header could not be set.";
+                return false;
+            }
+
+            affectedElementId = block!.Id;
+            error = null;
+            return true;
+        }
+
+        if (operation.Kind is AiActionKind.UpdateCommentBlock or AiActionKind.DeleteCommentBlock)
+        {
+            var block = FindCommentBlock(_session.ModelSystem.GlobalBoundary, operation.ElementId, out var boundary);
+            if (block is null || boundary is null)
+            {
+                error = $"Comment block '{operation.ElementId}' was not found in the model system.";
+                return false;
+            }
+
+            if (operation.Kind == AiActionKind.DeleteCommentBlock)
+            {
+                if (!_session.RemoveCommentBlock(_user, boundary, block, out var removeError))
+                {
+                    error = removeError?.Message ?? "The comment block could not be deleted.";
+                    return false;
+                }
+            }
+            else
+            {
+                if (operation.HasCommentText &&
+                    !_session.SetCommentBlockText(_user, block, operation.Value, out var textError))
+                {
+                    error = textError?.Message ?? "The comment block text could not be updated.";
+                    return false;
+                }
+
+                if (operation.HasCommentHeader && operation.TypeName is not null &&
+                    !_session.SetCommentBlockHeader(_user, block, operation.TypeName, out var headerError))
+                {
+                    error = headerError?.Message ?? "The comment block header could not be updated.";
+                    return false;
+                }
+
+                if (operation.HasCommentGeometry &&
+                    (operation.Width != 0 || operation.Height != 0 || operation.X != 0 || operation.Y != 0))
+                {
+                    if (operation.Width <= 0 || operation.Height <= 0)
+                    {
+                        error = "UpdateCommentBlock geometry requires positive width and height.";
+                        return false;
+                    }
+
+                    if (!_session.SetCommentBlockLocation(
+                            _user, block, new Rectangle(operation.X, operation.Y, operation.Width, operation.Height),
+                            out var locationError))
+                    {
+                        error = locationError?.Message ?? "The comment block location could not be updated.";
+                        return false;
+                    }
+                }
+            }
+
+            affectedElementId = block.Id;
+            error = null;
+            return true;
+        }
+
         if (operation.Kind == AiActionKind.CreateNode)
         {
             if (FindNode(_session.ModelSystem.GlobalBoundary, operation.ElementId) is not null)
@@ -596,6 +719,33 @@ public sealed class ModelSystemActionApplier : IAiActionApplier, IAiActionValida
 
     private static ActionOperation ParseOperation(AiActionProposal proposal)
     {
+        if (proposal.Kind == AiActionKind.CreateCommentBlock)
+        {
+            var boundaryId = ReadGuid(proposal, "boundaryId");
+            var comment = ReadString(proposal, "comment");
+            return new ActionOperation(proposal.Kind, Guid.Empty, Guid.Empty, boundaryId, Guid.Empty, Guid.Empty,
+                string.Empty, string.Empty, comment, ReadOptionalString(proposal, "header"),
+                ReadInt(proposal, "x", 0), ReadInt(proposal, "y", 0), false, proposal.Id,
+                ReadInt(proposal, "width", 200), ReadInt(proposal, "height", 80));
+        }
+
+        if (proposal.Kind is AiActionKind.UpdateCommentBlock or AiActionKind.DeleteCommentBlock)
+        {
+            var elementId = ReadGuid(proposal, "id");
+            var comment = ReadOptionalString(proposal, "comment");
+            var header = ReadOptionalString(proposal, "header");
+            return new ActionOperation(proposal.Kind, elementId, Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty,
+                string.Empty, string.Empty, comment ?? string.Empty, header,
+                ReadInt(proposal, "x", 0), ReadInt(proposal, "y", 0), false, proposal.Id,
+                ReadInt(proposal, "width", 0), ReadInt(proposal, "height", 0),
+                proposal.Arguments.TryGetProperty("comment", out _),
+                proposal.Arguments.TryGetProperty("header", out _),
+                proposal.Arguments.TryGetProperty("x", out _) ||
+                proposal.Arguments.TryGetProperty("y", out _) ||
+                proposal.Arguments.TryGetProperty("width", out _) ||
+                proposal.Arguments.TryGetProperty("height", out _));
+        }
+
         if (proposal.Kind == AiActionKind.CreateNode)
         {
             var elementId = ReadGuid(proposal, "id");
@@ -668,6 +818,14 @@ public sealed class ModelSystemActionApplier : IAiActionApplier, IAiActionValida
         }
 
         return property.GetString()!;
+    }
+
+    private static string? ReadOptionalString(AiActionProposal proposal, string name)
+    {
+        return proposal.Arguments.TryGetProperty(name, out var property) &&
+               property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
     }
 
     private static int ReadInt(AiActionProposal proposal, string name, int fallback)
@@ -799,6 +957,28 @@ public sealed class ModelSystemActionApplier : IAiActionApplier, IAiActionValida
         return null;
     }
 
+    private static CommentBlock? FindCommentBlock(Boundary boundary, Guid commentBlockId, out Boundary? owner)
+    {
+        var block = boundary.CommentBlocks.FirstOrDefault(candidate => candidate.Id == commentBlockId);
+        if (block is not null)
+        {
+            owner = boundary;
+            return block;
+        }
+
+        foreach (var child in boundary.Boundaries)
+        {
+            var result = FindCommentBlock(child, commentBlockId, out owner);
+            if (result is not null)
+            {
+                return result;
+            }
+        }
+
+        owner = null;
+        return null;
+    }
+
     private static Boundary? FindBoundary(Boundary boundary, Guid boundaryId)
     {
         if (boundary.Id == boundaryId)
@@ -861,7 +1041,12 @@ public sealed class ModelSystemActionApplier : IAiActionApplier, IAiActionValida
         int X,
         int Y,
         bool IsExpression,
-        string ProposalId);
+        string ProposalId,
+        int Width = 0,
+        int Height = 0,
+        bool HasCommentText = false,
+        bool HasCommentHeader = false,
+        bool HasCommentGeometry = false);
 
     private sealed record PlannedNode(
         Guid Id,

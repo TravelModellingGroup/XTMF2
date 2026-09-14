@@ -47,7 +47,10 @@ public enum AiActionKind
     SetBasicParameter,
     SetScriptedParameter,
     ConvertBasicParameterToScriptedParameter,
-    UpdateDescription
+    UpdateDescription,
+    CreateCommentBlock,
+    UpdateCommentBlock,
+    DeleteCommentBlock
 }
 
 public sealed record AiProviderInfo(

@@ -182,6 +182,62 @@ public sealed class TestModelSystemActionApplier
     }
 
     [TestMethod]
+    public void CommentBlockActionsCreateUpdateAndDeleteDocumentation()
+    {
+        TestGuiHelper.RunInModelSystemContext(nameof(CommentBlockActionsCreateUpdateAndDeleteDocumentation),
+            (user, _, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                var applier = new ModelSystemActionApplier(msSession, user);
+
+                using var createArguments = JsonDocument.Parse($"{{\"boundaryId\":\"{boundary.Id}\",\"comment\":\"Initial note\",\"header\":\"Assumptions\",\"x\":20,\"y\":30,\"width\":240,\"height\":90}}");
+                var create = new AiActionProposal(
+                    "create-comment",
+                    AiActionKind.CreateCommentBlock,
+                    "Create documentation note",
+                    createArguments.RootElement.Clone());
+
+                var createResult = applier.ApplyAsync(new AiActionBatch("create-batch", "Create note", [create]))
+                    .GetAwaiter().GetResult();
+
+                Assert.IsTrue(createResult.IsSuccessful, createResult.Error);
+                var block = boundary.CommentBlocks.Single();
+                Assert.AreEqual("Initial note", block.Comment);
+                Assert.AreEqual("Assumptions", block.Header);
+                Assert.AreEqual(20, block.Location.X);
+
+                using var updateArguments = JsonDocument.Parse($"{{\"id\":\"{block.Id}\",\"comment\":\"Updated note\",\"header\":\"Updated assumptions\",\"x\":40,\"y\":50,\"width\":260,\"height\":110}}");
+                var update = new AiActionProposal(
+                    "update-comment",
+                    AiActionKind.UpdateCommentBlock,
+                    "Update documentation note",
+                    updateArguments.RootElement.Clone());
+
+                var updateResult = applier.ApplyAsync(new AiActionBatch("update-batch", "Update note", [update]))
+                    .GetAwaiter().GetResult();
+
+                Assert.IsTrue(updateResult.IsSuccessful, updateResult.Error);
+                Assert.AreEqual("Updated note", block.Comment);
+                Assert.AreEqual("Updated assumptions", block.Header);
+                Assert.AreEqual(40, block.Location.X);
+                Assert.AreEqual(260, block.Location.Width);
+
+                using var deleteArguments = JsonDocument.Parse($"{{\"id\":\"{block.Id}\"}}");
+                var delete = new AiActionProposal(
+                    "delete-comment",
+                    AiActionKind.DeleteCommentBlock,
+                    "Delete documentation note",
+                    deleteArguments.RootElement.Clone());
+
+                var deleteResult = applier.ApplyAsync(new AiActionBatch("delete-batch", "Delete note", [delete]))
+                    .GetAwaiter().GetResult();
+
+                Assert.IsTrue(deleteResult.IsSuccessful, deleteResult.Error);
+                Assert.IsEmpty(boundary.CommentBlocks);
+            });
+    }
+
+    [TestMethod]
     public void ContextDescribesNestedBoundaryByIdAndPath()
     {
         TestGuiHelper.RunInModelSystemContext(nameof(ContextDescribesNestedBoundaryByIdAndPath),
