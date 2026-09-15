@@ -113,7 +113,7 @@ public partial class ModelSystemsView : UserControl
 
     private void OpenModelSystem(ModelSystemHeader header)
     {
-        var mainWindow = TopLevel.GetTopLevel(this) as MainWindow;
+        var mainWindow = _viewModel?.ParentWindow as MainWindow;
         if (mainWindow is null || _viewModel is null) return;
 
         if (!_viewModel.TryEditModelSystem(header, out var session, out var error, out var warnings) || session is null)
@@ -187,13 +187,15 @@ public partial class ModelSystemsView : UserControl
         header ??= _viewModel.SelectedModelSystem;
         if (header is null) return;
 
+        var capturedViewModel = _viewModel;
+
         Dispatcher.UIThread.Post(async () =>
         {
-            var mainWindow = TopLevel.GetTopLevel(this) as MainWindow;
+            var mainWindow = capturedViewModel.ParentWindow as MainWindow;
             if (mainWindow is null) return;
 
             // Build the list of other model systems in this project.
-            var others = _viewModel.GetOtherModelSystems(header);
+            var others = capturedViewModel.GetOtherModelSystems(header);
 
             var picker = new ComparePickerDialog(others);
             await picker.ShowDialog(mainWindow);
@@ -201,7 +203,6 @@ public partial class ModelSystemsView : UserControl
             if (picker.WasCancelled) return;
 
             // Capture values needed by the factory (picker is disposed after this method returns).
-            var capturedViewModel = _viewModel;
             var capturedHeader = header;
             var capturedRightHeader = picker.SelectedModelSystem;
             var capturedRightFilePath = picker.SelectedFilePath;
