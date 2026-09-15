@@ -67,7 +67,21 @@ public sealed record AiModelInfo(
     bool IsLocal = false,
     string? Description = null);
 
-public sealed record AiMessage(AiRole Role, string Content);
+public sealed record AiMessage(
+    AiRole Role,
+    string Content,
+    IReadOnlyList<AiToolCall>? ToolCalls = null,
+    string? ToolName = null);
+
+public sealed record AiToolDefinition(
+    string Name,
+    string Description,
+    JsonElement Parameters);
+
+public sealed record AiToolCall(
+    string Name,
+    JsonElement Arguments,
+    string? Id = null);
 
 public sealed record AiContextSnapshot(
     string ModelSystemId,
@@ -154,7 +168,8 @@ public sealed record AiChatRequest(
     AiContextSnapshot? Context = null,
     bool IsAgent = false,
     int MaxOutputTokens = 1024,
-    AiGenerationOptions? GenerationOptions = null);
+    AiGenerationOptions? GenerationOptions = null,
+    IReadOnlyList<AiToolDefinition>? Tools = null);
 
 public sealed record AiGenerationOptions(
     double? Temperature = null,
@@ -173,7 +188,8 @@ public sealed record AiResponseChunk(
     IReadOnlyList<AiModuleMetadataRequest>? MetadataRequests = null,
     IReadOnlyList<AiNodeConnectionRequest>? ConnectionRequests = null,
     IReadOnlyList<AiCommentBlockRequest>? CommentBlockRequests = null,
-    IReadOnlyList<AiBoundaryRequest>? BoundaryRequests = null);
+    IReadOnlyList<AiBoundaryRequest>? BoundaryRequests = null,
+    IReadOnlyList<AiToolCall>? ToolCalls = null);
 
 public sealed record AiModuleMetadataRequest(string TypeName);
 

@@ -203,6 +203,42 @@ public sealed class TestOllamaProvider
     }
 
     [TestMethod]
+    public async Task AgentRequestsSendNativeToolsAndParseToolCalls()
+    {
+        var requestBody = string.Empty;
+        using var client = CreateClient(request =>
+        {
+            requestBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"message\":{\"tool_calls\":[{\"function\":{\"name\":\"request_module_metadata\",\"arguments\":{\"typeName\":\"XTMF2.RuntimeModules.If\"}}}]},\"done\":true}\n",
+                    Encoding.UTF8,
+                    "application/x-ndjson")
+            };
+        });
+        var provider = new OllamaProvider(client, new Uri("http://localhost:11434"));
+        var request = new AiChatRequest(
+            "qwen3",
+            [new AiMessage(AiRole.User, "Inspect this module")],
+            IsAgent: true);
+
+        var chunks = new List<AiResponseChunk>();
+        await foreach (var chunk in provider.ChatAsync(request))
+        {
+            chunks.Add(chunk);
+        }
+
+        StringAssert.Contains(requestBody, "\"tools\"");
+        StringAssert.Contains(requestBody, "request_module_metadata");
+        Assert.HasCount(1, chunks);
+        Assert.AreEqual(
+            "XTMF2.RuntimeModules.If",
+            chunks[0].MetadataRequests![0].TypeName);
+        Assert.AreEqual("request_module_metadata", chunks[0].ToolCalls![0].Name);
+    }
+
+    [TestMethod]
     public async Task AgentStreamsActionOnlyChunkAsProposal()
     {
         using var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.OK)

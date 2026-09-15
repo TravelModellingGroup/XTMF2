@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -17,6 +18,7 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
         PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() }
     };
+    private static readonly IReadOnlyList<AiToolDefinition> DefaultAgentTools = CreateDefaultAgentTools();
     private readonly HttpClient _httpClient;
 
     public OllamaProvider(HttpClient httpClient, Uri endpoint)
@@ -30,7 +32,7 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
     public AiProviderInfo Info { get; } = new(
         "ollama",
         "Ollama",
-        AiCapability.Streaming | AiCapability.ModelDiscovery);
+        AiCapability.Streaming | AiCapability.ModelDiscovery | AiCapability.StructuredActions);
 
     public async Task<IReadOnlyList<AiModelInfo>> GetModelsAsync(
         CancellationToken cancellationToken = default)
@@ -155,6 +157,9 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        var tools = request.IsAgent
+            ? request.Tools ?? DefaultAgentTools
+            : Array.Empty<AiToolDefinition>();
         var messages = new List<object>();
         if (request.Context is not null)
         {
@@ -167,14 +172,10 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
 
         foreach (var message in request.Messages)
         {
-            messages.Add(new
-            {
-                role = message.Role.ToString().ToLowerInvariant(),
-                content = message.Content
-            });
+            messages.Add(BuildMessage(message));
         }
 
-        if (request.IsAgent)
+        if (request.IsAgent && tools.Count == 0)
         {
             messages.Insert(0, new
             {
@@ -300,6 +301,16 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
         {
             model = request.ModelId,
             messages,
+            tools = tools.Count == 0 ? null : tools.Select(tool => new
+            {
+                type = "function",
+                function = new
+                {
+                    name = tool.Name,
+                    description = tool.Description,
+                    parameters = tool.Parameters
+                }
+            }),
             options,
             think = request.IsAgent ? false : (bool?)null,
             stream = true
@@ -330,6 +341,7 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
         var emittedAgentTextLength = 0;
         var emittedAgentThinkingLength = 0;
         var emittedAgentActionIds = new HashSet<string>(StringComparer.Ordinal);
+        var nativeToolCalls = new List<AiToolCall>();
         while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
         {
             if (string.IsNullOrWhiteSpace(line))
@@ -351,6 +363,17 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
                            thinkingProperty.ValueKind == JsonValueKind.String
                 ? thinkingProperty.GetString()
                 : null;
+            if (message.TryGetProperty("tool_calls", out var toolCallsProperty) &&
+                toolCallsProperty.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var toolCall in toolCallsProperty.EnumerateArray())
+                {
+                    if (TryParseToolCall(toolCall, out var parsedToolCall))
+                    {
+                        nativeToolCalls.Add(parsedToolCall);
+                    }
+                }
+            }
 
             var isComplete = root.TryGetProperty("done", out var done) &&
                 done.ValueKind == JsonValueKind.True;
@@ -373,6 +396,11 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
                     emittedAgentActionIds);
                 if (isComplete)
                 {
+                    if (nativeToolCalls.Count > 0)
+                    {
+                        yield return ConvertToolCalls(nativeToolCalls);
+                        yield break;
+                    }
                     var structured = ParseAgentResponse(completeResponse.ToString());
                     if (structured is null && !StartsWithJsonObject(completeResponse.ToString()))
                     {
@@ -428,6 +456,165 @@ public sealed class OllamaProvider : IAiProvider, IAiModelContextInfo
                 yield break;
             }
         }
+    }
+
+    private static object BuildMessage(AiMessage message)
+    {
+        if (message.Role == AiRole.Assistant && message.ToolCalls is { Count: > 0 })
+        {
+            return new
+            {
+                role = "assistant",
+                content = message.Content,
+                tool_calls = message.ToolCalls.Select(toolCall => new
+                {
+                    type = "function",
+                    function = new
+                    {
+                        name = toolCall.Name,
+                        arguments = toolCall.Arguments
+                    }
+                })
+            };
+        }
+
+        return new
+        {
+            role = message.Role.ToString().ToLowerInvariant(),
+            content = message.Content,
+            tool_name = message.Role == AiRole.Tool ? message.ToolName : null
+        };
+    }
+
+    private static bool TryParseToolCall(JsonElement element, out AiToolCall toolCall)
+    {
+        toolCall = null!;
+        if (!element.TryGetProperty("function", out var function) ||
+            !function.TryGetProperty("name", out var name) ||
+            name.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var arguments = function.TryGetProperty("arguments", out var argumentsProperty)
+            ? argumentsProperty.Clone()
+            : JsonSerializer.SerializeToElement(new { });
+        toolCall = new AiToolCall(
+            name.GetString()!,
+            arguments,
+            element.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
+                ? id.GetString()
+                : null);
+        return true;
+    }
+
+    private static AiResponseChunk ConvertToolCalls(IReadOnlyList<AiToolCall> toolCalls)
+    {
+        var metadata = new List<AiModuleMetadataRequest>();
+        var connections = new List<AiNodeConnectionRequest>();
+        var comments = new List<AiCommentBlockRequest>();
+        var boundaries = new List<AiBoundaryRequest>();
+        var actions = new List<AiActionProposal>();
+
+        foreach (var toolCall in toolCalls)
+        {
+            switch (toolCall.Name)
+            {
+                case "request_module_metadata":
+                    if (toolCall.Arguments.TryGetProperty("typeName", out var typeName) &&
+                        typeName.ValueKind == JsonValueKind.String)
+                    {
+                        metadata.Add(new AiModuleMetadataRequest(typeName.GetString()!));
+                    }
+                    break;
+                case "inspect_connections":
+                    if (toolCall.Arguments.TryGetProperty("firstNodeId", out var first) &&
+                        toolCall.Arguments.TryGetProperty("secondNodeId", out var second) &&
+                        first.ValueKind == JsonValueKind.String && second.ValueKind == JsonValueKind.String)
+                    {
+                        connections.Add(new AiNodeConnectionRequest(first.GetString()!, second.GetString()!));
+                    }
+                    break;
+                case "inspect_comment_blocks":
+                    comments.Add(JsonSerializer.Deserialize<AiCommentBlockRequest>(toolCall.Arguments.GetRawText(), ActionJsonOptions)!);
+                    break;
+                case "inspect_boundary":
+                    boundaries.Add(JsonSerializer.Deserialize<AiBoundaryRequest>(toolCall.Arguments.GetRawText(), ActionJsonOptions)!);
+                    break;
+                case "propose_model_changes":
+                    if (JsonSerializer.Deserialize<AiResponseChunk>(toolCall.Arguments.GetRawText(), ActionJsonOptions) is { } proposal)
+                    {
+                        actions.AddRange(proposal.ProposedActions);
+                    }
+                    break;
+            }
+        }
+
+        return new AiResponseChunk(
+            string.Empty,
+            actions,
+            IsComplete: true,
+            MetadataRequests: metadata,
+            ConnectionRequests: connections,
+            CommentBlockRequests: comments,
+            BoundaryRequests: boundaries,
+            ToolCalls: toolCalls);
+    }
+
+    private static IReadOnlyList<AiToolDefinition> CreateDefaultAgentTools()
+    {
+        static AiToolDefinition Tool(string name, string description, object parameters) =>
+            new(name, description, JsonSerializer.SerializeToElement(parameters));
+
+        return
+        [
+            Tool("request_module_metadata", "Request detailed metadata for a registered module type.", new
+            {
+                type = "object",
+                required = new[] { "typeName" },
+                properties = new { typeName = new { type = "string" } }
+            }),
+            Tool("inspect_connections", "Inspect whether two existing nodes are connected.", new
+            {
+                type = "object",
+                required = new[] { "firstNodeId", "secondNodeId" },
+                properties = new
+                {
+                    firstNodeId = new { type = "string" },
+                    secondNodeId = new { type = "string" }
+                }
+            }),
+            Tool("inspect_comment_blocks", "Retrieve comment-block documentation by ID or text query.", new
+            {
+                type = "object",
+                properties = new
+                {
+                    commentBlockId = new { type = "string" },
+                    query = new { type = "string" }
+                }
+            }),
+            Tool("inspect_boundary", "Inspect a boundary outside the current context.", new
+            {
+                type = "object",
+                properties = new
+                {
+                    boundaryId = new { type = "string" },
+                    path = new { type = "string" },
+                    query = new { type = "string" }
+                }
+            }),
+            Tool("propose_model_changes", "Propose validated model-system changes for user review.", new
+            {
+                type = "object",
+                required = new[] { "proposedActions" },
+                properties = new
+                {
+                    text = new { type = "string" },
+                    proposedActions = new { type = "array", items = new { type = "object" } },
+                    plan = new { type = "object" }
+                }
+            })
+        ];
     }
 
     internal static AiResponseChunk? ParseAgentResponse(string response)

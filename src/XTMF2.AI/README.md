@@ -11,6 +11,7 @@
 - `AiPlan` and `AiPlanTask` represent dependency-ordered work that can be executed in small batches.
 - `AiActionExecutionResult.FailedActionId` identifies exactly which proposed action failed validation, so correction feedback can target one action instead of an entire batch.
 - `AiActionValidation` enforces explicit approval and destructive-action confirmation before edits are applied.
+- `AiToolDefinition` and `AiToolCall` provide provider-neutral tool schema and invocation contracts.
 - `AiProviderRegistry` provides deterministic provider lookup and model discovery.
 - `AiAssistantService` connects provider selection, streaming chat, policy validation, and action application.
 
@@ -32,23 +33,16 @@ An `Ask` turn follows this path:
 
 1. Validate that a prompt and model are selected, clear the prior turn state, and create a cancellation token.
 2. Project the current boundary into an `AiContextSnapshot` containing existing elements, links, parameters, hooks, variables, and the available module catalog.
-3. Send the prompt to the selected provider as a streaming request using `SuggestOnly` policy and the Ask output budget.
+3. Send the prompt to the selected provider as a streaming request using the Ask output budget.
 4. Append response and thinking chunks as they arrive. Structured proposals and plans are collected for display, but Ask mode never applies actions.
 
 An `Agent` turn adds a two-phase workflow:
 
-1. **Design:** send the prompt with the current context and force `SuggestOnly`. The model returns concise prose naming exact module types, node names, and hook names; it must not return actions or a plan.
+1. **Design:** send the prompt with the current context. The model returns concise prose naming exact module types, node names, and hook names; it must not return actions or a plan.
 2. **Build:** send the prompt again with the same context plus the design summary. The model returns one structured response containing concise text, optional `proposedActions`, and an optional dependency-aware `plan`.
 3. Validate action requests through `AiAssistantService` before exposing proposals for review.
 4. Validate the complete proposed action set through the host's non-mutating model-system validator. If a required structural hook is unconnected, ask the model whether it intends to add the link; an unchanged action set confirms that the omission is intentional. Other validation failures are fed back as corrections before exposing proposals.
-5. In `SuggestOnly` or `ApproveBatch`, leave validated proposals visible for review. The user can select individual actions, approve the batch, and apply it through the GUI.
-6. In `Autonomous`, apply non-destructive proposals automatically. If a plan is present, execute only ready tasks in dependency order; otherwise execute the proposed actions as one batch. Stop at the first failed task or action.
-
-The three policies have distinct meanings:
-
-- `SuggestOnly` permits inference and proposal display but no action execution.
-- `ApproveBatch` requires explicit approval before a selected batch is executed.
-- `Autonomous` permits automatic execution, but destructive actions still require separate destructive-action approval. The current GUI action applier supports `CreateNode`, `CreateLink`, `AddLinkDestination`, `UpdateNode`, and `UpdateParameter`; other action kinds are rejected as unsupported.
+5. Leave validated proposals visible for review. The user can select individual actions, approve the batch, and apply it through the GUI; destructive actions require separate destructive-action approval.
 
 ### Agent tools
 
@@ -69,14 +63,14 @@ ScriptedParameter expressions use the built-in expression language: quoted strin
 
 Each action has an ID, kind, summary, JSON arguments, and destructive flag. The applier validates IDs, module types, hooks, parameters, and argument shapes before applying anything. Create-node operations run before updates, create-link operations run after creation, and destination-append operations run after link creation. The whole accepted batch is committed through the model-system command buffer and can be undone as one operation.
 
-For multi-step work, the model can return an `AiPlan`. Each `AiPlanTask` names its dependencies and the action IDs it owns. Tasks become `Ready` only when all referenced dependencies are completed, and each task is applied as a separate action batch. Completed task actions are removed from the pending proposal set; a failed task stops autonomous execution and reports the failed action when available.
+For multi-step work, the model can return an `AiPlan`. Each `AiPlanTask` names its dependencies and the action IDs it owns. Tasks become `Ready` only when all referenced dependencies are completed, and each task can be applied as a separate action batch.
 
 ### Bounded recovery
 
 The orchestrator handles two different incomplete-response cases:
 
 - If Ollama stops at its output limit, the assistant extracts complete proposals already present, discards the incomplete JSON envelope, and asks for one fresh complete response using a bounded progress summary. The summary preserves the response tail and emitted action IDs, while the next context snapshot preserves provisional IDs for newly proposed nodes and links. Continuation cycles are capped at the configured limit, defaulting to 100 and constrained to 1-100. Repeated normalized continuation state is detected and stops the loop early.
-- If an autonomous action batch fails, the failed action ID and error are converted into targeted correction feedback. Pending proposals and plans are cleared, the current model-system context is re-read, and the original request is retried up to two times. The correction asks the model to regenerate only the failed action while preserving the other action IDs, kinds, and arguments.
+- If an applied action batch fails, the failed action ID and error are converted into targeted correction feedback. Pending proposals and plans are cleared, the current model-system context is re-read, and the correction asks the model to regenerate only the failed action while preserving the other action IDs, kinds, and arguments.
 - If an explicitly applied selection fails, the same targeted correction feedback starts one fresh provider turn. Stale proposals are cleared and the returned actions remain available for review; if the correction turn returns no actions, the original failure remains visible.
 
 Cancellation stops the provider stream and action execution through the request cancellation token. Partial response and thinking text remain visible when a request is stopped or the provider fails.
@@ -94,11 +88,13 @@ var models = await provider.GetModelsAsync();
 
 The adapter uses `GET /api/tags` for model discovery and `POST /api/chat` with streaming enabled. Responses are read with `ResponseHeadersRead` so Ollama's first token or thinking fragment is available immediately instead of waiting for the complete response. Requests also send a bounded `num_predict` output budget (768 tokens for Agent mode and 1024 for Ask mode). Agent requests use conservative Ollama generation settings (`temperature`, `top_p`, `repeat_penalty`, and `repeat_last_n`) to reduce repetitive output. Ollama is optional; connection failures are returned as `AiProviderException` and must not prevent XTMF2.GUI from starting.
 
-The GUI assistant uses `llama3.2` as its default editable model. The GUI settings persist the provider ID, model ID, Ollama endpoint, and action policy (`SuggestOnly`, `ApproveBatch`, or `Autonomous`) as non-secret preferences. The endpoint is validated when the application starts; invalid or unsupported values fall back to `http://localhost:11434`. Credentials are not written to these settings. Ollama Ask requests stream ordinary text. Ollama Agent requests receive an explicit structured-output instruction and are parsed as one JSON object containing `text`, an optional `plan`, and `proposedActions`; supported proposals are then shown for review and application in the assistant window. Planned tasks reference proposal IDs and can be run individually after their dependencies complete. Autonomous mode executes ready planned tasks as separate action batches, stopping at the first failure.
+For Agent requests, the adapter sends Ollama's native `tools` array using the provider-neutral `AiToolDefinition` schemas. Native `tool_calls` are accumulated from the stream and normalized into `AiResponseChunk`; the GUI resolves the request through the host and sends the named `tool` result back on the next request. Providers that use another schema format can consume the same optional `AiChatRequest.Tools` contract and map their own native representation.
 
-When applying a batch fails, `ModelSystemActionApplier` reports which proposed action id caused the failure. The assistant turns that into a targeted correction message ("Action 'a3' (CreateLink) failed: ... Regenerate only that action ...") instead of a generic error, so the next attempt only needs to fix the one broken action. In Autonomous mode, this correction is fed back automatically: `AiAssistantViewModel` retries up to `MaxAutonomousApplyRetries` times, clearing stale proposals and re-reading the current model-system snapshot before each retry, without requiring the user to resend the prompt.
+The GUI assistant uses `llama3.2` as its default editable model. The GUI settings persist the provider ID, model ID, Ollama endpoint, and continuation limit as non-secret preferences. The endpoint is validated when the application starts; invalid or unsupported values fall back to `http://localhost:11434`. Credentials are not written to these settings. Ollama Ask requests stream ordinary text. Ollama Agent requests send native function-tool schemas and normalize returned tool calls into host metadata requests, connection checks, comment lookups, boundary lookups, and model-change proposals. Supported proposals are shown for review and application in the assistant window.
 
-Agent mode splits each turn into a Design phase and a Build phase. The Design phase requests plain text only (forcing `AiAutonomyPolicy.SuggestOnly` for that request regardless of the configured policy) asking the model to name the exact module types, node names, and hook names it intends to use, without emitting any actions or a plan. The Build phase then asks the model to implement exactly that confirmed design using the normal structured-action schema. `StatusText` reflects the active phase ("Designing", then "Building"; "Computing" in Ask mode, which does not use phases), and `Thinking` is cleared when moving from Design to Build so reasoning from one phase does not linger under the other. `Response` accumulates across both phases so the design explanation stays visible above the build result.
+When applying a batch fails, `ModelSystemActionApplier` reports which proposed action id caused the failure. The assistant turns that into a targeted correction message ("Action 'a3' (CreateLink) failed: ... Regenerate only that action ...") instead of a generic error, so the next attempt only needs to fix the one broken action.
+
+Agent mode splits each turn into a Design phase and a Build phase. The Design phase asks the model to name the exact module types, node names, and hook names it intends to use. The Build phase then asks the model to implement exactly that confirmed design using the native tool schemas. `StatusText` reflects the active phase ("Designing", then "Building"; "Computing" in Ask mode, which does not use phases), and `Thinking` is cleared when moving from Design to Build so reasoning from one phase does not linger under the other. `Response` accumulates across both phases so the design explanation stays visible above the build result.
 
 Model discovery is opt-in from the assistant pane. Refreshing the model list calls the selected provider's `GetModelsAsync` implementation, so an unavailable Ollama server is reported in the assistant pane rather than blocking application startup.
 
@@ -113,20 +109,6 @@ var models = await providers.GetModelsAsync("ollama");
 ```
 
 Provider IDs are case-insensitive and must be unique. The registry intentionally does not create providers or persist selections; those responsibilities belong to the host application's composition and settings layers.
-
-## External control API
-
-`AiControlServer` provides an opt-in authenticated HTTP API around `AiAssistantService`. Hosts should bind it to loopback unless they deliberately provide a separately secured network boundary:
-
-```csharp
-var controlServer = new AiControlServer(
-    assistantService,
-    "http://127.0.0.1:45678/",
-    bearerToken);
-controlServer.Start();
-```
-
-Every request must include `Authorization: Bearer <token>`. The API exposes `GET /v1/models?providerId=...`, `POST /v1/chat`, and `POST /v1/actions`. Chat responses use the same `AiResponseChunk` records as the GUI; request `Accept: application/x-ndjson` for newline-delimited streaming or `Accept: text/event-stream` for SSE. Responses include `X-Request-ID`; callers may provide that header to correlate retries. Hosts may receive non-sensitive `AiControlAuditEvent` records through the optional audit callback. Concurrent requests are bounded to four by default and can be changed with the `maxConcurrentRequests` constructor argument. Requests are cancelled after five minutes by default; hosts can change that with `requestTimeout`. Action requests still pass through `AiActionPolicy` and the configured `IAiActionApplier`; callers must explicitly provide approval flags, and destructive actions require both approvals. The server is host-owned and must be disposed with `DisposeAsync()` during shutdown. Tokens should be generated or retrieved through a host secret mechanism rather than stored in source control or ordinary settings.
 
 ## Assistant service
 
@@ -166,9 +148,9 @@ These are the arguments for `CreateNode` and `CreateLink`, respectively. The `id
 
 The GUI applies a batch through the session command buffer, so the accepted batch can be undone as one operation. Unsupported or malformed actions are rejected before they are applied.
 
-The GUI opens the assistant in a separate modeless window from the model-system editor header. `Ask` mode always sends suggest-only requests and does not allow applying proposed edits. `Agent` mode enables the configured autonomy policy and exposes the existing reviewed action-application flow, including undo through `ModelSystemSession`.
+The GUI opens the assistant in a separate modeless window from the model-system editor header. `Ask` mode sends ordinary requests and does not allow applying proposed edits. `Agent` mode exposes the reviewed action-application flow, including undo through `ModelSystemSession`.
 
-The assistant pane displays streamed proposals for review. Each proposal can be individually selected or rejected before `Apply actions` submits the selected proposals as one batch; suggest-only mode rejects execution, while approve-batch permits explicit application. Autonomous mode applies streamed non-destructive proposals automatically, but destructive actions still require the explicit `Allow destructive actions` confirmation in the pane.
+The assistant pane displays proposals for review. Each proposal can be individually selected or rejected before `Apply actions` submits the selected proposals as one batch; destructive actions require the explicit `Allow destructive actions` confirmation in the pane.
 
 When Ollama reports that a response stopped at its output-length limit, the GUI automatically asks the model to compact the response and continue. The maximum number of continuation cycles is configurable in the GUI settings and defaults to 100, with values constrained to 1-100 per request. The assistant shows `Computing`, `Compacting`, and continuation status while this happens, and preserves partial response and thinking text if the provider stops before completion.
 

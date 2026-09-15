@@ -660,6 +660,7 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
             var connectionRequests = new List<AiNodeConnectionRequest>();
             var commentBlockRequests = new List<AiCommentBlockRequest>();
             var boundaryRequests = new List<AiBoundaryRequest>();
+            var turnToolCalls = new List<AiToolCall>();
             var turnResponse = new StringBuilder();
             StatusText = compactionCycle == 0
                 ? statusLabel
@@ -714,11 +715,18 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
                 {
                     boundaryRequests.AddRange(chunk.BoundaryRequests);
                 }
+                if (!askMode && chunk.ToolCalls is not null)
+                {
+                    turnToolCalls.AddRange(chunk.ToolCalls);
+                }
             }
 
-            if (turnResponse.Length > 0)
+            if (turnResponse.Length > 0 || turnToolCalls.Count > 0)
             {
-                conversationMessages.Add(new AiMessage(AiRole.Assistant, turnResponse.ToString()));
+                conversationMessages.Add(new AiMessage(
+                    AiRole.Assistant,
+                    turnResponse.ToString(),
+                    turnToolCalls.Count == 0 ? null : turnToolCalls.ToArray()));
             }
 
             if (!wasTruncated)
@@ -747,7 +755,8 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
                         AiRole.Tool,
                         "The node connection request was resolved by the XTMF2 host. Use the following " +
                         "results and return one complete response. Each connection includes the origin " +
-                        "hook name:\n" + connectionResult));
+                        "hook name:\n" + connectionResult,
+                        ToolName: "inspect_connections"));
                     StatusText = $"Checking node connections ({connectionCycle}/{MaximumMetadataCycles})";
                     queuedToolResult = true;
                 }
@@ -766,7 +775,8 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
                         AiRole.Tool,
                         "The metadata request was resolved by the XTMF2 host. Use the following results and " +
                         "return one complete response. Do not request the same type again unless the result " +
-                        "is missing:\n" + metadataResult));
+                        "is missing:\n" + metadataResult,
+                        ToolName: "request_module_metadata"));
                     StatusText = $"Loading module metadata ({metadataCycle}/{MaximumMetadataCycles})";
                     queuedToolResult = true;
                 }
@@ -784,7 +794,8 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
                     conversationMessages.Add(new AiMessage(
                         AiRole.Tool,
                         "The comment-block lookup was resolved by the XTMF2 host. Use the following " +
-                        "documentation and return one complete response:\n" + commentBlockResult));
+                        "documentation and return one complete response:\n" + commentBlockResult,
+                        ToolName: "inspect_comment_blocks"));
                     StatusText = $"Looking up comment blocks ({commentBlockCycle}/{MaximumMetadataCycles})";
                     queuedToolResult = true;
                 }
@@ -803,7 +814,8 @@ public sealed partial class AiAssistantViewModel : ObservableObject, IDisposable
                         AiRole.Tool,
                         "The boundary lookup was resolved by the XTMF2 host. The result is read-only; use " +
                         "the returned boundary and element IDs and return one complete response:\n" +
-                        boundaryResult));
+                        boundaryResult,
+                        ToolName: "inspect_boundary"));
                     StatusText = $"Looking up boundaries ({boundaryCycle}/{MaximumMetadataCycles})";
                     queuedToolResult = true;
                 }
