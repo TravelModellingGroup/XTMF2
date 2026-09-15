@@ -24,6 +24,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Fail", Description = "Crash the model run with a message.",
     DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
+[AiModuleInstructions("Use Fail deliberately as an action that aborts execution with its Message parameter. It is usually placed under Execute.To Execute or a conditional branch; Message is a generated parameter child and does not require a separate visible parameter node.")]
 public sealed class FailA : BaseAction
 {
     [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
@@ -37,6 +38,7 @@ public sealed class FailA : BaseAction
 
 [Module(Name = "Fail", Description = "Crash the model run with a message.",
     DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
+[AiModuleInstructions("Use the context-aware Fail action in an IAction<Context> branch when failure text depends on the current context. Configure its generated Message parameter; it aborts execution when invoked.")]
 public sealed class FailA<Context> : BaseAction<Context>
 {
     [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]
@@ -50,6 +52,7 @@ public sealed class FailA<Context> : BaseAction<Context>
 
 [Module(Name = "Fail", Description = "Crash the model run with a message.",
 DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Fail.html")]
+[AiModuleInstructions("Use this context-aware Fail variant when the failure message is a function of the current context. Connect or configure Message with the context-aware string function; it aborts execution when invoked.")]
 public sealed class FailWithContextA<Context> : BaseAction<Context>
 {
     [Parameter(Name = "Message", Index = 0, Description = "The message to fail with.", DefaultValue = "Invalid state!")]

@@ -815,9 +815,9 @@ namespace XTMF2.ModelSystemConstruct
             }
         }
 
-        internal bool AddNode(ModuleRepository modules, string name, Type type, Rectangle location, out Node? node, [NotNullWhen(false)] out CommandError? error)
+        internal bool AddNode(ModuleRepository modules, string name, Type type, Rectangle location, out Node? node, [NotNullWhen(false)] out CommandError? error, Guid id = default)
         {
-            node = Node.Create(modules, name, type, this, location);
+            node = Node.Create(modules, name, type, this, location, id);
             if (node is null)
             {
                 return Helper.FailWith(out error, $"Unable to create a node with the name {name} of type {type.FullName}!");
@@ -1223,13 +1223,13 @@ namespace XTMF2.ModelSystemConstruct
                 child.CollectFunctionTemplates(lookup);
         }
 
-        internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link? link, [NotNullWhen(false)] out CommandError? error)
+        internal bool AddLink(Node origin, NodeHook originHook, Node destination, out Link? link, [NotNullWhen(false)] out CommandError? error, Guid id = default)
         {
             switch (originHook.Cardinality)
             {
                 case HookCardinality.Single:
                 case HookCardinality.SingleOptional:
-                    link = new SingleLink(origin, originHook, destination, false);
+                    link = new SingleLink(origin, originHook, destination, false, id: id);
                     _links.Add(link);
                     break;
                 default:
@@ -1248,7 +1248,7 @@ namespace XTMF2.ModelSystemConstruct
                         }
                         else
                         {
-                            link = new MultiLink(origin, originHook, new List<Node>() { destination }, false);
+                            link = new MultiLink(origin, originHook, new List<Node>() { destination }, false, id: id);
                             _links.Add(link);
                         }
                     }

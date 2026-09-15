@@ -24,6 +24,7 @@ using System.Threading.Tasks;
 namespace XTMF2.RuntimeModules;
     [Module(Name = "Execute Actions Then Function", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/ExecuteActionsThenFunction.html",
 Description = "Allows you to execute actions before calling a function.  This allows you to ")]
+[AiModuleInstructions("Use Invoke First for zero or more actions that run before End With, then connect the required End With function. Set Invoke Actions in Parallel only when those actions are independent; Invoke First is an action array and End With passes the returned value through.")]
     public class ExecuteActionsThenFunction<Return> : BaseFunction<Return>
     {
         [SubModule(Index = 0, Name = "Invoke First", Description = "Actions to invoke before invoking the function.", PassesExecution = true)]

@@ -24,6 +24,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Basic Parameter", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/BasicParameter.html",
 Description = "Provides the ability to have a value in a model system.")]
+[AiModuleInstructions("Use BasicParameter as a literal value provider when a module parameter needs a fixed value. Normal module CreateNode actions generate hidden BasicParameter children automatically for compatible parameter hooks; do not create a visible BasicParameter solely to satisfy a generated parameter. Set its value with SetBasicParameter.")]
 public class BasicParameter<T> : BaseFunction<T>
 {
 #pragma warning disable CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.

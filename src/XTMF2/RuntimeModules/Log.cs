@@ -27,6 +27,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Log", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Log.html",
 Description = "Provides functionality for synchronizing the writing of events to a log and providing time stamps.")]
+[AiModuleInstructions("Connect the required LogStream hook to a WriteStream-producing module before using this Log with WriteToLogA or another logging module.")]
 public sealed class Log : BaseAction<string>, IFunction<Log>, IDisposable
 {
     [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.", Index = 0)]

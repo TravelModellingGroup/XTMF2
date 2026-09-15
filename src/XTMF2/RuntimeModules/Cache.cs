@@ -25,6 +25,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Cache", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Cache.html",
 Description = "Provides a way to keep the result of a function unless unloaded by an event.")]
+[AiModuleInstructions("Connect the required Source hook to the function whose result should be cached. Force Update is optional and accepts an event that invalidates the cached value; it is not required for normal caching.")]
 public sealed class Cache<T> : BaseFunction<T>, IDisposable
 {
     private readonly Lock _lock = new Lock();

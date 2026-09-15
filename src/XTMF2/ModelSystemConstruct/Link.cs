@@ -303,7 +303,8 @@ namespace XTMF2
                 warnings?.Add($"A link from '{origin.Name}' could not be loaded because the hook '{hookName}' was not found on the module and will be skipped.");
                 return true;
             }
-            if (destination != null)
+            var isMultiDestinationHook = hook.Cardinality is HookCardinality.AtLeastOne or HookCardinality.AnyNumber;
+            if (!isMultiDestinationHook && destination != null)
             {
                 if (hiddenDestinations is { Count: > 0 })
                 {
@@ -313,8 +314,8 @@ namespace XTMF2
             }
             else
             {
-                // destinations can not be null if destination was.
-                link = new MultiLink(origin, hook, destinations!, disabled, orthogonal, hiddenDestinations, linkId, breakpointX);
+                var multiDestinations = destinations ?? new List<Node> { destination! };
+                link = new MultiLink(origin, hook, multiDestinations, disabled, orthogonal, hiddenDestinations, linkId, breakpointX);
             }
             return true;
         }

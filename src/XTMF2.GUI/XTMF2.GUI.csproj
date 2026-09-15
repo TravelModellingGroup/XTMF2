@@ -19,6 +19,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="11.3.14" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.14" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.14" />
+    <PackageReference Include="Markdown.Avalonia" Version="11.0.3" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.1-build.4" />
     <PackageReference Include="Dock.Avalonia" Version="11.3.11.22" />
     <PackageReference Include="Dock.Model.Avalonia" Version="11.3.11.22" />
@@ -50,6 +51,7 @@
 
   <ItemGroup>    
     <ProjectReference Include="..\XTMF2\XTMF2.csproj" />
+    <ProjectReference Include="..\XTMF2.AI\XTMF2.AI.csproj" />
     <ProjectReference Include="..\XTMF2.Interfaces\XTMF2.Interfaces.csproj" />
     <ProjectReference Include="..\XTMF2.Client\XTMF2.RunServer.csproj" />
     <ProjectReference Include="..\XTMF2.Run\XTMF2.Run.csproj" />

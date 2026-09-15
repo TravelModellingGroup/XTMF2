@@ -34,6 +34,7 @@ namespace XTMF2.GUI.Views;
 public partial class ModelSystemEditorView : UserControl
 {
     private ModelSystemEditorViewModel? _vm;
+    private AiAssistantWindow? _aiAssistantWindow;
 
     // ── Scroll-position memory ───────────────────────────────────────────
     // Scroll offset is saved on the ViewModel so it survives even when
@@ -70,6 +71,28 @@ public partial class ModelSystemEditorView : UserControl
         // The ViewModel holds the saved offset so it persists even when Dock
         // recreates this view on each tab switch.
         CanvasScrollViewer.ScrollChanged += OnCanvasScrollChanged;
+    }
+
+    private void OpenAiAssistant_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm?.AiAssistant is null)
+            return;
+
+        _ = _vm.AiAssistant.RefreshModelsCommand.ExecuteAsync(null);
+        if (_aiAssistantWindow is not null)
+        {
+            _aiAssistantWindow.Activate();
+            return;
+        }
+
+        _aiAssistantWindow = new AiAssistantWindow(
+            _vm.AiAssistant,
+            _vm.NavigateToElementById);
+        _aiAssistantWindow.Closed += (_, _) => _aiAssistantWindow = null;
+        if (TopLevel.GetTopLevel(this) is Window owner)
+            _aiAssistantWindow.Show(owner);
+        else
+            _aiAssistantWindow.Show();
     }
 
     private void OnActualThemeVariantChanged(object? sender, EventArgs e)

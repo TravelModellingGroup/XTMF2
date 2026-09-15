@@ -26,6 +26,7 @@ namespace XTMF2.RuntimeModules;
     /// </summary>
     [Module(Name = "Start", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/Start.html",
 Description = "A starting point for a model system.")]
+[AiModuleInstructions("Use Start as the root action for a model-system execution chain. Connect its optional ToExecute hook to the first IAction; downstream actions can be connected from Execute.To Execute or other action hooks.")]
     public sealed class StartModule : BaseAction
     {
         [SubModule(Name = "ToExecute", Description = "The node to invoke when executing this start.", Index = 0, PassesExecution = true)]

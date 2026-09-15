@@ -19,6 +19,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -68,6 +69,12 @@ namespace XTMF2.Editing
         /// will be reversed together by a single undo.
         /// </summary>
         public void CommitBatch() => Buffer.CommitAggregateBatch();
+
+        /// <summary>
+        /// Reverses and discards all operations recorded since the matching
+        /// <see cref="BeginBatch"/> call.
+        /// </summary>
+        public bool AbortBatch(out CommandError? error) => Buffer.AbortAggregateBatch(out error);
 
         private const string FunctionTemplateSnapshotSource = "XTMF2FunctionTemplate";
         private const int FunctionTemplateSnapshotVersion = 1;
@@ -521,6 +528,14 @@ namespace XTMF2.Editing
         internal ModuleRepository GetModuleRepository()
         {
             return _session.GetModuleRepository();
+        }
+
+        /// <summary>
+        /// Gets the registered description and hooks for a module type.
+        /// </summary>
+        public (ModuleAttribute Description, TypeInfo TypeInfo, NodeHook[] Hooks) GetModuleInfo(Type type)
+        {
+            return GetModuleRepository()[type];
         }
 
         /// <summary>
@@ -1139,7 +1154,7 @@ namespace XTMF2.Editing
         /// <param name="node">The resulting node if the operation succeeds, null if the operation fails.</param>
         /// <param name="error">An error message if the operation fails.</param>
         /// <returns>True if the operation succeeds, false otherwise with an error message stored in error.</returns>
-        public bool AddNode(User user, Boundary boundary, string name, Type type, Rectangle location, out Node? node, [NotNullWhen(false)] out CommandError? error)
+        public bool AddNode(User user, Boundary boundary, string name, Type type, Rectangle location, out Node? node, [NotNullWhen(false)] out CommandError? error, Guid id = default)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
@@ -1152,7 +1167,7 @@ namespace XTMF2.Editing
                     node = null;
                     return false;
                 }
-                if (boundary.AddNode(GetModuleRepository(), name, type, location, out node, out error))
+                if (boundary.AddNode(GetModuleRepository(), name, type, location, out node, out error, id))
                 {
                     Node _node = node!;
                     Buffer.AddUndo(new Command(() =>
@@ -1181,9 +1196,11 @@ namespace XTMF2.Editing
         /// <param name="node">The resulting node object.</param>
         /// <param name="children"></param>
         /// <param name="error"></param>
+        /// <param name="id">The node ID to use, or the default value to generate one.</param>
         /// <returns></returns>
         public bool AddNodeGenerateParameters(User user, Boundary boundary, string name, Type type,
-            Rectangle location, out Node? node, out List<Node>? children, [NotNullWhen(false)]out CommandError? error)
+            Rectangle location, out Node? node, out List<Node>? children,
+            [NotNullWhen(false)] out CommandError? error, Guid id = default)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(boundary);
@@ -1197,7 +1214,7 @@ namespace XTMF2.Editing
                     node = null;
                     return false;
                 }
-                bool success = boundary.AddNode(GetModuleRepository(), name, type, location, out node, out error);
+                bool success = boundary.AddNode(GetModuleRepository(), name, type, location, out node, out error, id);
                 if (success)
                 {
                     // now generate the children
@@ -1284,7 +1301,9 @@ namespace XTMF2.Editing
                     {
                         var child = Node.Create(this.GetModuleRepository(), hook.Name, selectedType, boundary, Rectangle.Hidden);
 
-                        if (child?.SetParameterValue(ParameterExpression.CreateParameter(hook.DefaultValue!, genericParameters[0]), out var error) == true)
+                        if (child?.SetParameterValue(
+                            ParameterExpression.CreateParameter(hook.DefaultValue ?? string.Empty, genericParameters[0]),
+                            out var error) == true)
                         {
                             nodes.Add(child);
                             // Construct the link object directly without adding it to the boundary.
@@ -2737,9 +2756,12 @@ namespace XTMF2.Editing
                 // Nodes inside a FunctionTemplate's InternalModules have template-local
                 // variables that shadow the global model-system variables.
                 var localVars = basicParameter.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+                IEnumerable<Node> modelVars = ModelSystem.Variables is { } variables
+                    ? variables
+                    : Array.Empty<Node>();
                 IList<Node> allVars = localVars is { Count: > 0 }
-                    ? localVars.Concat(ModelSystem.Variables).ToList()
-                    : (IList<Node>)ModelSystem.Variables;
+                    ? localVars.Concat(modelVars).ToList()
+                    : modelVars.ToList();
                 if(basicParameter.SetParameterExpression(allVars, expression, out error))
                 {
                     var newType = basicParameter.Type;
@@ -2928,6 +2950,76 @@ namespace XTMF2.Editing
             return false;
         }
 
+
+        /// <summary>
+        /// Converts a BasicParameter node to a ScriptedParameter node and assigns a compiled expression.
+        /// </summary>
+        public bool ConvertBasicParameterToScriptedParameter(User user, Node basicParameter,
+            string expression, [NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(basicParameter);
+            ArgumentException.ThrowIfNullOrWhiteSpace(expression);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+
+                var previousType = basicParameter.Type;
+                var previousValue = basicParameter.ParameterValue;
+                if (previousType?.IsGenericType != true ||
+                    previousType.GetGenericTypeDefinition() != typeof(RuntimeModules.BasicParameter<>))
+                {
+                    error = new CommandError("Only BasicParameter nodes can be converted to ScriptedParameter nodes.");
+                    return false;
+                }
+
+                var scriptedType = typeof(RuntimeModules.ScriptedParameter<>).MakeGenericType(
+                    previousType.GetGenericArguments()[0]);
+                string? typeError = null;
+                error = null;
+                if (!basicParameter.SetType(GetModuleRepository(), scriptedType, ref typeError) ||
+                    !basicParameter.SetParameterExpression(BuildParameterVariables(basicParameter), expression, out error))
+                {
+                    string? restoreError = null;
+                    _ = basicParameter.SetType(GetModuleRepository(), previousType, ref restoreError);
+                    _ = basicParameter.SetParameterValue(previousValue, out _);
+                    error ??= new CommandError(typeError ?? "The scripted parameter expression could not be compiled.");
+                    return false;
+                }
+
+                var newType = basicParameter.Type;
+                var newValue = basicParameter.ParameterValue;
+                Buffer.AddUndo(new Command(() =>
+                {
+                    string? undoError = null;
+                    _ = basicParameter.SetType(GetModuleRepository(), previousType, ref undoError);
+                    return (basicParameter.SetParameterValue(previousValue, out var valueError), valueError);
+                }, () =>
+                {
+                    string? redoError = null;
+                    _ = basicParameter.SetType(GetModuleRepository(), newType, ref redoError);
+                    return (basicParameter.SetParameterValue(newValue, out var valueError), valueError);
+                }));
+                error = null;
+                return true;
+            }
+        }
+
+        private IList<Node> BuildParameterVariables(Node parameter)
+        {
+            var localVariables = parameter.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+            IEnumerable<Node> modelVariables = ModelSystem.Variables is { } variables
+                ? variables
+                : Array.Empty<Node>();
+            return localVariables is { Count: > 0 }
+                ? localVariables.Concat(modelVariables).ToList()
+                : modelVariables.ToList();
+        }
         private static Node ResolveDestinationNode(Node destination)
             => destination is GhostNode gn ? gn.ReferencedNode : destination;
 
@@ -3870,7 +3962,7 @@ namespace XTMF2.Editing
         /// <param name="error"></param>
         /// <returns></returns>
         public bool AddLink(User user, Node origin, NodeHook originHook,
-            Node destination, out Link? link, out CommandError? error)
+            Node destination, out Link? link, out CommandError? error, Guid id = default)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(origin);
@@ -3893,6 +3985,7 @@ namespace XTMF2.Editing
                     {
                         if (_link is SingleLink sl)
                         {
+                            link = sl;
                             var originalDestination = sl.Destination!;
                             success = sl.SetDestination(destination, out error);
                             if (success)
@@ -3914,7 +4007,7 @@ namespace XTMF2.Editing
                     }
                     else
                     {
-                        success = origin.ContainedWithin!.AddLink(origin, originHook, destination, out link, out error);
+                        success = origin.ContainedWithin!.AddLink(origin, originHook, destination, out link, out error, id);
                         if (success)
                         {
                             _link = link!;
@@ -3930,7 +4023,7 @@ namespace XTMF2.Editing
                 }
                 else
                 {
-                    success = origin.ContainedWithin!.AddLink(origin, originHook, destination, out link, out error);
+                    success = origin.ContainedWithin!.AddLink(origin, originHook, destination, out link, out error, id);
                     if (success)
                     {
                         Link _link = link!;

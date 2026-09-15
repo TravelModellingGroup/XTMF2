@@ -20,8 +20,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using System;
 using System.Linq;
+using System.Net.Http;
+using System.Threading.Tasks;
 using XTMF2.GUI.Resources;
+using XTMF2.AI;
 
 namespace XTMF2.GUI.Views;
 
@@ -29,6 +33,10 @@ public partial class SettingsWindow : Window
 {
     private string? _currentTheme;
     private string? _currentLanguage;
+    private string _currentAiProvider = "ollama";
+    private string _currentAiModel = "llama3.2";
+    private string _currentOllamaEndpoint = "http://localhost:11434";
+    private readonly HttpClient _aiHttpClient = new();
 
     public SettingsWindow()
     {
@@ -66,6 +74,16 @@ public partial class SettingsWindow : Window
 
         // Load system sounds preference
         PlaySystemSoundsCheckBox.IsChecked = Properties.Settings.Default.PlaySystemSounds;
+            _currentAiProvider = Properties.Settings.Default.AiProvider;
+            _currentAiModel = Properties.Settings.Default.AiModel;
+            _currentOllamaEndpoint = Properties.Settings.Default.OllamaEndpoint;
+            AiProviderComboBox.SelectedItem = AiProviderComboBox.Items
+                .OfType<ComboBoxItem>()
+                .FirstOrDefault(item => item.Tag?.ToString() == _currentAiProvider);
+            OllamaEndpointTextBox.Text = _currentOllamaEndpoint;
+            AiModelComboBox.SelectedItem = _currentAiModel;
+            AiMaxCompactionCyclesTextBox.Text = Properties.Settings.Default.AiMaxCompactionCycles.ToString();
+            _ = RefreshModelsAsync();
     }
 
     private void ThemeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -136,11 +154,60 @@ public partial class SettingsWindow : Window
         // Save system sounds preference
         Properties.Settings.Default.PlaySystemSounds =
             PlaySystemSoundsCheckBox.IsChecked == true;
-
+        if (AiProviderComboBox.SelectedItem is ComboBoxItem providerItem && providerItem.Tag is string provider)
+            Properties.Settings.Default.AiProvider = provider;
+        Properties.Settings.Default.AiModel = string.IsNullOrWhiteSpace(AiModelComboBox.Text)
+            ? "llama3.2"
+            : AiModelComboBox.Text.Trim();
+        Properties.Settings.Default.OllamaEndpoint = string.IsNullOrWhiteSpace(OllamaEndpointTextBox.Text)
+            ? "http://localhost:11434"
+            : OllamaEndpointTextBox.Text.Trim();
+        if (int.TryParse(AiMaxCompactionCyclesTextBox.Text, out var maxCompactionCycles))
+        {
+            Properties.Settings.Default.AiMaxCompactionCycles = Math.Clamp(maxCompactionCycles, 1, 100);
+        }
+        else
+        {
+            Properties.Settings.Default.AiMaxCompactionCycles = 100;
+        }
         Properties.Settings.Default.Save();
 
         // Theme is already saved via ChangeTheme method
         // which calls SaveThemePreference internally
+    }
+
+    private async void RefreshModels_Click(object? sender, RoutedEventArgs e)
+    {
+        await RefreshModelsAsync();
+    }
+
+    private async Task RefreshModelsAsync()
+    {
+        if (!Uri.TryCreate(OllamaEndpointTextBox.Text?.Trim(), UriKind.Absolute, out var endpoint) ||
+            endpoint.Scheme is not ("http" or "https"))
+        {
+            return;
+        }
+
+        try
+        {
+            var provider = new OllamaProvider(_aiHttpClient, endpoint);
+            var models = await provider.GetModelsAsync();
+            var selectedModel = AiModelComboBox.Text?.Trim();
+            AiModelComboBox.ItemsSource = models.Select(model => model.Id).ToArray();
+            if (!string.IsNullOrWhiteSpace(selectedModel) && models.Any(model => model.Id == selectedModel))
+            {
+                AiModelComboBox.SelectedItem = selectedModel;
+            }
+            else if (models.Count > 0)
+            {
+                AiModelComboBox.SelectedItem = models[0].Id;
+            }
+        }
+        catch
+        {
+            // Keep the configured model when discovery is unavailable.
+        }
     }
 
     public void Window_KeyUp(object? sender, KeyEventArgs e)

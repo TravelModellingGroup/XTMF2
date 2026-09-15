@@ -25,6 +25,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Open Write Stream From File", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/OpenWriteStreamFromFile.html",
 Description = "Provides a WriteStream to the given file name from context.")]
+[AiModuleInstructions("Set the required File Path parameter to the output path. This module creates parent directories when needed and produces a WriteStream for a consumer such as Log.LogStream; it is a value-producing function, not an action under Execute.To Execute.")]
 public class OpenWriteStreamFromFile : BaseFunction<WriteStream>
 {
 

@@ -9,7 +9,7 @@
         Classes="neon-dialog"
         Title="{res:Localize Settings_Title}"
         Width="600"
-        Height="360"
+        Height="650"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
         KeyUp="Window_KeyUp"
@@ -86,6 +86,48 @@
                         
                         <CheckBox Content="{res:Localize Settings_PlaySystemSounds}"
                                   x:Name="PlaySystemSoundsCheckBox"/>
+                    </StackPanel>
+                </Border>
+
+                <Border BorderBrush="{DynamicResource DlgListBorder}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="15">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="AI Assistant"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource DlgAccent}"/>
+                        <TextBlock Text="Provider" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="AiProviderComboBox"
+                                  Width="300"
+                                  HorizontalAlignment="Left">
+                            <ComboBoxItem Content="Ollama" Tag="ollama"/>
+                        </ComboBox>
+                        <TextBlock Text="Ollama endpoint" FontWeight="SemiBold"/>
+                                                <Grid ColumnDefinitions="*,Auto" Width="420" ColumnSpacing="8"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBox x:Name="OllamaEndpointTextBox"
+                                                                         HorizontalContentAlignment="Left"/>
+                            <Button Grid.Column="1" Click="RefreshModels_Click"
+                                    ToolTip.Tip="Refresh models" Width="34" Height="34" Padding="0">
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="M 16,9 A 6,6 0 0 0 5,6" Stroke="{DynamicResource NeonIconPrimary}" StrokeThickness="1.8" StrokeLineCap="Round" Fill="Transparent"/>
+                                        <Path Data="M 5,3.5 V 6 H 7.5" Stroke="{DynamicResource NeonIconSecondary}" StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent"/>
+                                        <Path Data="M 4,11 A 6,6 0 0 0 15,14" Stroke="{DynamicResource NeonIconSecondary}" StrokeThickness="1.8" StrokeLineCap="Round" Fill="Transparent"/>
+                                        <Path Data="M 15,16.5 V 14 H 12.5" Stroke="{DynamicResource NeonIconPrimary}" StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="Model" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="AiModelComboBox" Width="300" HorizontalAlignment="Left"
+                                  IsEditable="True"/>
+                        <TextBlock Text="Maximum AI continuations (1-100)" FontWeight="SemiBold"/>
+                        <TextBox x:Name="AiMaxCompactionCyclesTextBox"
+                                 Width="160"
+                                 HorizontalAlignment="Left"/>
                     </StackPanel>
                 </Border>
                 

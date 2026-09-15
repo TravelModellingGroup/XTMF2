@@ -21,6 +21,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using CommunityToolkit.Mvvm.Input;
 using Dock.Avalonia.Controls;
@@ -30,13 +31,18 @@ using Dock.Model.Controls;
 using Dock.Model.Core;
 using DockableClosingEventArgs = Dock.Model.Core.Events.DockableClosingEventArgs;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
+using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using XTMF2;
+using XTMF2.AI;
 using XTMF2.Editing;
+using XTMF2.GUI.AI;
 using XTMF2.GUI.Controls;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Views;
@@ -53,6 +59,8 @@ public partial class MainWindow : Window
     private bool _allowDocumentClose;
     private bool _documentCloseInProgress;
     private SettingsWindow? _settingsWindow;
+    private readonly HttpClient _aiHttpClient = new();
+    private readonly AiProviderRegistry _aiProviders = new();
 
     /// <summary>
     /// The single RunController instance for this GUI session.
@@ -69,6 +77,17 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _aiHttpClient.Timeout = TimeSpan.FromMinutes(10);
+        var endpoint = Uri.TryCreate(
+            Properties.Settings.Default.OllamaEndpoint,
+            UriKind.Absolute,
+            out var parsedEndpoint)
+            && parsedEndpoint.Scheme is "http" or "https"
+            ? parsedEndpoint
+            : new Uri("http://localhost:11434");
+        _aiProviders.Register(new OllamaProvider(
+            _aiHttpClient,
+            endpoint));
         DataContext = this;
         InitializeDock();
         UpdateLoadingState();
@@ -306,7 +325,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var editor = new ModelSystemEditorViewModel(session, user, _runController);
+        var editor = CreateEditorViewModel(session, user);
         editor.RunStarted = SwitchToRunsDocument;
         Documents.Add(editor);
     }
@@ -329,10 +348,25 @@ public partial class MainWindow : Window
             return existing;
         }
 
-        var editor = new ModelSystemEditorViewModel(session, user, _runController);
+        var editor = CreateEditorViewModel(session, user);
         editor.RunStarted = SwitchToRunsDocument;
         Documents.Add(editor);
         return editor;
+    }
+
+    private ModelSystemEditorViewModel CreateEditorViewModel(ModelSystemSession session, User user)
+    {
+        var service = new AiAssistantService(
+            _aiProviders,
+            new ModelSystemActionApplier(session, user));
+        return new ModelSystemEditorViewModel(
+            session,
+            user,
+            _runController,
+            service,
+            Properties.Settings.Default.AiModel,
+            Properties.Settings.Default.AiProvider,
+            Properties.Settings.Default.AiMaxCompactionCycles);
     }
 
     /// <summary>

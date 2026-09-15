@@ -24,6 +24,7 @@ using XTMF2;
 namespace XTMF2.RuntimeModules;
     [Module(Name = "Ignore Result", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IgnoreResult.html",
 Description = "Ignore the result of a function call.  This allows you to call functions from an action.")]
+[AiModuleInstructions("Use Ignore Result to invoke a function for its side effects from an action chain. Connect the required To Ignore hook to the function; its return value is discarded and the hook participates in execution flow.")]
     public class IgnoreResult<FuncReturn> : BaseAction
     {
         [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true, Index = 0, PassesExecution = true)]
@@ -37,6 +38,7 @@ Description = "Ignore the result of a function call.  This allows you to call fu
 
     [Module(Name = "Ignore Result", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IgnoreResult.html",
 Description = "Ignore the result of a function call.  This allows you to call functions from an action.")]
+[AiModuleInstructions("Use the context-aware Ignore Result adapter when an IAction<Context> needs to invoke a context-aware function for side effects. Connect To Ignore to the matching context function; its return value is discarded.")]
     public class IgnoreResult<Context, FuncReturn> : BaseAction<Context>
     {
         [SubModule(Description = "The module to ignore the results of.", Name = "To Ignore", Required = true, Index = 0, PassesExecution = true)]
@@ -50,6 +52,7 @@ Description = "Ignore the result of a function call.  This allows you to call fu
 
     [Module(Name = "Ignore Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IgnoreContext.html",
 Description = "Ignore the context of a function call.  This allows you to call functions that don't require a context.")]
+[AiModuleInstructions("Use Ignore Context when a context-aware action needs to invoke a context-free action. Connect the required To Ignore hook; the incoming context is intentionally discarded.")]
     public class IgnoreContext<Context> : BaseAction<Context>
     {
         [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true, Index = 0, PassesExecution = true)]
@@ -63,6 +66,7 @@ Description = "Ignore the context of a function call.  This allows you to call f
 
     [Module(Name = "Ignore Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/IgnoreContext.html",
 Description = "Ignore the context of a function call.  This allows you to call functions that don't require a context.")]
+[AiModuleInstructions("Use the context-aware Ignore Context function adapter when a context-aware function should invoke a context-free function and return its result. Connect the required To Ignore hook; the incoming context is intentionally discarded.")]
     public class IgnoreContext<Context,Return> : BaseFunction<Context,Return>
     {
         [SubModule(Description = "The module to invoke ignoring context.", Name = "To Ignore", Required = true, Index = 0, PassesExecution = true)]

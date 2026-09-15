@@ -32,7 +32,9 @@ using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XTMF2;
+using XTMF2.AI;
 using XTMF2.Editing;
+using XTMF2.GUI.AI;
 using XTMF2.GUI.Controls;
 using XTMF2.GUI.Resources;
 using XTMF2.GUI.Views;
@@ -108,6 +110,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     /// <summary>The user who owns this editing session.</summary>
     public User User { get; }
+
+    /// <summary>The optional AI assistant for this editor session.</summary>
+    public AiAssistantViewModel? AiAssistant { get; }
+
+    /// <summary>True when AI assistance is configured for this editor session.</summary>
+    public bool HasAiAssistant => AiAssistant is not null;
 
     /// <summary>The header of the model system being edited.</summary>
     public ModelSystemHeader ModelSystemHeader => Session.ModelSystemHeader;
@@ -804,13 +812,33 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     private const float PlacementStep = 80f;
 
     // =====================================================================
-    public ModelSystemEditorViewModel(ModelSystemSession session, User user, RunController? runController = null)
+    public ModelSystemEditorViewModel(
+        ModelSystemSession session,
+        User user,
+        RunController? runController = null,
+        AiAssistantService? aiAssistantService = null,
+        string aiModel = "llama3.2",
+        string aiProvider = "ollama",
+        int aiMaxCompactionCycles = AiAssistantViewModel.MaximumAllowedCompactionCycles)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(user);
         Session = session;
         User = user;
         _runController = runController;
+        if (aiAssistantService is not null)
+        {
+            AiAssistant = new AiAssistantViewModel(
+                aiAssistantService,
+                new ModelSystemContextProjector(
+                    ModelSystemHeader.Name ?? string.Empty,
+                    ModelSystemHeader.Name ?? "Model System",
+                    session),
+                () => CurrentBoundary,
+                aiModel,
+                aiProvider,
+                aiMaxCompactionCycles);
+        }
 
         // Build initial VM collections from the active boundary.
         _currentBoundary = GlobalBoundary;
@@ -4880,6 +4908,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         UnsubscribeFromBoundary(_currentBoundary);
 
         foreach (var lvm in Links) lvm.Detach();
+
+        AiAssistant?.Dispose();
 
         Session.Dispose();
     }

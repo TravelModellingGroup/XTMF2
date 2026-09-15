@@ -24,6 +24,7 @@ namespace XTMF2.RuntimeModules;
 
 [Module(Name = "Combine Context From No Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/CombineContextFromNoContext.html",
 Description = "Combines the contexts as derived from First and Second and invokes To Invoke with the combined context.")]
+[AiModuleInstructions("Connect required First and Second functions, then connect To Invoke to an action that accepts the combined tuple context. The no-context variant starts the flow; it is a context-composition action rather than a leaf function.")]
 public sealed class CombineContextAFromNoContext<Context1, Context2> : BaseAction
 {
     [SubModule(Name = "First", Required = true, Index = 0, Description = "The first context to use.")]
@@ -43,6 +44,7 @@ public sealed class CombineContextAFromNoContext<Context1, Context2> : BaseActio
 
 [Module(Name = "Combine Context From No Context", DocumentationLink = "https://tmg.utoronto.ca/doc/2.0/xtmf2/modules/XTMF2/RuntimeModules/CombineContextFromNoContext.html",
 Description = "Combines the contexts as derived from First and Second and invokes To Invoke with the combined context.")]
+[AiModuleInstructions("Use this context-aware variant when a current Context1 is already available. Connect the required Second function and To Invoke action; To Invoke receives a tuple of the current context and the second result.")]
 public sealed class CombineContextA<Context1, Context2> : BaseAction<Context1>
 {
     [SubModule(Name = "Second", Required = true, Index = 0, Description = "The second context to use.")]
