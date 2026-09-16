@@ -76,6 +76,8 @@ namespace XTMF2.Bus
                             try
                             {
                                 Current = context;
+                                Console.WriteLine($"RunServer model system run started processing: {context.ID}");
+                                Console.Out.Flush();
                                 if (runLocal)
                                 {
                                     context.RunInCurrentProcess(_Bus);

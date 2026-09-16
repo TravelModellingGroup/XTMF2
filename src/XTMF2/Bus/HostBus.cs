@@ -239,12 +239,16 @@ public sealed class HostBus : IDisposable
                                 var errMsg = reader.ReadString();
                                 var moduleName = reader.ReadString();
                                 var elementId = Guid.TryParse(reader.ReadString(), out var parsedId) ? (Guid?)parsedId : null;
+                                Console.WriteLine($"Host <- RunServer validation error: {runId}. {errMsg}");
+                                Console.Out.Flush();
                                 IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, String.Empty, moduleName, elementId));
                             }
                             break;
                         case In.ClientFinishedModelSystem:
                             {
                                 var runId = reader.ReadString();
+                                Console.WriteLine($"Host <- RunServer completion: {runId}");
+                                Console.Out.Flush();
                                 IgnoreWarnings(() => ClientFinishedModelSystem?.Invoke(this, runId));
                             }
                             break;
@@ -258,6 +262,8 @@ public sealed class HostBus : IDisposable
                                 var elementId = Guid.TryParse(elementIdText, out var parsedId)
                                     ? (Guid?)parsedId
                                     : null;
+                                Console.WriteLine($"Host <- RunServer runtime error: {runId}. {errMsg}");
+                                Console.Out.Flush();
                                 IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, stack, moduleName, elementId));
                             }
                             break;
@@ -265,6 +271,8 @@ public sealed class HostBus : IDisposable
                             {
                                 var runId = reader.ReadString();
                                 var status = reader.ReadString();
+                                Console.WriteLine($"Host <- RunServer status: {runId}: {status}");
+                                Console.Out.Flush();
                                 IgnoreWarnings(() => ClientReportedStatus?.Invoke(this, runId, status));
                             }
                             break;
@@ -372,7 +380,7 @@ public sealed class HostBus : IDisposable
     /// <returns>True if the model system was sent</returns>
     public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, 
         [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
-        => RunModelSystem(modelSystem, cwd, startToExecute, RunMode.Normal, out id, out error);
+        => RunModelSystem(modelSystem, cwd, startToExecute, RunMode.Normal, null, out id, out error);
 
     /// <summary>
     /// Send a run command to the client with an explicit run mode (Normal, Estimation or Calibration).
@@ -387,6 +395,16 @@ public sealed class HostBus : IDisposable
     public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute,
         RunMode runMode,
         [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
+        => RunModelSystem(modelSystem, cwd, startToExecute, runMode, null, out id, out error);
+
+    /// <summary>
+    /// Send a run command and invoke <paramref name="onIdCreated"/> before the request is written,
+    /// allowing consumers to register the run before fast clients can respond.
+    /// </summary>
+    public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute,
+        RunMode runMode,
+        Action<string>? onIdCreated,
+        [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
     {
         id = null;
         lock (_outLock)
@@ -400,6 +418,7 @@ public sealed class HostBus : IDisposable
                     return false;
                 }
                 id = Guid.NewGuid().ToString();
+                onIdCreated?.Invoke(id);
                 // int64
                 using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
                 writer.Write((int)Out.RunModelSystem);

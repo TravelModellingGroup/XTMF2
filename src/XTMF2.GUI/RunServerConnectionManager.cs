@@ -39,6 +39,7 @@ public sealed class RunServerConnectionManager : IDisposable
     private bool _disposed;
 
     public event Action<RunServerConnectionInfo>? StateChanged;
+    public event Action<HostBus>? ConnectionAvailable;
 
     public RunServerConnectionManager()
     {
@@ -79,6 +80,7 @@ public sealed class RunServerConnectionManager : IDisposable
             state = Snapshot(entry);
         }
 
+        ConnectionAvailable?.Invoke(hostBus);
         Publish(state);
         return true;
     }

@@ -239,6 +239,8 @@ namespace XTMF2.Bus
         /// <param name="error">The error message.</param>
         internal void ModelRunFailedValidation(string runId, string? error, string? moduleName = null, string? elementId = null)
         {
+            Console.WriteLine($"RunServer -> Host validation error: {runId}. {error ?? "No error message."}");
+            Console.Out.Flush();
             Write((writer) =>
             {
                 writer.Write((int)Out.ClientErrorValidatingModelSystem);
@@ -259,6 +261,8 @@ namespace XTMF2.Bus
         /// <param name="elementId">The resolved model element ID, when available.</param>
         internal void ModelRunFailed(string runId, string? message, string? stackTrace, string? moduleName = null, string? elementId = null)
         {
+            Console.WriteLine($"RunServer -> Host runtime error: {runId}. {message ?? "No error message."}");
+            Console.Out.Flush();
             Write((writer) =>
             {
                 writer.Write((int)(Out.ClientErrorWhenRunningModelSystem));
@@ -276,6 +280,8 @@ namespace XTMF2.Bus
         /// <param name="message">The current status message.</param>
         internal void SendStatusMessage(string runId, string? message)
         {
+            Console.WriteLine($"RunServer -> Host status: {runId}: {message ?? String.Empty}");
+            Console.Out.Flush();
             Write((writer) =>
             {
                 writer.Write((int)(Out.ClientReportedStatus));
@@ -330,6 +336,8 @@ namespace XTMF2.Bus
         /// <param name="context">The run that has completed.</param>
         internal void ModelRunComplete(string runId)
         {
+            Console.WriteLine($"RunServer -> Host completion: {runId}");
+            Console.Out.Flush();
             Write((writer) =>
             {
                 writer.Write((int)Out.ClientFinishedModelSystem);
@@ -400,10 +408,17 @@ namespace XTMF2.Bus
                                 var start = reader.ReadString();
                                 var runMode = (RunMode)reader.ReadInt32();
                                 var msSize = (int)reader.ReadInt64();
+                                Console.WriteLine($"RunServer model system run issued: {id} (start '{start}', mode {runMode}, {msSize} bytes)");
+                                Console.Out.Flush();
                                 using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
                                 if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, runMode, out var context))
                                 {
                                     _runScheduler.Run(context);
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"RunServer could not create model system run context: {id}");
+                                    Console.Out.Flush();
                                 }
                             }
                             break;

@@ -178,11 +178,15 @@ public class RunController : IDisposable
 
     private void OnClientErrorWhenRunningModelSystem(object sender, string runID, string errorMessage, string stack, string? moduleName, Guid? elementId)
     {
+        Console.WriteLine($"GUI received RunServer runtime error: {runID}: {errorMessage}");
+        Console.Out.Flush();
         RunsViewModel.NotifyError(runID, errorMessage, stack, moduleName, elementId);
     }
 
     private void OnClientFinishedModelSystem(object? sender, string runID)
     {
+        Console.WriteLine($"GUI received RunServer completion: {runID}");
+        Console.Out.Flush();
         RunsViewModel.NotifyFinished(runID);
     }
 
@@ -233,6 +237,8 @@ public class RunController : IDisposable
 
     private void OnClientReportedStatus(object sender, string runID, string status)
     {
+        Console.WriteLine($"GUI received RunServer status: {runID}: {status}");
+        Console.Out.Flush();
         RunsViewModel.NotifyStatus(runID, status);
     }
 
@@ -358,7 +364,24 @@ public class RunController : IDisposable
             error = new CommandError($"RunServer '{endpointId}' is not connected.");
             return false;
         }
-        if (!hostBus.RunModelSystem(msSession, runDirectory, startToExecute, runMode, out id, out error))
+        var endpoint = Settings.Default.RunServers.FirstOrDefault(endpoint => endpoint.Id == endpointId);
+        var serverLabel = endpoint is null
+            ? endpointId
+            : endpoint.Port > 0
+                ? $"{endpoint.Name} ({endpoint.Address}:{endpoint.Port})"
+                : $"{endpoint.Name} ({endpoint.Address})";
+        RunViewModel? runViewModel = null;
+        if (!hostBus.RunModelSystem(
+                msSession,
+                runDirectory,
+                startToExecute,
+                runMode,
+                runId =>
+                {
+                    runViewModel = RunsViewModel.AddRun(runId, runName, runDirectory, serverLabel, msSession, user);
+                },
+                out id,
+                out error))
         {
             return false;
         }
@@ -368,19 +391,12 @@ public class RunController : IDisposable
             _hostBusesByRunId[id] = hostBus;
             _runDirectoriesByRunId[id] = runDirectory;
         }
-        var endpoint = Settings.Default.RunServers.FirstOrDefault(endpoint => endpoint.Id == endpointId);
-        var serverLabel = endpoint is null
-            ? endpointId
-            : endpoint.Port > 0
-                ? $"{endpoint.Name} ({endpoint.Address}:{endpoint.Port})"
-                : $"{endpoint.Name} ({endpoint.Address})";
-        var vm = RunsViewModel.AddRun(id, runName, runDirectory, serverLabel, msSession, user);
         if (runMode != RunMode.Normal)
         {
             // Extract parameter metadata so the progress dialog can show names/bounds.
             var meta = msSession.GetOptimizationParameterMeta(runMode);
             var runId = id;
-            vm.SetRunMode(runMode, meta, () => hostBus.CancelModelRun(runId, out _));
+            runViewModel?.SetRunMode(runMode, meta, () => hostBus.CancelModelRun(runId, out _));
         }
         return true;
     }
@@ -404,6 +420,7 @@ public class RunController : IDisposable
         _runServerProcess = runServerProcess;
         _connections = new RunServerConnectionManager();
         _connections.StateChanged += state => RunServerStateChanged?.Invoke(state);
+        _connections.ConnectionAvailable += SubscribeToHostBus;
         _connections.AddConnection(RunServerEndpoint.CreateLocal(), hostBus, out _);
     }
 
@@ -415,8 +432,6 @@ public class RunController : IDisposable
         if (!_connections.Connect(endpoint, out error))
             return false;
 
-        if (_connections.TryGet(endpoint.Id, out var hostBus) && hostBus is not null)
-            SubscribeToHostBus(hostBus);
         return true;
     }
 

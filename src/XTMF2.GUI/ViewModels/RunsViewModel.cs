@@ -44,6 +44,8 @@ public sealed partial class RunsViewModel : ObservableObject
     // ── Run collection ────────────────────────────────────────────────────
     /// <summary>All runs that have been submitted in this session.</summary>
     public ObservableCollection<RunViewModel> Runs { get; } = new();
+    private readonly object _runsLock = new();
+    private readonly Dictionary<string, RunViewModel> _runsById = new(StringComparer.Ordinal);
 
     /// <summary>The run currently selected in the list view.</summary>
     [ObservableProperty]
@@ -61,6 +63,8 @@ public sealed partial class RunsViewModel : ObservableObject
         ModelSystemSession session, User user)
     {
         var vm = new RunViewModel(runId, runName, runDirectory, runServer, session, user);
+        lock (_runsLock)
+            _runsById[runId] = vm;
         Dispatcher.UIThread.Post(() =>
         {
             Runs.Add(vm);
@@ -156,14 +160,8 @@ public sealed partial class RunsViewModel : ObservableObject
 
     private RunViewModel? FindRun(string runId)
     {
-        // Runs is only modified on the UI thread, so a simple linear search is fine here.
-        // This is called from background threads; we iterate a snapshot to avoid races.
-        foreach (var run in Runs)
-        {
-            if (run.RunId == runId)
-                return run;
-        }
-        return null;
+        lock (_runsLock)
+            return _runsById.TryGetValue(runId, out var run) ? run : null;
     }
 
     // ── Removal commands ──────────────────────────────────────────────────
@@ -194,6 +192,8 @@ public sealed partial class RunsViewModel : ObservableObject
     {
         var idx = Runs.IndexOf(vm);
         Runs.Remove(vm);
+        lock (_runsLock)
+            _runsById.Remove(vm.RunId);
         if (ReferenceEquals(SelectedRun, vm))
             SelectedRun = Runs.Count > 0 ? Runs[Math.Min(idx, Runs.Count - 1)] : null;
     }
@@ -208,7 +208,11 @@ public sealed partial class RunsViewModel : ObservableObject
         for (var i = Runs.Count - 1; i >= 0; i--)
         {
             if (Runs[i].Status != RunStatus.Running)
+            {
+                lock (_runsLock)
+                    _runsById.Remove(Runs[i].RunId);
                 Runs.RemoveAt(i);
+            }
         }
         if (wasSelected is not null && !Runs.Contains(wasSelected))
             SelectedRun = Runs.FirstOrDefault();

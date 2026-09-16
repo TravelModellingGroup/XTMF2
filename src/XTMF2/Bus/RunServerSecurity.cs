@@ -72,9 +72,18 @@ public static class RunServerSecurity
     }
 
     public static X509Certificate2 LoadCertificate(string directory)
-        => X509Certificate2.CreateFromPemFile(
+    {
+        // CreateFromPemFile uses an ephemeral private key. Windows Schannel requires
+        // the server certificate key to be persisted before TLS authentication.
+        using var pemCertificate = X509Certificate2.CreateFromPemFile(
             Path.Combine(directory, "runserver-cert.pem"),
             Path.Combine(directory, "runserver-key.pem"));
+        var pkcs12 = pemCertificate.Export(X509ContentType.Pkcs12);
+        return X509CertificateLoader.LoadPkcs12(
+            pkcs12,
+            password: null,
+            X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.UserKeySet);
+    }
 
     public static string LoadToken(string directory)
         => File.ReadAllText(Path.Combine(directory, "runserver-token.txt")).Trim();
