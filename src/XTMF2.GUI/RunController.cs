@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.IO.Compression;
 using System.Threading;
 using System.Threading.Tasks;
 using XTMF2.Bus;
@@ -63,12 +64,18 @@ public class RunController : IDisposable
     /// </summary>
     private readonly Dictionary<string, (ModelSystemSession Session, User User)> _sessionsByRunId = new();
     private readonly Dictionary<string, HostBus> _hostBusesByRunId = new();
+    private readonly Dictionary<string, string> _runDirectoriesByRunId = new();
 
     /// <summary>
     /// Fires when an estimation or calibration run completes and has results ready to be
     /// optionally applied back to the model system.
     /// </summary>
     public event Action<string, ModelSystemSession, IReadOnlyList<(int nodeIndex, double value)>>? OptimizationResultsAvailable;
+
+    /// <summary>
+    /// Raised when a configured RunServer changes connection state.
+    /// </summary>
+    public event Action<RunServerConnectionInfo>? RunServerStateChanged;
 
     /// <summary>
     /// If running in debug mode, the RunServerBus with be run within the same process as the GUI to make debugging easier.
@@ -115,6 +122,7 @@ public class RunController : IDisposable
         hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
         hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
         hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
+        hostBus.ClientRunArtifactsReceived += controller.OnClientRunArtifactsReceived;
         controller.ConnectConfiguredRunServers();
         // Start the client processing in a separate thread to avoid blocking the GUI
         Task.Factory.StartNew(
@@ -164,6 +172,7 @@ public class RunController : IDisposable
             hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
             hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
             hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
+            hostBus.ClientRunArtifactsReceived += controller.OnClientRunArtifactsReceived;
             controller.ConnectConfiguredRunServers();
             return true;
         }
@@ -183,6 +192,51 @@ public class RunController : IDisposable
     private void OnClientFinishedModelSystem(object? sender, string runID)
     {
         RunsViewModel.NotifyFinished(runID);
+    }
+
+    private void OnClientRunArtifactsReceived(object? sender, HostBus.RunArtifactsReceivedEventArgs args)
+    {
+        string? targetDirectory;
+        lock (_sessionsByRunId)
+            _runDirectoriesByRunId.TryGetValue(args.RunId, out targetDirectory);
+
+        if (targetDirectory is null)
+        {
+            RunsViewModel.NotifyArtifactTransferFailed(args.RunId, "The local run directory is no longer available.");
+            return;
+        }
+
+        try
+        {
+            ExtractRunArtifacts(args.ArchivePath, targetDirectory);
+            RunsViewModel.NotifyArtifactsTransferred(args.RunId);
+        }
+        catch (Exception ex)
+        {
+            RunsViewModel.NotifyArtifactTransferFailed(args.RunId, ex.Message);
+        }
+    }
+
+    private static void ExtractRunArtifacts(string archivePath, string targetDirectory)
+    {
+        Directory.CreateDirectory(targetDirectory);
+        var root = Path.GetFullPath(targetDirectory);
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+        using var archive = ZipFile.OpenRead(archivePath);
+        foreach (var entry in archive.Entries)
+        {
+            var destination = Path.GetFullPath(Path.Combine(root, entry.FullName));
+            if (!destination.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(destination, root, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The RunServer returned an invalid artifact path.");
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                Directory.CreateDirectory(destination);
+                continue;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            entry.ExtractToFile(destination, true);
+        }
     }
 
     private void OnClientReportedStatus(object sender, string runID, string status)
@@ -320,6 +374,7 @@ public class RunController : IDisposable
         {
             _sessionsByRunId[id] = (msSession, user);
             _hostBusesByRunId[id] = hostBus;
+            _runDirectoriesByRunId[id] = runDirectory;
         }
         var endpoint = Settings.Default.RunServers.FirstOrDefault(endpoint => endpoint.Id == endpointId);
         var serverLabel = endpoint is null
@@ -356,6 +411,7 @@ public class RunController : IDisposable
         _hostBus = hostBus;
         _runServerProcess = runServerProcess;
         _connections = new RunServerConnectionManager();
+        _connections.StateChanged += state => RunServerStateChanged?.Invoke(state);
         _connections.AddConnection(RunServerEndpoint.CreateLocal(), hostBus, out _);
     }
 
@@ -391,14 +447,14 @@ public class RunController : IDisposable
 
     public IReadOnlyList<RunServerEndpoint> GetConnectedRunServers()
     {
-        var endpoints = new List<RunServerEndpoint>();
-        foreach (var endpoint in Settings.Default.RunServers)
-        {
-            if (_connections.TryGet(endpoint.Id, out _))
-                endpoints.Add(endpoint.Clone());
-        }
-        return endpoints;
+        return _connections.GetStates()
+            .Where(state => state.State == RunServerConnectionState.Available)
+            .Select(state => state.Endpoint.Clone())
+            .ToArray();
     }
+
+    public IReadOnlyList<RunServerConnectionInfo> GetRunServerStates()
+        => _connections.GetStates();
 
     private void SubscribeToHostBus(HostBus hostBus)
     {
@@ -407,6 +463,7 @@ public class RunController : IDisposable
         hostBus.ClientErrorWhenRunningModelSystem += OnClientErrorWhenRunningModelSystem;
         hostBus.ClientOptimizationResultsAvailable += OnClientOptimizationResultsAvailable;
         hostBus.ClientIterationProgressAvailable += OnClientIterationProgressAvailable;
+        hostBus.ClientRunArtifactsReceived += OnClientRunArtifactsReceived;
     }
 
     private bool _disposed;

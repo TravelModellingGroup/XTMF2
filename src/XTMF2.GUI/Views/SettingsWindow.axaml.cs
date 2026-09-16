@@ -26,6 +26,8 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Avalonia.Layout;
+using Avalonia.Threading;
+using XTMF2.GUI;
 using XTMF2.GUI.Resources;
 using XTMF2.AI;
 using XTMF2.GUI.Properties;
@@ -40,13 +42,22 @@ public partial class SettingsWindow : Window
     private string _currentAiModel = "llama3.2";
     private string _currentOllamaEndpoint = "http://localhost:11434";
     private readonly HttpClient _aiHttpClient = new();
-    private readonly List<(RunServerEndpoint Endpoint, TextBox Name, TextBox Address, TextBox Port, Button Remove)> _runServerEditors = new();
+    private readonly List<(RunServerEndpoint Endpoint, TextBox Name, TextBox Address, TextBox Port, TextBlock Status, Button Reconnect, Button Remove)> _runServerEditors = new();
+    private readonly RunController? _runController;
 
     public event Action? SettingsSaved;
 
     public SettingsWindow()
+        : this(null)
     {
+    }
+
+    public SettingsWindow(RunController? runController)
+    {
+        _runController = runController;
         InitializeComponent();
+        if (_runController is not null)
+            _runController.RunServerStateChanged += OnRunServerStateChanged;
         LoadSettings();
     }
 
@@ -93,6 +104,8 @@ public partial class SettingsWindow : Window
             _runServerEditors.Clear();
             foreach (var endpoint in Properties.Settings.Default.RunServers)
                 AddRunServerEditor(endpoint.Clone());
+            foreach (var state in _runController?.GetRunServerStates() ?? Array.Empty<RunServerConnectionInfo>())
+                ApplyRunServerState(state);
             _ = RefreshModelsAsync();
     }
 
@@ -104,26 +117,72 @@ public partial class SettingsWindow : Window
         var name = new TextBox { Text = endpoint.Name, Watermark = "Name" };
         var address = new TextBox { Text = endpoint.Address, Watermark = "Address" };
         var port = new TextBox { Text = endpoint.Port.ToString(), Watermark = "Port" };
+        var status = new TextBlock { Text = endpoint.IsLocal ? "Available" : "Disconnected", Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center };
+        var reconnect = new Button { Content = "Reconnect", Padding = new Thickness(8, 4), IsEnabled = !endpoint.IsLocal };
         var remove = new Button { Content = "Remove", Padding = new Thickness(8, 4), IsEnabled = !endpoint.IsLocal };
         var row = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("1.2*,1.5*,Auto,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("1.2*,1.5*,Auto,Auto,Auto,Auto"),
             ColumnSpacing = 8
         };
         Grid.SetColumn(address, 1);
         Grid.SetColumn(port, 2);
-        Grid.SetColumn(remove, 3);
+        Grid.SetColumn(status, 3);
+        Grid.SetColumn(reconnect, 4);
+        Grid.SetColumn(remove, 5);
         row.Children.Add(name);
         row.Children.Add(address);
         row.Children.Add(port);
+        row.Children.Add(status);
+        row.Children.Add(reconnect);
         row.Children.Add(remove);
+        reconnect.Click += (_, _) => ReconnectRunServer(endpoint, address, port, reconnect);
         remove.Click += (_, _) =>
         {
             RunServersPanel.Children.Remove(row);
             _runServerEditors.RemoveAll(editor => ReferenceEquals(editor.Remove, remove));
         };
         RunServersPanel.Children.Add(row);
-        _runServerEditors.Add((endpoint, name, address, port, remove));
+        _runServerEditors.Add((endpoint, name, address, port, status, reconnect, remove));
+    }
+
+    private void OnRunServerStateChanged(RunServerConnectionInfo state)
+        => Dispatcher.UIThread.Post(() => ApplyRunServerState(state));
+
+    private void ApplyRunServerState(RunServerConnectionInfo state)
+    {
+        var editor = _runServerEditors.FirstOrDefault(item => item.Endpoint.Id == state.Endpoint.Id);
+        if (editor.Status is null)
+            return;
+
+        editor.Status.Text = state.State switch
+        {
+            RunServerConnectionState.Available => "Available",
+            RunServerConnectionState.Connecting => "Connecting...",
+            _ => string.IsNullOrWhiteSpace(state.Error) ? "Disconnected" : $"Disconnected: {state.Error}"
+        };
+        editor.Reconnect.IsEnabled = state.State == RunServerConnectionState.Disconnected && !editor.Endpoint.IsLocal;
+        ToolTip.SetTip(editor.Status, state.Error);
+    }
+
+    private void ReconnectRunServer(RunServerEndpoint endpoint, TextBox address, TextBox port, Button reconnect)
+    {
+        if (_runController is null || !int.TryParse(port.Text, out var portNumber))
+            return;
+
+        var currentEndpoint = endpoint.Clone();
+        currentEndpoint.Address = address.Text?.Trim() ?? string.Empty;
+        currentEndpoint.Port = portNumber;
+        reconnect.IsEnabled = false;
+        if (!_runController.ConnectRunServer(currentEndpoint, out var error) && !string.IsNullOrWhiteSpace(error))
+            ToolTip.SetTip(reconnect, error);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_runController is not null)
+            _runController.RunServerStateChanged -= OnRunServerStateChanged;
+        base.OnClosed(e);
     }
 
     private void ThemeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)

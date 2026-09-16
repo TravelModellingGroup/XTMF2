@@ -154,11 +154,11 @@ namespace XTMF2.Client
             using (client)
             using (var stream = client.GetStream())
             {
-                RunClient(stream, extraDlls);
+                RunClient(stream, extraDlls, usePrivateWorkspace: true);
             }
         }
 
-        private static void RunClient(Stream serverStream, List<string> extraDlls, SystemConfiguration? config = null)
+        private static void RunClient(Stream serverStream, List<string> extraDlls, SystemConfiguration? config = null, bool usePrivateWorkspace = false)
         {
             var runtime = XTMFRuntime.CreateRuntime(config);
             var loadedConfig = runtime.SystemConfiguration;
@@ -166,7 +166,7 @@ namespace XTMF2.Client
             {
                 loadedConfig.LoadAssembly(dll);
             }
-            using var clientBus = new RunServerBus(serverStream, true, runtime, extraDlls, System.Diagnostics.Debugger.IsAttached);
+            using var clientBus = new RunServerBus(serverStream, true, runtime, extraDlls, System.Diagnostics.Debugger.IsAttached, usePrivateWorkspace);
             clientBus.ProcessRequests();
         }
     }

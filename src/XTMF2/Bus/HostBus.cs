@@ -96,7 +96,8 @@ public sealed class HostBus : IDisposable
         SendModelSystemResult = 7,
         ClientReportedStatus = 8,
         ClientOptimizationResults = 9,
-        ClientIterationProgress = 10
+        ClientIterationProgress = 10,
+        ClientRunArtifacts = 11
     }
 
     /// <summary>
@@ -104,6 +105,25 @@ public sealed class HostBus : IDisposable
     /// The parameter is the name of the completed model system.
     /// </summary>
     public event EventHandler<string>? ClientFinishedModelSystem;
+
+    public event EventHandler<RunArtifactsReceivedEventArgs>? ClientRunArtifactsReceived;
+
+    public sealed class RunArtifactsReceivedEventArgs : EventArgs
+    {
+        public string RunId { get; }
+        public string ArchivePath { get; }
+
+        internal RunArtifactsReceivedEventArgs(string runId, string archivePath)
+        {
+            RunId = runId;
+            ArchivePath = archivePath;
+        }
+    }
+
+    /// <summary>
+    /// Raised when the connection to the RunServer is closed or lost.
+    /// </summary>
+    public event EventHandler? Disconnected;
 
     /// <summary>
     /// Used to report that a model system has had a run error.
@@ -270,6 +290,24 @@ public sealed class HostBus : IDisposable
                                 IgnoreWarnings(() => ClientIterationProgressAvailable?.Invoke(this, runId, iteration, fitness, values));
                             }
                             break;
+                        case In.ClientRunArtifacts:
+                            {
+                                var runId = reader.ReadString();
+                                var length = reader.ReadInt64();
+                                var archivePath = Path.Combine(Path.GetTempPath(), $"XTMF2-{Guid.NewGuid():N}.zip");
+                                try
+                                {
+                                    using (var archive = File.Create(archivePath))
+                                        CopyExactly(reader.BaseStream, archive, length);
+                                    IgnoreWarnings(() => ClientRunArtifactsReceived?.Invoke(
+                                        this, new RunArtifactsReceivedEventArgs(runId, archivePath)));
+                                }
+                                finally
+                                {
+                                    try { File.Delete(archivePath); } catch { }
+                                }
+                            }
+                            break;
                         default:
                             throw new Exception($"Unsupported command: {Enum.GetName<In>(command)}");
                     }
@@ -283,6 +321,7 @@ public sealed class HostBus : IDisposable
             finally
             {
                 _Exited = true;
+                IgnoreWarnings(() => Disconnected?.Invoke(this, EventArgs.Empty));
             }
         })
         {
@@ -291,6 +330,19 @@ public sealed class HostBus : IDisposable
         };
         listenerThread.Start();
         return listenerThread;
+    }
+
+    private static void CopyExactly(Stream source, Stream destination, long length)
+    {
+        var buffer = new byte[81920];
+        while (length > 0)
+        {
+            var read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, length));
+            if (read == 0)
+                throw new EndOfStreamException("The RunServer artifact archive was truncated.");
+            destination.Write(buffer, 0, read);
+            length -= read;
+        }
     }
 
     private enum Out

@@ -90,10 +90,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// Optional run controller used to submit model system runs.
     /// When null the Run button is disabled.
     /// </summary>
-    private readonly RunController? _runController;
+    private RunController? _runController;
 
     /// <summary>True when a <see cref="RunController"/> is available.</summary>
     public bool CanRun => _runController is not null;
+
+    public void SetRunController(RunController? runController)
+    {
+        if (ReferenceEquals(_runController, runController))
+            return;
+
+        _runController = runController;
+        OnPropertyChanged(nameof(CanRun));
+    }
 
     /// <summary>True when at least one estimation group has at least one parameter configured.</summary>
     public bool HasEstimationTargets =>

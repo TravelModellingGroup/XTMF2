@@ -108,6 +108,24 @@ public sealed partial class RunsViewModel : ObservableObject
         Dispatcher.UIThread.Post(() => vm.AppendStatus(status));
     }
 
+    internal void NotifyArtifactsTransferred(string runId)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            vm.MarkArtifactsAvailable();
+            vm.AppendStatus("Run output transferred to the local run directory.");
+        });
+    }
+
+    internal void NotifyArtifactTransferFailed(string runId, string error)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.MarkArtifactTransferFailed(error));
+    }
+
     /// <summary>
     /// Stores optimization results on the run entry so the user can apply them.
     /// Safe to call from any thread.

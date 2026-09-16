@@ -304,6 +304,11 @@ public partial class MainWindow : Window
         _isLoading = false;
         UpdateLoadingState();
 
+        foreach (var editor in EnumerateOpenDocuments()
+            .Select(document => document.Context)
+            .OfType<ModelSystemEditorViewModel>())
+            editor.SetRunController(_runController);
+
         // Add the Runs tab so it is always visible.
         if (_runController is not null)
             Documents.Add(_runController.RunsViewModel);
@@ -452,7 +457,7 @@ public partial class MainWindow : Window
     {
         if (_settingsWindow is null || !_settingsWindow.IsVisible)
         {
-            _settingsWindow = new SettingsWindow();
+            _settingsWindow = new SettingsWindow(_runController);
             _settingsWindow.SettingsSaved += () => _runController?.RefreshConfiguredRunServers();
             _settingsWindow.Closed += (s, _) => _settingsWindow = null;
             _settingsWindow.ShowDialog(this);

@@ -3,7 +3,18 @@
 
     This file is part of XTMF2.
 
-    XTMF2 is free software: you can redistribute it and/or modify
+                            finally
+                            {
+                                try
+                                {
+                                    _Bus.SendRunArtifacts(context.ID, context.WorkingDirectory);
+                                }
+                                catch
+                                {
+                                    // The execution result has already been reported; a failed
+                                    // artifact transfer must not replace that result.
+                                }
+                            }
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
@@ -73,6 +84,7 @@ namespace XTMF2.Bus
                                 {
                                     context.RunInNewProcess(_Bus);
                                 }
+                                _Bus.SendRunArtifacts(context.ID, context.WorkingDirectory);
                             }
                             catch (Exception e)
                             {

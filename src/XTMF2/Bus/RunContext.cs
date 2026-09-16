@@ -47,6 +47,8 @@ namespace XTMF2.Bus
         /// </summary>
         private readonly string _currentWorkingDirectory;
 
+        internal string WorkingDirectory => _currentWorkingDirectory;
+
         /// <summary>
         /// A reference to the XTMFRuntime that will execute the model system.
         /// </summary>

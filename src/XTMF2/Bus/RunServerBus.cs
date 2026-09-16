@@ -20,6 +20,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,6 +39,7 @@ namespace XTMF2.Bus
 
         private readonly Scheduler _runScheduler;
         private readonly List<string> _extraDlls;
+        private readonly bool _usePrivateWorkspace;
 
         /// <summary>
         /// The link to the XTMFRuntime
@@ -57,13 +59,14 @@ namespace XTMF2.Bus
         /// <param name="runtime">The XTMFRuntime to work within.</param>
         /// <param name="extraDlls">Additional DLLs that the client should load.</param>
         /// <param name="runLocal">If true, the model system will be run within the same process as the GUI.  This is only intended for debugging purposes.</param>
-        public RunServerBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string>? extraDlls = null, bool runLocal = false)
+        public RunServerBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string>? extraDlls = null, bool runLocal = false, bool usePrivateWorkspace = false)
         {
             Runtime = runtime;
             _runScheduler = new Scheduler(this, runLocal);
             _clientHost = serverStream;
             _owner = streamOwner;
             _extraDlls = extraDlls ?? new List<string>();
+            _usePrivateWorkspace = usePrivateWorkspace;
         }
 
         private void Dispose(bool managed)
@@ -113,7 +116,8 @@ namespace XTMF2.Bus
             SendModelSystemResult = 7,
             ClientReportedStatus = 8,
             ClientOptimizationResults = 9,
-            ClientIterationProgress = 10
+            ClientIterationProgress = 10,
+            ClientRunArtifacts = 11
         }
 
         /// <summary>
@@ -333,6 +337,36 @@ namespace XTMF2.Bus
             });
         }
 
+        internal void SendRunArtifacts(string runId, string runDirectory)
+        {
+            string? archivePath = null;
+            try
+            {
+                if (!Directory.Exists(runDirectory))
+                    return;
+
+                archivePath = Path.Combine(Path.GetTempPath(), $"XTMF2-{Guid.NewGuid():N}.zip");
+                ZipFile.CreateFromDirectory(runDirectory, archivePath, CompressionLevel.Fastest, false);
+                var archiveInfo = new FileInfo(archivePath);
+                Write(writer =>
+                {
+                    writer.Write((int)Out.ClientRunArtifacts);
+                    writer.Write(runId);
+                    writer.Write(archiveInfo.Length);
+                    using var archive = File.OpenRead(archivePath);
+                    archive.CopyTo(writer.BaseStream);
+                    writer.BaseStream.Flush();
+                });
+            }
+            finally
+            {
+                if (archivePath is not null)
+                {
+                    try { File.Delete(archivePath); } catch { }
+                }
+            }
+        }
+
         private static MemoryStream CreateMemoryStreamLoadingFrom(Stream source, int bytes)
         {
             // Read things in parts in case the whole dataset is not ready before we start reading.
@@ -361,7 +395,8 @@ namespace XTMF2.Bus
                         case In.RunModelSystem:
                             {
                                 var id = reader.ReadString();
-                                var cwd = reader.ReadString();
+                                var requestedDirectory = reader.ReadString();
+                                var cwd = _usePrivateWorkspace ? CreateRunDirectory(id) : requestedDirectory;
                                 var start = reader.ReadString();
                                 var runMode = (RunMode)reader.ReadInt32();
                                 var msSize = (int)reader.ReadInt64();
@@ -393,6 +428,13 @@ namespace XTMF2.Bus
                     return;
                 }
             }
+        }
+
+        private static string CreateRunDirectory(string runId)
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "XTMF2", "Runs", runId);
+            Directory.CreateDirectory(directory);
+            return directory;
         }
     }
 }

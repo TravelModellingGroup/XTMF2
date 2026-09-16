@@ -63,7 +63,20 @@ public sealed partial class RunViewModel : ObservableObject
     public string RunServer { get; }
 
     /// <summary>True when this run has a known output directory that can be opened.</summary>
-    public bool HasRunDirectory => !string.IsNullOrWhiteSpace(RunDirectory);
+    public bool HasRunDirectory => ArtifactsAvailable && !string.IsNullOrWhiteSpace(RunDirectory);
+
+    [ObservableProperty]
+    private bool _artifactsAvailable;
+
+    internal void MarkArtifactsAvailable()
+    {
+        ArtifactsAvailable = true;
+        OnPropertyChanged(nameof(HasRunDirectory));
+        OpenRunDirectoryCommand.NotifyCanExecuteChanged();
+    }
+
+    internal void MarkArtifactTransferFailed(string message)
+        => AppendStatus($"Output transfer failed: {message}");
 
     /// <summary>Current execution status.</summary>
     [ObservableProperty]
