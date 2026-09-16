@@ -57,6 +57,8 @@ public class RunController : IDisposable
     private HostBus _hostBus;
     private readonly RunServerConnectionManager _connections;
     private const string LocalEndpointId = "local";
+    private readonly object _hostBusSubscriptionLock = new();
+    private readonly HashSet<HostBus> _subscribedHostBuses = new();
 
     /// <summary>
     /// Maps run IDs to the model system session and the user that submitted the run,
@@ -117,12 +119,7 @@ public class RunController : IDisposable
         {
             _runServerBus = runServerBus
         };
-        hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
-        hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
-        hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
-        hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
-        hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
-        hostBus.ClientRunArtifactsReceived += controller.OnClientRunArtifactsReceived;
+        controller.SubscribeToHostBus(hostBus);
         controller.ConnectConfiguredRunServers();
         // Start the client processing in a separate thread to avoid blocking the GUI
         Task.Factory.StartNew(
@@ -167,12 +164,7 @@ public class RunController : IDisposable
             }
             var hostBus = new HostBus(hostStream!, true);
             controller = new RunController(runtime, hostBus, client);
-            hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
-            hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
-            hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
-            hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
-            hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
-            hostBus.ClientRunArtifactsReceived += controller.OnClientRunArtifactsReceived;
+            controller.SubscribeToHostBus(hostBus);
             controller.ConnectConfiguredRunServers();
             return true;
         }
@@ -465,12 +457,42 @@ public class RunController : IDisposable
 
     private void SubscribeToHostBus(HostBus hostBus)
     {
+        lock (_hostBusSubscriptionLock)
+        {
+            if (!_subscribedHostBuses.Add(hostBus))
+                return;
+        }
+
         hostBus.ClientReportedStatus += OnClientReportedStatus;
         hostBus.ClientFinishedModelSystem += OnClientFinishedModelSystem;
         hostBus.ClientErrorWhenRunningModelSystem += OnClientErrorWhenRunningModelSystem;
         hostBus.ClientOptimizationResultsAvailable += OnClientOptimizationResultsAvailable;
         hostBus.ClientIterationProgressAvailable += OnClientIterationProgressAvailable;
         hostBus.ClientRunArtifactsReceived += OnClientRunArtifactsReceived;
+        hostBus.Disconnected += OnHostBusDisconnected;
+    }
+
+    private void OnHostBusDisconnected(object? sender, EventArgs e)
+    {
+        if (sender is HostBus hostBus)
+            UnsubscribeFromHostBus(hostBus);
+    }
+
+    private void UnsubscribeFromHostBus(HostBus hostBus)
+    {
+        lock (_hostBusSubscriptionLock)
+        {
+            if (!_subscribedHostBuses.Remove(hostBus))
+                return;
+        }
+
+        hostBus.ClientReportedStatus -= OnClientReportedStatus;
+        hostBus.ClientFinishedModelSystem -= OnClientFinishedModelSystem;
+        hostBus.ClientErrorWhenRunningModelSystem -= OnClientErrorWhenRunningModelSystem;
+        hostBus.ClientOptimizationResultsAvailable -= OnClientOptimizationResultsAvailable;
+        hostBus.ClientIterationProgressAvailable -= OnClientIterationProgressAvailable;
+        hostBus.ClientRunArtifactsReceived -= OnClientRunArtifactsReceived;
+        hostBus.Disconnected -= OnHostBusDisconnected;
     }
 
     private bool _disposed;
@@ -480,6 +502,11 @@ public class RunController : IDisposable
         if (_disposed) return;
         _disposed = true;
         GC.SuppressFinalize(this);
+        HostBus[] subscribedHostBuses;
+        lock (_hostBusSubscriptionLock)
+            subscribedHostBuses = _subscribedHostBuses.ToArray();
+        foreach (var hostBus in subscribedHostBuses)
+            UnsubscribeFromHostBus(hostBus);
         _runServerBus?.Dispose();
         _connections.Dispose();
         if (_runServerProcess is { HasExited: false })
