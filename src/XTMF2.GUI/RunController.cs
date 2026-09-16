@@ -435,7 +435,14 @@ public class RunController : IDisposable
             if (endpoint.IsLocal || endpoint.Port == 0)
                 continue;
 
-            ConnectRunServer(endpoint, out _);
+            try
+            {
+                ConnectRunServer(endpoint, out _);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RunController] Failed to connect to RunServer '{endpoint.Name}': {ex.Message}");
+            }
         }
     }
 

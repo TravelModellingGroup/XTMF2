@@ -136,7 +136,7 @@ namespace XTMF2.Bus
                     listener.Stop();
                 }
             }
-            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException)
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException or AggregateException)
             {
                 error = ex.Message;
                 return false;
@@ -181,9 +181,11 @@ namespace XTMF2.Bus
                 stream = client.GetStream();
                 return true;
             }
-            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException)
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException or AggregateException)
             {
-                error = ex.Message;
+                error = ex is AggregateException aggregate
+                    ? aggregate.GetBaseException().Message
+                    : ex.Message;
                 return false;
             }
             finally

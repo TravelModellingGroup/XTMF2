@@ -197,7 +197,16 @@ public sealed class RunServerConnectionManager : IDisposable
         }
 
         foreach (var endpoint in endpoints)
-            Connect(endpoint, out _);
+        {
+            try
+            {
+                Connect(endpoint, out _);
+            }
+            catch (Exception ex)
+            {
+                MarkDisconnected(endpoint.Id, ex.Message);
+            }
+        }
     }
 
     private void MarkDisconnected(string endpointId, string error)
