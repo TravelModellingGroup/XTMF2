@@ -314,9 +314,11 @@ public sealed class HostBus : IDisposable
                     System.Threading.Interlocked.MemoryBarrier();
                 }
             }
-            catch(Exception)
+            catch (Exception ex)
             {
                 // The client has disconnected or crashed. Exit the listener thread.
+                Console.Error.WriteLine($"[HostBus] RunServer connection listener stopped: {ex}");
+                Console.Error.Flush();
             }
             finally
             {

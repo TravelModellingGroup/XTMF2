@@ -38,6 +38,36 @@ for interacting with INRO's EMME software.  Additionally it contains TMG's TMGTo
 
 > dotnet run -c Release --project src/XTMF2.GUI/XTMF2.GUI.csproj
 
+## Remote RunServer
+
+Local RunServer execution requires no setup. XTMF2 creates and connects to its local RunServer automatically.
+
+Remote TCP RunServers require TLS and token authentication. On the machine that will host the RunServer, generate its security files once:
+
+```bash
+dotnet run -c Release --project src/XTMF2.Client/XTMF2.RunServer.csproj -- -setup-security ./runserver-security
+```
+
+This creates:
+
+* `runserver-cert.pem`: the self-signed TLS certificate.
+* `runserver-key.pem`: the certificate private key. Keep this file private.
+* `runserver-token.txt`: the authentication token. Keep this file private.
+
+The setup command prints the certificate's SHA-256 fingerprint. The server also prints the same fingerprint each time it starts; this is safe to share with GUI users and is not the authentication token. Start the remote server with the security directory:
+
+```bash
+dotnet run -c Release --project src/XTMF2.Client/XTMF2.RunServer.csproj -- -tcp 0.0.0.0 5000 -security ./runserver-security
+```
+
+In XTMF2, open **Settings**, open **RunServers**, and add a remote endpoint. Enter:
+
+1. The remote machine's address and TCP port.
+2. The contents of `runserver-token.txt` in **Token**.
+3. The printed SHA-256 fingerprint in **Certificate**. Colons and spaces are accepted.
+
+The GUI pins the server certificate to this fingerprint and authenticates with the token before creating the RunServer bus. A mismatched certificate or token is rejected. Do not expose the TCP port to untrusted networks; use firewall rules or a private network as appropriate.
+
 ## Main Branches
 
 There are 4 major branches for XTMF 2 intended for different purposes:

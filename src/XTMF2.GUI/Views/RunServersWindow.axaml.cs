@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using XTMF2.Bus;
 using XTMF2.GUI.Properties;
 
 namespace XTMF2.GUI.Views;
@@ -21,6 +22,8 @@ public partial class RunServersWindow : Window
         public required TextBox Name { get; init; }
         public required TextBox Address { get; init; }
         public required TextBox Port { get; init; }
+        public required TextBox Token { get; init; }
+        public required TextBox CertificateFingerprint { get; init; }
         public required TextBlock Status { get; init; }
         public required Button Reconnect { get; init; }
         public required Button Remove { get; init; }
@@ -71,6 +74,8 @@ public partial class RunServersWindow : Window
         var name = new TextBox { Text = endpoint.Name, Watermark = "Name", HorizontalAlignment = HorizontalAlignment.Stretch };
         var address = new TextBox { Text = endpoint.Address, Watermark = "Address", HorizontalAlignment = HorizontalAlignment.Stretch };
         var port = new TextBox { Text = endpoint.Port.ToString(), Watermark = "Port", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var token = new TextBox { Text = endpoint.Token, Watermark = "Token", PasswordChar = '*', IsEnabled = !endpoint.IsLocal, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var certificateFingerprint = new TextBox { Text = endpoint.CertificateFingerprint, Watermark = "SHA-256 certificate fingerprint", IsEnabled = !endpoint.IsLocal, HorizontalAlignment = HorizontalAlignment.Stretch };
         var status = new TextBlock
         {
             Text = endpoint.IsLocal ? "Available" : "Disconnected",
@@ -78,7 +83,8 @@ public partial class RunServersWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Foreground = endpoint.IsLocal ? Brushes.LimeGreen : Brushes.Red,
-            TextTrimming = TextTrimming.CharacterEllipsis
+            TextWrapping = TextWrapping.Wrap,
+            MaxHeight = 48
         };
         var reconnect = new Button { Content = "Reconnect", Width = 130, IsEnabled = !endpoint.IsLocal };
         var remove = new Button { Content = "Remove", Width = 100, IsEnabled = !endpoint.IsLocal };
@@ -109,6 +115,8 @@ public partial class RunServersWindow : Window
             Name = name,
             Address = address,
             Port = port,
+            Token = token,
+            CertificateFingerprint = certificateFingerprint,
             Status = status,
             Reconnect = reconnect,
             Remove = remove
@@ -163,15 +171,57 @@ public partial class RunServersWindow : Window
 
     private void ReconnectRunServer(RunServerEditor editor)
     {
-        if (_runController is null || !int.TryParse(editor.Port.Text, out var portNumber))
+        if (_runController is null)
+        {
+            SetConnectionError(editor, "RunServer connections are not available in this window.");
             return;
+        }
+
+        if (!int.TryParse(editor.Port.Text, out var portNumber) || portNumber < 1 || portNumber > 65535)
+        {
+            SetConnectionError(editor, "Invalid TCP port.");
+            return;
+        }
 
         var currentEndpoint = editor.Endpoint.Clone();
         currentEndpoint.Address = editor.Address.Text?.Trim() ?? string.Empty;
         currentEndpoint.Port = portNumber;
+        currentEndpoint.Token = editor.Token.Text?.Trim() ?? string.Empty;
+        currentEndpoint.CertificateFingerprint = editor.CertificateFingerprint.Text?.Trim() ?? string.Empty;
         editor.Reconnect.IsEnabled = false;
-        if (!_runController.ConnectRunServer(currentEndpoint, out var error) && !string.IsNullOrWhiteSpace(error))
-            ToolTip.SetTip(editor.Reconnect, error);
+        editor.Status.Text = $"Connecting to {currentEndpoint.Address}:{currentEndpoint.Port}...";
+        editor.Status.Foreground = Brushes.Cyan;
+        ToolTip.SetTip(editor.Status, null);
+        Console.WriteLine($"RunServer GUI connection attempt to {currentEndpoint.Address}:{currentEndpoint.Port}");
+        Console.Out.Flush();
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                var connected = _runController.ConnectRunServer(currentEndpoint, out var error);
+                Console.WriteLine(connected
+                    ? $"RunServer GUI connection succeeded to {currentEndpoint.Address}:{currentEndpoint.Port}"
+                    : $"RunServer GUI connection failed to {currentEndpoint.Address}:{currentEndpoint.Port}: {error ?? "unknown error"}");
+                Console.Out.Flush();
+                if (!connected && !string.IsNullOrWhiteSpace(error))
+                    Dispatcher.UIThread.Post(() => SetConnectionError(editor, error));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"RunServer GUI connection threw for {currentEndpoint.Address}:{currentEndpoint.Port}: {ex.Message}");
+                Console.Out.Flush();
+                Dispatcher.UIThread.Post(() => SetConnectionError(editor, ex.Message));
+            }
+        });
+    }
+
+    private static void SetConnectionError(RunServerEditor editor, string error)
+    {
+        editor.Status.Text = $"Disconnected: {error}";
+        editor.Status.Foreground = Brushes.Red;
+        editor.Reconnect.IsEnabled = !editor.Endpoint.IsLocal;
+        ToolTip.SetTip(editor.Status, error);
+        ToolTip.SetTip(editor.Reconnect, error);
     }
 
     private void EndpointSelector_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -184,6 +234,8 @@ public partial class RunServersWindow : Window
             DetachFromParent(currentEditor.Name);
             DetachFromParent(currentEditor.Address);
             DetachFromParent(currentEditor.Port);
+            DetachFromParent(currentEditor.Token);
+            DetachFromParent(currentEditor.CertificateFingerprint);
             DetachFromParent(currentEditor.Status);
             DetachFromParent(currentEditor.Reconnect);
             DetachFromParent(currentEditor.Remove);
@@ -201,6 +253,8 @@ public partial class RunServersWindow : Window
         EndpointDetailsPanel.Children.Add(CreateField("Name", editor.Name));
         EndpointDetailsPanel.Children.Add(CreateField("Address", editor.Address));
         EndpointDetailsPanel.Children.Add(CreateField("Port", editor.Port));
+        EndpointDetailsPanel.Children.Add(CreateField("Token", editor.Token));
+        EndpointDetailsPanel.Children.Add(CreateField("Certificate", editor.CertificateFingerprint));
         EndpointDetailsPanel.Children.Add(CreateField("Status", editor.Status));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 8, 0, 0) };
         actions.Children.Add(editor.Reconnect);
@@ -254,6 +308,10 @@ public partial class RunServersWindow : Window
                 endpoint.Name = string.IsNullOrWhiteSpace(editor.Name.Text) ? "RunServer" : editor.Name.Text.Trim();
                 endpoint.Address = editor.Address.Text.Trim();
                 endpoint.Port = port;
+                endpoint.Token = editor.Token.Text?.Trim() ?? string.Empty;
+                endpoint.CertificateFingerprint = editor.CertificateFingerprint.Text?.Trim() ?? string.Empty;
+                if (!endpoint.IsLocal && (endpoint.Token.Length < RunServerSecurity.TokenMinimumLength || endpoint.CertificateFingerprint.Length == 0))
+                    throw new InvalidOperationException("Each remote RunServer must have a token and certificate fingerprint.");
                 if (endpoints.Any(existing => string.Equals(existing.Address, endpoint.Address, StringComparison.OrdinalIgnoreCase) && existing.Port == endpoint.Port))
                     throw new InvalidOperationException("RunServer addresses and ports must be unique.");
                 endpoints.Add(endpoint);

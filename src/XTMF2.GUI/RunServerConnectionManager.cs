@@ -85,6 +85,8 @@ public sealed class RunServerConnectionManager : IDisposable
 
     public bool Connect(RunServerEndpoint endpoint, out string? error)
     {
+        Console.WriteLine($"RunServer connection starting for '{endpoint.Name}' at {endpoint.Address}:{endpoint.Port} (secure={!endpoint.IsLocal})");
+        Console.Out.Flush();
         RunServerConnectionInfo? state = null;
         lock (_sync)
         {
@@ -103,8 +105,11 @@ public sealed class RunServerConnectionManager : IDisposable
             if (entry.State == RunServerConnectionState.Connecting)
             {
                 error = "A connection attempt is already in progress.";
+                Console.WriteLine($"RunServer connection skipped for '{endpoint.Name}': {error}");
+                Console.Out.Flush();
                 return false;
             }
+            entry.Endpoint = endpoint.Clone();
             entry.State = RunServerConnectionState.Connecting;
             entry.Error = null;
             state = Snapshot(entry);
@@ -112,9 +117,20 @@ public sealed class RunServerConnectionManager : IDisposable
 
         Publish(state);
 
-        if (!CreateStreams.CreateTcpClient(endpoint.Address, endpoint.Port, out var stream, out error))
+        var connected = endpoint.IsLocal
+            ? CreateStreams.CreateTcpClient(endpoint.Address, endpoint.Port, out var stream, out error)
+            : CreateStreams.CreateSecureTcpClient(
+                endpoint.Address,
+                endpoint.Port,
+                endpoint.Token,
+                endpoint.CertificateFingerprint,
+                out stream,
+                out error);
+        if (!connected)
         {
             MarkDisconnected(endpoint.Id, error ?? "Unable to connect to the RunServer.");
+            Console.WriteLine($"RunServer connection failed for '{endpoint.Name}': {error ?? "unknown error"}");
+            Console.Out.Flush();
             return false;
         }
 

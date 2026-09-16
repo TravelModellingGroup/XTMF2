@@ -23,6 +23,9 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Sockets;
+using System.Net;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using XTMF2.Bus;
 using XTMF2.Configuration;
 
@@ -35,7 +38,7 @@ namespace XTMF2.Client
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: XTMF.Run [-loadDLL dllPath] [-tcp ADDRESS PORT] [-namedPipe PIPE_NAME]");
+                Console.WriteLine("Usage: XTMF.Run [-setup-security DIRECTORY] [-loadDLL dllPath] [-tcp ADDRESS PORT -security DIRECTORY] [-namedPipe PIPE_NAME]");
                 return;
             }
             List<string> dllsToLoad = new List<string>();
@@ -57,6 +60,14 @@ namespace XTMF2.Client
                     case "-config":
                         Console.WriteLine("Custom configurations are not supported yet.");
                         return;
+                    case "-setup-security":
+                        if (i + 1 >= args.Length)
+                        {
+                            Console.WriteLine("Expected a directory after -setup-security.");
+                            return;
+                        }
+                        SetupSecurity(args[++i]);
+                        return;
                     case "-remote":
                         Console.WriteLine("Remote connections are not supported yet.");
                         return;
@@ -72,7 +83,17 @@ namespace XTMF2.Client
                             Console.WriteLine("Expected a numeric TCP port after the -tcp address!");
                             return;
                         }
-                        RunTcpServer(tcpAddress, tcpPort, dllsToLoad);
+                        string? securityDirectory = null;
+                        if (i + 2 < args.Length && string.Equals(args[i + 1], "-security", StringComparison.OrdinalIgnoreCase))
+                        {
+                            securityDirectory = args[i += 2];
+                        }
+                        else if (!IsLoopbackAddress(tcpAddress))
+                        {
+                            Console.WriteLine("Remote TCP RunServers require -security DIRECTORY.");
+                            return;
+                        }
+                        RunTcpServer(tcpAddress, tcpPort, securityDirectory, dllsToLoad);
                         break;
                     case "-namedpipe":
                         if (args.Length == ++i)
@@ -107,8 +128,44 @@ namespace XTMF2.Client
             }
         }
 
-        private static void RunTcpServer(string address, int port, List<string> extraDlls)
+        private static void SetupSecurity(string directory)
         {
+            try
+            {
+                RunServerSecurity.SaveSetup(directory, out var token, out var fingerprint);
+                Console.WriteLine($"RunServer security files created in {directory}");
+                Console.WriteLine($"Certificate fingerprint: {fingerprint}");
+                Console.WriteLine("Token: read runserver-token.txt and enter it in the XTMF2 GUI.");
+                Console.WriteLine($"Start with: XTMF2.RunServer -tcp 0.0.0.0 PORT -security {directory}");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException)
+            {
+                Console.WriteLine($"Unable to create RunServer security files: {ex.Message}");
+            }
+        }
+
+        private static bool IsLoopbackAddress(string address)
+            => string.Equals(address, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                (IPAddress.TryParse(address, out var parsed) && IPAddress.IsLoopback(parsed));
+
+        private static void RunTcpServer(string address, int port, string? securityDirectory, List<string> extraDlls)
+        {
+            X509Certificate2? certificate = null;
+            string? token = null;
+            if (securityDirectory is not null)
+            {
+                try
+                {
+                    certificate = RunServerSecurity.LoadCertificate(securityDirectory);
+                    token = RunServerSecurity.LoadToken(securityDirectory);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException)
+                {
+                    Console.WriteLine($"Unable to load RunServer security files: {ex.Message}");
+                    return;
+                }
+            }
+
             if (!CreateStreams.CreateTcpListener(address, port, out var listener, out var boundPort, out var error))
             {
                 Console.WriteLine("Error creating TCP RunServer listener\r\n" + error);
@@ -117,6 +174,8 @@ namespace XTMF2.Client
 
             var tcpListener = listener!;
             Console.WriteLine($"RunServer listening on {address}:{boundPort}");
+            if (certificate is not null)
+                Console.WriteLine($"Certificate fingerprint: {RunServerSecurity.GetFingerprint(certificate)}");
             Console.Out.Flush();
             using (tcpListener)
             using (var shutdown = new CancellationTokenSource())
@@ -139,22 +198,73 @@ namespace XTMF2.Client
                     {
                         break;
                     }
+                    catch (SocketException ex)
+                    {
+                        Console.WriteLine($"RunServer listener error while accepting a connection: {ex.Message}");
+                        Console.Out.Flush();
+                        continue;
+                    }
 
                     if (client is null)
                         continue;
 
+                    Console.WriteLine($"RunServer connection attempt from {client.Client.RemoteEndPoint?.ToString() ?? "unknown endpoint"}");
+                    Console.Out.Flush();
                     var acceptedClient = client;
-                    _ = Task.Run(() => RunTcpClient(acceptedClient, extraDlls));
+                    _ = securityDirectory is null
+                        ? Task.Run(() => RunTcpClientUnsecured(acceptedClient, extraDlls))
+                        : Task.Run(() => RunTcpClient(acceptedClient, certificate!, token!, extraDlls));
                 }
             }
         }
 
-        private static void RunTcpClient(TcpClient client, List<string> extraDlls)
+        private static void RunTcpClientUnsecured(TcpClient client, List<string> extraDlls)
         {
+            var remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown endpoint";
+            Console.WriteLine($"Local RunServer connection accepted from {remoteEndpoint}");
+            Console.Out.Flush();
             using (client)
             using (var stream = client.GetStream())
             {
-                RunClient(stream, extraDlls, usePrivateWorkspace: true);
+                try
+                {
+                    RunClient(stream, extraDlls, usePrivateWorkspace: true);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Local RunServer client session failed for {remoteEndpoint}: {ex.Message}");
+                    Console.Out.Flush();
+                }
+            }
+        }
+
+        private static void RunTcpClient(TcpClient client, X509Certificate2 certificate, string token, List<string> extraDlls)
+        {
+            var remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown endpoint";
+            using (client)
+            {
+                if (!CreateStreams.AuthenticateSecureTcpClient(client, certificate, token, out var stream, out var error))
+                {
+                    Console.WriteLine($"RunServer security validation failed for {remoteEndpoint}: {error}");
+                    Console.Out.Flush();
+                    return;
+                }
+                Console.WriteLine($"RunServer connection authenticated successfully from {remoteEndpoint}");
+                Console.Out.Flush();
+                using (stream)
+                {
+                    try
+                    {
+                        RunClient(stream, extraDlls, usePrivateWorkspace: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"RunServer client session failed for {remoteEndpoint}: {ex.Message}");
+                        Console.Out.Flush();
+                    }
+                }
+                Console.WriteLine($"RunServer connection disconnected from {remoteEndpoint}");
+                Console.Out.Flush();
             }
         }
 

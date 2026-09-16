@@ -422,9 +422,11 @@ namespace XTMF2.Bus
                     }
                     Interlocked.MemoryBarrier();
                 }
-                catch
+                catch (Exception ex)
                 {
                     // if anything goes wrong, just exit the loop and end the process.
+                    Console.Error.WriteLine($"[RunServerBus] Host connection request loop stopped: {ex}");
+                    Console.Error.Flush();
                     return;
                 }
             }
