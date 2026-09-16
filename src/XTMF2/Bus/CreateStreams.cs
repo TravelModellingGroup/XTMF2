@@ -21,6 +21,8 @@ using System.Collections.Generic;
 using System.Text;
 using System.IO;
 using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Diagnostics.CodeAnalysis;
 
@@ -28,6 +30,119 @@ namespace XTMF2.Bus
 {
     public static class CreateStreams
     {
+        /// <summary>
+        /// Creates a TCP listener, invokes <paramref name="createClient"/> with the bound
+        /// port, and waits for one client connection. A port of zero requests an ephemeral
+        /// port from the operating system.
+        /// </summary>
+        public static bool CreateNewTcpHost(
+            string address,
+            int port,
+            [NotNullWhen(true)] out Stream? stream,
+            out int boundPort,
+            [NotNullWhen(false)] out string? error,
+            Action<int> createClient,
+            int timeoutMilliseconds = 5000)
+        {
+            stream = null;
+            boundPort = 0;
+            error = null;
+
+            if (!IPAddress.TryParse(address, out var ipAddress))
+            {
+                error = $"The TCP host address '{address}' is not a valid IP address.";
+                return false;
+            }
+
+            if (port is < 0 or > IPEndPoint.MaxPort)
+            {
+                error = $"The TCP port '{port}' is outside the valid range.";
+                return false;
+            }
+
+            try
+            {
+                var listener = new TcpListener(ipAddress, port);
+                listener.Start();
+                boundPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+                try
+                {
+                    createClient(boundPort);
+                    var acceptTask = listener.AcceptTcpClientAsync();
+                    if (!acceptTask.Wait(timeoutMilliseconds) || !acceptTask.IsCompletedSuccessfully)
+                    {
+                        error = "No TCP client connection was received before the timeout.";
+                        return false;
+                    }
+
+                    stream = acceptTask.Result.GetStream();
+                    return true;
+                }
+                finally
+                {
+                    listener.Stop();
+                }
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Connects to a TCP RunServer endpoint.
+        /// </summary>
+        public static bool CreateTcpClient(
+            string address,
+            int port,
+            [NotNullWhen(true)] out Stream? stream,
+            [NotNullWhen(false)] out string? error,
+            int timeoutMilliseconds = 5000)
+        {
+            stream = null;
+            error = null;
+
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                error = "The TCP host address is required.";
+                return false;
+            }
+
+            if (port is < 1 or > IPEndPoint.MaxPort)
+            {
+                error = $"The TCP port '{port}' is outside the valid range.";
+                return false;
+            }
+
+            var client = new TcpClient();
+            try
+            {
+                var connectTask = client.ConnectAsync(address, port);
+                if (!connectTask.Wait(timeoutMilliseconds) || !connectTask.IsCompletedSuccessfully)
+                {
+                    error = $"Unable to connect to TCP RunServer {address}:{port}.";
+                    return false;
+                }
+
+                stream = client.GetStream();
+                return true;
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException)
+            {
+                error = ex.Message;
+                return false;
+            }
+            finally
+            {
+                if (stream is null)
+                {
+                    client.Dispose();
+                }
+            }
+        }
+
         /// <summary>
         /// Create a new named pipe host
         /// </summary>
@@ -108,12 +223,11 @@ namespace XTMF2.Bus
             [NotNullWhen(true)] out RunServerBus runServerBus,
             [NotNullWhen(false)] out string? error)
         {
-            var debugId = Guid.NewGuid().ToString();
             Stream? clientStream = null;
             string? clientError = null;
-            if (!CreateNewNamedPipeHost(debugId, out var hostStream, out error, () =>
+            if (!CreateNewTcpHost("127.0.0.1", 0, out var hostStream, out _, out error, port =>
             {
-                if (!CreateNamedPipeClient(debugId, out clientStream, out clientError))
+                if (!CreateTcpClient("127.0.0.1", port, out clientStream, out clientError))
                 {
                     return;
                 }

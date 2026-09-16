@@ -453,6 +453,7 @@ public partial class MainWindow : Window
         if (_settingsWindow is null || !_settingsWindow.IsVisible)
         {
             _settingsWindow = new SettingsWindow();
+            _settingsWindow.SettingsSaved += () => _runController?.RefreshConfiguredRunServers();
             _settingsWindow.Closed += (s, _) => _settingsWindow = null;
             _settingsWindow.ShowDialog(this);
         }

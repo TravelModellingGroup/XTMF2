@@ -21,11 +21,14 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
+using Avalonia.Layout;
 using XTMF2.GUI.Resources;
 using XTMF2.AI;
+using XTMF2.GUI.Properties;
 
 namespace XTMF2.GUI.Views;
 
@@ -37,6 +40,9 @@ public partial class SettingsWindow : Window
     private string _currentAiModel = "llama3.2";
     private string _currentOllamaEndpoint = "http://localhost:11434";
     private readonly HttpClient _aiHttpClient = new();
+    private readonly List<(RunServerEndpoint Endpoint, TextBox Name, TextBox Address, TextBox Port, Button Remove)> _runServerEditors = new();
+
+    public event Action? SettingsSaved;
 
     public SettingsWindow()
     {
@@ -83,7 +89,41 @@ public partial class SettingsWindow : Window
             OllamaEndpointTextBox.Text = _currentOllamaEndpoint;
             AiModelComboBox.SelectedItem = _currentAiModel;
             AiMaxCompactionCyclesTextBox.Text = Properties.Settings.Default.AiMaxCompactionCycles.ToString();
+            RunServersPanel.Children.Clear();
+            _runServerEditors.Clear();
+            foreach (var endpoint in Properties.Settings.Default.RunServers)
+                AddRunServerEditor(endpoint.Clone());
             _ = RefreshModelsAsync();
+    }
+
+    private void AddRunServer_Click(object? sender, RoutedEventArgs e)
+        => AddRunServerEditor(new RunServerEndpoint { Name = "RunServer" });
+
+    private void AddRunServerEditor(RunServerEndpoint endpoint)
+    {
+        var name = new TextBox { Text = endpoint.Name, Watermark = "Name" };
+        var address = new TextBox { Text = endpoint.Address, Watermark = "Address" };
+        var port = new TextBox { Text = endpoint.Port.ToString(), Watermark = "Port" };
+        var remove = new Button { Content = "Remove", Padding = new Thickness(8, 4), IsEnabled = !endpoint.IsLocal };
+        var row = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("1.2*,1.5*,Auto,Auto"),
+            ColumnSpacing = 8
+        };
+        Grid.SetColumn(address, 1);
+        Grid.SetColumn(port, 2);
+        Grid.SetColumn(remove, 3);
+        row.Children.Add(name);
+        row.Children.Add(address);
+        row.Children.Add(port);
+        row.Children.Add(remove);
+        remove.Click += (_, _) =>
+        {
+            RunServersPanel.Children.Remove(row);
+            _runServerEditors.RemoveAll(editor => ReferenceEquals(editor.Remove, remove));
+        };
+        RunServersPanel.Children.Add(row);
+        _runServerEditors.Add((endpoint, name, address, port, remove));
     }
 
     private void ThemeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -116,8 +156,16 @@ public partial class SettingsWindow : Window
 
     private void Save_Click(object? sender, RoutedEventArgs e)
     {
-        SaveSettings();
-        Close();
+        try
+        {
+            SaveSettings();
+            SettingsSaved?.Invoke();
+            Close();
+        }
+        catch (InvalidOperationException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Unable to save settings: {ex.Message}");
+        }
     }
 
     private void Cancel_Click(object? sender, RoutedEventArgs e)
@@ -145,6 +193,29 @@ public partial class SettingsWindow : Window
 
     private void SaveSettings()
     {
+        var endpoints = new List<RunServerEndpoint>();
+        foreach (var editor in _runServerEditors)
+        {
+            if (string.IsNullOrWhiteSpace(editor.Address.Text) ||
+                !int.TryParse(editor.Port.Text, out var port) ||
+                port < (editor.Endpoint.IsLocal ? 0 : 1) || port > 65535)
+            {
+                throw new InvalidOperationException("Each RunServer must have a valid address and port.");
+            }
+
+            var endpoint = editor.Endpoint.Clone();
+            endpoint.Name = string.IsNullOrWhiteSpace(editor.Name.Text) ? "RunServer" : editor.Name.Text.Trim();
+            endpoint.Address = editor.Address.Text.Trim();
+            endpoint.Port = port;
+            if (endpoints.Any(existing => string.Equals(existing.Address, endpoint.Address, StringComparison.OrdinalIgnoreCase) && existing.Port == endpoint.Port))
+                throw new InvalidOperationException("RunServer addresses and ports must be unique.");
+            endpoints.Add(endpoint);
+        }
+
+        if (!endpoints.Any(endpoint => endpoint.IsLocal))
+            throw new InvalidOperationException("The local RunServer cannot be removed.");
+
+        Properties.Settings.Default.RunServers = endpoints;
         // Save language preference
         if (_currentLanguage != null)
         {

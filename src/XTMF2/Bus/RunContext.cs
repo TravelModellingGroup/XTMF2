@@ -119,17 +119,16 @@ namespace XTMF2.Bus
 
         private (RunBus runBus, Task readerTask) CreateRunBusLocal(RunServerBus clientBus)
         {
-            var pipeName = Guid.NewGuid().ToString();
             string? error = null;
             Stream? clientToRunStream = null;
             RunBus? runBus = null;
             Task? readerTask = null;
-            CreateStreams.CreateNewNamedPipeHost(pipeName, out clientToRunStream, out error, () =>
+            CreateStreams.CreateNewTcpHost("127.0.0.1", 0, out clientToRunStream, out _, out error, port =>
             {
                 // Start the reader task. It takes ownership of clientToRunStream and disposes it
                 // when it exits (leaveOpen=false in the BinaryReader inside StartProcessingRequestFromRun).
                 readerTask = clientBus.StartProcessingRequestFromRun(ID, clientToRunStream!);
-                if (CreateStreams.CreateNamedPipeClient(pipeName, out var runToClientStream, out error))
+                if (CreateStreams.CreateTcpClient("127.0.0.1", port, out var runToClientStream, out error))
                 {
                     // Construct RunBus synchronously so that _runtime.RunBus is set before
                     // CreateRunBusLocal returns and Run.StartRun() is called.
@@ -141,16 +140,15 @@ namespace XTMF2.Bus
 
         private (Stream clientToRunStream, Process runProcess) CreateRunBusRemote(RunServerBus clientBus)
         {
-            var pipeName = Guid.NewGuid().ToString();
             string? error = null;
             Process? runProcess = null;
-            CreateStreams.CreateNewNamedPipeHost(pipeName, out var clientToRunStream, out error, () =>
+            CreateStreams.CreateNewTcpHost("127.0.0.1", 0, out var clientToRunStream, out _, out error, port =>
             {
                 var path = Path.GetDirectoryName(typeof(RunServerBus).GetTypeInfo().Assembly.Location)!;
                 var startInfo = new ProcessStartInfo()
                 {
                     FileName = "dotnet",
-                    Arguments = $"\"{Path.Combine(path, "XTMF2.Run.dll")}\" -runID \"{ID}\" {GetExtraDlls(clientBus)}-namedPipe \"{pipeName}\"",
+                    Arguments = $"\"{Path.Combine(path, "XTMF2.Run.dll")}\" -runID \"{ID}\" {GetExtraDlls(clientBus)}-tcp 127.0.0.1 {port}",
                     UseShellExecute = false,
                     CreateNoWindow = OperatingSystem.IsWindows(),
                     WorkingDirectory = path

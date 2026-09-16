@@ -17,7 +17,9 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 
 namespace XTMF2.GUI.Properties;
@@ -78,6 +80,7 @@ public class Settings
     public string AiModel { get; set; } = "llama3.2";
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
     public int AiMaxCompactionCycles { get; set; } = 100;
+    public List<RunServerEndpoint> RunServers { get; set; } = new() { RunServerEndpoint.CreateLocal() };
 
     public void Save()
     {
@@ -123,6 +126,7 @@ public class Settings
                     settings.AiMaxCompactionCycles = loaded.AiMaxCompactionCycles is < 1 or > 100
                         ? 100
                         : loaded.AiMaxCompactionCycles;
+                    settings.RunServers = NormalizeRunServers(loaded.RunServers);
                 }
             }
         }
@@ -132,5 +136,38 @@ public class Settings
         }
 
         return settings;
+    }
+
+    private static List<RunServerEndpoint> NormalizeRunServers(IEnumerable<RunServerEndpoint>? endpoints)
+    {
+        var normalized = new List<RunServerEndpoint>();
+        if (endpoints is not null)
+        {
+            foreach (var endpoint in endpoints)
+            {
+                if (endpoint is null || string.IsNullOrWhiteSpace(endpoint.Address) || endpoint.Port is < 0 or > 65535)
+                    continue;
+
+                if (normalized.Any(existing => existing.Id == endpoint.Id))
+                    continue;
+
+                normalized.Add(endpoint);
+            }
+        }
+
+        var local = normalized.FirstOrDefault(endpoint => endpoint.IsLocal);
+        if (local is null)
+        {
+            normalized.Insert(0, RunServerEndpoint.CreateLocal());
+        }
+        else
+        {
+            local.Id = "local";
+            local.Name = "Local RunServer";
+            local.Address = "127.0.0.1";
+            local.Port = 0;
+        }
+
+        return normalized;
     }
 }

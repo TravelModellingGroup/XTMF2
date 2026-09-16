@@ -9,7 +9,7 @@
         Classes="neon-dialog"
         Title="{res:Localize Settings_Title}"
         Width="600"
-        Height="650"
+        Height="760"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
         KeyUp="Window_KeyUp"
@@ -86,6 +86,28 @@
                         
                         <CheckBox Content="{res:Localize Settings_PlaySystemSounds}"
                                   x:Name="PlaySystemSoundsCheckBox"/>
+                    </StackPanel>
+                </Border>
+
+                <Border BorderBrush="{DynamicResource DlgListBorder}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="15">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="RunServers"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource DlgAccent}"/>
+                            <Button Grid.Column="1"
+                                    Content="Add"
+                                    Click="AddRunServer_Click"
+                                    Padding="12,4"/>
+                        </Grid>
+                        <TextBlock Text="Configure the local or remote RunServer endpoints available for model-system runs."
+                                   TextWrapping="Wrap"
+                                   Opacity="0.7"/>
+                        <StackPanel x:Name="RunServersPanel" Spacing="8"/>
                     </StackPanel>
                 </Border>
 

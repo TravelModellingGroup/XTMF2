@@ -11,7 +11,7 @@ namespace XTMF2.Run
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: XTMF.Run [-runID RunID] [-loadDLL dllPath] [-config CONFIGURATION] [-remote SERVER_ADDRESS] [-namedPipe PIPE_NAME]");
+                Console.WriteLine("Usage: XTMF.Run [-runID RunID] [-loadDLL dllPath] [-tcp ADDRESS PORT] [-namedPipe PIPE_NAME]");
                 return;
             }
             List<string> dllsToLoad = new List<string>();
@@ -44,6 +44,38 @@ namespace XTMF2.Run
                     case "-remote":
                         Console.WriteLine("Remote connections are not supported yet.");
                         return;
+                    case "-tcp":
+                        if (i + 2 >= args.Length)
+                        {
+                            Console.WriteLine("Expected an address and port after getting a -tcp instruction!");
+                            return;
+                        }
+                        var tcpAddress = args[++i];
+                        if (!int.TryParse(args[++i], out var tcpPort))
+                        {
+                            Console.WriteLine("Expected a numeric TCP port after the -tcp address!");
+                            return;
+                        }
+                        Stream? tcpStream = null;
+                        try
+                        {
+                            if (!CreateStreams.CreateTcpClient(tcpAddress, tcpPort, out tcpStream, out error))
+                            {
+                                Console.WriteLine("Error creating TCP run client\r\n" + error);
+                                return;
+                            }
+                            if (runID == null)
+                            {
+                                Console.WriteLine("No runID was provided!");
+                                return;
+                            }
+                            Run(runID, tcpStream!, dllsToLoad);
+                        }
+                        finally
+                        {
+                            tcpStream?.Dispose();
+                        }
+                        break;
                     case "-namedpipe":
                         if (args.Length == ++i)
                         {

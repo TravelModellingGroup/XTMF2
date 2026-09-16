@@ -26,6 +26,7 @@ using System.Threading.Tasks;
 using XTMF2.Bus;
 using XTMF2.Editing;
 using XTMF2.GUI.ViewModels;
+using XTMF2.GUI.Properties;
 
 
 namespace XTMF2.GUI;
@@ -52,12 +53,15 @@ public class RunController : IDisposable
     /// The hostbus that this controller uses to communicate with the client. This is used to send commands to the client and receive status updates from the client.
     /// </summary>
     private HostBus _hostBus;
+    private readonly RunServerConnectionManager _connections;
+    private const string LocalEndpointId = "local";
 
     /// <summary>
     /// Maps run IDs to the model system session and the user that submitted the run,
     /// so that optimization results can be forwarded to the correct session.
     /// </summary>
     private readonly Dictionary<string, (ModelSystemSession Session, User User)> _sessionsByRunId = new();
+    private readonly Dictionary<string, HostBus> _hostBusesByRunId = new();
 
     /// <summary>
     /// Fires when an estimation or calibration run completes and has results ready to be
@@ -109,6 +113,7 @@ public class RunController : IDisposable
         hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
         hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
         hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
+        controller.ConnectConfiguredRunServers();
         // Start the client processing in a separate thread to avoid blocking the GUI
         Task.Factory.StartNew(
             () =>
@@ -121,19 +126,18 @@ public class RunController : IDisposable
 
     private static bool InitializeInSeparateProcess(XTMFRuntime runtime, out RunController? controller, out string? error)
     {
-        var id = Guid.NewGuid().ToString();
         var xtmfGUIFilePath = typeof(XTMF2.GUI.Program).Assembly.Location;
         var xtmfClientFileName = Path.Combine(Path.GetDirectoryName(xtmfGUIFilePath)!, "XTMF2.RunServer.dll");
         Process? client = null;
         try
         {
-            if (!XTMF2.Bus.CreateStreams.CreateNewNamedPipeHost(id, out var hostStream, out error, () =>
+            if (!XTMF2.Bus.CreateStreams.CreateNewTcpHost("127.0.0.1", 0, out var hostStream, out var hostPort, out error, boundPort =>
             {
                 // Client startup goes here
                 var startInfo = new ProcessStartInfo()
                 {
                     FileName = "dotnet",
-                    Arguments = $"\"{xtmfClientFileName}\" -namedPipe \"{id}\"",
+                    Arguments = $"\"{xtmfClientFileName}\" -tcp 127.0.0.1 {boundPort}",
                     UseShellExecute = false,
                     CreateNoWindow = OperatingSystem.IsWindows(),
                     WorkingDirectory = Environment.CurrentDirectory
@@ -156,6 +160,7 @@ public class RunController : IDisposable
             hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
             hostBus.ClientOptimizationResultsAvailable += controller.OnClientOptimizationResultsAvailable;
             hostBus.ClientIterationProgressAvailable += controller.OnClientIterationProgressAvailable;
+            controller.ConnectConfiguredRunServers();
             return true;
         }
         catch (Exception ex)
@@ -217,7 +222,18 @@ public class RunController : IDisposable
         string runName,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
-        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Normal, out id, out error);
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Normal, LocalEndpointId, out id, out error);
+
+    public bool SendRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        string endpointId,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Normal, endpointId, out id, out error);
 
     /// <summary>
     /// Sends an estimation run (Nelder-Mead loop) to the client process.
@@ -230,7 +246,18 @@ public class RunController : IDisposable
         string runName,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
-        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Estimation, out id, out error);
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Estimation, LocalEndpointId, out id, out error);
+
+    public bool SendEstimationRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        string endpointId,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Estimation, endpointId, out id, out error);
 
     /// <summary>
     /// Sends a calibration run (proportional-update loop) to the client process.
@@ -243,7 +270,18 @@ public class RunController : IDisposable
         string runName,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
-        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Calibration, out id, out error);
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Calibration, LocalEndpointId, out id, out error);
+
+    public bool SendCalibrationRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        string endpointId,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Calibration, endpointId, out id, out error);
 
     private bool SendRun(
         Project projectSession,
@@ -252,6 +290,7 @@ public class RunController : IDisposable
         string startToExecute,
         string runName,
         RunMode runMode,
+        string endpointId,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
     {
@@ -263,13 +302,20 @@ public class RunController : IDisposable
             return false;
         }
         var runDirectory = Path.Combine(projectDirectory, "runs", runName);
-        if (!_hostBus.RunModelSystem(msSession, runDirectory, startToExecute, runMode, out id, out error))
+        if (!_connections.TryGet(endpointId, out var hostBus) || hostBus is null)
+        {
+            id = null;
+            error = new CommandError($"RunServer '{endpointId}' is not connected.");
+            return false;
+        }
+        if (!hostBus.RunModelSystem(msSession, runDirectory, startToExecute, runMode, out id, out error))
         {
             return false;
         }
         lock (_sessionsByRunId)
         {
             _sessionsByRunId[id] = (msSession, user);
+            _hostBusesByRunId[id] = hostBus;
         }
         var vm = RunsViewModel.AddRun(id, runName, runDirectory, msSession, user);
         if (runMode != RunMode.Normal)
@@ -277,7 +323,7 @@ public class RunController : IDisposable
             // Extract parameter metadata so the progress dialog can show names/bounds.
             var meta = msSession.GetOptimizationParameterMeta(runMode);
             var runId = id;
-            vm.SetRunMode(runMode, meta, () => _hostBus.CancelModelRun(runId, out _));
+            vm.SetRunMode(runMode, meta, () => hostBus.CancelModelRun(runId, out _));
         }
         return true;
     }
@@ -286,6 +332,58 @@ public class RunController : IDisposable
     {
         Runtime = runtime;
         _hostBus = hostBus;
+        _connections = new RunServerConnectionManager();
+        _connections.AddConnection(RunServerEndpoint.CreateLocal(), hostBus, out _);
+    }
+
+    /// <summary>
+    /// Connects to an externally managed TCP RunServer and makes it available for routing.
+    /// </summary>
+    public bool ConnectRunServer(RunServerEndpoint endpoint, out string? error)
+    {
+        if (!_connections.Connect(endpoint, out error))
+            return false;
+
+        if (_connections.TryGet(endpoint.Id, out var hostBus) && hostBus is not null)
+            SubscribeToHostBus(hostBus);
+        return true;
+    }
+
+    private void ConnectConfiguredRunServers()
+    {
+        foreach (var endpoint in Settings.Default.RunServers)
+        {
+            if (endpoint.IsLocal || endpoint.Port == 0)
+                continue;
+
+            ConnectRunServer(endpoint, out _);
+        }
+    }
+
+    public void RefreshConfiguredRunServers()
+        => ConnectConfiguredRunServers();
+
+    public bool TryGetRunServer(string endpointId, out HostBus? hostBus)
+        => _connections.TryGet(endpointId, out hostBus);
+
+    public IReadOnlyList<RunServerEndpoint> GetConnectedRunServers()
+    {
+        var endpoints = new List<RunServerEndpoint>();
+        foreach (var endpoint in Settings.Default.RunServers)
+        {
+            if (_connections.TryGet(endpoint.Id, out _))
+                endpoints.Add(endpoint.Clone());
+        }
+        return endpoints;
+    }
+
+    private void SubscribeToHostBus(HostBus hostBus)
+    {
+        hostBus.ClientReportedStatus += OnClientReportedStatus;
+        hostBus.ClientFinishedModelSystem += OnClientFinishedModelSystem;
+        hostBus.ClientErrorWhenRunningModelSystem += OnClientErrorWhenRunningModelSystem;
+        hostBus.ClientOptimizationResultsAvailable += OnClientOptimizationResultsAvailable;
+        hostBus.ClientIterationProgressAvailable += OnClientIterationProgressAvailable;
     }
 
     private bool _disposed;
@@ -296,7 +394,6 @@ public class RunController : IDisposable
         _disposed = true;
         GC.SuppressFinalize(this);
         _runServerBus?.Dispose();
-        _hostBus.RequestClientShutdown(out _);
-        _hostBus.Dispose();
+        _connections.Dispose();
     }
 }

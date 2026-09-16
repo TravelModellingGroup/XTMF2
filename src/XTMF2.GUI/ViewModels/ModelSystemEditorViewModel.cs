@@ -38,6 +38,7 @@ using XTMF2.GUI.AI;
 using XTMF2.GUI.Controls;
 using XTMF2.GUI.Resources;
 using XTMF2.GUI.Views;
+using XTMF2.GUI.Properties;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
 using System.Diagnostics.CodeAnalysis;
@@ -3430,6 +3431,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var runName = runNameDialog.InputText?.Trim();
         if (string.IsNullOrEmpty(runName)) return;
 
+        var endpointId = await SelectRunServerAsync();
+        if (endpointId is null) return;
+
         // Determine which start to execute.
         string startToExecute;
         if (availableStarts.Count == 1)
@@ -3452,7 +3456,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         var project = Session.Project;
-        if (!_runController.SendRun(project, Session, User, startToExecute, runName, out _, out var runError))
+        if (!_runController.SendRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
         {
             ShowToast($"Failed to start run: {runError?.Message}", isError: true, durationMs: 6000);
             return;
@@ -3485,6 +3489,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var runName = runNameDialog.InputText?.Trim();
         if (string.IsNullOrEmpty(runName)) return;
 
+        var endpointId = await SelectRunServerAsync();
+        if (endpointId is null) return;
+
         string startToExecute;
         if (availableStarts.Count == 1)
         {
@@ -3505,7 +3512,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         var project = Session.Project;
-        if (!_runController.SendEstimationRun(project, Session, User, startToExecute, runName, out _, out var runError))
+        if (!_runController.SendEstimationRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
         {
             ShowToast($"Failed to start estimation run: {runError?.Message}", isError: true, durationMs: 6000);
             return;
@@ -3538,6 +3545,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var runName = runNameDialog.InputText?.Trim();
         if (string.IsNullOrEmpty(runName)) return;
 
+        var endpointId = await SelectRunServerAsync();
+        if (endpointId is null) return;
+
         string startToExecute;
         if (availableStarts.Count == 1)
         {
@@ -3558,7 +3568,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         var project = Session.Project;
-        if (!_runController.SendCalibrationRun(project, Session, User, startToExecute, runName, out _, out var runError))
+        if (!_runController.SendCalibrationRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
         {
             ShowToast($"Failed to start calibration run: {runError?.Message}", isError: true, durationMs: 6000);
             return;
@@ -3566,6 +3576,32 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         ShowToast($"Calibration run '{runName}' started.", durationMs: 3000);
         RunStarted?.Invoke();
+    }
+
+    private async Task<string?> SelectRunServerAsync()
+    {
+        if (_runController is null)
+            return null;
+
+        var endpoints = _runController.GetConnectedRunServers();
+        if (endpoints.Count == 0)
+        {
+            ShowToast("No RunServer is connected.", isError: true, durationMs: 5000);
+            return null;
+        }
+        if (endpoints.Count == 1)
+            return endpoints[0].Id;
+
+        var picker = new StartPickerDialog(
+            title: "Select RunServer",
+            prompt: "Select the RunServer for this run:",
+            startNames: endpoints.Select(endpoint => endpoint.Name).ToList(),
+            defaultStart: endpoints[0].Name);
+        await picker.ShowDialog(ParentWindow!);
+        if (picker.WasCancelled)
+            return null;
+
+        return endpoints.FirstOrDefault(endpoint => endpoint.Name == picker.SelectedStartName)?.Id;
     }
 
     /// <summary>Save the model system to its project file.</summary>
