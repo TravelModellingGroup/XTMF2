@@ -42,9 +42,8 @@ public partial class SettingsWindow : Window
     private string _currentAiModel = "llama3.2";
     private string _currentOllamaEndpoint = "http://localhost:11434";
     private readonly HttpClient _aiHttpClient = new();
-    private readonly List<(RunServerEndpoint Endpoint, TextBox Name, TextBox Address, TextBox Port, TextBlock Status, Button Reconnect, Button Remove)> _runServerEditors = new();
     private readonly RunController? _runController;
-
+    private RunServersWindow? _runServersWindow;
     public event Action? SettingsSaved;
 
     public SettingsWindow()
@@ -56,8 +55,6 @@ public partial class SettingsWindow : Window
     {
         _runController = runController;
         InitializeComponent();
-        if (_runController is not null)
-            _runController.RunServerStateChanged += OnRunServerStateChanged;
         LoadSettings();
     }
 
@@ -100,89 +97,33 @@ public partial class SettingsWindow : Window
             OllamaEndpointTextBox.Text = _currentOllamaEndpoint;
             AiModelComboBox.SelectedItem = _currentAiModel;
             AiMaxCompactionCyclesTextBox.Text = Properties.Settings.Default.AiMaxCompactionCycles.ToString();
-            RunServersPanel.Children.Clear();
-            _runServerEditors.Clear();
-            foreach (var endpoint in Properties.Settings.Default.RunServers)
-                AddRunServerEditor(endpoint.Clone());
-            foreach (var state in _runController?.GetRunServerStates() ?? Array.Empty<RunServerConnectionInfo>())
-                ApplyRunServerState(state);
             _ = RefreshModelsAsync();
-    }
-
-    private void AddRunServer_Click(object? sender, RoutedEventArgs e)
-        => AddRunServerEditor(new RunServerEndpoint { Name = "RunServer" });
-
-    private void AddRunServerEditor(RunServerEndpoint endpoint)
-    {
-        var name = new TextBox { Text = endpoint.Name, Watermark = "Name" };
-        var address = new TextBox { Text = endpoint.Address, Watermark = "Address" };
-        var port = new TextBox { Text = endpoint.Port.ToString(), Watermark = "Port" };
-        var status = new TextBlock { Text = endpoint.IsLocal ? "Available" : "Disconnected", Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center };
-        var reconnect = new Button { Content = "Reconnect", Padding = new Thickness(8, 4), IsEnabled = !endpoint.IsLocal };
-        var remove = new Button { Content = "Remove", Padding = new Thickness(8, 4), IsEnabled = !endpoint.IsLocal };
-        var row = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("1.2*,1.5*,Auto,Auto,Auto,Auto"),
-            ColumnSpacing = 8
-        };
-        Grid.SetColumn(address, 1);
-        Grid.SetColumn(port, 2);
-        Grid.SetColumn(status, 3);
-        Grid.SetColumn(reconnect, 4);
-        Grid.SetColumn(remove, 5);
-        row.Children.Add(name);
-        row.Children.Add(address);
-        row.Children.Add(port);
-        row.Children.Add(status);
-        row.Children.Add(reconnect);
-        row.Children.Add(remove);
-        reconnect.Click += (_, _) => ReconnectRunServer(endpoint, address, port, reconnect);
-        remove.Click += (_, _) =>
-        {
-            RunServersPanel.Children.Remove(row);
-            _runServerEditors.RemoveAll(editor => ReferenceEquals(editor.Remove, remove));
-        };
-        RunServersPanel.Children.Add(row);
-        _runServerEditors.Add((endpoint, name, address, port, status, reconnect, remove));
-    }
-
-    private void OnRunServerStateChanged(RunServerConnectionInfo state)
-        => Dispatcher.UIThread.Post(() => ApplyRunServerState(state));
-
-    private void ApplyRunServerState(RunServerConnectionInfo state)
-    {
-        var editor = _runServerEditors.FirstOrDefault(item => item.Endpoint.Id == state.Endpoint.Id);
-        if (editor.Status is null)
-            return;
-
-        editor.Status.Text = state.State switch
-        {
-            RunServerConnectionState.Available => "Available",
-            RunServerConnectionState.Connecting => "Connecting...",
-            _ => string.IsNullOrWhiteSpace(state.Error) ? "Disconnected" : $"Disconnected: {state.Error}"
-        };
-        editor.Reconnect.IsEnabled = state.State == RunServerConnectionState.Disconnected && !editor.Endpoint.IsLocal;
-        ToolTip.SetTip(editor.Status, state.Error);
-    }
-
-    private void ReconnectRunServer(RunServerEndpoint endpoint, TextBox address, TextBox port, Button reconnect)
-    {
-        if (_runController is null || !int.TryParse(port.Text, out var portNumber))
-            return;
-
-        var currentEndpoint = endpoint.Clone();
-        currentEndpoint.Address = address.Text?.Trim() ?? string.Empty;
-        currentEndpoint.Port = portNumber;
-        reconnect.IsEnabled = false;
-        if (!_runController.ConnectRunServer(currentEndpoint, out var error) && !string.IsNullOrWhiteSpace(error))
-            ToolTip.SetTip(reconnect, error);
     }
 
     protected override void OnClosed(EventArgs e)
     {
-        if (_runController is not null)
-            _runController.RunServerStateChanged -= OnRunServerStateChanged;
+        _runServersWindow?.Close();
         base.OnClosed(e);
+    }
+
+    private async void ManageRunServers_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_runServersWindow is not null && _runServersWindow.IsVisible)
+        {
+            _runServersWindow.Activate();
+            return;
+        }
+
+        _runServersWindow = new RunServersWindow(_runController);
+        _runServersWindow.RunServersSaved += () => _runController?.RefreshConfiguredRunServers();
+        try
+        {
+            await _runServersWindow.ShowDialog(this);
+        }
+        finally
+        {
+            _runServersWindow = null;
+        }
     }
 
     private void ThemeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -252,29 +193,6 @@ public partial class SettingsWindow : Window
 
     private void SaveSettings()
     {
-        var endpoints = new List<RunServerEndpoint>();
-        foreach (var editor in _runServerEditors)
-        {
-            if (string.IsNullOrWhiteSpace(editor.Address.Text) ||
-                !int.TryParse(editor.Port.Text, out var port) ||
-                port < (editor.Endpoint.IsLocal ? 0 : 1) || port > 65535)
-            {
-                throw new InvalidOperationException("Each RunServer must have a valid address and port.");
-            }
-
-            var endpoint = editor.Endpoint.Clone();
-            endpoint.Name = string.IsNullOrWhiteSpace(editor.Name.Text) ? "RunServer" : editor.Name.Text.Trim();
-            endpoint.Address = editor.Address.Text.Trim();
-            endpoint.Port = port;
-            if (endpoints.Any(existing => string.Equals(existing.Address, endpoint.Address, StringComparison.OrdinalIgnoreCase) && existing.Port == endpoint.Port))
-                throw new InvalidOperationException("RunServer addresses and ports must be unique.");
-            endpoints.Add(endpoint);
-        }
-
-        if (!endpoints.Any(endpoint => endpoint.IsLocal))
-            throw new InvalidOperationException("The local RunServer cannot be removed.");
-
-        Properties.Settings.Default.RunServers = endpoints;
         // Save language preference
         if (_currentLanguage != null)
         {
@@ -340,10 +258,11 @@ public partial class SettingsWindow : Window
         }
     }
 
-    public void Window_KeyUp(object? sender, KeyEventArgs e)
+    public void Window_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
+        if (e.Handled == false && sender == this && e.Key == Key.Escape)
         {
+            e.Handled = true;
             Cancel_Click(sender, new RoutedEventArgs());
         }
     }

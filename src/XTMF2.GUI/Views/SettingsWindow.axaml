@@ -12,7 +12,7 @@
         Height="760"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
-        KeyUp="Window_KeyUp"
+        KeyDown="Window_KeyDown"
         >
 
     <Grid RowDefinitions="Auto,*,Auto" Margin="16">
@@ -93,21 +93,20 @@
                         BorderThickness="1"
                         CornerRadius="6"
                         Padding="15">
-                    <StackPanel Spacing="10">
-                        <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="8">
+                        <StackPanel Spacing="4">
                             <TextBlock Text="RunServers"
                                        FontSize="16"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource DlgAccent}"/>
-                            <Button Grid.Column="1"
-                                    Content="Add"
-                                    Click="AddRunServer_Click"
-                                    Padding="12,4"/>
-                        </Grid>
-                        <TextBlock Text="Configure the local or remote RunServer endpoints available for model-system runs."
-                                   TextWrapping="Wrap"
-                                   Opacity="0.7"/>
-                        <StackPanel x:Name="RunServersPanel" Spacing="8"/>
+                            <TextBlock Text="Configure the local or remote RunServer endpoints available for model-system runs."
+                                       TextWrapping="Wrap"
+                                       Opacity="0.7"/>
+                        </StackPanel>
+                        <Button
+                            Content="Manage Run Servers"
+                                Click="ManageRunServers_Click"
+                                Height="34"/>
                     </StackPanel>
                 </Border>
 

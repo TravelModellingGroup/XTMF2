@@ -1,0 +1,285 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Threading;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using XTMF2.GUI.Properties;
+
+namespace XTMF2.GUI.Views;
+
+public partial class RunServersWindow : Window
+{
+    private sealed class RunServerEditor
+    {
+        public required RunServerEndpoint Endpoint { get; init; }
+        public required ListBoxItem SelectorItem { get; init; }
+        public required TextBox Name { get; init; }
+        public required TextBox Address { get; init; }
+        public required TextBox Port { get; init; }
+        public required TextBlock Status { get; init; }
+        public required Button Reconnect { get; init; }
+        public required Button Remove { get; init; }
+    }
+
+    private readonly RunController? _runController;
+    private readonly List<RunServerEditor> _editors = new();
+
+    public event Action? RunServersSaved;
+
+    public RunServersWindow()
+        : this(null)
+    {
+    }
+
+    public RunServersWindow(RunController? runController)
+    {
+        _runController = runController;
+        InitializeComponent();
+        if (_runController is not null)
+            _runController.RunServerStateChanged += OnRunServerStateChanged;
+        LoadSettings();
+    }
+
+
+    private void LoadSettings()
+    {
+        EndpointSelector.Items.Clear();
+        _editors.Clear();
+        foreach (var endpoint in Properties.Settings.Default.RunServers)
+            AddRunServerEditor(endpoint.Clone());
+        foreach (var state in _runController?.GetRunServerStates() ?? Array.Empty<RunServerConnectionInfo>())
+            ApplyRunServerState(state);
+        if (_editors.Count > 0)
+            EndpointSelector.SelectedIndex = 0;
+        else
+            ShowSelectedEditor(null);
+    }
+
+    private void AddRunServer_Click(object? sender, RoutedEventArgs e)
+    {
+        AddRunServerEditor(new RunServerEndpoint { Name = "RunServer" });
+        EndpointSelector.SelectedIndex = _editors.Count - 1;
+    }
+
+    private void AddRunServerEditor(RunServerEndpoint endpoint)
+    {
+        var name = new TextBox { Text = endpoint.Name, Watermark = "Name", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var address = new TextBox { Text = endpoint.Address, Watermark = "Address", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var port = new TextBox { Text = endpoint.Port.ToString(), Watermark = "Port", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var status = new TextBlock
+        {
+            Text = endpoint.IsLocal ? "Available" : "Disconnected",
+            Opacity = 0.7,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Foreground = endpoint.IsLocal ? Brushes.LimeGreen : Brushes.Red,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        var reconnect = new Button { Content = "Reconnect", Width = 130, IsEnabled = !endpoint.IsLocal };
+        var remove = new Button { Content = "Remove", Width = 100, IsEnabled = !endpoint.IsLocal };
+        var selectorName = new TextBlock
+        {
+            Text = endpoint.Name,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var selectorStatus = new TextBlock
+        {
+            Text = endpoint.IsLocal ? "Available" : "Disconnected",
+            Foreground = endpoint.IsLocal ? Brushes.LimeGreen : Brushes.Red,
+            FontSize = 11,
+            Opacity = 0.9,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var selectorContent = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
+        Grid.SetColumn(selectorStatus, 1);
+        selectorContent.Children.Add(selectorName);
+        selectorContent.Children.Add(selectorStatus);
+        var selectorItem = new ListBoxItem { Content = selectorContent, Tag = endpoint };
+        var editor = new RunServerEditor
+        {
+            Endpoint = endpoint,
+            SelectorItem = selectorItem,
+            Name = name,
+            Address = address,
+            Port = port,
+            Status = status,
+            Reconnect = reconnect,
+            Remove = remove
+        };
+
+        name.TextChanged += (_, _) => selectorName.Text = string.IsNullOrWhiteSpace(name.Text) ? "RunServer" : name.Text;
+        reconnect.Click += (_, _) => ReconnectRunServer(editor);
+        remove.Click += (_, _) =>
+        {
+            var index = _editors.IndexOf(editor);
+            _editors.Remove(editor);
+            EndpointSelector.Items.Remove(selectorItem);
+            if (_editors.Count == 0)
+                ShowSelectedEditor(null);
+            else if (EndpointSelector.SelectedItem == selectorItem)
+                EndpointSelector.SelectedIndex = Math.Min(index, _editors.Count - 1);
+        };
+        EndpointSelector.Items.Add(selectorItem);
+        _editors.Add(editor);
+    }
+
+    private void OnRunServerStateChanged(RunServerConnectionInfo state)
+        => Dispatcher.UIThread.Post(() => ApplyRunServerState(state));
+
+    private void ApplyRunServerState(RunServerConnectionInfo state)
+    {
+        var editor = _editors.FirstOrDefault(item => item.Endpoint.Id == state.Endpoint.Id);
+        if (editor is null)
+            return;
+
+        editor.Status.Text = state.State switch
+        {
+            RunServerConnectionState.Available => "Available",
+            RunServerConnectionState.Connecting => "Connecting...",
+            _ => string.IsNullOrWhiteSpace(state.Error) ? "Disconnected" : $"Disconnected: {state.Error}"
+        };
+        editor.Status.Foreground = state.State switch
+        {
+            RunServerConnectionState.Available => Brushes.LimeGreen,
+            RunServerConnectionState.Connecting => Brushes.Cyan,
+            _ => Brushes.Red
+        };
+        if (editor.SelectorItem.Content is Grid selectorContent && selectorContent.Children.Count > 1 &&
+            selectorContent.Children[1] is TextBlock selectorStatus)
+        {
+            selectorStatus.Text = editor.Status.Text;
+            selectorStatus.Foreground = editor.Status.Foreground;
+        }
+        editor.Reconnect.IsEnabled = state.State == RunServerConnectionState.Disconnected && !editor.Endpoint.IsLocal;
+        ToolTip.SetTip(editor.Status, state.Error);
+    }
+
+    private void ReconnectRunServer(RunServerEditor editor)
+    {
+        if (_runController is null || !int.TryParse(editor.Port.Text, out var portNumber))
+            return;
+
+        var currentEndpoint = editor.Endpoint.Clone();
+        currentEndpoint.Address = editor.Address.Text?.Trim() ?? string.Empty;
+        currentEndpoint.Port = portNumber;
+        editor.Reconnect.IsEnabled = false;
+        if (!_runController.ConnectRunServer(currentEndpoint, out var error) && !string.IsNullOrWhiteSpace(error))
+            ToolTip.SetTip(editor.Reconnect, error);
+    }
+
+    private void EndpointSelector_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        => ShowSelectedEditor(_editors.FirstOrDefault(editor => ReferenceEquals(editor.SelectorItem, EndpointSelector.SelectedItem)));
+
+    private void ShowSelectedEditor(RunServerEditor? editor)
+    {
+        foreach (var currentEditor in _editors)
+        {
+            DetachFromParent(currentEditor.Name);
+            DetachFromParent(currentEditor.Address);
+            DetachFromParent(currentEditor.Port);
+            DetachFromParent(currentEditor.Status);
+            DetachFromParent(currentEditor.Reconnect);
+            DetachFromParent(currentEditor.Remove);
+        }
+        EndpointDetailsPanel.Children.Clear();
+        if (editor is null)
+            return;
+
+        EndpointDetailsPanel.Children.Add(new TextBlock
+        {
+            Text = "RunServer details",
+            FontSize = 14,
+            FontWeight = FontWeight.SemiBold
+        });
+        EndpointDetailsPanel.Children.Add(CreateField("Name", editor.Name));
+        EndpointDetailsPanel.Children.Add(CreateField("Address", editor.Address));
+        EndpointDetailsPanel.Children.Add(CreateField("Port", editor.Port));
+        EndpointDetailsPanel.Children.Add(CreateField("Status", editor.Status));
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 8, 0, 0) };
+        actions.Children.Add(editor.Reconnect);
+        actions.Children.Add(editor.Remove);
+        EndpointDetailsPanel.Children.Add(actions);
+    }
+
+    private static void DetachFromParent(Control control)
+    {
+        if (control.Parent is Panel panel)
+            panel.Children.Remove(control);
+    }
+
+    private static Grid CreateField(string label, Control control)
+    {
+        Grid.SetColumn(control, 1);
+        return new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("100,*"),
+            ColumnSpacing = 12,
+            Children =
+            {
+                new TextBlock { Text = label, FontWeight = FontWeight.SemiBold, Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center },
+                control
+            }
+        };
+    }
+
+    private void Window_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (sender == this && e.Handled == false && e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            Close();
+        }
+    }
+
+    private void Save_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var endpoints = new List<RunServerEndpoint>();
+            foreach (var editor in _editors)
+            {
+                if (string.IsNullOrWhiteSpace(editor.Address.Text) ||
+                    !int.TryParse(editor.Port.Text, out var port) ||
+                    port < (editor.Endpoint.IsLocal ? 0 : 1) || port > 65535)
+                    throw new InvalidOperationException("Each RunServer must have a valid address and port.");
+
+                var endpoint = editor.Endpoint.Clone();
+                endpoint.Name = string.IsNullOrWhiteSpace(editor.Name.Text) ? "RunServer" : editor.Name.Text.Trim();
+                endpoint.Address = editor.Address.Text.Trim();
+                endpoint.Port = port;
+                if (endpoints.Any(existing => string.Equals(existing.Address, endpoint.Address, StringComparison.OrdinalIgnoreCase) && existing.Port == endpoint.Port))
+                    throw new InvalidOperationException("RunServer addresses and ports must be unique.");
+                endpoints.Add(endpoint);
+            }
+
+            if (!endpoints.Any(endpoint => endpoint.IsLocal))
+                throw new InvalidOperationException("The local RunServer cannot be removed.");
+
+            Properties.Settings.Default.RunServers = endpoints;
+            Properties.Settings.Default.Save();
+            RunServersSaved?.Invoke();
+            Close();
+        }
+        catch (InvalidOperationException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Unable to save RunServer settings: {ex.Message}");
+        }
+    }
+
+    private void Cancel_Click(object? sender, RoutedEventArgs e)
+        => Close();
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_runController is not null)
+            _runController.RunServerStateChanged -= OnRunServerStateChanged;
+        base.OnClosed(e);
+    }
+}

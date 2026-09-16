@@ -62,6 +62,7 @@ public partial class MainWindow : Window
     private bool _allowDocumentClose;
     private bool _documentCloseInProgress;
     private SettingsWindow? _settingsWindow;
+    private RunServersWindow? _runServersWindow;
     private readonly HttpClient _aiHttpClient = new();
     private readonly AiProviderRegistry _aiProviders = new();
 
@@ -465,6 +466,20 @@ public partial class MainWindow : Window
         else
         {
             _settingsWindow.Activate();
+        }
+    }
+
+    private void ShowRunServersWindow()
+    {
+        var settingsOwner = _settingsWindow;
+        if (settingsOwner is null)
+            return;
+
+        if (_runServersWindow is null || !_runServersWindow.IsVisible)
+        {
+            _runServersWindow = new RunServersWindow(_runController);
+            _runServersWindow.RunServersSaved += () => _runController?.RefreshConfiguredRunServers();
+            _runServersWindow.ShowDialog(settingsOwner).GetAwaiter().GetResult();
         }
     }
 
