@@ -31,6 +31,7 @@ using Dock.Model.Core;
 using ActiveDockableChangedEventArgs = Dock.Model.Core.Events.ActiveDockableChangedEventArgs;
 using DockableClosedEventArgs = Dock.Model.Core.Events.DockableClosedEventArgs;
 using DockableClosingEventArgs = Dock.Model.Core.Events.DockableClosingEventArgs;
+using DockableRemovedEventArgs = Dock.Model.Core.Events.DockableRemovedEventArgs;
 using DockWindowClosingEventArgs = Dock.Model.Core.Events.WindowClosingEventArgs;
 using System;
 using System.Collections.Generic;
@@ -106,6 +107,7 @@ public partial class MainWindow : Window
             ?? throw new InvalidOperationException("DockControl factory was not initialized.");
         _factory.DockableClosing += OnDockableClosing;
         _factory.DockableClosed += OnDockableClosed;
+        _factory.DockableRemoved += OnDockableRemoved;
         _factory.WindowClosing += OnFloatingWindowClosing;
         _factory.ActiveDockableChanged += OnActiveDockableChanged;
 
@@ -134,17 +136,28 @@ public partial class MainWindow : Window
         if (e.Dockable is not IDocument document || document.Context is not object context)
             return;
 
+        RemoveClosedDocument(context);
+    }
+
+    private void OnDockableRemoved(object? sender, DockableRemovedEventArgs e)
+    {
+        if (e.Dockable is not IDocument document || document.Context is not object context)
+            return;
+
         Dispatcher.UIThread.Post(() =>
         {
-            if (IsDocumentInLayout(document))
-                return;
-
-            if (Documents.Contains(context))
-            {
-                Documents.Remove(context);
-                CloseEmptyFloatingWindows();
-            }
+            if (!IsDocumentInLayout(document))
+                RemoveClosedDocument(context);
         }, DispatcherPriority.Background);
+    }
+
+    private void RemoveClosedDocument(object context)
+    {
+        if (Documents.Contains(context))
+        {
+            Documents.Remove(context);
+            CloseEmptyFloatingWindows();
+        }
     }
 
     private bool IsDocumentInLayout(IDocument document)
@@ -228,19 +241,49 @@ public partial class MainWindow : Window
         }
     }
 
-    private static IEnumerable<ModelSystemEditorViewModel> GetDirtyEditors(IDockable dockable)
+    private IEnumerable<ModelSystemEditorViewModel> GetDirtyEditors(IDockable dockable)
     {
-        var documents = dockable is IDocument document
+        var closingDocuments = dockable is IDocument document
             ? new[] { document }
             : dockable is IDock dock
                 ? EnumerateDocuments(dock)
                 : Enumerable.Empty<IDocument>();
 
-        return documents
+        var closingDocumentSet = closingDocuments.ToHashSet();
+        return closingDocumentSet
             .Select(document => document.Context)
             .OfType<ModelSystemEditorViewModel>()
             .Where(editor => editor.IsDirty)
+            .Where(editor => IsOnlyOpenEditorForModelSystem(editor, closingDocumentSet))
             .Distinct();
+    }
+
+    private bool IsOnlyOpenEditorForModelSystem(
+        ModelSystemEditorViewModel editor,
+        HashSet<IDocument> closingDocuments)
+    {
+        return !EnumerateOpenDocuments()
+            .Any(document => !closingDocuments.Contains(document)
+                && document.Context is ModelSystemEditorViewModel other
+                && other.ModelSystemHeader == editor.ModelSystemHeader);
+    }
+
+    private IEnumerable<IDocument> EnumerateOpenDocuments()
+    {
+        if (DockControl.Layout is not IRootDock root)
+            yield break;
+
+        foreach (var document in EnumerateDocuments(root))
+            yield return document;
+
+        foreach (var window in root.Windows ?? Enumerable.Empty<IDockWindow>())
+        {
+            if (window.Layout is null)
+                continue;
+
+            foreach (var document in EnumerateDocuments(window.Layout))
+                yield return document;
+        }
     }
 
     /// <summary>
@@ -316,31 +359,11 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Opens a new tab for the given model system editing session.
-    /// If a tab for the same <see cref="ModelSystemHeader"/> is already open it is
-    /// activated instead and <paramref name="session"/> is disposed.
     /// </summary>
     /// <param name="session">The model system editing session to open.</param>
     /// <param name="user">The user who opened the session (forwarded to the editor VM).</param>
     public void OpenModelSystemTab(ModelSystemSession session, User user)
     {
-        // Reuse an existing tab for the same model system, if any.
-        var existing = Documents
-            .OfType<ModelSystemEditorViewModel>()
-            .FirstOrDefault(vm => vm.ModelSystemHeader == session.ModelSystemHeader);
-
-        if (existing is not null)
-        {
-            if (ActivateDocument(existing))
-            {
-                // Dispose the caller's session; the open tab already owns one.
-                session.Dispose();
-                return;
-            }
-
-            // Dock no longer has a container for this source item.
-            Documents.Remove(existing);
-        }
-
         var editor = CreateEditorViewModel(session, user);
         editor.RunStarted = SwitchToRunsDocument;
         Documents.Add(editor);
@@ -348,27 +371,10 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Opens a new (or focuses an existing) model-system editor tab and returns its VM.
-    /// If a tab for the same model system already exists, the caller's
-    /// <paramref name="session"/> is disposed and the existing tab is focused.
+    /// Opens a new model-system editor tab and returns its VM.
     /// </summary>
     public ModelSystemEditorViewModel OpenModelSystemTabAndGet(ModelSystemSession session, User user)
     {
-        var existing = Documents
-            .OfType<ModelSystemEditorViewModel>()
-            .FirstOrDefault(vm => vm.ModelSystemHeader == session.ModelSystemHeader);
-
-        if (existing is not null)
-        {
-            if (ActivateDocument(existing))
-            {
-                session.Dispose();
-                return existing;
-            }
-
-            Documents.Remove(existing);
-        }
-
         var editor = CreateEditorViewModel(session, user);
         editor.RunStarted = SwitchToRunsDocument;
         Documents.Add(editor);
@@ -518,7 +524,23 @@ public partial class MainWindow : Window
 
         var dirtyEditors = GetDirtyEditors(closingDockable).ToList();
         if (dirtyEditors.Count == 0)
+        {
+            if (closingDockable is IDocument { Context: object context }
+                && Documents.Contains(context))
+            {
+                _allowDocumentClose = true;
+                try
+                {
+                    Documents.Remove(context);
+                }
+                finally
+                {
+                    _allowDocumentClose = false;
+                }
+            }
+
             return;
+        }
 
         e.Cancel = true;
         foreach (var editor in dirtyEditors)
@@ -570,7 +592,12 @@ public partial class MainWindow : Window
         _closeCheckInProgress = true;
         try
         {
-            foreach (var editor in Documents.OfType<ModelSystemEditorViewModel>().Where(vm => vm.IsDirty).ToList())
+            foreach (var editor in Documents
+                .OfType<ModelSystemEditorViewModel>()
+                .Where(vm => vm.IsDirty)
+                .GroupBy(vm => vm.Session)
+                .Select(group => group.First())
+                .ToList())
             {
                 FocusEditorTab(editor);
                 var dialog = new SaveChangesDialog(

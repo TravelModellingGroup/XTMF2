@@ -55,6 +55,13 @@ namespace XTMF2.Editing
         public Project Project => _session.Project;
 
         private readonly CommandBuffer Buffer = new CommandBuffer();
+        private long _savedChangeCount;
+
+        /// <summary>
+        /// Gets whether the shared model system has changes since its last successful save.
+        /// This state belongs to the session because multiple editor views can share it.
+        /// </summary>
+        public bool IsDirty => ChangeCount != _savedChangeCount;
 
         /// <summary>
         /// Starts collecting all subsequent undoable operations into a single batch entry
@@ -517,7 +524,11 @@ namespace XTMF2.Editing
         private void OnBufferPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName is nameof(CanUndo) or nameof(CanRedo) or nameof(ChangeCount))
+            {
                 PropertyChanged?.Invoke(this, e);
+                if (e.PropertyName == nameof(ChangeCount))
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDirty)));
+            }
         }
 
         public void Dispose()
@@ -3829,7 +3840,9 @@ namespace XTMF2.Editing
                     error = new CommandError(errorString ?? "No error message given when failing to save the model system!");
                     return false;
                 }
+                _savedChangeCount = ChangeCount;
                 error = null;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDirty)));
                 return true;
             }
         }
