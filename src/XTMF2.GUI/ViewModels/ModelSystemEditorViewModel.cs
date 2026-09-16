@@ -598,18 +598,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     private bool _showGhostCorrespondenceLines = true;
 
     // ── Undo / Redo state ─────────────────────────────────────────────────
-    /// <summary>True when there is at least one undoable command.</summary>
-    [ObservableProperty]
-    private bool _canUndo;
+    /// <summary>True when there is at least one undoable command in the session buffer.</summary>
+    public bool CanUndo => Session.CanUndo;
 
-    /// <summary>True when there is at least one redoable command.</summary>
-    [ObservableProperty]
-    private bool _canRedo;
-
-    private long _savedChangeCount;
+    /// <summary>True when there is at least one redoable command in the session buffer.</summary>
+    public bool CanRedo => Session.CanRedo;
 
     /// <summary>True when the model system changed since its last successful save.</summary>
-    public bool IsDirty => Session.ChangeCount != _savedChangeCount;
+    public bool IsDirty => Session.IsDirty;
 
     // Unsubscribe from the outgoing element before the field changes.
     partial void OnSelectedElementChanging(ICanvasElement? value)
@@ -859,10 +855,6 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.CalibrationGroups)
             .CollectionChanged += OnCalibrationGroupsChanged;
 
-        // Mirror CanUndo/CanRedo from the session reactively.
-        _canUndo = Session.CanUndo;
-        _canRedo = Session.CanRedo;
-        _savedChangeCount = Session.ChangeCount;
         ((System.ComponentModel.INotifyPropertyChanged)Session).PropertyChanged += OnSessionPropertyChanged;
 
         // Keep SearchItems in sync with the canvas collections.
@@ -882,9 +874,16 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     private void OnSessionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(Session.CanUndo))      CanUndo = Session.CanUndo;
-        else if (e.PropertyName == nameof(Session.CanRedo)) CanRedo = Session.CanRedo;
+        if (e.PropertyName == nameof(Session.CanUndo))
+            OnPropertyChanged(nameof(CanUndo));
+        else if (e.PropertyName == nameof(Session.CanRedo))
+            OnPropertyChanged(nameof(CanRedo));
         else if (e.PropertyName == nameof(Session.ChangeCount))
+        {
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(Title));
+        }
+        else if (e.PropertyName == nameof(Session.IsDirty))
         {
             OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(Title));
@@ -3580,9 +3579,6 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         await Task.Yield();
         if (Session.Save(out var error))
         {
-            _savedChangeCount = Session.ChangeCount;
-            OnPropertyChanged(nameof(IsDirty));
-            OnPropertyChanged(nameof(Title));
             ShowToast(Strings.ModelSystemEditor_ToastSaved);
             return true;
         }

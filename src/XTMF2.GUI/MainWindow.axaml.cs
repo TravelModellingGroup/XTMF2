@@ -16,7 +16,6 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
-using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Input;
@@ -29,7 +28,11 @@ using Dock.Model.Avalonia;
 using Dock.Model.Avalonia.Controls;
 using Dock.Model.Controls;
 using Dock.Model.Core;
+using ActiveDockableChangedEventArgs = Dock.Model.Core.Events.ActiveDockableChangedEventArgs;
+using DockableClosedEventArgs = Dock.Model.Core.Events.DockableClosedEventArgs;
 using DockableClosingEventArgs = Dock.Model.Core.Events.DockableClosingEventArgs;
+using DockableRemovedEventArgs = Dock.Model.Core.Events.DockableRemovedEventArgs;
+using DockWindowClosingEventArgs = Dock.Model.Core.Events.WindowClosingEventArgs;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -93,126 +96,194 @@ public partial class MainWindow : Window
         UpdateLoadingState();
     }
 
-    private DocumentDock? _documentDock;
-    /// <summary>Guard to prevent circular syncing between Documents and VisibleDockables.</summary>
-    private bool _suppressDocumentsSync;
+    private Factory? _factory;
+    private IDockable? _activeDockable;
     /// <summary>The <see cref="ModelSystemEditorViewModel"/> in the currently active dock tab, or null.</summary>
     private ModelSystemEditorViewModel? _activeEditorVm;
 
     private void InitializeDock()
     {
-        var factory = new Factory();
-        factory.DockableClosing += OnDockableClosing;
-        _documentDock = new DocumentDock
-        {
-            Id = "DocumentDock",
-            CanCreateDocument = false,
-            VisibleDockables = new AvaloniaList<IDockable>()
-        };
-        var rootDock = new RootDock
-        {
-            Id = "Root",
-            IsCollapsable = false,
-            ActiveDockable = _documentDock,
-            DefaultDockable = _documentDock,
-            VisibleDockables = new AvaloniaList<IDockable> { _documentDock }
-        };
-        factory.InitLayout(rootDock);
-        DockControl.Layout = rootDock;
-        DockControl.Factory = factory;
+        _factory = DockControl.Factory as Factory
+            ?? throw new InvalidOperationException("DockControl factory was not initialized.");
+        _factory.DockableClosing += OnDockableClosing;
+        _factory.DockableClosed += OnDockableClosed;
+        _factory.DockableRemoved += OnDockableRemoved;
+        _factory.WindowClosing += OnFloatingWindowClosing;
+        _factory.ActiveDockableChanged += OnActiveDockableChanged;
 
-        // Sync Documents collection changes to VisibleDockables
-        Documents.CollectionChanged += OnDocumentsChanged;
+        var documentDock = DockControl.Layout?.VisibleDockables
+            ?.OfType<DocumentDock>()
+            .FirstOrDefault()
+            ?? throw new InvalidOperationException("Document dock was not initialized.");
 
-        // Reverse-sync: when the dock itself closes a tab, remove it from Documents
-        if (_documentDock.VisibleDockables is INotifyCollectionChanged notifyDockables)
-            notifyDockables.CollectionChanged += OnVisibleDockablesChanged;
+        // The source collection owns view models; Dock owns generated containers.
+        Documents.CollectionChanged += OnDocumentsSourceChanged;
 
-        // Track which tab is active so Undo/Redo can delegate to the right editor.
-        ((INotifyPropertyChanged)_documentDock).PropertyChanged += OnDocumentDockPropertyChanged;
+        // Track activation at the factory level so floating windows participate too.
     }
 
-    private void OnDocumentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void OnDocumentsSourceChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (_documentDock is null) return;
-        _documentDock.VisibleDockables ??= new AvaloniaList<IDockable>();
-
-        _suppressDocumentsSync = true;
-        try
-        {
-            if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems is not null)
-            {
-                foreach (var item in e.NewItems)
-                {
-                    var doc = CreateDocumentForViewModel(item);
-                    _documentDock.VisibleDockables.Add(doc);
-                    _documentDock.ActiveDockable = doc;
-                }
-            }
-            else if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems is not null)
-            {
-                foreach (var item in e.OldItems)
-                {
-                    var doc = _documentDock.VisibleDockables
-                        .OfType<Document>()
-                        .FirstOrDefault(d => d.Context == item);
-                    if (doc is not null)
-                        _documentDock.VisibleDockables.Remove(doc);
-                    (item as IDisposable)?.Dispose();
-                }
-            }
-            else if (e.Action == NotifyCollectionChangedAction.Reset)
-            {
-                _documentDock.VisibleDockables.Clear();
-            }
-        }
-        finally
-        {
-            _suppressDocumentsSync = false;
-        }
-    }
-
-    private void OnVisibleDockablesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (_suppressDocumentsSync) return;
         if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems is not null)
         {
-            foreach (var item in e.OldItems.OfType<Document>())
+            foreach (var item in e.OldItems)
+                (item as IDisposable)?.Dispose();
+        }
+    }
+
+    private void OnDockableClosed(object? sender, DockableClosedEventArgs e)
+    {
+        if (e.Dockable is not IDocument document || document.Context is not object context)
+            return;
+
+        RemoveClosedDocument(context);
+    }
+
+    private void OnDockableRemoved(object? sender, DockableRemovedEventArgs e)
+    {
+        if (e.Dockable is not IDocument document || document.Context is not object context)
+            return;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!IsDocumentInLayout(document))
+                RemoveClosedDocument(context);
+        }, DispatcherPriority.Background);
+    }
+
+    private void RemoveClosedDocument(object context)
+    {
+        if (Documents.Contains(context))
+        {
+            Documents.Remove(context);
+            CloseEmptyFloatingWindows();
+        }
+    }
+
+    private bool IsDocumentInLayout(IDocument document)
+    {
+        if (DockControl.Layout is not IRootDock root)
+            return false;
+
+        if (ContainsDocument(root, document))
+            return true;
+
+        foreach (var window in root.Windows ?? Enumerable.Empty<IDockWindow>())
+        {
+            if (window.Layout is not null && ContainsDocument(window.Layout, document))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsDocument(IDock dock, IDocument document)
+    {
+        foreach (var dockable in dock.VisibleDockables ?? Enumerable.Empty<IDockable>())
+        {
+            if (ReferenceEquals(dockable, document))
+                return true;
+
+            if (dockable is IDock childDock && ContainsDocument(childDock, document))
+                return true;
+        }
+
+        return false;
+    }
+
+    private void CloseEmptyFloatingWindows()
+    {
+        if (DockControl.Layout is not IRootDock root)
+            return;
+
+        foreach (var window in (root.Windows ?? Enumerable.Empty<IDockWindow>()).ToList())
+        {
+            if (window.Layout is not null && !EnumerateDocuments(window.Layout).Any())
+                window.OnClose();
+        }
+    }
+
+    private async void OnFloatingWindowClosing(object? sender, DockWindowClosingEventArgs e)
+    {
+        if (e.Window?.Layout is not { } layout)
+            return;
+
+        var dirtyEditors = GetDirtyEditors(layout).ToList();
+
+        if (dirtyEditors.Count == 0)
+            return;
+
+        e.Cancel = true;
+        foreach (var editor in dirtyEditors)
+        {
+            await PromptToCloseEditorAsync(editor);
+            if (Documents.Contains(editor))
+                return;
+        }
+
+        // The original close event was canceled while the dialog was open.
+        // Clear that cancellation so Dock can finish closing this same window.
+        e.Cancel = false;
+    }
+
+    private static IEnumerable<IDocument> EnumerateDocuments(IDock? dock)
+    {
+        foreach (var dockable in dock?.VisibleDockables ?? Enumerable.Empty<IDockable>())
+        {
+            if (dockable is IDocument document)
+                yield return document;
+
+            if (dockable is IDock childDock)
             {
-                var vm = Documents.FirstOrDefault(d => ReferenceEquals(d, item.Context));
-                if (vm is not null)
-                    Documents.Remove(vm);
+                foreach (var childDocument in EnumerateDocuments(childDock))
+                    yield return childDocument;
             }
         }
     }
 
-    private static Document CreateDocumentForViewModel(object viewModel)
+    private IEnumerable<ModelSystemEditorViewModel> GetDirtyEditors(IDockable dockable)
     {
-        // Resolve Title and CanClose via duck-typing on the view model
-        var title = (viewModel as dynamic)?.Title as string ?? viewModel.ToString() ?? "Document";
-        var canClose = (viewModel as dynamic)?.CanClose is bool b ? b : true;
+        var closingDocuments = dockable is IDocument document
+            ? new[] { document }
+            : dockable is IDock dock
+                ? EnumerateDocuments(dock)
+                : Enumerable.Empty<IDocument>();
 
-        var doc = new Document
-        {
-            Id = Guid.NewGuid().ToString(),
-            Title = title,
-            CanClose = canClose,
-            Context = viewModel,
-            Content = new Func<IServiceProvider, object>(_ =>
-                new ContentControl { Content = viewModel })
-        };
+        var closingDocumentSet = closingDocuments.ToHashSet();
+        return closingDocumentSet
+            .Select(document => document.Context)
+            .OfType<ModelSystemEditorViewModel>()
+            .Where(editor => editor.IsDirty)
+            .Where(editor => IsOnlyOpenEditorForModelSystem(editor, closingDocumentSet))
+            .Distinct();
+    }
 
-        // Keep the tab header in sync when the VM's Title property changes.
-        if (viewModel is System.ComponentModel.INotifyPropertyChanged inpc)
+    private bool IsOnlyOpenEditorForModelSystem(
+        ModelSystemEditorViewModel editor,
+        HashSet<IDocument> closingDocuments)
+    {
+        return !EnumerateOpenDocuments()
+            .Any(document => !closingDocuments.Contains(document)
+                && document.Context is ModelSystemEditorViewModel other
+                && other.ModelSystemHeader == editor.ModelSystemHeader);
+    }
+
+    private IEnumerable<IDocument> EnumerateOpenDocuments()
+    {
+        if (DockControl.Layout is not IRootDock root)
+            yield break;
+
+        foreach (var document in EnumerateDocuments(root))
+            yield return document;
+
+        foreach (var window in root.Windows ?? Enumerable.Empty<IDockWindow>())
         {
-            inpc.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(doc.Title))
-                    doc.Title = (viewModel as dynamic)?.Title as string ?? doc.Title;
-            };
+            if (window.Layout is null)
+                continue;
+
+            foreach (var document in EnumerateDocuments(window.Layout))
+                yield return document;
         }
-
-        return doc;
     }
 
     /// <summary>
@@ -262,95 +333,52 @@ public partial class MainWindow : Window
 
         if (existing is not null)
         {
-            // Find the corresponding document in the dock and activate it
-            var (dock, doc) = GetViewAndDocFromModel(DockControl.Layout!, existing);
-            if (doc is not null)
-            {
-                // Activate the document
-                dock?.ActiveDockable = doc;
-            }
-            return;
+            if (ActivateDocument(existing))
+                return;
+
+            Documents.Remove(existing);
         }
         // No existing tab, create a new one
-        Documents.Add(new ModelSystemsViewModel(_runtime, _currentUser!, project, this));
+        var modelSystems = new ModelSystemsViewModel(_runtime, _currentUser!, project, this);
+        Documents.Add(modelSystems);
+        ActivateDocument(modelSystems);
     }
 
-    /// <summary>
-    /// Finds a document within a dock hierarchy that matches the given view model.
-    /// </summary>
-    /// <param name="dock">The dock to search within.</param>
-    /// <param name="viewModel">The view model to match.</param>
-    /// <returns>A tuple containing the dock and document if found; otherwise, (null, null).</returns>
-    private static (IDock? Dock, IDocument? document) GetViewAndDocFromModel(IDock dock, object viewModel)
+    private bool ActivateDocument(object viewModel)
     {
-        // TODO: Consider moving this into a utility class.
-        foreach (var d in dock.VisibleDockables ?? Enumerable.Empty<IDockable>())
+        if (_factory?.GetContainerFromItem(viewModel) is IDocument document
+            && document.Owner is IDock dock)
         {
-            if (d is IDocument doc && doc.Context == viewModel)
-                return (dock, doc);
-
-            if (d is IDock childDock)
-            {
-                var result = GetViewAndDocFromModel(childDock, viewModel);
-                if (result != (null, null))
-                    return result;
-            }
+            dock.ActiveDockable = document;
+            return true;
         }
 
-        return (null, null);
+        return false;
     }
 
 
     /// <summary>
     /// Opens a new tab for the given model system editing session.
-    /// If a tab for the same <see cref="ModelSystemHeader"/> is already open it is
-    /// activated instead and <paramref name="session"/> is disposed.
     /// </summary>
     /// <param name="session">The model system editing session to open.</param>
     /// <param name="user">The user who opened the session (forwarded to the editor VM).</param>
     public void OpenModelSystemTab(ModelSystemSession session, User user)
     {
-        // Reuse an existing tab for the same model system, if any.
-        var existing = Documents
-            .OfType<ModelSystemEditorViewModel>()
-            .FirstOrDefault(vm => vm.ModelSystemHeader == session.ModelSystemHeader);
-
-        if (existing is not null)
-        {
-            // Dispose the caller's session; the open tab already owns one.
-            session.Dispose();
-            var (dock, doc) = GetViewAndDocFromModel(DockControl.Layout!, existing);
-            if (doc is not null)
-                dock!.ActiveDockable = doc;
-            return;
-        }
-
         var editor = CreateEditorViewModel(session, user);
         editor.RunStarted = SwitchToRunsDocument;
         Documents.Add(editor);
+        ActivateDocument(editor);
     }
 
     /// <summary>
-    /// Opens a new (or focuses an existing) model-system editor tab and returns its VM.
-    /// If a tab for the same model system already exists, the caller's
-    /// <paramref name="session"/> is disposed and the existing tab is focused.
+    /// Opens a new model-system editor tab and returns its VM.
     /// </summary>
     public ModelSystemEditorViewModel OpenModelSystemTabAndGet(ModelSystemSession session, User user)
     {
-        var existing = Documents
-            .OfType<ModelSystemEditorViewModel>()
-            .FirstOrDefault(vm => vm.ModelSystemHeader == session.ModelSystemHeader);
-
-        if (existing is not null)
-        {
-            session.Dispose();
-            FocusEditorTab(existing);
-            return existing;
-        }
-
         var editor = CreateEditorViewModel(session, user);
         editor.RunStarted = SwitchToRunsDocument;
         Documents.Add(editor);
+        ActivateDocument(editor);
         return editor;
     }
 
@@ -374,9 +402,7 @@ public partial class MainWindow : Window
     /// </summary>
     public void FocusEditorTab(ModelSystemEditorViewModel editorVm)
     {
-        var (dock, doc) = GetViewAndDocFromModel(DockControl.Layout!, editorVm);
-        if (doc is not null)
-            dock!.ActiveDockable = doc;
+        ActivateDocument(editorVm);
     }
 
     /// <summary>
@@ -385,9 +411,7 @@ public partial class MainWindow : Window
     private void SwitchToRunsDocument()
     {
         if (_runController is null) return;
-        var (dock, doc) = GetViewAndDocFromModel(DockControl.Layout!, _runController.RunsViewModel);
-        if (doc is not null)
-            dock!.ActiveDockable = doc;
+        ActivateDocument(_runController.RunsViewModel);
     }
 
     /// <summary>
@@ -408,6 +432,7 @@ public partial class MainWindow : Window
         var vm = new ModelSystemDiffViewModel(diffFactory, leftHeader, rightHeader);
         vm.OpenOrFocusEditorCallback = openOrFocusEditor;
         Documents.Add(vm);
+        ActivateDocument(vm);
     }
 
     /// <summary>
@@ -444,12 +469,11 @@ public partial class MainWindow : Window
         aboutDialog.ShowDialog(this);
     }
 
-    /// <summary>Updates the active editor when the dock's active document changes.</summary>
-    private void OnDocumentDockPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    /// <summary>Updates the active editor when any dock, including a floating dock, activates a document.</summary>
+    private void OnActiveDockableChanged(object? sender, ActiveDockableChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(IDock.ActiveDockable)) return;
-
-        var newVm = (_documentDock?.ActiveDockable as IDocument)?.Context as ModelSystemEditorViewModel;
+        _activeDockable = e.Dockable;
+        var newVm = (e.Dockable as IDocument)?.Context as ModelSystemEditorViewModel;
         if (ReferenceEquals(_activeEditorVm, newVm)) return;
 
         if (_activeEditorVm is INotifyPropertyChanged oldNpc)
@@ -492,14 +516,39 @@ public partial class MainWindow : Window
 
     private async void OnDockableClosing(object? sender, DockableClosingEventArgs e)
     {
-        if (_allowDocumentClose
-            || e.Dockable is not IDocument document
-            || document.Context is not ModelSystemEditorViewModel editor
-            || !editor.IsDirty)
+        if (_allowDocumentClose)
             return;
 
+        if (e.Dockable is not { } closingDockable)
+            return;
+
+        var dirtyEditors = GetDirtyEditors(closingDockable).ToList();
+        if (dirtyEditors.Count == 0)
+        {
+            if (closingDockable is IDocument { Context: object context }
+                && Documents.Contains(context))
+            {
+                _allowDocumentClose = true;
+                try
+                {
+                    Documents.Remove(context);
+                }
+                finally
+                {
+                    _allowDocumentClose = false;
+                }
+            }
+
+            return;
+        }
+
         e.Cancel = true;
-        await PromptToCloseEditorAsync(editor);
+        foreach (var editor in dirtyEditors)
+        {
+            await PromptToCloseEditorAsync(editor);
+            if (Documents.Contains(editor))
+                return;
+        }
     }
 
     private async Task PromptToCloseEditorAsync(ModelSystemEditorViewModel editor)
@@ -543,7 +592,12 @@ public partial class MainWindow : Window
         _closeCheckInProgress = true;
         try
         {
-            foreach (var editor in Documents.OfType<ModelSystemEditorViewModel>().Where(vm => vm.IsDirty).ToList())
+            foreach (var editor in Documents
+                .OfType<ModelSystemEditorViewModel>()
+                .Where(vm => vm.IsDirty)
+                .GroupBy(vm => vm.Session)
+                .Select(group => group.First())
+                .ToList())
             {
                 FocusEditorTab(editor);
                 var dialog = new SaveChangesDialog(
@@ -626,7 +680,7 @@ public partial class MainWindow : Window
     private void CloseCurrentDocument()
     {
         // Find the currently active document and remove it from the collection, which will close the tab.
-        if (_documentDock?.ActiveDockable is IDocument activeDoc
+        if (_activeDockable is IDocument activeDoc
             && activeDoc.CanClose
             && activeDoc.Context is object context)
         {
@@ -636,15 +690,6 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (DockControl.Layout is IDock currentDock
-                && currentDock.CanGoBack)
-            {
-                var goBackCommand = currentDock.GoBack;
-                if(goBackCommand.CanExecute(currentDock))
-                {
-                    goBackCommand.Execute(currentDock);
-                }
-            }
             // Now that we tried to move back, we can remove the active document.
             Documents.Remove(context);
         }

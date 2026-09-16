@@ -2,10 +2,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:local="using:XTMF2.GUI"
+        xmlns:dockmodel="using:Dock.Model.Avalonia"
+        xmlns:dock="using:Dock.Model.Avalonia.Controls"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:res="clr-namespace:XTMF2.GUI.Resources"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="XTMF2.GUI.MainWindow"
+        x:Name="RootWindow"
         x:DataType="local:MainWindow"
         Title="{res:Localize MainWindow_Title}"
         Icon="avares://XTMF2.GUI/Resources/XTMF_icon.png"
@@ -43,8 +46,28 @@
             </MenuItem>
         </Menu>
         
-        <!-- DockControl - layout initialized in code-behind -->
-        <DockControl x:Name="DockControl" Grid.Row="1" />
+        <DockControl x:Name="DockControl"
+                     Grid.Row="1"
+                     InitializeFactory="True"
+                     InitializeLayout="True">
+            <DockControl.Factory>
+                <dockmodel:Factory />
+            </DockControl.Factory>
+            <dock:RootDock Id="Root" IsCollapsable="False">
+                <dock:DocumentDock Id="DocumentDock"
+                                   CanCreateDocument="False"
+                                   CanUpdateItemsSourceOnUnregister="False"
+                                   ItemsSource="{Binding #RootWindow.((local:MainWindow)DataContext).Documents}">
+                    <dock:DocumentDock.DocumentTemplate>
+                        <dock:DocumentTemplate>
+                            <ContentControl x:DataType="dock:Document"
+                                            Background="{DynamicResource DlgBg}"
+                                            Content="{Binding Context}" />
+                        </dock:DocumentTemplate>
+                    </dock:DocumentDock.DocumentTemplate>
+                </dock:DocumentDock>
+            </dock:RootDock>
+        </DockControl>
         
         <!-- Loading Overlay -->
         <Border x:Name="LoadingPanel"

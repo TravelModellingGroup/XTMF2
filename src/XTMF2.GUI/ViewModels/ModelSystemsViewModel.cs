@@ -55,6 +55,9 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
     /// <summary>The currently logged-in user.</summary>
     public User CurrentUser => _user;
 
+    /// <summary>Gets the main window used to open dialogs and editor documents.</summary>
+    public Window? ParentWindow => _parentWindow;
+
     [ObservableProperty]
     private ModelSystemHeader? _selectedModelSystem;
 
