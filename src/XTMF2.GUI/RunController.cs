@@ -27,6 +27,7 @@ using XTMF2.Bus;
 using XTMF2.Editing;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Properties;
+using System.Linq;
 
 
 namespace XTMF2.GUI;
@@ -73,6 +74,7 @@ public class RunController : IDisposable
     /// If running in debug mode, the RunServerBus with be run within the same process as the GUI to make debugging easier.
     /// </summary>
     private RunServerBus? _runServerBus;
+    private readonly Process? _runServerProcess;
 
     /// <summary>
     /// Generate a new Run controller
@@ -131,30 +133,32 @@ public class RunController : IDisposable
         Process? client = null;
         try
         {
-            if (!XTMF2.Bus.CreateStreams.CreateNewTcpHost("127.0.0.1", 0, out var hostStream, out var hostPort, out error, boundPort =>
+            var startInfo = new ProcessStartInfo()
             {
-                // Client startup goes here
-                var startInfo = new ProcessStartInfo()
-                {
-                    FileName = "dotnet",
-                    Arguments = $"\"{xtmfClientFileName}\" -tcp 127.0.0.1 {boundPort}",
-                    UseShellExecute = false,
-                    CreateNoWindow = OperatingSystem.IsWindows(),
-                    WorkingDirectory = Environment.CurrentDirectory
-                };
-                client = new()
-                {
-                    StartInfo = startInfo,
-                    EnableRaisingEvents = true
-                };
-                client.Start();
-            }))
+                FileName = "dotnet",
+                Arguments = $"\"{xtmfClientFileName}\" -tcp 127.0.0.1 0",
+                UseShellExecute = false,
+                CreateNoWindow = OperatingSystem.IsWindows(),
+                WorkingDirectory = Environment.CurrentDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            client = new() { StartInfo = startInfo, EnableRaisingEvents = true };
+            client.Start();
+            var listenLine = client.StandardOutput.ReadLine();
+            if (!TryParseListeningPort(listenLine, out var hostPort))
+            {
+                error = "The local RunServer did not report a listening TCP port.";
+                controller = null;
+                return false;
+            }
+            if (!XTMF2.Bus.CreateStreams.CreateTcpClient("127.0.0.1", hostPort, out var hostStream, out error))
             {
                 controller = null;
                 return false;
             }
-            var hostBus = new HostBus(hostStream, true);
-            controller = new RunController(runtime, hostBus);
+            var hostBus = new HostBus(hostStream!, true);
+            controller = new RunController(runtime, hostBus, client);
             hostBus.ClientReportedStatus += controller.OnClientReportedStatus;
             hostBus.ClientFinishedModelSystem += controller.OnClientFinishedModelSystem;
             hostBus.ClientErrorWhenRunningModelSystem += controller.OnClientErrorWhenRunningModelSystem;
@@ -317,7 +321,13 @@ public class RunController : IDisposable
             _sessionsByRunId[id] = (msSession, user);
             _hostBusesByRunId[id] = hostBus;
         }
-        var vm = RunsViewModel.AddRun(id, runName, runDirectory, msSession, user);
+        var endpoint = Settings.Default.RunServers.FirstOrDefault(endpoint => endpoint.Id == endpointId);
+        var serverLabel = endpoint is null
+            ? endpointId
+            : endpoint.Port > 0
+                ? $"{endpoint.Name} ({endpoint.Address}:{endpoint.Port})"
+                : $"{endpoint.Name} ({endpoint.Address})";
+        var vm = RunsViewModel.AddRun(id, runName, runDirectory, serverLabel, msSession, user);
         if (runMode != RunMode.Normal)
         {
             // Extract parameter metadata so the progress dialog can show names/bounds.
@@ -328,10 +338,23 @@ public class RunController : IDisposable
         return true;
     }
 
-    private RunController(XTMFRuntime runtime, HostBus hostBus)
+    private static bool TryParseListeningPort(string? line, out int port)
+    {
+        port = 0;
+        const string prefix = "RunServer listening on ";
+        if (line is null || !line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var endpoint = line[prefix.Length..];
+        var separator = endpoint.LastIndexOf(':');
+        return separator >= 0 && int.TryParse(endpoint[(separator + 1)..], out port) && port is > 0 and <= 65535;
+    }
+
+    private RunController(XTMFRuntime runtime, HostBus hostBus, Process? runServerProcess = null)
     {
         Runtime = runtime;
         _hostBus = hostBus;
+        _runServerProcess = runServerProcess;
         _connections = new RunServerConnectionManager();
         _connections.AddConnection(RunServerEndpoint.CreateLocal(), hostBus, out _);
     }
@@ -395,5 +418,18 @@ public class RunController : IDisposable
         GC.SuppressFinalize(this);
         _runServerBus?.Dispose();
         _connections.Dispose();
+        if (_runServerProcess is { HasExited: false })
+        {
+            try
+            {
+                _runServerProcess.Kill(entireProcessTree: true);
+                _runServerProcess.WaitForExit(2000);
+            }
+            catch
+            {
+                // The process may have exited while the connection was closing.
+            }
+        }
+        _runServerProcess?.Dispose();
     }
 }

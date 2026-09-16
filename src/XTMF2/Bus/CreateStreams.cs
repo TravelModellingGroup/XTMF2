@@ -24,12 +24,59 @@ using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.Bus
 {
     public static class CreateStreams
     {
+        /// <summary>
+        /// Creates and starts a TCP listener. The address is a bind address; 0.0.0.0
+        /// listens on every IPv4 interface.
+        /// </summary>
+        public static bool CreateTcpListener(
+            string address,
+            int port,
+            out TcpListener? listener,
+            out int boundPort,
+            [NotNullWhen(false)] out string? error)
+        {
+            listener = null;
+            boundPort = 0;
+            error = null;
+
+            if (!IPAddress.TryParse(address, out var ipAddress))
+            {
+                error = $"The TCP bind address '{address}' is not a valid IP address.";
+                return false;
+            }
+
+            if (ipAddress.Equals(IPAddress.Any))
+                ipAddress = IPAddress.Any;
+
+            if (port is < 0 or > IPEndPoint.MaxPort)
+            {
+                error = $"The TCP port '{port}' is outside the valid range.";
+                return false;
+            }
+
+            try
+            {
+                listener = new TcpListener(ipAddress, port);
+                listener.Start();
+                boundPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+                return true;
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException)
+            {
+                listener?.Stop();
+                listener = null;
+                error = ex.Message;
+                return false;
+            }
+        }
+
         /// <summary>
         /// Creates a TCP listener, invokes <paramref name="createClient"/> with the bound
         /// port, and waits for one client connection. A port of zero requests an ephemeral
@@ -52,6 +99,11 @@ namespace XTMF2.Bus
             {
                 error = $"The TCP host address '{address}' is not a valid IP address.";
                 return false;
+            }
+
+            if (ipAddress.Equals(IPAddress.Parse("0.0.0.0")))
+            {
+                ipAddress = IPAddress.Any;
             }
 
             if (port is < 0 or > IPEndPoint.MaxPort)

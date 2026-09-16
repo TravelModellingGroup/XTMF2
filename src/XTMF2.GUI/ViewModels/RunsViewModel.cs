@@ -57,9 +57,10 @@ public sealed partial class RunsViewModel : ObservableObject
     /// <param name="runId">The ID assigned by the host bus.</param>
     /// <param name="runName">The human-readable run name.</param>
     /// <returns>The newly created <see cref="RunViewModel"/>.</returns>
-    internal RunViewModel AddRun(string runId, string runName, string runDirectory, ModelSystemSession session, User user)
+    internal RunViewModel AddRun(string runId, string runName, string runDirectory, string runServer,
+        ModelSystemSession session, User user)
     {
-        var vm = new RunViewModel(runId, runName, runDirectory, session, user);
+        var vm = new RunViewModel(runId, runName, runDirectory, runServer, session, user);
         Dispatcher.UIThread.Post(() =>
         {
             Runs.Add(vm);

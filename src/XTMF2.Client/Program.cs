@@ -22,6 +22,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Net.Sockets;
 using XTMF2.Bus;
 using XTMF2.Configuration;
 
@@ -71,20 +72,7 @@ namespace XTMF2.Client
                             Console.WriteLine("Expected a numeric TCP port after the -tcp address!");
                             return;
                         }
-                        Stream? tcpStream = null;
-                        try
-                        {
-                            if (!CreateStreams.CreateTcpClient(tcpAddress, tcpPort, out tcpStream, out error))
-                            {
-                                Console.WriteLine("Error creating TCP run client\r\n" + error);
-                                return;
-                            }
-                            RunClient(tcpStream!, dllsToLoad);
-                        }
-                        finally
-                        {
-                            tcpStream?.Dispose();
-                        }
+                        RunTcpServer(tcpAddress, tcpPort, dllsToLoad);
                         break;
                     case "-namedpipe":
                         if (args.Length == ++i)
@@ -116,6 +104,57 @@ namespace XTMF2.Client
                         Console.WriteLine($"Unknown argument '{args[i]}'!");
                         return;
                 }
+            }
+        }
+
+        private static void RunTcpServer(string address, int port, List<string> extraDlls)
+        {
+            if (!CreateStreams.CreateTcpListener(address, port, out var listener, out var boundPort, out var error))
+            {
+                Console.WriteLine("Error creating TCP RunServer listener\r\n" + error);
+                return;
+            }
+
+            var tcpListener = listener!;
+            Console.WriteLine($"RunServer listening on {address}:{boundPort}");
+            Console.Out.Flush();
+            using (tcpListener)
+            using (var shutdown = new CancellationTokenSource())
+            {
+                Console.CancelKeyPress += (_, eventArgs) =>
+                {
+                    eventArgs.Cancel = true;
+                    shutdown.Cancel();
+                    tcpListener.Stop();
+                };
+
+                while (!shutdown.IsCancellationRequested)
+                {
+                    TcpClient? client = null;
+                    try
+                    {
+                        client = tcpListener.AcceptTcpClient();
+                    }
+                    catch (SocketException) when (shutdown.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    if (client is null)
+                        continue;
+
+                    var acceptedClient = client;
+                    _ = Task.Run(() => RunTcpClient(acceptedClient, extraDlls));
+                }
+            }
+        }
+
+        private static void RunTcpClient(TcpClient client, List<string> extraDlls)
+        {
+            using (client)
+            using (var stream = client.GetStream())
+            {
+                RunClient(stream, extraDlls);
             }
         }
 

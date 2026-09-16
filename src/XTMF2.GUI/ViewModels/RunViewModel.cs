@@ -59,6 +59,9 @@ public sealed partial class RunViewModel : ObservableObject
     /// <summary>The directory that the run executes in and writes its output to.</summary>
     public string RunDirectory { get; }
 
+    /// <summary>The configured RunServer that processed this run.</summary>
+    public string RunServer { get; }
+
     /// <summary>True when this run has a known output directory that can be opened.</summary>
     public bool HasRunDirectory => !string.IsNullOrWhiteSpace(RunDirectory);
 
@@ -89,11 +92,13 @@ public sealed partial class RunViewModel : ObservableObject
     private readonly ModelSystemSession _session;
     private readonly User _user;
 
-    public RunViewModel(string runId, string runName, string runDirectory, ModelSystemSession session, User user)
+    public RunViewModel(string runId, string runName, string runDirectory, string runServer,
+        ModelSystemSession session, User user)
     {
         RunId   = runId;
         RunName = runName;
         RunDirectory = runDirectory;
+        RunServer = runServer;
         _session = session;
         _user = user;
     }
