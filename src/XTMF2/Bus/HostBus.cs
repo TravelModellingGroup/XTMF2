@@ -271,8 +271,6 @@ public sealed class HostBus : IDisposable
                             {
                                 var runId = reader.ReadString();
                                 var status = reader.ReadString();
-                                Console.WriteLine($"Host <- RunServer status: {runId}: {status}");
-                                Console.Out.Flush();
                                 IgnoreWarnings(() => ClientReportedStatus?.Invoke(this, runId, status));
                             }
                             break;

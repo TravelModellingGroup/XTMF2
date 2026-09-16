@@ -280,8 +280,6 @@ namespace XTMF2.Bus
         /// <param name="message">The current status message.</param>
         internal void SendStatusMessage(string runId, string? message)
         {
-            Console.WriteLine($"RunServer -> Host status: {runId}: {message ?? String.Empty}");
-            Console.Out.Flush();
             Write((writer) =>
             {
                 writer.Write((int)(Out.ClientReportedStatus));

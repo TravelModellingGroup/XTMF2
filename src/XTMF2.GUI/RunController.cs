@@ -237,8 +237,6 @@ public class RunController : IDisposable
 
     private void OnClientReportedStatus(object sender, string runID, string status)
     {
-        Console.WriteLine($"GUI received RunServer status: {runID}: {status}");
-        Console.Out.Flush();
         RunsViewModel.NotifyStatus(runID, status);
     }
 
