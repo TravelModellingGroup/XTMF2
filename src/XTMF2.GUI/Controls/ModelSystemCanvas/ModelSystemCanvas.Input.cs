@@ -794,23 +794,11 @@ partial class ModelSystemCanvas
                     // _vm.SelectedElement.IsSelected is already true — no change needed
                 }
 
-                if (_multiSelection.Contains(hit))
-                {
-                    // Toggle off: remove from multi-selection.
-                    RemoveFromMultiSelection(hit);
-                    hit.IsSelected = false;
-                    // If the deselected element was the primary, pick the next available.
-                    if (ReferenceEquals(_vm.SelectedElement, hit))
-                        _vm.SelectedElement = _multiSelection.FirstOrDefault();
-                }
-                else
-                {
-                    // Toggle on: add to multi-selection.
-                    AddToMultiSelection(hit);
-                    hit.IsSelected = true;
-                    // Reflect the most recently touched element in the property panel.
-                    _vm.SelectedElement = hit;
-                }
+                // Ctrl+click is additive: keep already-selected elements selected.
+                AddToMultiSelection(hit);
+                hit.IsSelected = true;
+                // Reflect the most recently touched element in the property panel.
+                _vm.SelectedElement = hit;
                 InvalidateVisual();
             }
             else
@@ -825,14 +813,7 @@ partial class ModelSystemCanvas
                         _multiLinkSelection.Add(existingLink.UnderlyingLink);
                     }
 
-                    if (_multiLinkSelection.Contains(linkHit.UnderlyingLink))
-                    {
-                        _multiLinkSelection.Remove(linkHit.UnderlyingLink);
-                    }
-                    else
-                    {
-                        _multiLinkSelection.Add(linkHit.UnderlyingLink);
-                    }
+                    _multiLinkSelection.Add(linkHit.UnderlyingLink);
 
                     LinkViewModel? primary = _vm.Links
                         .FirstOrDefault(l => _multiLinkSelection.Contains(l.UnderlyingLink));
@@ -843,9 +824,9 @@ partial class ModelSystemCanvas
                 }
                 else
                 {
-                    // Ctrl+drag on empty space → begin a rubber-band selection rectangle.
-                    ClearMultiSelection();
-                    _vm.SelectElementCommand.Execute(null);
+                    // Ctrl+drag on empty space adds the rectangle's contents to the current selection.
+                    if (_multiSelection.Count == 0 && _vm.SelectedElement is { } selectedElement)
+                        AddToMultiSelection(selectedElement);
                     _selRectStart = mpos;
                     _selRectCurrent = mpos;
                     e.Pointer.Capture(this);

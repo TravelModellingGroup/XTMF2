@@ -519,7 +519,8 @@ namespace XTMF2.ModelSystemConstruct
             [NotNullWhen(true)] out FunctionTemplate? template,
             [NotNullWhen(false)] ref string? error, List<string>? warnings = null,
             List<Link.PendingLoad>? deferredLinks = null,
-            List<FunctionInstance.PendingLoad>? deferredFunctionInstances = null)
+            List<FunctionInstance.PendingLoad>? deferredFunctionInstances = null,
+            bool regenerateId = false)
         {
             template = null;
             Guid? id = null;
@@ -630,7 +631,7 @@ namespace XTMF2.ModelSystemConstruct
             else
             {
                 template = partialTemplate;
-                template.Id = id ?? Guid.NewGuid();
+                template.Id = regenerateId ? Guid.NewGuid() : id ?? Guid.NewGuid();
             }
             template.SetLocation(location);
 

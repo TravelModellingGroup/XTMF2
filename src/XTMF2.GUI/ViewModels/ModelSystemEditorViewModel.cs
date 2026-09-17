@@ -4428,12 +4428,6 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         try
         {
             var pastedTemplatesBySnapshot = new Dictionary<string, FunctionTemplate>(StringComparer.Ordinal);
-            var templateSnapshotsReferencedByInstances = payload.Elements
-                .Where(e => e.Kind == CanvasElementKind.FunctionInstance
-                    && !string.IsNullOrWhiteSpace(e.EmbeddedTemplateSnapshot))
-                .Select(e => e.EmbeddedTemplateSnapshot!)
-                .ToHashSet(StringComparer.Ordinal);
-
             // Paste FunctionTemplates first so FunctionInstances that reference them can be resolved.
             foreach (var element in payload.Elements)
             {
@@ -4446,9 +4440,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                     continue;
                 }
 
-                var preferReuseExisting = element.IsTemplateCompanion
-                    || (!string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot)
-                        && templateSnapshotsReferencedByInstances.Contains(element.EmbeddedTemplateSnapshot));
+                    var preferReuseExisting = element.IsTemplateCompanion;
 
                 var pastedTemplate = PasteFunctionTemplate(element, dx, dy, preferReuseExisting);
                 if (pastedTemplate is not null && !string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot))
@@ -4720,7 +4712,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                     element.Name,
                     loc,
                     out var importedTemplate,
-                    out _))
+                    out _,
+                    regenerateId: !element.IsTemplateCompanion))
             {
                 return importedTemplate;
             }
@@ -4810,7 +4803,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                     preferredName,
                     importedLocation,
                     out var imported,
-                    out _))
+                    out _,
+                    regenerateId: false))
             {
                 return imported;
             }

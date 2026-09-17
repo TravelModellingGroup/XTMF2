@@ -683,12 +683,14 @@ public class ModelSystemEditorViewModelClipboardTests
                     .GetAwaiter().GetResult();
 
                 var boundary = session.ModelSystem.GlobalBoundary;
-                Assert.HasCount(1, boundary.FunctionTemplates,
-                    "Equivalent existing template should be reused instead of duplicating.");
+                Assert.HasCount(2, boundary.FunctionTemplates,
+                    "An explicitly pasted FunctionTemplate should create a new definition.");
                 Assert.HasCount(1, boundary.FunctionInstances,
                     "FunctionInstance should be pasted.");
-                Assert.AreSame(existingTemplate, boundary.FunctionInstances.Single().Template,
-                    "Pasted FunctionInstance should resolve to the existing equivalent template.");
+                Assert.AreNotSame(existingTemplate, boundary.FunctionInstances.Single().Template,
+                    "Pasted FunctionInstance should resolve to the explicitly pasted template.");
+                Assert.AreNotEqual(existingTemplate.Id, boundary.FunctionInstances.Single().Template.Id,
+                    "Pasted FunctionTemplate should receive a new GUID.");
             });
     }
 
@@ -801,11 +803,11 @@ public class ModelSystemEditorViewModelClipboardTests
                         Assert.AreEqual("Mixed header", boundary.CommentBlocks[0].Header);
 
                         Assert.HasCount(1, boundary.FunctionTemplates,
-                            "Duplicate template snapshot entries should still dedupe in mixed payloads.");
+                            "The explicit template and its companion should materialize one pasted definition.");
                         Assert.HasCount(1, boundary.FunctionInstances,
                             "Function instance in mixed payload should be pasted.");
-                        Assert.AreSame(boundary.FunctionTemplates.Single(), boundary.FunctionInstances.Single().Template,
-                            "Function instance should bind to deduped template.");
+                        Assert.Contains(boundary.FunctionInstances.Single().Template, boundary.FunctionTemplates,
+                            "Function instance should bind to the explicitly pasted template.");
                     }), error?.Message);
             });
     }
