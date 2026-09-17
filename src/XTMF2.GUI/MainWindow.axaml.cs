@@ -62,6 +62,7 @@ public partial class MainWindow : Window
     private bool _allowDocumentClose;
     private bool _documentCloseInProgress;
     private SettingsWindow? _settingsWindow;
+    private RunServersWindow? _runServersWindow;
     private readonly HttpClient _aiHttpClient = new();
     private readonly AiProviderRegistry _aiProviders = new();
 
@@ -304,6 +305,11 @@ public partial class MainWindow : Window
         _isLoading = false;
         UpdateLoadingState();
 
+        foreach (var editor in EnumerateOpenDocuments()
+            .Select(document => document.Context)
+            .OfType<ModelSystemEditorViewModel>())
+            editor.SetRunController(_runController);
+
         // Add the Runs tab so it is always visible.
         if (_runController is not null)
             Documents.Add(_runController.RunsViewModel);
@@ -452,13 +458,28 @@ public partial class MainWindow : Window
     {
         if (_settingsWindow is null || !_settingsWindow.IsVisible)
         {
-            _settingsWindow = new SettingsWindow();
+            _settingsWindow = new SettingsWindow(_runController);
+            _settingsWindow.SettingsSaved += () => _runController?.RefreshConfiguredRunServers();
             _settingsWindow.Closed += (s, _) => _settingsWindow = null;
             _settingsWindow.ShowDialog(this);
         }
         else
         {
             _settingsWindow.Activate();
+        }
+    }
+
+    private void ShowRunServersWindow()
+    {
+        var settingsOwner = _settingsWindow;
+        if (settingsOwner is null)
+            return;
+
+        if (_runServersWindow is null || !_runServersWindow.IsVisible)
+        {
+            _runServersWindow = new RunServersWindow(_runController);
+            _runServersWindow.RunServersSaved += () => _runController?.RefreshConfiguredRunServers();
+            _runServersWindow.ShowDialog(settingsOwner).GetAwaiter().GetResult();
         }
     }
 

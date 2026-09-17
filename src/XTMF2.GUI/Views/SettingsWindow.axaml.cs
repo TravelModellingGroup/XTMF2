@@ -21,11 +21,16 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
+using Avalonia.Layout;
+using Avalonia.Threading;
+using XTMF2.GUI;
 using XTMF2.GUI.Resources;
 using XTMF2.AI;
+using XTMF2.GUI.Properties;
 
 namespace XTMF2.GUI.Views;
 
@@ -37,9 +42,18 @@ public partial class SettingsWindow : Window
     private string _currentAiModel = "llama3.2";
     private string _currentOllamaEndpoint = "http://localhost:11434";
     private readonly HttpClient _aiHttpClient = new();
+    private readonly RunController? _runController;
+    private RunServersWindow? _runServersWindow;
+    public event Action? SettingsSaved;
 
     public SettingsWindow()
+        : this(null)
     {
+    }
+
+    public SettingsWindow(RunController? runController)
+    {
+        _runController = runController;
         InitializeComponent();
         LoadSettings();
     }
@@ -86,6 +100,32 @@ public partial class SettingsWindow : Window
             _ = RefreshModelsAsync();
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        _runServersWindow?.Close();
+        base.OnClosed(e);
+    }
+
+    private async void ManageRunServers_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_runServersWindow is not null && _runServersWindow.IsVisible)
+        {
+            _runServersWindow.Activate();
+            return;
+        }
+
+        _runServersWindow = new RunServersWindow(_runController);
+        _runServersWindow.RunServersSaved += () => _runController?.RefreshConfiguredRunServers();
+        try
+        {
+            await _runServersWindow.ShowDialog(this);
+        }
+        finally
+        {
+            _runServersWindow = null;
+        }
+    }
+
     private void ThemeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (ThemeComboBox.SelectedItem is ComboBoxItem selectedItem)
@@ -116,8 +156,16 @@ public partial class SettingsWindow : Window
 
     private void Save_Click(object? sender, RoutedEventArgs e)
     {
-        SaveSettings();
-        Close();
+        try
+        {
+            SaveSettings();
+            SettingsSaved?.Invoke();
+            Close();
+        }
+        catch (InvalidOperationException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Unable to save settings: {ex.Message}");
+        }
     }
 
     private void Cancel_Click(object? sender, RoutedEventArgs e)
@@ -210,10 +258,11 @@ public partial class SettingsWindow : Window
         }
     }
 
-    public void Window_KeyUp(object? sender, KeyEventArgs e)
+    public void Window_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
+        if (e.Handled == false && sender == this && e.Key == Key.Escape)
         {
+            e.Handled = true;
             Cancel_Click(sender, new RoutedEventArgs());
         }
     }

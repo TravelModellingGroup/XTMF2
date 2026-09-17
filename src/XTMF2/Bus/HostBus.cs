@@ -96,7 +96,8 @@ public sealed class HostBus : IDisposable
         SendModelSystemResult = 7,
         ClientReportedStatus = 8,
         ClientOptimizationResults = 9,
-        ClientIterationProgress = 10
+        ClientIterationProgress = 10,
+        ClientRunArtifacts = 11
     }
 
     /// <summary>
@@ -104,6 +105,25 @@ public sealed class HostBus : IDisposable
     /// The parameter is the name of the completed model system.
     /// </summary>
     public event EventHandler<string>? ClientFinishedModelSystem;
+
+    public event EventHandler<RunArtifactsReceivedEventArgs>? ClientRunArtifactsReceived;
+
+    public sealed class RunArtifactsReceivedEventArgs : EventArgs
+    {
+        public string RunId { get; }
+        public string ArchivePath { get; }
+
+        internal RunArtifactsReceivedEventArgs(string runId, string archivePath)
+        {
+            RunId = runId;
+            ArchivePath = archivePath;
+        }
+    }
+
+    /// <summary>
+    /// Raised when the connection to the RunServer is closed or lost.
+    /// </summary>
+    public event EventHandler? Disconnected;
 
     /// <summary>
     /// Used to report that a model system has had a run error.
@@ -219,12 +239,16 @@ public sealed class HostBus : IDisposable
                                 var errMsg = reader.ReadString();
                                 var moduleName = reader.ReadString();
                                 var elementId = Guid.TryParse(reader.ReadString(), out var parsedId) ? (Guid?)parsedId : null;
+                                Console.WriteLine($"Host <- RunServer validation error: {runId}. {errMsg}");
+                                Console.Out.Flush();
                                 IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, String.Empty, moduleName, elementId));
                             }
                             break;
                         case In.ClientFinishedModelSystem:
                             {
                                 var runId = reader.ReadString();
+                                Console.WriteLine($"Host <- RunServer completion: {runId}");
+                                Console.Out.Flush();
                                 IgnoreWarnings(() => ClientFinishedModelSystem?.Invoke(this, runId));
                             }
                             break;
@@ -238,6 +262,8 @@ public sealed class HostBus : IDisposable
                                 var elementId = Guid.TryParse(elementIdText, out var parsedId)
                                     ? (Guid?)parsedId
                                     : null;
+                                Console.WriteLine($"Host <- RunServer runtime error: {runId}. {errMsg}");
+                                Console.Out.Flush();
                                 IgnoreWarnings(() => ClientErrorWhenRunningModelSystem?.Invoke(this, runId, errMsg, stack, moduleName, elementId));
                             }
                             break;
@@ -270,19 +296,40 @@ public sealed class HostBus : IDisposable
                                 IgnoreWarnings(() => ClientIterationProgressAvailable?.Invoke(this, runId, iteration, fitness, values));
                             }
                             break;
+                        case In.ClientRunArtifacts:
+                            {
+                                var runId = reader.ReadString();
+                                var length = reader.ReadInt64();
+                                var archivePath = Path.Combine(Path.GetTempPath(), $"XTMF2-{Guid.NewGuid():N}.zip");
+                                try
+                                {
+                                    using (var archive = File.Create(archivePath))
+                                        CopyExactly(reader.BaseStream, archive, length);
+                                    IgnoreWarnings(() => ClientRunArtifactsReceived?.Invoke(
+                                        this, new RunArtifactsReceivedEventArgs(runId, archivePath)));
+                                }
+                                finally
+                                {
+                                    try { File.Delete(archivePath); } catch { }
+                                }
+                            }
+                            break;
                         default:
                             throw new Exception($"Unsupported command: {Enum.GetName<In>(command)}");
                     }
                     System.Threading.Interlocked.MemoryBarrier();
                 }
             }
-            catch(Exception)
+            catch (Exception ex)
             {
                 // The client has disconnected or crashed. Exit the listener thread.
+                Console.Error.WriteLine($"[HostBus] RunServer connection listener stopped: {ex}");
+                Console.Error.Flush();
             }
             finally
             {
                 _Exited = true;
+                IgnoreWarnings(() => Disconnected?.Invoke(this, EventArgs.Empty));
             }
         })
         {
@@ -291,6 +338,19 @@ public sealed class HostBus : IDisposable
         };
         listenerThread.Start();
         return listenerThread;
+    }
+
+    private static void CopyExactly(Stream source, Stream destination, long length)
+    {
+        var buffer = new byte[81920];
+        while (length > 0)
+        {
+            var read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, length));
+            if (read == 0)
+                throw new EndOfStreamException("The RunServer artifact archive was truncated.");
+            destination.Write(buffer, 0, read);
+            length -= read;
+        }
     }
 
     private enum Out
@@ -318,7 +378,7 @@ public sealed class HostBus : IDisposable
     /// <returns>True if the model system was sent</returns>
     public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute, 
         [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
-        => RunModelSystem(modelSystem, cwd, startToExecute, RunMode.Normal, out id, out error);
+        => RunModelSystem(modelSystem, cwd, startToExecute, RunMode.Normal, null, out id, out error);
 
     /// <summary>
     /// Send a run command to the client with an explicit run mode (Normal, Estimation or Calibration).
@@ -333,6 +393,16 @@ public sealed class HostBus : IDisposable
     public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute,
         RunMode runMode,
         [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
+        => RunModelSystem(modelSystem, cwd, startToExecute, runMode, null, out id, out error);
+
+    /// <summary>
+    /// Send a run command and invoke <paramref name="onIdCreated"/> before the request is written,
+    /// allowing consumers to register the run before fast clients can respond.
+    /// </summary>
+    public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute,
+        RunMode runMode,
+        Action<string>? onIdCreated,
+        [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
     {
         id = null;
         lock (_outLock)
@@ -346,6 +416,7 @@ public sealed class HostBus : IDisposable
                     return false;
                 }
                 id = Guid.NewGuid().ToString();
+                onIdCreated?.Invoke(id);
                 // int64
                 using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
                 writer.Write((int)Out.RunModelSystem);

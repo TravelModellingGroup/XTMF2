@@ -21,13 +21,331 @@ using System.Collections.Generic;
 using System.Text;
 using System.IO;
 using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
+using System.Net.Security;
+using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Diagnostics.CodeAnalysis;
 
 namespace XTMF2.Bus
 {
     public static class CreateStreams
     {
+        /// <summary>
+        /// Creates and starts a TCP listener. The address is a bind address; 0.0.0.0
+        /// listens on every IPv4 interface.
+        /// </summary>
+        public static bool CreateTcpListener(
+            string address,
+            int port,
+            out TcpListener? listener,
+            out int boundPort,
+            [NotNullWhen(false)] out string? error)
+        {
+            listener = null;
+            boundPort = 0;
+            error = null;
+
+            if (!IPAddress.TryParse(address, out var ipAddress))
+            {
+                error = $"The TCP bind address '{address}' is not a valid IP address.";
+                return false;
+            }
+
+            if (ipAddress.Equals(IPAddress.Any))
+                ipAddress = IPAddress.Any;
+
+            if (port is < 0 or > IPEndPoint.MaxPort)
+            {
+                error = $"The TCP port '{port}' is outside the valid range.";
+                return false;
+            }
+
+            try
+            {
+                listener = new TcpListener(ipAddress, port);
+                listener.Start();
+                boundPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+                return true;
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException)
+            {
+                listener?.Stop();
+                listener = null;
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Creates a TCP listener, invokes <paramref name="createClient"/> with the bound
+        /// port, and waits for one client connection. A port of zero requests an ephemeral
+        /// port from the operating system.
+        /// </summary>
+        public static bool CreateNewTcpHost(
+            string address,
+            int port,
+            [NotNullWhen(true)] out Stream? stream,
+            out int boundPort,
+            [NotNullWhen(false)] out string? error,
+            Action<int> createClient,
+            int timeoutMilliseconds = 5000)
+        {
+            stream = null;
+            boundPort = 0;
+            error = null;
+
+            if (!IPAddress.TryParse(address, out var ipAddress))
+            {
+                error = $"The TCP host address '{address}' is not a valid IP address.";
+                return false;
+            }
+
+            if (ipAddress.Equals(IPAddress.Parse("0.0.0.0")))
+            {
+                ipAddress = IPAddress.Any;
+            }
+
+            if (port is < 0 or > IPEndPoint.MaxPort)
+            {
+                error = $"The TCP port '{port}' is outside the valid range.";
+                return false;
+            }
+
+            try
+            {
+                var listener = new TcpListener(ipAddress, port);
+                listener.Start();
+                boundPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+                try
+                {
+                    createClient(boundPort);
+                    var acceptTask = listener.AcceptTcpClientAsync();
+                    if (!acceptTask.Wait(timeoutMilliseconds) || !acceptTask.IsCompletedSuccessfully)
+                    {
+                        error = "No TCP client connection was received before the timeout.";
+                        return false;
+                    }
+
+                    stream = acceptTask.Result.GetStream();
+                    return true;
+                }
+                finally
+                {
+                    listener.Stop();
+                }
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException or AggregateException)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Connects to a TCP RunServer endpoint.
+        /// </summary>
+        public static bool CreateTcpClient(
+            string address,
+            int port,
+            [NotNullWhen(true)] out Stream? stream,
+            [NotNullWhen(false)] out string? error,
+            int timeoutMilliseconds = 5000)
+        {
+            stream = null;
+            error = null;
+
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                error = "The TCP host address is required.";
+                return false;
+            }
+
+            if (port is < 1 or > IPEndPoint.MaxPort)
+            {
+                error = $"The TCP port '{port}' is outside the valid range.";
+                return false;
+            }
+
+            var client = new TcpClient();
+            try
+            {
+                var connectTask = client.ConnectAsync(address, port);
+                if (!connectTask.Wait(timeoutMilliseconds) || !connectTask.IsCompletedSuccessfully)
+                {
+                    error = $"Unable to connect to TCP RunServer {address}:{port}.";
+                    return false;
+                }
+
+                stream = client.GetStream();
+                return true;
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException or AggregateException)
+            {
+                error = ex is AggregateException aggregate
+                    ? aggregate.GetBaseException().Message
+                    : ex.Message;
+                return false;
+            }
+            finally
+            {
+                if (stream is null)
+                {
+                    client.Dispose();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Connects to a remote RunServer over pinned TLS and authenticates with its token.
+        /// </summary>
+        public static bool CreateSecureTcpClient(
+            string address,
+            int port,
+            string token,
+            string certificateFingerprint,
+            [NotNullWhen(true)] out Stream? stream,
+            [NotNullWhen(false)] out string? error,
+            int timeoutMilliseconds = 5000)
+        {
+            stream = null;
+            error = null;
+            if (string.IsNullOrWhiteSpace(token) || token.Length < RunServerSecurity.TokenMinimumLength)
+            {
+                error = "A valid RunServer token is required.";
+                return false;
+            }
+            if (string.IsNullOrWhiteSpace(certificateFingerprint))
+            {
+                error = "A RunServer certificate fingerprint is required.";
+                return false;
+            }
+
+            var client = new TcpClient();
+            var certificateValidationFailed = false;
+            try
+            {
+                var connectTask = client.ConnectAsync(address, port);
+                if (!connectTask.Wait(timeoutMilliseconds))
+                {
+                    error = $"Timed out connecting to secure TCP RunServer {address}:{port}. Check the address, port, firewall, and that the RunServer is listening.";
+                    return false;
+                }
+                if (!connectTask.IsCompletedSuccessfully)
+                {
+                    error = $"Unable to reach secure TCP RunServer {address}:{port}. Check the address, port, firewall, and that the RunServer is listening.";
+                    return false;
+                }
+
+                client.ReceiveTimeout = timeoutMilliseconds;
+                client.SendTimeout = timeoutMilliseconds;
+                var tls = new SslStream(client.GetStream(), false, (_, certificate, _, _) =>
+                {
+                    certificateValidationFailed = certificate is not X509Certificate2 presented ||
+                        !RunServerSecurity.FingerprintMatches(presented, certificateFingerprint);
+                    return !certificateValidationFailed;
+                });
+                tls.AuthenticateAsClient(address, null, SslProtocols.Tls12 | SslProtocols.Tls13, false);
+                AuthenticateClient(tls, token, timeoutMilliseconds);
+                client.ReceiveTimeout = 0;
+                client.SendTimeout = 0;
+                stream = tls;
+                return true;
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException or AuthenticationException or CryptographicException or AggregateException)
+            {
+                error = certificateValidationFailed
+                    ? "The RunServer certificate fingerprint does not match the configured fingerprint."
+                    : ex is AggregateException aggregate
+                    ? aggregate.GetBaseException().Message
+                    : ex.Message;
+                return false;
+            }
+            finally
+            {
+                if (stream is null)
+                    client.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Performs the server side of the TLS and token handshake for an accepted client.
+        /// </summary>
+        public static bool AuthenticateSecureTcpClient(
+            TcpClient client,
+            X509Certificate2 certificate,
+            string token,
+            [NotNullWhen(true)] out Stream? stream,
+            [NotNullWhen(false)] out string? error,
+            int timeoutMilliseconds = 5000)
+        {
+            stream = null;
+            error = null;
+            try
+            {
+                client.ReceiveTimeout = timeoutMilliseconds;
+                client.SendTimeout = timeoutMilliseconds;
+                var tls = new SslStream(client.GetStream(), false);
+                tls.AuthenticateAsServer(certificate, false, SslProtocols.Tls12 | SslProtocols.Tls13, false);
+                AuthenticateServer(tls, token, timeoutMilliseconds);
+                client.ReceiveTimeout = 0;
+                client.SendTimeout = 0;
+                stream = tls;
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or AuthenticationException or CryptographicException)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        private static void AuthenticateClient(Stream stream, string token, int timeoutMilliseconds)
+        {
+            var nonce = ReadExact(stream, RunServerSecurity.NonceLength);
+            var proof = RunServerSecurity.ComputeProof(token, nonce);
+            stream.Write(proof, 0, proof.Length);
+            stream.Flush();
+            if (ReadExact(stream, 1)[0] != 1)
+                throw new AuthenticationException("The RunServer rejected the authentication token.");
+        }
+
+        private static void AuthenticateServer(Stream stream, string token, int timeoutMilliseconds)
+        {
+            if (string.IsNullOrWhiteSpace(token) || token.Length < RunServerSecurity.TokenMinimumLength)
+                throw new AuthenticationException("The RunServer token is not configured.");
+
+            var nonce = RandomNumberGenerator.GetBytes(RunServerSecurity.NonceLength);
+            stream.Write(nonce, 0, nonce.Length);
+            stream.Flush();
+            var proof = ReadExact(stream, 32);
+            var expected = RunServerSecurity.ComputeProof(token, nonce);
+            var accepted = CryptographicOperations.FixedTimeEquals(proof, expected);
+            stream.WriteByte(accepted ? (byte)1 : (byte)0);
+            stream.Flush();
+            if (!accepted)
+                throw new AuthenticationException("The RunServer rejected the authentication token.");
+        }
+
+        private static byte[] ReadExact(Stream stream, int count)
+        {
+            var buffer = new byte[count];
+            var offset = 0;
+            while (offset < count)
+            {
+                var read = stream.Read(buffer, offset, count - offset);
+                if (read == 0)
+                    throw new EndOfStreamException("The RunServer closed the connection during authentication.");
+                offset += read;
+            }
+            return buffer;
+        }
+
         /// <summary>
         /// Create a new named pipe host
         /// </summary>
@@ -108,12 +426,11 @@ namespace XTMF2.Bus
             [NotNullWhen(true)] out RunServerBus runServerBus,
             [NotNullWhen(false)] out string? error)
         {
-            var debugId = Guid.NewGuid().ToString();
             Stream? clientStream = null;
             string? clientError = null;
-            if (!CreateNewNamedPipeHost(debugId, out var hostStream, out error, () =>
+            if (!CreateNewTcpHost("127.0.0.1", 0, out var hostStream, out _, out error, port =>
             {
-                if (!CreateNamedPipeClient(debugId, out clientStream, out clientError))
+                if (!CreateTcpClient("127.0.0.1", port, out clientStream, out clientError))
                 {
                     return;
                 }
@@ -124,7 +441,7 @@ namespace XTMF2.Bus
                 return false;
             }
             hostBus = new HostBus(hostStream!, true);
-            runServerBus = new RunServerBus(clientStream!, true, runtime, null, true);
+            runServerBus = new RunServerBus(clientStream!, true, runtime, null, true, true);
             return true;
         }
     }
