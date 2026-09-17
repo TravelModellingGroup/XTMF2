@@ -27,7 +27,7 @@ namespace XTMF2.GUI.Views;
 /// <summary>
 /// A small dialog that lets the user pick a Start from a ComboBox.
 /// </summary>
-public partial class StartPickerDialog : Window, INotifyPropertyChanged
+public partial class FunctionTemplatePickerDialog : Window, INotifyPropertyChanged
 {
     private string? _prompt;
     private string? _selectedStartName;
@@ -61,7 +61,7 @@ public partial class StartPickerDialog : Window, INotifyPropertyChanged
     /// </summary>
     public bool WasCancelled { get; private set; } = true;
 
-    public StartPickerDialog()
+    public FunctionTemplatePickerDialog()
     {
         InitializeComponent();
         StartNames  = [];
@@ -73,7 +73,7 @@ public partial class StartPickerDialog : Window, INotifyPropertyChanged
     /// <param name="prompt">Label shown above the ComboBox.</param>
     /// <param name="startNames">List of available start names to display.</param>
     /// <param name="defaultStart">The start that should be pre-selected.</param>
-    public StartPickerDialog(string title, string prompt,
+    public FunctionTemplatePickerDialog(string title, string prompt,
                              IReadOnlyList<string> startNames,
                              string? defaultStart = null)
     {
