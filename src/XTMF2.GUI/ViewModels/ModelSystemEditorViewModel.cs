@@ -3040,7 +3040,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
         else
         {
-            var picker = new StartPickerDialog(
+            var picker = new FunctionTemplatePickerDialog(
                 title: "Add Function Instance",
                 prompt: "Select the function template to instantiate:",
                 startNames: templateDisplayNames,
@@ -3429,40 +3429,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return;
         }
 
-        // Prompt for the run name.
         var defaultRunName = $"{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
-        var runNameDialog = new InputDialog(
-            title: "Run Model System",
-            prompt: "Enter a name for this run:",
-            defaultText: defaultRunName);
-        await runNameDialog.ShowDialog(ParentWindow);
-        if (runNameDialog.WasCancelled) return;
-        var runName = runNameDialog.InputText?.Trim();
-        if (string.IsNullOrEmpty(runName)) return;
-
-        var endpointId = await SelectRunServerAsync();
-        if (endpointId is null) return;
-
-        // Determine which start to execute.
-        string startToExecute;
-        if (availableStarts.Count == 1)
-        {
-            startToExecute = availableStarts[0].Name;
-        }
-        else
-        {
-            // Multiple starts: show a ComboBox so the user can pick one.
-            var startNames = availableStarts.Select(s => s.Name).ToList();
-            var startDialog = new StartPickerDialog(
-                title: "Select Start",
-                prompt: "Select the start to execute:",
-                startNames: startNames,
-                defaultStart: startNames[0]);
-            await startDialog.ShowDialog(ParentWindow);
-            if (startDialog.WasCancelled) return;
-            startToExecute = startDialog.SelectedStartName ?? startNames[0];
-            if (string.IsNullOrEmpty(startToExecute)) return;
-        }
+        var runConfiguration = await ConfigureRunAsync(
+            "Run Model System",
+            defaultRunName,
+            availableStarts.Select(start => start.Name).ToList());
+        if (runConfiguration is null) return;
+        var (runName, endpointId, startToExecute) = runConfiguration.Value;
 
         var project = Session.Project;
         if (!_runController.SendRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
@@ -3489,36 +3462,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         var defaultRunName = $"Estimation_{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
-        var runNameDialog = new InputDialog(
-            title: "Run Estimation",
-            prompt: "Enter a name for this estimation run:",
-            defaultText: defaultRunName);
-        await runNameDialog.ShowDialog(ParentWindow);
-        if (runNameDialog.WasCancelled) return;
-        var runName = runNameDialog.InputText?.Trim();
-        if (string.IsNullOrEmpty(runName)) return;
-
-        var endpointId = await SelectRunServerAsync();
-        if (endpointId is null) return;
-
-        string startToExecute;
-        if (availableStarts.Count == 1)
-        {
-            startToExecute = availableStarts[0].Name;
-        }
-        else
-        {
-            var startNames = availableStarts.Select(s => s.Name).ToList();
-            var startDialog = new StartPickerDialog(
-                title: "Select Start",
-                prompt: "Select the start to execute:",
-                startNames: startNames,
-                defaultStart: startNames[0]);
-            await startDialog.ShowDialog(ParentWindow);
-            if (startDialog.WasCancelled) return;
-            startToExecute = startDialog.SelectedStartName ?? startNames[0];
-            if (string.IsNullOrEmpty(startToExecute)) return;
-        }
+        var runConfiguration = await ConfigureRunAsync(
+            "Run Estimation",
+            defaultRunName,
+            availableStarts.Select(start => start.Name).ToList());
+        if (runConfiguration is null) return;
+        var (runName, endpointId, startToExecute) = runConfiguration.Value;
 
         var project = Session.Project;
         if (!_runController.SendEstimationRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
@@ -3545,36 +3494,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         var defaultRunName = $"Calibration_{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
-        var runNameDialog = new InputDialog(
-            title: "Run Calibration",
-            prompt: "Enter a name for this calibration run:",
-            defaultText: defaultRunName);
-        await runNameDialog.ShowDialog(ParentWindow);
-        if (runNameDialog.WasCancelled) return;
-        var runName = runNameDialog.InputText?.Trim();
-        if (string.IsNullOrEmpty(runName)) return;
-
-        var endpointId = await SelectRunServerAsync();
-        if (endpointId is null) return;
-
-        string startToExecute;
-        if (availableStarts.Count == 1)
-        {
-            startToExecute = availableStarts[0].Name;
-        }
-        else
-        {
-            var startNames = availableStarts.Select(s => s.Name).ToList();
-            var startDialog = new StartPickerDialog(
-                title: "Select Start",
-                prompt: "Select the start to execute:",
-                startNames: startNames,
-                defaultStart: startNames[0]);
-            await startDialog.ShowDialog(ParentWindow);
-            if (startDialog.WasCancelled) return;
-            startToExecute = startDialog.SelectedStartName ?? startNames[0];
-            if (string.IsNullOrEmpty(startToExecute)) return;
-        }
+        var runConfiguration = await ConfigureRunAsync(
+            "Run Calibration",
+            defaultRunName,
+            availableStarts.Select(start => start.Name).ToList());
+        if (runConfiguration is null) return;
+        var (runName, endpointId, startToExecute) = runConfiguration.Value;
 
         var project = Session.Project;
         if (!_runController.SendCalibrationRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
@@ -3587,7 +3512,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         RunStarted?.Invoke();
     }
 
-    private async Task<string?> SelectRunServerAsync()
+    private async Task<(string RunName, string EndpointId, string StartName)?> ConfigureRunAsync(
+        string title,
+        string defaultRunName,
+        IReadOnlyList<string> startNames)
     {
         if (_runController is null)
             return null;
@@ -3598,19 +3526,18 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             ShowToast("No RunServer is connected.", isError: true, durationMs: 5000);
             return null;
         }
-        if (endpoints.Count == 1)
-            return endpoints[0].Id;
 
-        var picker = new StartPickerDialog(
-            title: "Select RunServer",
-            prompt: "Select the RunServer for this run:",
-            startNames: endpoints.Select(endpoint => endpoint.Name).ToList(),
-            defaultStart: endpoints[0].Name);
-        await picker.ShowDialog(ParentWindow!);
-        if (picker.WasCancelled)
+        var dialog = new RunConfigurationDialog(title, defaultRunName, endpoints, startNames);
+        await dialog.ShowDialog(ParentWindow!);
+        if (dialog.WasCancelled)
             return null;
 
-        return endpoints.FirstOrDefault(endpoint => endpoint.Name == picker.SelectedStartName)?.Id;
+        var runName = dialog.RunName?.Trim();
+        var endpointId = dialog.SelectedRunServer?.Id;
+        var startName = dialog.SelectedStartName;
+        return string.IsNullOrEmpty(runName) || endpointId is null || string.IsNullOrEmpty(startName)
+            ? null
+            : (runName, endpointId, startName);
     }
 
     /// <summary>Save the model system to its project file.</summary>
@@ -4342,7 +4269,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             var templateDisplayNames = availableTemplates
                 .Select(ft => Boundary.GetQualifiedTemplateName(_currentBoundary, ft) ?? ft.Name)
                 .ToList();
-            var picker = new StartPickerDialog(
+            var picker = new FunctionTemplatePickerDialog(
                 title: "Add Function Instance",
                 prompt: "Select the function template to instantiate:",
                 startNames: templateDisplayNames,
