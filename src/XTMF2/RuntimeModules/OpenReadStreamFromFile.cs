@@ -41,6 +41,7 @@ public class OpenReadStreamFromFile : BaseFunction<ReadStream>
         {
             if (FilePath?.Invoke() is string path)
             {
+                path = Helper.NormalizePathSeparators(path);
                 return new ReadStream(File.OpenRead(path));
             }
             else
@@ -60,6 +61,7 @@ public class OpenReadStreamFromFile : BaseFunction<ReadStream>
         {
             if (FilePath?.Invoke() is string filePath)
             {
+                filePath = Helper.NormalizePathSeparators(filePath);
                 if (!File.Exists(filePath))
                 {
                     error = $"The file '{filePath}' does not exist!";

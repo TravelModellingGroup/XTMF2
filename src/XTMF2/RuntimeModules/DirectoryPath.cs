@@ -36,8 +36,10 @@ public sealed class DirectoryPath : BaseFunction<string>
     {
         if(Parent != null)
         {
-            return System.IO.Path.Combine(Parent.Invoke(), Path!.Invoke());
+            return Helper.NormalizePathSeparators(System.IO.Path.Combine(
+                Helper.NormalizePathSeparators(Parent.Invoke()),
+                Helper.NormalizePathSeparators(Path!.Invoke())));
         }
-        return Path!.Invoke();
+        return Helper.NormalizePathSeparators(Path!.Invoke());
     }
 }
