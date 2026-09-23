@@ -37,8 +37,9 @@ partial class ModelSystemCanvas
     private LinkViewModel? HitTestLink(Point pos)
     {
         if (_vm is null) return null;
-        foreach (var link in _vm.Links)
+        for (int linkIndex = _vm.Links.Count - 1; linkIndex >= 0; linkIndex--)
         {
+            var link = _vm.Links[linkIndex];
             if (link.IsDestinationBranchHidden && !_vm.RenderAllHiddenDestinationLinks) continue;
 
             // Skip inter-boundary links — they are not rendered.
@@ -89,8 +90,9 @@ partial class ModelSystemCanvas
     {
         if (_vm is null) return null;
         const double BreakpointHitTolerance = 8.0;
-        foreach (var link in _vm.Links)
+        for (int linkIndex = _vm.Links.Count - 1; linkIndex >= 0; linkIndex--)
         {
+            var link = _vm.Links[linkIndex];
             if (link.IsDestinationBranchHidden && !_vm.RenderAllHiddenDestinationLinks)
                 continue;
             if (link.Destination is null || !link.UnderlyingLink.IsOrthogonal)
@@ -488,8 +490,9 @@ partial class ModelSystemCanvas
 
         ICanvasElement? CheckHandle<T>(ObservableCollection<T> collection) where T : ICanvasElement
         {
-            foreach(var element in collection)
+            for (int index = collection.Count - 1; index >= 0; index--)
             {
+                var element = collection[index];
                 // Use the same rendered dimensions used when drawing the resize handle,
                 // so that the hit-test rectangle matches the visual even when a node's
                 // stored Height is smaller than its actual rendered height (e.g. when
@@ -507,12 +510,13 @@ partial class ModelSystemCanvas
             }
             return null;
         }
-        ICanvasElement? hit = CheckHandle(_vm.Nodes) 
-                            ?? CheckHandle(_vm.CommentBlocks)
-                            ?? CheckHandle(_vm.GhostNodes)
-                            ?? CheckHandle(_vm.FunctionTemplates)
-                            ?? CheckHandle(_vm.FunctionInstances)
-                            ?? CheckHandle(_vm.FunctionParameterVMs);
+        ICanvasElement? hit = CheckHandle(_vm.Starts)
+                    ?? CheckHandle(_vm.GhostNodes)
+                    ?? CheckHandle(_vm.Nodes)
+                    ?? CheckHandle(_vm.FunctionParameterVMs)
+                    ?? CheckHandle(_vm.FunctionInstances)
+                    ?? CheckHandle(_vm.FunctionTemplates)
+                    ?? CheckHandle(_vm.CommentBlocks);
         return hit;
     }
 
@@ -736,10 +740,11 @@ partial class ModelSystemCanvas
     {
         if (_vm is null) return null;
 
-        static ICanvasElement? TestHitsElement<T> (ObservableCollection<T> collection, Point pos) where T : ICanvasElement
+        static ICanvasElement? TestHitsElement<T>(ObservableCollection<T> collection, Point pos) where T : ICanvasElement
         {
-            foreach (var element in collection)
+            for (int index = collection.Count - 1; index >= 0; index--)
             {
+                var element = collection[index];
                 if (element.IsPointWithin(pos))
                     return element;
             }
@@ -747,13 +752,11 @@ partial class ModelSystemCanvas
         }
 
         ICanvasElement? hit = TestHitsElement(_vm.Starts, pos)
-                        ??  TestHitsElement(_vm.Nodes, pos)
-                        ?? TestHitsElement(_vm.FunctionParameterVMs, pos)
-                        ?? TestHitsElement(_vm.GhostNodes, pos)
-                        // Function instances render above function-template boxes and must win
-                        // hit-testing when they overlap.
-                        ?? TestHitsElement(_vm.FunctionInstances, pos)
-                        ?? TestHitsElement(_vm.FunctionTemplates, pos);
+                ?? TestHitsElement(_vm.GhostNodes, pos)
+                ?? TestHitsElement(_vm.Nodes, pos)
+                ?? TestHitsElement(_vm.FunctionParameterVMs, pos)
+                ?? TestHitsElement(_vm.FunctionInstances, pos)
+                ?? TestHitsElement(_vm.FunctionTemplates, pos);
 
         
         if (hit is not null)

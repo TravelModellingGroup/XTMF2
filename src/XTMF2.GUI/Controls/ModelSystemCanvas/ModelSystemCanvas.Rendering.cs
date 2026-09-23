@@ -53,12 +53,12 @@ partial class ModelSystemCanvas
 
         using (ctx.PushTransform(Matrix.CreateScale(_scale, _scale)))
         {
+            RenderLinks(ctx);
             RenderCommentBlocks(ctx);
             RenderFunctionTemplates(ctx);
             RenderFunctionInstances(ctx);
             RenderFunctionParameters(ctx);
             RenderGhostCorrespondenceLines(ctx);
-            RenderLinks(ctx);
             RenderNodes(ctx);
             RenderGhostNodes(ctx);
             RenderStarts(ctx);
