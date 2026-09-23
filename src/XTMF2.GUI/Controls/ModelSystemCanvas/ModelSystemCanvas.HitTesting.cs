@@ -632,7 +632,7 @@ partial class ModelSystemCanvas
         foreach (var ((fi, hook), parameter) in _fiHookCanInlineParam)
         {
             int hookIndex = -1;
-            var hooks = fi.UnderlyingInstance.Hooks;
+            if (!_fiVisibleHooks.TryGetValue(fi, out var hooks)) continue;
             for (int i = 0; i < hooks.Count; i++)
             {
                 if (ReferenceEquals(hooks[i], hook))
@@ -679,7 +679,7 @@ partial class ModelSystemCanvas
         // Also check FunctionInstance-originated inlined params.
         foreach (var ((fi, fpHook), paramNode) in _fiHookInlinedParam)
         {
-            var fiHooks = fi.UnderlyingInstance.Hooks;
+            if (!_fiVisibleHooks.TryGetValue(fi, out var fiHooks)) continue;
             int hookIdx = -1;
             for (int j = 0; j < fiHooks.Count; j++)
                 if (ReferenceEquals(fiHooks[j], fpHook)) { hookIdx = j; break; }

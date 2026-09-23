@@ -2086,8 +2086,7 @@ partial class ModelSystemCanvas
         }
         else if (element is FunctionInstanceViewModel fiVm)
         {
-            var fiHooks = fiVm.UnderlyingInstance.Hooks;
-            if (fiHooks is null) return null;
+            if (!_fiVisibleHooks.TryGetValue(fiVm, out var fiHooks)) return null;
 
             int hookIdx = -1;
             for (int j = 0; j < fiHooks.Count; j++)
