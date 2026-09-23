@@ -59,8 +59,8 @@ public partial class RunsView : UserControl
 
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // Auto-scroll to the bottom when new messages arrive.
-        MessageScrollViewer.ScrollToEnd();
+        // Keep the newest message visible at the top.
+        MessageScrollViewer.ScrollToHome();
     }
 
     private void ViewProgressButton_Click(object? sender, RoutedEventArgs e)
