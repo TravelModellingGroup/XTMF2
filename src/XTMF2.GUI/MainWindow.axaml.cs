@@ -381,6 +381,16 @@ public partial class MainWindow : Window
     /// </summary>
     public ModelSystemEditorViewModel OpenModelSystemTabAndGet(ModelSystemSession session, User user)
     {
+        var existing = EnumerateOpenDocuments()
+            .Select(document => document.Context)
+            .OfType<ModelSystemEditorViewModel>()
+            .FirstOrDefault(editor => editor.ModelSystemHeader == session.ModelSystemHeader);
+        if (existing is not null)
+        {
+            ActivateDocument(existing);
+            return existing;
+        }
+
         var editor = CreateEditorViewModel(session, user);
         editor.RunStarted = SwitchToRunsDocument;
         Documents.Add(editor);

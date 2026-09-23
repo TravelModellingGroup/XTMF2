@@ -142,7 +142,7 @@ namespace XTMF2
         internal static void WriteRunCompleted(string runDirectory)
         {
             using var stream = File.OpenWrite(Path.Combine(runDirectory, ResultsFile));
-            using var writer = new Utf8JsonWriter(stream);
+            using var writer = new Utf8JsonWriter(stream, Helper.RelaxedJsonWriterOptions);
             writer.WriteStartObject();
             writer.WriteBoolean(nameof(Completed), true);
             writer.WriteEndObject();
@@ -160,7 +160,7 @@ namespace XTMF2
                 error = error.InnerException;
             }
             using var stream = File.OpenWrite(Path.Combine(runDirectory, ResultsFile));
-            using var writer = new Utf8JsonWriter(stream);
+            using var writer = new Utf8JsonWriter(stream, Helper.RelaxedJsonWriterOptions);
             writer.WriteStartObject();
             writer.WriteBoolean(nameof(Completed), false);
             writer.WriteString(nameof(ErrorMessage), error.Message);
@@ -184,7 +184,7 @@ namespace XTMF2
         internal static void WriteValidationError(string runDirectory, string? moduleName, string? errorMessage, Guid? elementId = null)
         {
             using var stream = File.OpenWrite(Path.Combine(runDirectory, ResultsFile));
-            using var writer = new Utf8JsonWriter(stream);
+            using var writer = new Utf8JsonWriter(stream, Helper.RelaxedJsonWriterOptions);
             writer.WriteStartObject();
             writer.WriteBoolean(nameof(Completed), false);
             writer.WriteString(nameof(ErrorMessage), errorMessage ?? string.Empty);           

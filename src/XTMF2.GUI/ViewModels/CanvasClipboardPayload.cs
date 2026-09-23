@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Encodings.Web;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -121,8 +122,10 @@ internal sealed record CanvasElementDto(
     [property: JsonPropertyName("isScriptedParam")]    bool                 IsScriptedParam     = false,
     [property: JsonPropertyName("inlinedChildren")]    List<InlinedChildDto>? InlinedChildren   = null,
     [property: JsonPropertyName("templateName")]       string?              TemplateName        = null,
-    [property: JsonPropertyName("embeddedTemplateSnapshot")] string?         EmbeddedTemplateSnapshot = null,
+    [property: JsonPropertyName("embeddedTemplateSnapshot")] object?         EmbeddedTemplateSnapshot = null,
     [property: JsonPropertyName("referencedNodeName")] string?             ReferencedNodeName  = null,
+        [property: JsonPropertyName("referencedNodeId")]   Guid?               ReferencedNodeId    = null,
+        [property: JsonPropertyName("referencedNodeTypeName")] string?         ReferencedNodeTypeName = null,
     [property: JsonPropertyName("functionParameters")] List<FunctionParameterDto>? FunctionParameters = null,
     [property: JsonPropertyName("crossLinks")]         List<CrossNodeLinkDto>? CrossLinks        = null,
     [property: JsonPropertyName("isTemplateCompanion")] bool               IsTemplateCompanion = false,
@@ -188,6 +191,7 @@ internal static class CanvasClipboardSerializer
     {
         WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     /// <summary>
@@ -203,6 +207,23 @@ internal static class CanvasClipboardSerializer
     /// </summary>
     public static string Serialize(CanvasClipboardPayload payload)
         => JsonSerializer.Serialize(payload, SerializerOptions);
+
+    internal static string? SnapshotText(object? snapshot)
+        => snapshot switch
+        {
+            null => null,
+            string text => text,
+            JsonElement element when element.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonElement element => element.GetRawText(),
+            _ => null,
+        };
+
+    internal static JsonElement? SnapshotJson(string? snapshot)
+    {
+        if (string.IsNullOrWhiteSpace(snapshot)) return null;
+        using var document = JsonDocument.Parse(snapshot);
+        return document.RootElement.Clone();
+    }
 
     /// <summary>
     /// Attempts to deserialise the clipboard text returned by

@@ -1,0 +1,85 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:XTMF2.GUI.Views"
+        x:Class="XTMF2.GUI.Views.RunConfigurationDialog"
+        x:CompileBindings="True"
+        x:DataType="local:RunConfigurationDialog"
+        Classes="neon-dialog"
+        Width="440"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="20">
+        <TextBlock Grid.Row="0"
+                   Text="Enter a name for this run:"
+                   FontSize="14"
+                   Margin="0,0,0,8"/>
+
+        <TextBox Grid.Row="1"
+                 x:Name="RunNameTextBox"
+                 Text="{Binding RunName}"
+                 Watermark="Run name"
+                 TabIndex="0"/>
+
+        <TextBlock Grid.Row="2"
+               Text="{Binding RunNameValidationMessage}"
+               Foreground="{DynamicResource DlgErrorFg}"
+               FontSize="12"
+               Margin="0,5,0,0"
+               TextWrapping="Wrap"
+               IsVisible="{Binding IsRunNameInvalid}"/>
+
+        <StackPanel Grid.Row="3"
+                    IsVisible="{Binding IsRunServerSelectionVisible}"
+                    Margin="0,14,0,0"
+                    Spacing="6">
+            <TextBlock Text="RunServer"
+                       FontSize="14"/>
+            <ComboBox x:Name="RunServerComboBox"
+                      ItemsSource="{Binding RunServers}"
+                      SelectedItem="{Binding SelectedRunServer}"
+                      HorizontalAlignment="Stretch"
+                      TabIndex="1">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Name}"/>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </StackPanel>
+
+        <StackPanel Grid.Row="4"
+                IsVisible="{Binding IsStartSelectionVisible}"
+                Margin="0,14,0,0"
+                Spacing="6">
+            <TextBlock Text="Start"
+                   FontSize="14"/>
+            <ComboBox x:Name="StartComboBox"
+                  ItemsSource="{Binding StartNames}"
+                SelectedItem="{Binding SelectedStartName}"
+                TabIndex="2"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="5"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,18,0,0">
+            <Button Content="OK"
+                    Classes="dlg-primary"
+                    Click="OK_Click"
+                    IsEnabled="{Binding IsRunNameValid}"
+                    IsDefault="True"
+                    TabIndex="3"
+                    Padding="20,8"
+                    MinWidth="80"/>
+            <Button Content="Cancel"
+                    Click="Cancel_Click"
+                    IsCancel="True"
+                    TabIndex="4"
+                    Padding="20,8"
+                    MinWidth="80"/>
+        </StackPanel>
+    </Grid>
+</Window>

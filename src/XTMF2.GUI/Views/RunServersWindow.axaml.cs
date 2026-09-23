@@ -20,6 +20,7 @@ public partial class RunServersWindow : Window
         public required RunServerEndpoint Endpoint { get; init; }
         public required ListBoxItem SelectorItem { get; init; }
         public required TextBox Name { get; init; }
+        public required CheckBox Enabled { get; init; }
         public required TextBox Address { get; init; }
         public required TextBox Port { get; init; }
         public required TextBox Token { get; init; }
@@ -72,21 +73,22 @@ public partial class RunServersWindow : Window
     private void AddRunServerEditor(RunServerEndpoint endpoint)
     {
         var name = new TextBox { Text = endpoint.Name, Watermark = "Name", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var enabled = new CheckBox { Content = "Enabled", IsChecked = endpoint.Enabled, IsEnabled = !endpoint.IsLocal };
         var address = new TextBox { Text = endpoint.Address, Watermark = "Address", HorizontalAlignment = HorizontalAlignment.Stretch };
         var port = new TextBox { Text = endpoint.Port.ToString(), Watermark = "Port", HorizontalAlignment = HorizontalAlignment.Stretch };
         var token = new TextBox { Text = endpoint.Token, Watermark = "Token", PasswordChar = '*', IsEnabled = !endpoint.IsLocal, HorizontalAlignment = HorizontalAlignment.Stretch };
         var certificateFingerprint = new TextBox { Text = endpoint.CertificateFingerprint, Watermark = "SHA-256 certificate fingerprint", IsEnabled = !endpoint.IsLocal, HorizontalAlignment = HorizontalAlignment.Stretch };
         var status = new TextBlock
         {
-            Text = endpoint.IsLocal ? "Available" : "Disconnected",
+            Text = endpoint.IsLocal ? "Available" : endpoint.Enabled ? "Disconnected" : "Disabled",
             Opacity = 0.7,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Foreground = endpoint.IsLocal ? Brushes.LimeGreen : Brushes.Red,
+            Foreground = endpoint.IsLocal ? Brushes.LimeGreen : endpoint.Enabled ? Brushes.Red : Brushes.Gray,
             TextWrapping = TextWrapping.Wrap,
             MaxHeight = 48
         };
-        var reconnect = new Button { Content = "Reconnect", Width = 130, IsEnabled = !endpoint.IsLocal };
+        var reconnect = new Button { Content = "Reconnect", Width = 130, IsEnabled = !endpoint.IsLocal && endpoint.Enabled };
         var remove = new Button { Content = "Remove", Width = 100, IsEnabled = !endpoint.IsLocal };
         var selectorName = new TextBlock
         {
@@ -96,8 +98,8 @@ public partial class RunServersWindow : Window
         };
         var selectorStatus = new TextBlock
         {
-            Text = endpoint.IsLocal ? "Available" : "Disconnected",
-            Foreground = endpoint.IsLocal ? Brushes.LimeGreen : Brushes.Red,
+            Text = endpoint.IsLocal ? "Available" : endpoint.Enabled ? "Disconnected" : "Disabled",
+            Foreground = endpoint.IsLocal ? Brushes.LimeGreen : endpoint.Enabled ? Brushes.Red : Brushes.Gray,
             FontSize = 11,
             Opacity = 0.9,
             HorizontalAlignment = HorizontalAlignment.Right,
@@ -113,6 +115,7 @@ public partial class RunServersWindow : Window
             Endpoint = endpoint,
             SelectorItem = selectorItem,
             Name = name,
+            Enabled = enabled,
             Address = address,
             Port = port,
             Token = token,
@@ -232,6 +235,7 @@ public partial class RunServersWindow : Window
         foreach (var currentEditor in _editors)
         {
             DetachFromParent(currentEditor.Name);
+            DetachFromParent(currentEditor.Enabled);
             DetachFromParent(currentEditor.Address);
             DetachFromParent(currentEditor.Port);
             DetachFromParent(currentEditor.Token);
@@ -251,6 +255,7 @@ public partial class RunServersWindow : Window
             FontWeight = FontWeight.SemiBold
         });
         EndpointDetailsPanel.Children.Add(CreateField("Name", editor.Name));
+        EndpointDetailsPanel.Children.Add(editor.Enabled);
         EndpointDetailsPanel.Children.Add(CreateField("Address", editor.Address));
         EndpointDetailsPanel.Children.Add(CreateField("Port", editor.Port));
         EndpointDetailsPanel.Children.Add(CreateField("Token", editor.Token));
@@ -306,6 +311,7 @@ public partial class RunServersWindow : Window
 
                 var endpoint = editor.Endpoint.Clone();
                 endpoint.Name = string.IsNullOrWhiteSpace(editor.Name.Text) ? "RunServer" : editor.Name.Text.Trim();
+                endpoint.Enabled = editor.Enabled.IsChecked != false;
                 endpoint.Address = editor.Address.Text.Trim();
                 endpoint.Port = port;
                 endpoint.Token = editor.Token.Text?.Trim() ?? string.Empty;

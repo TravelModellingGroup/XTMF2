@@ -186,7 +186,7 @@ namespace XTMF2
                     userDir.Create();
                 }
                 using (var stream = File.Create(temp))
-                using (var writer = new Utf8JsonWriter(stream))
+                using (var writer = new Utf8JsonWriter(stream, Helper.RelaxedJsonWriterOptions))
                 {
                     writer.WriteStartObject();
                     writer.WriteString(UserNameProperty, UserName);

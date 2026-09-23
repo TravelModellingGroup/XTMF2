@@ -93,7 +93,8 @@ public class Settings
 
             var json = JsonSerializer.Serialize(this, new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             });
             File.WriteAllText(SettingsPath, json);
         }
@@ -164,6 +165,7 @@ public class Settings
         {
             local.Id = "local";
             local.Name = "Local RunServer";
+            local.Enabled = true;
             local.Address = "127.0.0.1";
             local.Port = 0;
         }

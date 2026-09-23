@@ -1170,16 +1170,70 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (e.NewItems is not null)
             foreach (GhostNode g in e.NewItems)
+            {
                 GhostNodes.Add(new GhostNodeViewModel(g, Session, User));
+                RebuildLinksForGhost(g.ReferencedNode);
+            }
 
         if (e.OldItems is not null)
             foreach (GhostNode g in e.OldItems)
             {
                 var vm = GhostNodes.FirstOrDefault(v => v.UnderlyingGhostNode == g);
-                if (vm is not null) GhostNodes.Remove(vm);
+                if (vm is not null)
+                {
+                    foreach (var linkViewModel in Links
+                        .Where(link => ReferenceEquals(link.Origin, vm) || ReferenceEquals(link.Destination, vm))
+                        .ToList())
+                    {
+                        linkViewModel.Detach();
+                        Links.Remove(linkViewModel);
+                        _projectedLinkViewModels.Remove(linkViewModel);
+
+                        if (linkViewModel.UnderlyingLink is SingleLink singleLink
+                            && _singleLinkDestHandlers.TryGetValue(singleLink, out var handler))
+                        {
+                            singleLink.PropertyChanged -= handler;
+                            _singleLinkDestHandlers.Remove(singleLink);
+                        }
+                    }
+
+                    GhostNodes.Remove(vm);
+                    RebuildLinksForGhost(g.ReferencedNode);
+                }
             }
 
             RebuildProjectedLinkViewModels();
+    }
+
+    private void RebuildLinksForGhost(Node referencedNode)
+    {
+        var affectedLinks = _currentBoundary.Links
+            .Where(link => link.Origin == referencedNode
+                || link switch
+                {
+                    SingleLink single => single.Destination == referencedNode,
+                    MultiLink multi => multi.Destinations.Contains(referencedNode),
+                    _ => false,
+                })
+            .ToList();
+
+        foreach (var link in affectedLinks)
+        {
+            foreach (var linkViewModel in Links.Where(vm => vm.UnderlyingLink == link).ToList())
+            {
+                linkViewModel.Detach();
+                Links.Remove(linkViewModel);
+            }
+
+            if (link is SingleLink singleLink
+                && _singleLinkDestHandlers.TryGetValue(singleLink, out var handler))
+            {
+                singleLink.PropertyChanged -= handler;
+                _singleLinkDestHandlers.Remove(singleLink);
+            }
+
+            TryAddLinkViewModel(link);
+        }
     }
 
     private void OnFunctionTemplatesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1391,7 +1445,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (node is Start start)
             return Starts.FirstOrDefault(s => s.UnderlyingStart == start);
         if (node is FunctionInstance fi)
-            return FunctionInstances.FirstOrDefault(fivm => fivm.UnderlyingInstance == fi);
+        {
+            var directFiVm = FunctionInstances.FirstOrDefault(fivm => fivm.UnderlyingInstance == fi);
+            if (directFiVm is not null) return directFiVm;
+        }
         if (node is FunctionParameter fp)
             return FunctionParameterVMs.FirstOrDefault(fpvm => fpvm.UnderlyingParameter == fp);
         var directVm = Nodes.FirstOrDefault(n => n.UnderlyingNode == node);
@@ -1661,8 +1718,18 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// </summary>
     internal void CreateGhostNode(NodeViewModel nvm, int x, int y, int w, int h)
     {
+        CreateGhostNode(nvm.UnderlyingNode, x, y, w, h);
+    }
+
+    internal void CreateGhostNode(FunctionInstanceViewModel fivm, int x, int y, int w, int h)
+    {
+        CreateGhostNode(fivm.UnderlyingInstance, x, y, w, h);
+    }
+
+    private void CreateGhostNode(Node referencedNode, int x, int y, int w, int h)
+    {
         var location = new Rectangle(x, y, w, h);
-        if (!Session.AddGhostNode(User, _currentBoundary, nvm.UnderlyingNode, location,
+        if (!Session.AddGhostNode(User, _currentBoundary, referencedNode, location,
                 out _, out var error))
             ShowToast(error?.Message ?? "Failed to create ghost node.", isError: true, durationMs: 4000);
     }
@@ -3040,7 +3107,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
         else
         {
-            var picker = new StartPickerDialog(
+            var picker = new FunctionTemplatePickerDialog(
                 title: "Add Function Instance",
                 prompt: "Select the function template to instantiate:",
                 startNames: templateDisplayNames,
@@ -3429,40 +3496,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return;
         }
 
-        // Prompt for the run name.
         var defaultRunName = $"{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
-        var runNameDialog = new InputDialog(
-            title: "Run Model System",
-            prompt: "Enter a name for this run:",
-            defaultText: defaultRunName);
-        await runNameDialog.ShowDialog(ParentWindow);
-        if (runNameDialog.WasCancelled) return;
-        var runName = runNameDialog.InputText?.Trim();
-        if (string.IsNullOrEmpty(runName)) return;
-
-        var endpointId = await SelectRunServerAsync();
-        if (endpointId is null) return;
-
-        // Determine which start to execute.
-        string startToExecute;
-        if (availableStarts.Count == 1)
-        {
-            startToExecute = availableStarts[0].Name;
-        }
-        else
-        {
-            // Multiple starts: show a ComboBox so the user can pick one.
-            var startNames = availableStarts.Select(s => s.Name).ToList();
-            var startDialog = new StartPickerDialog(
-                title: "Select Start",
-                prompt: "Select the start to execute:",
-                startNames: startNames,
-                defaultStart: startNames[0]);
-            await startDialog.ShowDialog(ParentWindow);
-            if (startDialog.WasCancelled) return;
-            startToExecute = startDialog.SelectedStartName ?? startNames[0];
-            if (string.IsNullOrEmpty(startToExecute)) return;
-        }
+        var runConfiguration = await ConfigureRunAsync(
+            "Run Model System",
+            defaultRunName,
+            availableStarts.Select(start => start.Name).ToList());
+        if (runConfiguration is null) return;
+        var (runName, endpointId, startToExecute) = runConfiguration.Value;
 
         var project = Session.Project;
         if (!_runController.SendRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
@@ -3489,36 +3529,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         var defaultRunName = $"Estimation_{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
-        var runNameDialog = new InputDialog(
-            title: "Run Estimation",
-            prompt: "Enter a name for this estimation run:",
-            defaultText: defaultRunName);
-        await runNameDialog.ShowDialog(ParentWindow);
-        if (runNameDialog.WasCancelled) return;
-        var runName = runNameDialog.InputText?.Trim();
-        if (string.IsNullOrEmpty(runName)) return;
-
-        var endpointId = await SelectRunServerAsync();
-        if (endpointId is null) return;
-
-        string startToExecute;
-        if (availableStarts.Count == 1)
-        {
-            startToExecute = availableStarts[0].Name;
-        }
-        else
-        {
-            var startNames = availableStarts.Select(s => s.Name).ToList();
-            var startDialog = new StartPickerDialog(
-                title: "Select Start",
-                prompt: "Select the start to execute:",
-                startNames: startNames,
-                defaultStart: startNames[0]);
-            await startDialog.ShowDialog(ParentWindow);
-            if (startDialog.WasCancelled) return;
-            startToExecute = startDialog.SelectedStartName ?? startNames[0];
-            if (string.IsNullOrEmpty(startToExecute)) return;
-        }
+        var runConfiguration = await ConfigureRunAsync(
+            "Run Estimation",
+            defaultRunName,
+            availableStarts.Select(start => start.Name).ToList());
+        if (runConfiguration is null) return;
+        var (runName, endpointId, startToExecute) = runConfiguration.Value;
 
         var project = Session.Project;
         if (!_runController.SendEstimationRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
@@ -3545,36 +3561,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         var defaultRunName = $"Calibration_{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
-        var runNameDialog = new InputDialog(
-            title: "Run Calibration",
-            prompt: "Enter a name for this calibration run:",
-            defaultText: defaultRunName);
-        await runNameDialog.ShowDialog(ParentWindow);
-        if (runNameDialog.WasCancelled) return;
-        var runName = runNameDialog.InputText?.Trim();
-        if (string.IsNullOrEmpty(runName)) return;
-
-        var endpointId = await SelectRunServerAsync();
-        if (endpointId is null) return;
-
-        string startToExecute;
-        if (availableStarts.Count == 1)
-        {
-            startToExecute = availableStarts[0].Name;
-        }
-        else
-        {
-            var startNames = availableStarts.Select(s => s.Name).ToList();
-            var startDialog = new StartPickerDialog(
-                title: "Select Start",
-                prompt: "Select the start to execute:",
-                startNames: startNames,
-                defaultStart: startNames[0]);
-            await startDialog.ShowDialog(ParentWindow);
-            if (startDialog.WasCancelled) return;
-            startToExecute = startDialog.SelectedStartName ?? startNames[0];
-            if (string.IsNullOrEmpty(startToExecute)) return;
-        }
+        var runConfiguration = await ConfigureRunAsync(
+            "Run Calibration",
+            defaultRunName,
+            availableStarts.Select(start => start.Name).ToList());
+        if (runConfiguration is null) return;
+        var (runName, endpointId, startToExecute) = runConfiguration.Value;
 
         var project = Session.Project;
         if (!_runController.SendCalibrationRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
@@ -3587,7 +3579,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         RunStarted?.Invoke();
     }
 
-    private async Task<string?> SelectRunServerAsync()
+    private async Task<(string RunName, string EndpointId, string StartName)?> ConfigureRunAsync(
+        string title,
+        string defaultRunName,
+        IReadOnlyList<string> startNames)
     {
         if (_runController is null)
             return null;
@@ -3598,19 +3593,18 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             ShowToast("No RunServer is connected.", isError: true, durationMs: 5000);
             return null;
         }
-        if (endpoints.Count == 1)
-            return endpoints[0].Id;
 
-        var picker = new StartPickerDialog(
-            title: "Select RunServer",
-            prompt: "Select the RunServer for this run:",
-            startNames: endpoints.Select(endpoint => endpoint.Name).ToList(),
-            defaultStart: endpoints[0].Name);
-        await picker.ShowDialog(ParentWindow!);
-        if (picker.WasCancelled)
+        var dialog = new RunConfigurationDialog(title, defaultRunName, endpoints, startNames);
+        await dialog.ShowDialog(ParentWindow!);
+        if (dialog.WasCancelled)
             return null;
 
-        return endpoints.FirstOrDefault(endpoint => endpoint.Name == picker.SelectedStartName)?.Id;
+        var runName = dialog.RunName?.Trim();
+        var endpointId = dialog.SelectedRunServer?.Id;
+        var startName = dialog.SelectedStartName;
+        return string.IsNullOrEmpty(runName) || endpointId is null || string.IsNullOrEmpty(startName)
+            ? null
+            : (runName, endpointId, startName);
     }
 
     /// <summary>Save the model system to its project file.</summary>
@@ -4342,7 +4336,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             var templateDisplayNames = availableTemplates
                 .Select(ft => Boundary.GetQualifiedTemplateName(_currentBoundary, ft) ?? ft.Name)
                 .ToList();
-            var picker = new StartPickerDialog(
+            var picker = new FunctionTemplatePickerDialog(
                 title: "Add Function Instance",
                 prompt: "Select the function template to instantiate:",
                 startNames: templateDisplayNames,
@@ -4501,31 +4495,23 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         try
         {
             var pastedTemplatesBySnapshot = new Dictionary<string, FunctionTemplate>(StringComparer.Ordinal);
-            var templateSnapshotsReferencedByInstances = payload.Elements
-                .Where(e => e.Kind == CanvasElementKind.FunctionInstance
-                    && !string.IsNullOrWhiteSpace(e.EmbeddedTemplateSnapshot))
-                .Select(e => e.EmbeddedTemplateSnapshot!)
-                .ToHashSet(StringComparer.Ordinal);
-
             // Paste FunctionTemplates first so FunctionInstances that reference them can be resolved.
             foreach (var element in payload.Elements)
             {
                 if (element.Kind != CanvasElementKind.FunctionTemplate) continue;
 
                 // Guard against duplicate FunctionTemplate payload entries for the same snapshot.
-                if (!string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot)
-                    && pastedTemplatesBySnapshot.ContainsKey(element.EmbeddedTemplateSnapshot))
+                var snapshotText = CanvasClipboardSerializer.SnapshotText(element.EmbeddedTemplateSnapshot);
+                if (snapshotText is not null && pastedTemplatesBySnapshot.ContainsKey(snapshotText))
                 {
                     continue;
                 }
 
-                var preferReuseExisting = element.IsTemplateCompanion
-                    || (!string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot)
-                        && templateSnapshotsReferencedByInstances.Contains(element.EmbeddedTemplateSnapshot));
+                    var preferReuseExisting = element.IsTemplateCompanion;
 
                 var pastedTemplate = PasteFunctionTemplate(element, dx, dy, preferReuseExisting);
-                if (pastedTemplate is not null && !string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot))
-                    pastedTemplatesBySnapshot[element.EmbeddedTemplateSnapshot] = pastedTemplate;
+                if (pastedTemplate is not null && snapshotText is not null)
+                    pastedTemplatesBySnapshot[snapshotText] = pastedTemplate;
             }
 
             // Pass 1: create all node-like elements (without linking inlined children yet).
@@ -4555,7 +4541,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                         break;
 
                     case CanvasElementKind.GhostNode:
-                        PasteGhostNodeEntry(element, dx, dy);
+                        await PasteGhostNodeEntryAsync(element, dx, dy);
                         break;
 
                     // FunctionTemplate was already handled above.
@@ -4775,12 +4761,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         float h = element.H > 0 ? element.H : 140f;
         var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
 
-        if (!string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot))
+        var snapshotText = CanvasClipboardSerializer.SnapshotText(element.EmbeddedTemplateSnapshot);
+        if (snapshotText is not null)
         {
             // Companion template entries (auto-added when copying a FunctionInstance)
             // should resolve to an equivalent existing template when available.
             if (preferReuseExisting
-                && Session.TryFindEquivalentFunctionTemplateSnapshot(element.EmbeddedTemplateSnapshot, out var existingTemplate, out _)
+                && Session.TryFindEquivalentFunctionTemplateSnapshot(snapshotText, out var existingTemplate, out _)
                 && existingTemplate is not null)
             {
                 return existingTemplate;
@@ -4789,11 +4776,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             if (Session.ImportFunctionTemplateSnapshot(
                     User,
                     _currentBoundary,
-                    element.EmbeddedTemplateSnapshot,
+                    snapshotText,
                     element.Name,
                     loc,
                     out var importedTemplate,
-                    out _))
+                    out _,
+                    regenerateId: !element.IsTemplateCompanion))
             {
                 return importedTemplate;
             }
@@ -4855,12 +4843,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         float dy,
         IReadOnlyDictionary<string, FunctionTemplate> pastedTemplatesBySnapshot)
     {
-        if (!string.IsNullOrWhiteSpace(element.EmbeddedTemplateSnapshot))
+        var snapshotText = CanvasClipboardSerializer.SnapshotText(element.EmbeddedTemplateSnapshot);
+        if (snapshotText is not null)
         {
-            if (pastedTemplatesBySnapshot.TryGetValue(element.EmbeddedTemplateSnapshot, out var templateFromThisPaste))
+            if (pastedTemplatesBySnapshot.TryGetValue(snapshotText, out var templateFromThisPaste))
                 return templateFromThisPaste;
 
-            if (Session.TryFindEquivalentFunctionTemplateSnapshot(element.EmbeddedTemplateSnapshot, out var existing, out _)
+            if (Session.TryFindEquivalentFunctionTemplateSnapshot(snapshotText, out var existing, out _)
                 && existing is not null)
             {
                 return existing;
@@ -4879,11 +4868,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             if (Session.ImportFunctionTemplateSnapshot(
                     User,
                     _currentBoundary,
-                    element.EmbeddedTemplateSnapshot,
+                    snapshotText,
                     preferredName,
                     importedLocation,
                     out var imported,
-                    out _))
+                    out _,
+                    regenerateId: false))
             {
                 return imported;
             }
@@ -4899,21 +4889,47 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             string.Equals(ft.Name, element.TemplateName, StringComparison.OrdinalIgnoreCase));
     }
 
-    private void PasteGhostNodeEntry(CanvasElementDto element, float dx, float dy)
+    private Task PasteGhostNodeEntryAsync(CanvasElementDto element, float dx, float dy)
     {
-        if (element.ReferencedNodeName is null) return;
+        Node? referencedNode = null;
+        if (element.ReferencedNodeId is Guid referencedNodeId)
+            TryFindNodeById(referencedNodeId, Session.ModelSystem.GlobalBoundary, out referencedNode);
 
-        // Try to find the referenced real node by name in the current boundary's visible nodes.
-        var referencedNvm = Nodes.FirstOrDefault(n =>
-            string.Equals(n.Name, element.ReferencedNodeName, StringComparison.OrdinalIgnoreCase)
-            && !n.IsInlined);
-        if (referencedNvm is null) return;
+        if (referencedNode is null && !string.IsNullOrWhiteSpace(element.ReferencedNodeName))
+        {
+            referencedNode = Nodes.FirstOrDefault(n =>
+                string.Equals(n.Name, element.ReferencedNodeName, StringComparison.OrdinalIgnoreCase)
+                && !n.IsInlined)?.UnderlyingNode;
+            referencedNode ??= FunctionInstances.FirstOrDefault(fi =>
+                string.Equals(fi.Name, element.ReferencedNodeName, StringComparison.OrdinalIgnoreCase))?.UnderlyingInstance;
+        }
+
+        if (referencedNode is null && CanvasClipboardSerializer.SnapshotText(element.EmbeddedTemplateSnapshot) is not null)
+        {
+            var template = ResolveTemplateForPastedFunctionInstance(element, 0, 0,
+                new Dictionary<string, FunctionTemplate>(StringComparer.Ordinal));
+            if (template is not null)
+            {
+                var name = string.IsNullOrWhiteSpace(element.ReferencedNodeName)
+                    ? "Pasted Function Instance"
+                    : element.ReferencedNodeName;
+                if (!Session.AddFunctionInstance(User, _currentBoundary, template, name,
+                        new Rectangle(element.X + dx + 280f, element.Y + dy, 160f, 70f), out var instance, out _))
+                    return Task.CompletedTask;
+                referencedNode = instance;
+                if (instance is not null)
+                    PasteNodeInlinedChildren(element, instance);
+            }
+        }
+
+        if (referencedNode is null) return Task.CompletedTask;
 
         float w = element.W > 0 ? element.W : 120f;
         float h = element.H > 0 ? element.H : 50f;
         var loc = new Rectangle(element.X + dx, element.Y + dy, w, h);
 
-        Session.AddGhostNode(User, _currentBoundary, referencedNvm.UnderlyingNode, loc, out _, out _);
+        Session.AddGhostNode(User, _currentBoundary, referencedNode, loc, out _, out _);
+        return Task.CompletedTask;
     }
 
     internal bool UpdateCurrentParameterValueFromFilePath(NodeViewModel nvm, string newFilePath, bool isDirectory,

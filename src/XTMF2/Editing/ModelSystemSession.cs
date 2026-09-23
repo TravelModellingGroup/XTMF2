@@ -114,7 +114,7 @@ namespace XTMF2.Editing
                     CollectTypesForFunctionTemplateSnapshot(template, moduleTypes);
 
                     var buffer = new ArrayBufferWriter<byte>();
-                    using var writer = new Utf8JsonWriter(buffer);
+                    using var writer = new Utf8JsonWriter(buffer, XTMF2.Helper.RelaxedJsonWriterOptions);
                     writer.WriteStartObject();
                     writer.WriteString("source", FunctionTemplateSnapshotSource);
                     writer.WriteNumber("version", FunctionTemplateSnapshotVersion);
@@ -194,7 +194,8 @@ namespace XTMF2.Editing
             string? nameOverride,
             Rectangle? locationOverride,
             [NotNullWhen(true)] out FunctionTemplate? template,
-            [NotNullWhen(false)] out CommandError? error)
+            [NotNullWhen(false)] out CommandError? error,
+            bool regenerateId = false)
         {
             ArgumentNullException.ThrowIfNull(user);
             ArgumentNullException.ThrowIfNull(targetBoundary);
@@ -209,7 +210,8 @@ namespace XTMF2.Editing
                     return false;
                 }
 
-                if (!TryLoadFunctionTemplateFromSnapshot(targetBoundary, snapshot, out var loadedTemplate, out var loadError))
+                if (!TryLoadFunctionTemplateFromSnapshot(targetBoundary, snapshot, regenerateId,
+                    out var loadedTemplate, out var loadError))
                 {
                     error = loadError;
                     return false;
@@ -310,6 +312,7 @@ namespace XTMF2.Editing
         private bool TryLoadFunctionTemplateFromSnapshot(
             Boundary targetBoundary,
             string snapshot,
+            bool regenerateId,
             [NotNullWhen(true)] out FunctionTemplate? template,
             [NotNullWhen(false)] out CommandError? error)
         {
@@ -366,7 +369,8 @@ namespace XTMF2.Editing
 
                 string? loadError = null;
                 if (!FunctionTemplate.Load(GetModuleRepository(), typeLookup, nodeLookup, scriptedParameters,
-                    deferredGhostNodes, ref reader, targetBoundary, out template, ref loadError))
+                    deferredGhostNodes, ref reader, targetBoundary, out template, ref loadError,
+                    regenerateId: regenerateId))
                 {
                     error = new CommandError(loadError ?? "Unable to load function-template snapshot.");
                     return false;
@@ -450,7 +454,7 @@ namespace XTMF2.Editing
                 }
 
                 var buffer = new ArrayBufferWriter<byte>();
-                using (var writer = new Utf8JsonWriter(buffer))
+                using (var writer = new Utf8JsonWriter(buffer, XTMF2.Helper.RelaxedJsonWriterOptions))
                 {
                     WriteCanonicalJson(writer, templateEl);
                     writer.Flush();

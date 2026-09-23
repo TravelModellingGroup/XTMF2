@@ -20,11 +20,18 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 
 namespace XTMF2
 {
     public static class Helper
     {
+        public static readonly JsonWriterOptions RelaxedJsonWriterOptions = new()
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        };
+
         /// <summary>
         /// Conditionally execute code on a disposable object while this
         /// function maintains it's lifetime

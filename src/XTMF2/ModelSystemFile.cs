@@ -137,7 +137,7 @@ namespace XTMF2
                 // copy in the model system file
                 File.Copy(modelSystemHeader.ModelSystemPath, System.IO.Path.Combine(tempDir.FullName, ModelSystemFilePath));
                 using (var metadataStream = File.OpenWrite(System.IO.Path.Combine(tempDir.FullName, MetaDataFilePath)))
-                using (var writer = new Utf8JsonWriter(metadataStream))
+                using (var writer = new Utf8JsonWriter(metadataStream, Helper.RelaxedJsonWriterOptions))
                 {
                     writer.WriteStartObject();
                     writer.WriteString(PropertyName, modelSystemHeader.Name);
@@ -221,7 +221,7 @@ namespace XTMF2
                 
                 // File.Copy(modelSystemHeader.ModelSystemPath, System.IO.Path.Combine(tempDir.FullName, ModelSystemFilePath));
                 using (var metadataStream = File.OpenWrite(System.IO.Path.Combine(tempDir.FullName, MetaDataFilePath)))
-                using (var writer = new Utf8JsonWriter(metadataStream))
+                using (var writer = new Utf8JsonWriter(metadataStream, Helper.RelaxedJsonWriterOptions))
                 {
                     var header = session.ModelSystemHeader;
                     writer.WriteStartObject();

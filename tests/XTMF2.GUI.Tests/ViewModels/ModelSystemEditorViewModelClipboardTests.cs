@@ -19,6 +19,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using XTMF2.Editing;
 using XTMF2.GUI.Controls;
 using XTMF2.GUI.Tests.Modules;
@@ -91,6 +92,31 @@ public class ModelSystemEditorViewModelClipboardTests
         Assert.AreEqual("Body text", roundTrip.Elements[0].CommentBody);
         Assert.AreEqual("Header", roundTrip.Elements[0].CommentHeader);
         Assert.IsNull(roundTrip.Elements[0].Name);
+    }
+
+    [TestMethod]
+    public void ClipboardSerializer_EmbeddedTemplateSnapshot_IsRawJson()
+    {
+        using var snapshot = JsonDocument.Parse("{\"source\":\"XTMF2FunctionTemplate\",\"version\":1}");
+        var payload = new CanvasClipboardPayload(
+            Source: "XTMF2Canvas",
+            Version: 1,
+            Elements:
+            [
+                new CanvasElementDto(
+                    Kind: CanvasElementKind.FunctionTemplate,
+                    X: 0,
+                    Y: 0,
+                    W: 1,
+                    H: 1,
+                    ParameterValue: "a+b",
+                    EmbeddedTemplateSnapshot: snapshot.RootElement.Clone())
+            ]);
+
+        var json = CanvasClipboardSerializer.Serialize(payload);
+        StringAssert.Contains(json, "\"embeddedTemplateSnapshot\":{\"source\":\"XTMF2FunctionTemplate\"");
+        StringAssert.Contains(json, "\"paramValue\":\"a+b\"");
+        Assert.DoesNotContain(json, "\\u0022", System.StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -555,6 +581,64 @@ public class ModelSystemEditorViewModelClipboardTests
     }
 
     [TestMethod]
+    public void PasteElementsAsync_GhostNodeWithMissingFunctionInstance_ReconstructsSource()
+    {
+        TestGuiHelper.RunInProjectContext(
+            nameof(PasteElementsAsync_GhostNodeWithMissingFunctionInstance_ReconstructsSource),
+            (runtime, user, projectSession) =>
+            {
+                CommandError? error = null;
+                Assert.IsTrue(projectSession.CreateNewModelSystem(user, "SourceModel", out var sourceHeader, out error),
+                    error?.Message);
+                Assert.IsTrue(projectSession.CreateNewModelSystem(user, "TargetModel", out var targetHeader, out error),
+                    error?.Message);
+
+                string? snapshot = null;
+                Assert.IsTrue(projectSession.EditModelSystem(user, sourceHeader!, out var sourceSession, out error)
+                    .UsingIf(sourceSession, () =>
+                    {
+                        var sourceTemplate = BuildTemplate(
+                            user, sourceSession!, "GhostTemplate",
+                            new Rectangle(20, 20, 260, 160),
+                            new Rectangle(30, 40, 160, 60),
+                            new Rectangle(50, 120, 150, 50));
+                        Assert.IsTrue(sourceSession!.ExportFunctionTemplateSnapshot(sourceTemplate, out snapshot, out error),
+                            error?.Message);
+                    }), error?.Message);
+
+                Assert.IsTrue(projectSession.EditModelSystem(user, targetHeader!, out var targetSession, out error)
+                    .UsingIf(targetSession, () =>
+                    {
+                        using var vmEditor = new ModelSystemEditorViewModel(targetSession!, user, runController: null);
+                        var payload = new CanvasClipboardPayload(
+                            Source: "XTMF2Canvas",
+                            Version: 1,
+                            Elements:
+                            [
+                                new CanvasElementDto(
+                                    Kind: CanvasElementKind.GhostNode,
+                                    X: 100f,
+                                    Y: 120f,
+                                    W: 160f,
+                                    H: 70f,
+                                    Name: "CopiedInstance",
+                                    ReferencedNodeName: "CopiedInstance",
+                                    EmbeddedTemplateSnapshot: snapshot!,
+                                    TemplateName: "GhostTemplate")
+                            ]);
+
+                        vmEditor.PasteElementsAsync(payload, 0, 0).GetAwaiter().GetResult();
+
+                        var boundary = targetSession!.ModelSystem.GlobalBoundary;
+                        Assert.HasCount(1, boundary.FunctionInstances);
+                        Assert.HasCount(1, boundary.GhostNodes);
+                        Assert.AreSame(boundary.FunctionInstances.Single(), boundary.GhostNodes.Single().ReferencedNode);
+                        Assert.AreNotEqual(Rectangle.Hidden, boundary.FunctionInstances.Single().Location);
+                    }), error?.Message);
+            });
+    }
+
+    [TestMethod]
     public void PasteElementsAsync_FunctionInstanceRestoresEmbeddedParameter()
     {
         TestGuiHelper.RunInProjectContext(
@@ -683,12 +767,14 @@ public class ModelSystemEditorViewModelClipboardTests
                     .GetAwaiter().GetResult();
 
                 var boundary = session.ModelSystem.GlobalBoundary;
-                Assert.HasCount(1, boundary.FunctionTemplates,
-                    "Equivalent existing template should be reused instead of duplicating.");
+                Assert.HasCount(2, boundary.FunctionTemplates,
+                    "An explicitly pasted FunctionTemplate should create a new definition.");
                 Assert.HasCount(1, boundary.FunctionInstances,
                     "FunctionInstance should be pasted.");
-                Assert.AreSame(existingTemplate, boundary.FunctionInstances.Single().Template,
-                    "Pasted FunctionInstance should resolve to the existing equivalent template.");
+                Assert.AreNotSame(existingTemplate, boundary.FunctionInstances.Single().Template,
+                    "Pasted FunctionInstance should resolve to the explicitly pasted template.");
+                Assert.AreNotEqual(existingTemplate.Id, boundary.FunctionInstances.Single().Template.Id,
+                    "Pasted FunctionTemplate should receive a new GUID.");
             });
     }
 
@@ -801,11 +887,11 @@ public class ModelSystemEditorViewModelClipboardTests
                         Assert.AreEqual("Mixed header", boundary.CommentBlocks[0].Header);
 
                         Assert.HasCount(1, boundary.FunctionTemplates,
-                            "Duplicate template snapshot entries should still dedupe in mixed payloads.");
+                            "The explicit template and its companion should materialize one pasted definition.");
                         Assert.HasCount(1, boundary.FunctionInstances,
                             "Function instance in mixed payload should be pasted.");
-                        Assert.AreSame(boundary.FunctionTemplates.Single(), boundary.FunctionInstances.Single().Template,
-                            "Function instance should bind to deduped template.");
+                        Assert.Contains(boundary.FunctionInstances.Single().Template, boundary.FunctionTemplates,
+                            "Function instance should bind to the explicitly pasted template.");
                     }), error?.Message);
             });
     }

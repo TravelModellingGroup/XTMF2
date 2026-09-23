@@ -50,6 +50,8 @@ public enum RunStatus
 /// </summary>
 public sealed partial class RunViewModel : ObservableObject
 {
+    private const int MaximumMessageCount = 200;
+
     /// <summary>The unique identifier assigned to this run by the host bus.</summary>
     public string RunId { get; }
 
@@ -126,12 +128,12 @@ public sealed partial class RunViewModel : ObservableObject
     {
         if (!Directory.Exists(RunDirectory))
         {
-            Messages.Add($"The run directory does not exist: {RunDirectory}");
+            AddMessage($"The run directory does not exist: {RunDirectory}");
             return;
         }
         if (!TryOpenDirectoryInFileExplorer(RunDirectory))
         {
-            Messages.Add($"Unable to open the run directory: {RunDirectory}");
+            AddMessage($"Unable to open the run directory: {RunDirectory}");
         }
     }
 
@@ -328,18 +330,25 @@ public sealed partial class RunViewModel : ObservableObject
             return;
         if (!_optimizationSession.ApplyOptimizationResults(_optimizationUser, _optimizationResults, out var error))
         {
-            Messages.Add($"Failed to apply optimization results: {error?.Message}");
+            AddMessage($"Failed to apply optimization results: {error?.Message}");
             return;
         }
         HasOptimizationResults = false;
-        Messages.Add($"Optimization results applied ({_optimizationResults.Count} parameter(s) updated).");
+        AddMessage($"Optimization results applied ({_optimizationResults.Count} parameter(s) updated).");
     }
 
     /// <summary>Records a status message from the client and updates <see cref="StatusText"/>.</summary>
     internal void AppendStatus(string message)
     {
-        Messages.Add(message);
+        AddMessage(message);
         StatusText = message;
+    }
+
+    private void AddMessage(string message)
+    {
+        Messages.Insert(0, message);
+        if (Messages.Count > MaximumMessageCount)
+            Messages.RemoveAt(Messages.Count - 1);
     }
 
     /// <summary>Marks the run as finished successfully.</summary>
@@ -361,10 +370,10 @@ public sealed partial class RunViewModel : ObservableObject
         _errorElementId = elementId;
         HasErrorNavigationTarget = elementId.HasValue;
         if (!string.IsNullOrEmpty(stack))
-            Messages.Add($"Stack trace:\n{stack}");
-        Messages.Add($"Error: {errorMessage}");
+            AddMessage($"Stack trace:\n{stack}");
+        AddMessage($"Error: {errorMessage}");
         if (!string.IsNullOrWhiteSpace(moduleName))
-            Messages.Add($"Failing module: {moduleName}");
+            AddMessage($"Failing module: {moduleName}");
         OnPropertyChanged(nameof(StatusBadge));
         OnPropertyChanged(nameof(IsCompleted));
         CancelRunCommand.NotifyCanExecuteChanged();

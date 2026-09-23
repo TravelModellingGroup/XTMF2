@@ -9,6 +9,7 @@ public sealed class RunServerEndpoint
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "RunServer";
+    public bool Enabled { get; set; } = true;
     public string Address { get; set; } = "127.0.0.1";
     public int Port { get; set; }
     public bool IsLocal { get; set; }
@@ -20,6 +21,7 @@ public sealed class RunServerEndpoint
         {
             Id = "local",
             Name = "Local RunServer",
+            Enabled = true,
             Address = "127.0.0.1",
             Port = 0,
             IsLocal = true,
@@ -32,6 +34,7 @@ public sealed class RunServerEndpoint
         {
             Id = Id,
             Name = Name,
+            Enabled = Enabled,
             Address = Address,
             Port = Port,
             IsLocal = IsLocal,

@@ -211,7 +211,7 @@ namespace XTMF2
         {
             try
             {
-                using var writer = new Utf8JsonWriter(saveTo);
+                using var writer = new Utf8JsonWriter(saveTo, XTMF2.Helper.RelaxedJsonWriterOptions);
                 var typeDictionary = GlobalBoundary.GetUsedTypes();
                 writer.WriteStartObject();
                 WriteTypes(writer, typeDictionary);
