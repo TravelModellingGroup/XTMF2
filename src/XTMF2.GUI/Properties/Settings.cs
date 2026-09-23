@@ -164,6 +164,7 @@ public class Settings
         {
             local.Id = "local";
             local.Name = "Local RunServer";
+            local.Enabled = true;
             local.Address = "127.0.0.1";
             local.Port = 0;
         }

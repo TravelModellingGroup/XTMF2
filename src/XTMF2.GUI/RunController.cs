@@ -427,6 +427,12 @@ public class RunController : IDisposable
     /// </summary>
     public bool ConnectRunServer(RunServerEndpoint endpoint, out string? error)
     {
+        if (!endpoint.Enabled)
+        {
+            error = $"RunServer '{endpoint.Name}' is disabled.";
+            return false;
+        }
+
         if (!_connections.Connect(endpoint, out error))
             return false;
 
@@ -435,9 +441,20 @@ public class RunController : IDisposable
 
     private void ConnectConfiguredRunServers()
     {
+        var configuredEndpoints = Settings.Default.RunServers
+            .Where(endpoint => !endpoint.IsLocal && endpoint.Port != 0)
+            .ToDictionary(endpoint => endpoint.Id, StringComparer.Ordinal);
+
+        foreach (var state in _connections.GetStates())
+        {
+            if (!state.Endpoint.IsLocal &&
+                (!configuredEndpoints.TryGetValue(state.Endpoint.Id, out var endpoint) || !endpoint.Enabled))
+                _connections.Remove(state.Endpoint.Id);
+        }
+
         foreach (var endpoint in Settings.Default.RunServers)
         {
-            if (endpoint.IsLocal || endpoint.Port == 0)
+            if (endpoint.IsLocal || endpoint.Port == 0 || !endpoint.Enabled)
                 continue;
 
             try
