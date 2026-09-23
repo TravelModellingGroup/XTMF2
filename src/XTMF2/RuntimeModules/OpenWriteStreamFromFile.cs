@@ -35,7 +35,7 @@ public class OpenWriteStreamFromFile : BaseFunction<WriteStream>
 
     public override WriteStream Invoke()
     {
-        var context = FilePath!.Invoke();
+        var context = Helper.NormalizePathSeparators(FilePath!.Invoke());
         if(String.IsNullOrWhiteSpace(context))
         {
             throw new XTMFRuntimeException(this, "The provided file path was empty!");

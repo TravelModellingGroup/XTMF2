@@ -464,6 +464,7 @@ partial class ModelSystemCanvas
 
                 var directoryPath = directories[0].TryGetLocalPath();
                 if (string.IsNullOrEmpty(directoryPath)) return;
+                directoryPath = XTMF2.Helper.NormalizePathSeparators(directoryPath);
 
                 if(!_vm.UpdateCurrentParameterValueFromFilePath(nvm, directoryPath, true, out var error))
                 {
@@ -486,6 +487,7 @@ partial class ModelSystemCanvas
 
                 var filePath = files[0].TryGetLocalPath();
                 if (string.IsNullOrEmpty(filePath)) return;
+                filePath = XTMF2.Helper.NormalizePathSeparators(filePath);
 
                 if(!_vm.UpdateCurrentParameterValueFromFilePath(nvm, filePath, false, out var error))
                 {

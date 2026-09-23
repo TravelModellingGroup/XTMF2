@@ -83,5 +83,8 @@ namespace XTMF2
                 throw new ArgumentNullException(paramName);
             }
         }
+
+        public static string NormalizePathSeparators(string path) =>
+            path.Replace('\\', '/');
     }
 }
