@@ -93,7 +93,8 @@ public class Settings
 
             var json = JsonSerializer.Serialize(this, new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             });
             File.WriteAllText(SettingsPath, json);
         }

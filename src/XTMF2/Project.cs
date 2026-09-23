@@ -376,7 +376,7 @@ namespace XTMF2
             {
                 using (var tempFile = File.Create(temp))
                 {
-                    using var writer = new Utf8JsonWriter(tempFile);
+                    using var writer = new Utf8JsonWriter(tempFile, Helper.RelaxedJsonWriterOptions);
                     writer.WriteStartObject();
                     writer.WriteString(NameProperty, Name);
                     writer.WriteString(DescriptionProperty, Description);

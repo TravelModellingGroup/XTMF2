@@ -56,6 +56,25 @@ namespace XTMF2.UnitTests.Editing
             return ghost!;
         }
 
+        [TestMethod]
+        public void TestAddGhostNode_FromFunctionInstance()
+        {
+            TestHelper.RunInModelSystemContext(nameof(TestAddGhostNode_FromFunctionInstance),
+            (user, pSession, ms) =>
+            {
+                var boundary = ms.ModelSystem.GlobalBoundary;
+                var template = AddTemplate(user, ms, boundary);
+                Assert.IsTrue(ms.AddFunctionInstance(user, boundary, template, "Instance",
+                    new Rectangle(10f, 10f, 120f, 50f), out var instance, out var error), error?.Message);
+
+                var ghost = AddGhost(user, ms, boundary, instance!);
+
+                Assert.AreSame(instance, ghost.ReferencedNode);
+                Assert.AreEqual(instance.Name, ghost.Name);
+                Assert.HasCount(1, boundary.GhostNodes);
+            });
+        }
+
         // ── RemoveGhostNode inside InternalModules ─────────────────────────────
 
         [TestMethod]

@@ -139,7 +139,7 @@ partial class ModelSystemCanvas
                             (float)ft.X, (float)ft.Y,
                             (float)ft.Width, (float)ft.Height,
                             Name: ft.Name,
-                            EmbeddedTemplateSnapshot: templateSnapshot,
+                            EmbeddedTemplateSnapshot: CanvasClipboardSerializer.SnapshotJson(templateSnapshot),
                             FunctionParameters: fpDtos.Count > 0 ? fpDtos : null);
 
                         // If this template snapshot is already present (for example as an
@@ -148,7 +148,10 @@ partial class ModelSystemCanvas
                         {
                             var existingTemplateIndex = dtos.FindIndex(existing =>
                                 existing.Kind == CanvasElementKind.FunctionTemplate
-                                && string.Equals(existing.EmbeddedTemplateSnapshot, templateSnapshot, System.StringComparison.Ordinal));
+                                && string.Equals(
+                                    CanvasClipboardSerializer.SnapshotText(existing.EmbeddedTemplateSnapshot),
+                                    templateSnapshot,
+                                    System.StringComparison.Ordinal));
                             if (existingTemplateIndex >= 0)
                             {
                                 // Prefer the explicit user-copied FunctionTemplate over a companion stub.
@@ -182,18 +185,48 @@ partial class ModelSystemCanvas
                             (float)fi.Width, (float)fi.Height,
                             Name: fi.Name,
                             TemplateName: fi.TemplateName,
-                            EmbeddedTemplateSnapshot: instanceTemplateSnapshot,
+                            EmbeddedTemplateSnapshot: CanvasClipboardSerializer.SnapshotJson(instanceTemplateSnapshot),
                             InlinedChildren: embeddedParameters,
                             OriginalId: fi.UnderlyingInstance.Id);
                         break;
 
                     case GhostNodeViewModel ghost:
+                        var referencedNode = ghost.UnderlyingGhostNode.ReferencedNode;
+                        string? ghostTemplateSnapshot = null;
+                        List<InlinedChildDto>? ghostEmbeddedParameters = null;
+                        if (referencedNode is FunctionInstance referencedInstance)
+                        {
+                            _vm.TryExportFunctionTemplateSnapshot(referencedInstance.Template, out ghostTemplateSnapshot);
+                            if (ghost.ReferencedFunctionInstanceViewModel is { } referencedFiVm)
+                            {
+                                foreach (var kvp in _fiHookInlinedParam)
+                                {
+                                    if (!ReferenceEquals(kvp.Key.Item1, referencedFiVm)) continue;
+                                    ghostEmbeddedParameters ??= [];
+                                    var childDto = BuildNodeDto(kvp.Value) with
+                                    {
+                                        X = kvp.Value.UnderlyingNode.Location.X,
+                                        Y = kvp.Value.UnderlyingNode.Location.Y,
+                                        W = (float)NodeRenderWidth(kvp.Value),
+                                        H = (float)NodeRenderHeight(kvp.Value),
+                                    };
+                                    ghostEmbeddedParameters.Add(new InlinedChildDto(kvp.Key.Item2.Name, childDto));
+                                }
+                            }
+                        }
                         dto = new CanvasElementDto(
                             CanvasElementKind.GhostNode,
                             (float)ghost.X, (float)ghost.Y,
                             (float)ghost.Width, (float)ghost.Height,
                             Name: ghost.Name,
-                            ReferencedNodeName: ghost.UnderlyingGhostNode.ReferencedNode.Name);
+                            TemplateName: referencedNode is FunctionInstance referencedFi ? referencedFi.Template.Name : null,
+                            EmbeddedTemplateSnapshot: CanvasClipboardSerializer.SnapshotJson(ghostTemplateSnapshot),
+                            InlinedChildren: ghostEmbeddedParameters,
+                            ReferencedNodeName: referencedNode.Name,
+                            ReferencedNodeId: referencedNode.Id,
+                            ReferencedNodeTypeName: referencedNode is FunctionInstance
+                                ? null
+                                : referencedNode.Type?.AssemblyQualifiedName);
                         break;
 
                     default:
@@ -204,9 +237,12 @@ partial class ModelSystemCanvas
                 // Ensure cross-model-system paste has a concrete FunctionTemplate element to materialize
                 // before FunctionInstance resolution. This carries full internals via the snapshot.
                 if (el is FunctionInstanceViewModel fivm
-                    && !string.IsNullOrWhiteSpace(dto.EmbeddedTemplateSnapshot)
+                    && CanvasClipboardSerializer.SnapshotText(dto.EmbeddedTemplateSnapshot) is not null
                     && !dtos.Any(existing => existing.Kind == CanvasElementKind.FunctionTemplate
-                        && string.Equals(existing.EmbeddedTemplateSnapshot, dto.EmbeddedTemplateSnapshot, System.StringComparison.Ordinal)))
+                        && string.Equals(
+                            CanvasClipboardSerializer.SnapshotText(existing.EmbeddedTemplateSnapshot),
+                            CanvasClipboardSerializer.SnapshotText(dto.EmbeddedTemplateSnapshot),
+                            System.StringComparison.Ordinal)))
                 {
                     var t = fivm.UnderlyingInstance.Template;
                     dtos.Add(new CanvasElementDto(

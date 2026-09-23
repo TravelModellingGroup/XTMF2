@@ -190,7 +190,7 @@ namespace XTMF2
             System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
             var fvi = FileVersionInfo.GetVersionInfo(assembly.Location);
             using var stream = File.OpenWrite(System.IO.Path.Combine(tempDirName, MetaDataFilePath));
-            using var writer = new Utf8JsonWriter(stream);
+            using var writer = new Utf8JsonWriter(stream, Helper.RelaxedJsonWriterOptions);
             writer.WriteStartObject();
             writer.WriteString(PropertyName, project.Name);
             writer.WriteString(PropertyDescription, project.Description);

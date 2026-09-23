@@ -927,6 +927,23 @@ partial class ModelSystemCanvas
             menu.Items.Add(moveNodeItem);
         }
 
+        if (element is FunctionInstanceViewModel ghostSourceInstance)
+        {
+            var capturedGhostSource = ghostSourceInstance;
+            var ghostItem = new MenuItem { Header = "Create Ghost Node" };
+            ghostItem.Click += (_, _) =>
+            {
+                const double gap = 30.0;
+                int gx = (int)(capturedGhostSource.X + capturedGhostSource.Width + gap);
+                int gy = (int)capturedGhostSource.Y;
+                vm.CreateGhostNode(capturedGhostSource, gx, gy,
+                    (int)capturedGhostSource.Width, (int)capturedGhostSource.Height);
+            };
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(ghostItem);
+        }
+
         // ── Extract to Function Template ───────────────────────────────────────
         // Available for regular nodes and function instances when NOT already inside
         // a function template's InternalModules view.

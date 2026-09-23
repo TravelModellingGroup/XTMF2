@@ -114,7 +114,7 @@ namespace XTMF2.Editing
                     CollectTypesForFunctionTemplateSnapshot(template, moduleTypes);
 
                     var buffer = new ArrayBufferWriter<byte>();
-                    using var writer = new Utf8JsonWriter(buffer);
+                    using var writer = new Utf8JsonWriter(buffer, XTMF2.Helper.RelaxedJsonWriterOptions);
                     writer.WriteStartObject();
                     writer.WriteString("source", FunctionTemplateSnapshotSource);
                     writer.WriteNumber("version", FunctionTemplateSnapshotVersion);
@@ -454,7 +454,7 @@ namespace XTMF2.Editing
                 }
 
                 var buffer = new ArrayBufferWriter<byte>();
-                using (var writer = new Utf8JsonWriter(buffer))
+                using (var writer = new Utf8JsonWriter(buffer, XTMF2.Helper.RelaxedJsonWriterOptions))
                 {
                     WriteCanonicalJson(writer, templateEl);
                     writer.Flush();
