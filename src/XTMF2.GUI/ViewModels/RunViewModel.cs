@@ -24,6 +24,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using XTMF2.Configuration;
+using XTMF2.GUI.Properties;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XTMF2.Bus;
@@ -225,6 +226,11 @@ public sealed partial class RunViewModel : ObservableObject
     /// <summary>Complete history of all completed iterations (oldest first).</summary>
     public ObservableCollection<OptimizationIterationViewModel> IterationHistory { get; } = new();
 
+    public ObservableCollection<RemoteEstimationWorkerViewModel> RemoteWorkers { get; } = new();
+
+    [ObservableProperty]
+    private bool _isRemoteSharedEstimation;
+
     /// <summary>The iteration currently shown in the detail panel; auto-advances with each new iteration.</summary>
     [ObservableProperty]
     private OptimizationIterationViewModel? _selectedIteration;
@@ -249,6 +255,74 @@ public sealed partial class RunViewModel : ObservableObject
         }
         OnPropertyChanged(nameof(IsOptimizationRun));
         CancelRunCommand.NotifyCanExecuteChanged();
+    }
+
+    internal void SetRemoteEstimationWorkers(
+        IReadOnlyList<RunServerEndpoint> endpoints,
+        IReadOnlyCollection<string> activeWorkerIds,
+        Func<string, string?> addWorker,
+        Func<string, string?> removeWorker)
+    {
+        IsRemoteSharedEstimation = true;
+        _addRemoteWorkerAction = addWorker;
+        _removeRemoteWorkerAction = removeWorker;
+        RemoteWorkers.Clear();
+        foreach (var endpoint in endpoints)
+            RemoteWorkers.Add(new RemoteEstimationWorkerViewModel(endpoint,
+                activeWorkerIds.Contains(endpoint.Id, StringComparer.Ordinal)));
+    }
+
+    internal void ApplyRemoteWorkerSnapshot(IReadOnlyCollection<string> activeWorkerIds)
+    {
+        foreach (var worker in RemoteWorkers)
+        {
+            worker.IsActive = activeWorkerIds.Contains(worker.WorkerId, StringComparer.Ordinal);
+            worker.IsBusy = false;
+        }
+    }
+
+    internal void ApplyRemoteWorkerAcknowledgement(SharedEstimationWorkerControlAcknowledgement acknowledgement)
+    {
+        var worker = RemoteWorkers.FirstOrDefault(candidate =>
+            string.Equals(candidate.WorkerId, acknowledgement.WorkerId, StringComparison.Ordinal));
+        if (worker is null)
+            return;
+        worker.IsBusy = false;
+        if (acknowledgement.Succeeded)
+            worker.IsActive = acknowledgement.Add;
+        else
+            AppendStatus($"[Remote estimation] Worker change failed: {acknowledgement.Error}");
+    }
+
+    private Func<string, string?>? _addRemoteWorkerAction;
+    private Func<string, string?>? _removeRemoteWorkerAction;
+
+    [RelayCommand]
+    private void AddRemoteWorker(RemoteEstimationWorkerViewModel worker)
+    {
+        if (worker.IsActive || worker.IsBusy || _addRemoteWorkerAction is null)
+            return;
+        worker.IsBusy = true;
+        var error = _addRemoteWorkerAction(worker.WorkerId);
+        if (error is not null)
+        {
+            worker.IsBusy = false;
+            AppendStatus($"[Remote estimation] Unable to add worker: {error}");
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveRemoteWorker(RemoteEstimationWorkerViewModel worker)
+    {
+        if (!worker.IsActive || worker.IsBusy || _removeRemoteWorkerAction is null)
+            return;
+        worker.IsBusy = true;
+        var error = _removeRemoteWorkerAction(worker.WorkerId);
+        if (error is not null)
+        {
+            worker.IsBusy = false;
+            AppendStatus($"[Remote estimation] Unable to remove worker: {error}");
+        }
     }
 
     /// <summary>Called on the UI thread whenever the client sends per-iteration progress.</summary>

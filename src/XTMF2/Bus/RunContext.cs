@@ -46,6 +46,7 @@ namespace XTMF2.Bus
         /// The directory that this run will be executed in.
         /// </summary>
         private readonly string _currentWorkingDirectory;
+        private readonly IReadOnlyDictionary<int, string>? _basicParameterOverrides;
 
         internal string WorkingDirectory => _currentWorkingDirectory;
 
@@ -75,6 +76,11 @@ namespace XTMF2.Bus
         /// <summary>Set to true to request that the optimisation loop terminates after the current iteration.</summary>
         private volatile bool _cancelRequested;
 
+        private List<Action<double>>? _sharedWorkerSetters;
+        private IAction? _sharedWorkerStart;
+        private Func<double>? _sharedWorkerFitnessReader;
+        private ModelSystem? _sharedWorkerModelSystem;
+
         /// <summary>
         /// Requests that the optimisation loop for this run terminates, if this run's ID matches.
         /// </summary>
@@ -84,7 +90,8 @@ namespace XTMF2.Bus
                 _cancelRequested = true;
         }
 
-        private RunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd, string start)
+        private RunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd, string start,
+            IReadOnlyDictionary<int, string>? basicParameterOverrides)
         {
             _runtime = runtime;
             ID = id;
@@ -92,6 +99,7 @@ namespace XTMF2.Bus
             _currentWorkingDirectory = cwd;
             HasExecuted = false;
             StartToExecute = start;
+            _basicParameterOverrides = basicParameterOverrides;
         }
 
         /// <summary>
@@ -106,9 +114,10 @@ namespace XTMF2.Bus
         /// <param name="context">The resulting context.</param>
         /// <returns>True if the model system was able to be processed, false otherwise.</returns>
         public static bool CreateRunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd,
-            string start, RunMode runMode, out RunContext context)
+            string start, RunMode runMode, out RunContext context,
+            IReadOnlyDictionary<int, string>? basicParameterOverrides = null)
         {
-            context = new RunContext(runtime, id, modelSystem, cwd, start) { _runMode = runMode };
+            context = new RunContext(runtime, id, modelSystem, cwd, start, basicParameterOverrides) { _runMode = runMode };
             return true;
         }
 
@@ -118,6 +127,109 @@ namespace XTMF2.Bus
         public static bool CreateRunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd,
             string start, out RunContext context)
             => CreateRunContext(runtime, id, modelSystem, cwd, start, RunMode.Normal, out context);
+
+        internal bool PrepareSharedEstimationWorker([System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out RunError? error)
+        {
+            error = null;
+            if (!BuildAndValidateModelSystem(out var ms, out var start, out error))
+                return false;
+
+            var nodesByIndex = ms!.NodesByLoadIndex;
+            var nodeToIndex = nodesByIndex is null
+                ? new Dictionary<Node, int>()
+                : nodesByIndex.ToDictionary(kv => kv.Value, kv => kv.Key);
+            var setters = new List<Action<double>>();
+            foreach (var group in ms.EstimationGroups)
+                foreach (var entry in group.Parameters)
+                {
+                    if (!entry.IsEnabled || !nodeToIndex.ContainsKey(entry.Node))
+                        continue;
+                    if (BuildDoubleSetter(entry.Node) is { } setter)
+                        setters.Add(setter);
+                }
+
+            var fitnessReader = ms.EstimationFitnessNode is { } fitnessNode
+                ? BuildSignalReader(fitnessNode)
+                : null;
+            if (setters.Count == 0)
+            {
+                error = new RunError(RunErrorType.Validation,
+                    "Estimation requires at least one enabled estimation parameter.", null, string.Empty);
+                return false;
+            }
+            if (fitnessReader is null)
+            {
+                error = new RunError(RunErrorType.Validation,
+                    "Estimation requires a fitness node that returns a numeric value.", null, string.Empty);
+                return false;
+            }
+            if (start!.Module is not IAction modelStart)
+            {
+                error = new RunError(RunErrorType.Validation,
+                    "The configured start module does not implement IAction.", null, string.Empty);
+                return false;
+            }
+
+            _sharedWorkerModelSystem = ms;
+            _sharedWorkerSetters = setters;
+            _sharedWorkerStart = modelStart;
+            _sharedWorkerFitnessReader = fitnessReader;
+            return true;
+        }
+
+        internal SharedEstimationEvaluationResult EvaluateSharedEstimationCandidate(
+            SharedEstimationCandidate candidate)
+        {
+            if (_sharedWorkerSetters is null || _sharedWorkerStart is null
+                || _sharedWorkerFitnessReader is null || _sharedWorkerModelSystem is null)
+                return CreateWorkerError(candidate, "The shared-estimation worker is not prepared.", null, null);
+            if (candidate.Parameters.Count != _sharedWorkerSetters.Count)
+                return CreateWorkerError(candidate,
+                    $"Expected {_sharedWorkerSetters.Count} parameters but received {candidate.Parameters.Count}.", null, null);
+
+            lock (this)
+            {
+                var originalDir = Directory.GetCurrentDirectory();
+                using var loopRunBus = new RunBus(ID, _ => { }, _runtime);
+                var loopRun = new Run(ID, _modelSystem, StartToExecute, _runtime,
+                    _currentWorkingDirectory, RunMode.Estimation);
+                loopRunBus.CurrentRun = loopRun;
+                try
+                {
+                    Directory.SetCurrentDirectory(_currentWorkingDirectory);
+                    for (int i = 0; i < _sharedWorkerSetters.Count; i++)
+                        _sharedWorkerSetters[i](candidate.Parameters[i]);
+                    _sharedWorkerStart.Invoke();
+                    return new SharedEstimationEvaluationResult(
+                        candidate.RunId, candidate.BatchId, candidate.CandidateId,
+                        _sharedWorkerFitnessReader(), null, null, null);
+                }
+                catch (Exception e)
+                {
+                    while (e.InnerException is Exception inner) e = inner;
+                    Guid? elementId = null;
+                    string? moduleName = null;
+                    if (e is XTMFRuntimeException xe)
+                    {
+                        if (!Run.TryResolveModelElementForRuntimeModule(_sharedWorkerModelSystem,
+                            xe.FailingModule, out moduleName, out elementId))
+                            moduleName = xe.FailingModule?.Name;
+                    }
+                    return CreateWorkerError(candidate, e.Message, moduleName, elementId);
+                }
+                finally
+                {
+                    Directory.SetCurrentDirectory(originalDir);
+                    if (ReferenceEquals(loopRunBus.CurrentRun, loopRun))
+                        loopRunBus.CurrentRun = null;
+                }
+            }
+        }
+
+        private static SharedEstimationEvaluationResult CreateWorkerError(
+            SharedEstimationCandidate candidate, string message, string? moduleName, Guid? elementId)
+            => new(candidate.RunId, candidate.BatchId, candidate.CandidateId,
+                double.MaxValue, message, moduleName, elementId);
 
         private (RunBus runBus, Task readerTask) CreateRunBusLocal(RunServerBus clientBus)
         {
@@ -323,37 +435,43 @@ namespace XTMF2.Bus
             using var loopRunBus = new RunBus(ID, msg => client.SendStatusMessage(ID, msg), _runtime);
             var loopRun = new Run(ID, _modelSystem, StartToExecute, _runtime, _currentWorkingDirectory, RunMode.Estimation);
             loopRunBus.CurrentRun = loopRun;
+            double EvaluateCandidate(double[] values)
+            {
+                if (_cancelRequested) return double.MaxValue;
+                iterationCount++;
+                for (int i = 0; i < paramEntries.Count; i++)
+                    paramEntries[i].setter(values[i]);
+                try
+                {
+                    modelStart.Invoke();
+                }
+                catch (Exception e)
+                {
+                    while (e.InnerException is Exception inner) e = inner;
+                    Guid? elementId = null;
+                    string? moduleName = null;
+                    if (e is XTMFRuntimeException xe)
+                    {
+                        if (!Run.TryResolveModelElementForRuntimeModule(ms, xe.FailingModule, out moduleName, out elementId))
+                            moduleName = xe.FailingModule?.Name;
+                    }
+                    firstRunError = new RunError(RunErrorType.Runtime, e.Message, moduleName, e.StackTrace, elementId);
+                    return double.MaxValue;
+                }
+                latestValues = (double[])values.Clone();
+                return fitnessReader();
+            }
             try
             {
                 Directory.SetCurrentDirectory(_currentWorkingDirectory);
-                algorithm.Run(
-                    fitnessEvaluator: values =>
+                algorithm.RunBatch(
+                    fitnessEvaluator: EvaluateCandidate,
+                    batchFitnessEvaluator: values =>
                     {
-                        if (_cancelRequested) return double.MaxValue;
-                        iterationCount++;
-                        // Apply the parameter vector directly to the already-constructed modules.
-                        for (int i = 0; i < paramEntries.Count; i++)
-                            paramEntries[i].setter(values[i]);
-                        try
-                        {
-                            modelStart.Invoke();
-                        }
-                        catch (Exception e)
-                        {
-                            while (e.InnerException is Exception inner) e = inner;
-                            Guid? elementId = null;
-                            string? moduleName = null;
-                            if (e is XTMFRuntimeException xe)
-                            {
-                                if (!Run.TryResolveModelElementForRuntimeModule(ms, xe.FailingModule, out moduleName, out elementId))
-                                    moduleName = xe.FailingModule?.Name;
-                            }
-                            firstRunError = new RunError(RunErrorType.Runtime, e.Message, moduleName, e.StackTrace, elementId);
-                            return double.MaxValue;
-                        }
-                        latestValues = (double[])values.Clone();
-                        double rawFitness = fitnessReader();
-                        return rawFitness;
+                        var fitnesses = new double[values.Count];
+                        for (int i = 0; i < values.Count; i++)
+                            fitnesses[i] = EvaluateCandidate(values[i]);
+                        return fitnesses;
                     },
                     progressCallback: (iter, fitness) =>
                     {
@@ -581,6 +699,7 @@ namespace XTMF2.Bus
             }
 
             if (!ModelSystem.Load(msString, _runtime, out ms, ref errorMsg)
+                || !ApplyBasicParameterOverrides(ms, ref errorMsg)
                 || !ms!.Construct(_runtime, ref errorMsg, ref elementId)
                 || !ms!.Validate(ref moduleName, ref errorMsg, ref elementId))
             {
@@ -605,6 +724,40 @@ namespace XTMF2.Bus
             }
 
             error = null;
+            return true;
+        }
+
+        private bool ApplyBasicParameterOverrides(ModelSystem modelSystem, ref string? error)
+        {
+            if (_basicParameterOverrides is null)
+                return true;
+
+            if (modelSystem.NodesByLoadIndex is null)
+            {
+                error = "Unable to apply shared-estimation parameter overrides because node indices are unavailable.";
+                return false;
+            }
+
+            foreach (var pair in _basicParameterOverrides)
+            {
+                if (!modelSystem.NodesByLoadIndex.TryGetValue(pair.Key, out var node))
+                {
+                    error = $"Shared-estimation parameter override references unknown node index {pair.Key}.";
+                    return false;
+                }
+                if (node.Type is null || !node.Type.IsGenericType
+                    || node.Type.GetGenericTypeDefinition() != typeof(BasicParameter<>)
+                    || node.Type.GetGenericArguments()[0] != typeof(string))
+                {
+                    error = $"Shared-estimation parameter override node {pair.Key} is not a BasicParameter<string>.";
+                    return false;
+                }
+                if (!node.SetParameterValue(ParameterExpression.CreateParameter(pair.Value, typeof(string)), out var setError))
+                {
+                    error = setError?.Message ?? $"Unable to apply shared-estimation override for node {pair.Key}.";
+                    return false;
+                }
+            }
             return true;
         }
 

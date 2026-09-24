@@ -63,7 +63,7 @@
                                             FontSize="14"
                                             VerticalAlignment="Center"
                                             IsEnabled="{Binding IsCompleted}"
-                                            Command="{Binding DataContext.RemoveRunCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                            Command="{Binding $parent[UserControl].DataContext.RemoveRunCommand}"
                                             CommandParameter="{Binding}"/>
                                 </Grid>
                             </DataTemplate>
@@ -142,6 +142,44 @@
                                 HorizontalAlignment="Left"
                                 Click="ViewProgressButton_Click"
                                 ToolTip.Tip="Open the live optimisation progress window for this run."/>
+                        <StackPanel IsVisible="{Binding SelectedRun.IsRemoteSharedEstimation}"
+                                    Margin="0,8,0,0"
+                                    Spacing="4">
+                            <TextBlock Text="Remote workers"
+                                       FontWeight="SemiBold"/>
+                            <ItemsControl ItemsSource="{Binding SelectedRun.RemoteWorkers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RemoteEstimationWorkerViewModel"
+                                                  x:CompileBindings="False">
+                                        <Grid ColumnDefinitions="*,Auto,Auto"
+                                              Margin="0,2">
+                                            <TextBlock Text="{Binding Name}"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="Active"
+                                                       IsVisible="{Binding IsActive}"
+                                                       Opacity="0.65"
+                                                       Margin="8,0"/>
+                                            <Button Grid.Column="2"
+                                                    Content="Add"
+                                                    IsVisible="{Binding IsInactive}"
+                                                    IsEnabled="{Binding IsNotBusy}"
+                                                    Command="{Binding $parent[UserControl].DataContext.SelectedRun.AddRemoteWorkerCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Padding="8,3"/>
+                                            <Button Grid.Column="2"
+                                                    Content="Remove"
+                                                    IsVisible="{Binding IsActive}"
+                                                    IsEnabled="{Binding IsNotBusy}"
+                                                    Command="{Binding $parent[UserControl].DataContext.SelectedRun.RemoveRemoteWorkerCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Padding="8,3"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- Message log -->

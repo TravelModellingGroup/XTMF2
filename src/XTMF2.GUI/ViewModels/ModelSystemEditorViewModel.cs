@@ -2759,6 +2759,25 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         return CollectFunctionNodes(Session.ModelSystem.GlobalBoundary);
     }
 
+    public System.Collections.Generic.List<XTMF2.ModelSystemConstruct.Node> GetInputDirectoryNodes()
+    {
+        return CollectInputDirectoryNodes(Session.ModelSystem.GlobalBoundary);
+    }
+
+    private static System.Collections.Generic.List<XTMF2.ModelSystemConstruct.Node> CollectInputDirectoryNodes(
+        XTMF2.ModelSystemConstruct.Boundary boundary)
+    {
+        var result = new System.Collections.Generic.List<XTMF2.ModelSystemConstruct.Node>();
+        foreach (var node in boundary.Modules)
+        {
+            if (node.Type == typeof(XTMF2.RuntimeModules.BasicParameter<string>))
+                result.Add(node);
+        }
+        foreach (var child in boundary.Boundaries)
+            result.AddRange(CollectInputDirectoryNodes(child));
+        return result;
+    }
+
     private static System.Collections.Generic.List<XTMF2.ModelSystemConstruct.Node> CollectFunctionNodes(
         XTMF2.ModelSystemConstruct.Boundary boundary)
     {
@@ -3502,10 +3521,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             defaultRunName,
             availableStarts.Select(start => start.Name).ToList());
         if (runConfiguration is null) return;
-        var (runName, endpointId, startToExecute) = runConfiguration.Value;
+        var (runName, endpointIds, startToExecute, _, _) = runConfiguration.Value;
 
         var project = Session.Project;
-        if (!_runController.SendRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
+        if (!_runController.SendRun(project, Session, User, startToExecute, runName, endpointIds[0], out _, out var runError))
         {
             ShowToast($"Failed to start run: {runError?.Message}", isError: true, durationMs: 6000);
             return;
@@ -3529,15 +3548,31 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         var defaultRunName = $"Estimation_{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var selectedInputDirectoryId = Session.ModelSystem.EstimationInputDirectoryNode?.Id;
+        var inputDirectory = Session.GetStringBasicParameterMeta()
+            .Where(parameter => selectedInputDirectoryId is not null && parameter.nodeId == selectedInputDirectoryId)
+            .ToList();
+        var inputDirectoryParameters = inputDirectory
+            .Select(parameter => new RunConfigurationDialog.PathParameter(
+                parameter.nodeIndex, parameter.nodeId, parameter.name, parameter.value))
+            .ToList();
         var runConfiguration = await ConfigureRunAsync(
             "Run Estimation",
             defaultRunName,
-            availableStarts.Select(start => start.Name).ToList());
+            availableStarts.Select(start => start.Name).ToList(),
+            allowMultipleRunServers: true,
+            inputDirectoryParameters);
         if (runConfiguration is null) return;
-        var (runName, endpointId, startToExecute) = runConfiguration.Value;
+        var (runName, endpointIds, startToExecute, pathOverrides, orchestratorEndpointId) = runConfiguration.Value;
 
         var project = Session.Project;
-        if (!_runController.SendEstimationRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
+        CommandError? runError;
+        bool started = endpointIds.Count > 1 && orchestratorEndpointId is not null
+            ? _runController.SendRemoteSharedEstimationRun(project, Session, User, startToExecute, runName,
+                orchestratorEndpointId, endpointIds, pathOverrides, out _, out runError)
+            : _runController.SendEstimationRun(project, Session, User, startToExecute, runName,
+                endpointIds[0], out _, out runError);
+        if (!started)
         {
             ShowToast($"Failed to start estimation run: {runError?.Message}", isError: true, durationMs: 6000);
             return;
@@ -3566,10 +3601,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             defaultRunName,
             availableStarts.Select(start => start.Name).ToList());
         if (runConfiguration is null) return;
-        var (runName, endpointId, startToExecute) = runConfiguration.Value;
+        var (runName, endpointIds, startToExecute, _, _) = runConfiguration.Value;
 
         var project = Session.Project;
-        if (!_runController.SendCalibrationRun(project, Session, User, startToExecute, runName, endpointId, out _, out var runError))
+        if (!_runController.SendCalibrationRun(project, Session, User, startToExecute, runName, endpointIds[0], out _, out var runError))
         {
             ShowToast($"Failed to start calibration run: {runError?.Message}", isError: true, durationMs: 6000);
             return;
@@ -3579,10 +3614,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         RunStarted?.Invoke();
     }
 
-    private async Task<(string RunName, string EndpointId, string StartName)?> ConfigureRunAsync(
+    private async Task<(string RunName, IReadOnlyList<string> EndpointIds, string StartName,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<int, string>> PathOverrides,
+        string? OrchestratorEndpointId)?> ConfigureRunAsync(
         string title,
         string defaultRunName,
-        IReadOnlyList<string> startNames)
+        IReadOnlyList<string> startNames,
+        bool allowMultipleRunServers = false,
+        IReadOnlyList<RunConfigurationDialog.PathParameter>? pathParameters = null)
     {
         if (_runController is null)
             return null;
@@ -3594,17 +3633,19 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return null;
         }
 
-        var dialog = new RunConfigurationDialog(title, defaultRunName, endpoints, startNames);
+        var dialog = new RunConfigurationDialog(title, defaultRunName, endpoints, startNames,
+            allowMultipleRunServers, pathParameters);
         await dialog.ShowDialog(ParentWindow!);
         if (dialog.WasCancelled)
             return null;
 
         var runName = dialog.RunName?.Trim();
-        var endpointId = dialog.SelectedRunServer?.Id;
+        var endpointIds = dialog.SelectedRunServers.Select(endpoint => endpoint.Id).ToArray();
         var startName = dialog.SelectedStartName;
-        return string.IsNullOrEmpty(runName) || endpointId is null || string.IsNullOrEmpty(startName)
+        var orchestratorEndpointId = allowMultipleRunServers ? dialog.SelectedCoordinatorRunServer?.Id : null;
+        return string.IsNullOrEmpty(runName) || endpointIds.Length == 0 || string.IsNullOrEmpty(startName)
             ? null
-            : (runName, endpointId, startName);
+            : (runName, endpointIds, startName, dialog.PathOverrides, orchestratorEndpointId);
     }
 
     /// <summary>Save the model system to its project file.</summary>

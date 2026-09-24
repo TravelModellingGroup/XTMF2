@@ -23,6 +23,7 @@ using System.Linq;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using XTMF2.Bus;
 using XTMF2.Editing;
 
 namespace XTMF2.GUI.ViewModels;
@@ -156,6 +157,21 @@ public sealed partial class RunsViewModel : ObservableObject
         var vm = FindRun(runId);
         if (vm is null) return;
         Dispatcher.UIThread.Post(() => vm.UpdateIterationProgress(iteration, fitness, values));
+    }
+
+    internal void NotifyRemoteWorkerSnapshot(string runId, IReadOnlyCollection<string> activeWorkerIds)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.ApplyRemoteWorkerSnapshot(activeWorkerIds));
+    }
+
+    internal void NotifyRemoteWorkerAcknowledgement(
+        SharedEstimationWorkerControlAcknowledgement acknowledgement)
+    {
+        var vm = FindRun(acknowledgement.RunId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.ApplyRemoteWorkerAcknowledgement(acknowledgement));
     }
 
     private RunViewModel? FindRun(string runId)

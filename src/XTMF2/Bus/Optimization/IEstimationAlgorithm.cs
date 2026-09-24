@@ -18,6 +18,7 @@
 */
 
 using System;
+using System.Collections.Generic;
 
 namespace XTMF2.Bus.Optimization;
 
@@ -76,6 +77,27 @@ public interface IEstimationAlgorithm
     void Run(Func<double[], double> fitnessEvaluator,
              Action<int, double>? progressCallback = null,
              Func<bool>? shouldCancel = null);
+
+    /// <summary>
+    /// Execute the search while allowing independent candidate evaluations to be submitted as
+    /// a batch. The default implementation preserves the existing sequential behaviour and
+    /// lets algorithms adopt parallel evaluation incrementally.
+    /// </summary>
+    /// <param name="fitnessEvaluator">Fallback evaluator for a single candidate.</param>
+    /// <param name="batchFitnessEvaluator">
+    /// Evaluates the supplied candidates and returns one fitness value per candidate, in the
+    /// same order. Implementations may dispatch these evaluations to multiple run servers.
+    /// </param>
+    /// <param name="progressCallback">Optional progress callback.</param>
+    /// <param name="shouldCancel">Optional cancellation predicate.</param>
+    void RunBatch(
+        Func<double[], double> fitnessEvaluator,
+        Func<IReadOnlyList<double[]>, IReadOnlyList<double>> batchFitnessEvaluator,
+        Action<int, double>? progressCallback = null,
+        Func<bool>? shouldCancel = null)
+    {
+        Run(fitnessEvaluator, progressCallback, shouldCancel);
+    }
 
     /// <summary>The parameter vector that produced the lowest fitness seen so far.</summary>
     double[] BestParameters { get; }

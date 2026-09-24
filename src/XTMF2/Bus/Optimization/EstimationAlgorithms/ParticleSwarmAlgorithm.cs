@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
 
 namespace XTMF2.Bus.Optimization;
 
@@ -99,6 +100,16 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
                     Action<int, double>? progressCallback = null,
                     Func<bool>? shouldCancel = null)
     {
+        RunBatch(fitnessEvaluator, candidates => EvaluateSequentially(fitnessEvaluator, candidates),
+            progressCallback, shouldCancel);
+    }
+
+    /// <inheritdoc/>
+    public void RunBatch(Func<double[], double> fitnessEvaluator,
+                         Func<IReadOnlyList<double[]>, IReadOnlyList<double>> batchFitnessEvaluator,
+                         Action<int, double>? progressCallback = null,
+                         Func<bool>? shouldCancel = null)
+    {
         if (_n == 0) return;
 
         var rng = new Random(42);
@@ -133,10 +144,13 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
             }
         }
 
-        // Evaluate initial fitness.
+        // Evaluate initial fitness as one independent population.
+        var initialFitness = batchFitnessEvaluator(positions);
+        if (initialFitness.Count != positions.Length)
+            throw new InvalidOperationException("The batch fitness evaluator must return one value per candidate.");
         for (int i = 0; i < _swarmSize; i++)
         {
-            double f = eval(positions[i]);
+            double f = _isMaximize ? -initialFitness[i] : initialFitness[i];
             pBest[i]    = (double[])positions[i].Clone();
             pBestFit[i] = f;
             if (f < _bestInternalFitness)
@@ -171,7 +185,14 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
                         positions[i][d] + velocities[i][d]));
                 }
 
-                double fitness = eval(positions[i]);
+            }
+
+            var populationFitness = batchFitnessEvaluator(positions);
+            if (populationFitness.Count != positions.Length)
+                throw new InvalidOperationException("The batch fitness evaluator must return one value per candidate.");
+            for (int i = 0; i < _swarmSize; i++)
+            {
+                double fitness = _isMaximize ? -populationFitness[i] : populationFitness[i];
                 if (fitness < pBestFit[i])
                 {
                     pBestFit[i] = fitness;
@@ -200,6 +221,15 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
             }
             prevBestFitness = _bestInternalFitness;
         }
+    }
+
+    private static IReadOnlyList<double> EvaluateSequentially(
+        Func<double[], double> fitnessEvaluator, IReadOnlyList<double[]> candidates)
+    {
+        var results = new double[candidates.Count];
+        for (int i = 0; i < candidates.Count; i++)
+            results[i] = fitnessEvaluator(candidates[i]);
+        return results;
     }
 
     private double[] Clamp(double[] v)

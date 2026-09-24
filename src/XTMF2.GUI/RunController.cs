@@ -25,9 +25,11 @@ using System.IO.Compression;
 using System.Threading;
 using System.Threading.Tasks;
 using XTMF2.Bus;
+using XTMF2.Bus.Optimization;
 using XTMF2.Editing;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Properties;
+using XTMF2.ModelSystemConstruct;
 using System.Linq;
 
 
@@ -67,6 +69,11 @@ public class RunController : IDisposable
     private readonly Dictionary<string, (ModelSystemSession Session, User User)> _sessionsByRunId = new();
     private readonly Dictionary<string, HostBus> _hostBusesByRunId = new();
     private readonly Dictionary<string, string> _runDirectoriesByRunId = new();
+    private readonly Dictionary<string, IReadOnlyList<(int nodeIndex, string name, double min, double max)>>
+        _remoteEstimationMetadata = new();
+    private readonly Dictionary<string, IReadOnlyDictionary<string, SharedEstimationWorkerEndpoint>>
+        _remoteWorkerEndpointsByRunId = new();
+    private readonly HashSet<string> _completedRemoteRuns = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Fires when an estimation or calibration run completes and has results ready to be
@@ -247,6 +254,51 @@ public class RunController : IDisposable
         RunsViewModel.NotifyIterationProgress(runID, iteration, fitness, values);
     }
 
+    private void OnSharedEstimationProgress(object? sender, SharedEstimationProgress progress)
+    {
+        RunsViewModel.NotifyStatus(progress.RunId,
+            $"[Remote estimation] iteration {progress.Iteration}: best fitness = {progress.BestFitness:G6}");
+    }
+
+    private void OnSharedEstimationWorkerControlAcknowledged(
+        object? sender, SharedEstimationWorkerControlAcknowledgement acknowledgement)
+    {
+        RunsViewModel.NotifyRemoteWorkerAcknowledgement(acknowledgement);
+    }
+
+    private void OnSharedEstimationCompleted(object? sender, SharedEstimationCompletion completion)
+    {
+        lock (_sessionsByRunId)
+        {
+            if (!_completedRemoteRuns.Add(completion.RunId))
+                return;
+        }
+        if (!completion.Succeeded)
+        {
+            RunsViewModel.NotifyError(completion.RunId,
+                completion.FailureReason ?? "Remote estimation failed.", String.Empty, null, null);
+            return;
+        }
+
+        (ModelSystemSession Session, User User) entry;
+        IReadOnlyList<(int nodeIndex, string name, double min, double max)> metadata;
+        lock (_sessionsByRunId)
+        {
+            if (!_remoteEstimationMetadata.TryGetValue(completion.RunId, out var remoteMetadata))
+                return;
+            if (!_sessionsByRunId.TryGetValue(completion.RunId, out entry) ||
+                remoteMetadata is null)
+                return;
+            metadata = remoteMetadata;
+        }
+        if (completion.BestParameters.Count != metadata.Count)
+            return;
+        var results = metadata.Select((item, index) => (item.nodeIndex, completion.BestParameters[index])).ToArray();
+        RunsViewModel.NotifyOptimizationResults(completion.RunId, entry.Session, entry.User, results);
+        OptimizationResultsAvailable?.Invoke(completion.RunId, entry.Session, results);
+        RunsViewModel.NotifyFinished(completion.RunId);
+    }
+
     private void OnClientOptimizationResultsAvailable(
         object sender, string runID, IReadOnlyList<(int nodeIndex, double value)> results)
     {
@@ -312,6 +364,278 @@ public class RunController : IDisposable
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
         => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Estimation, endpointId, out id, out error);
+
+    /// <summary>
+    /// Starts an estimation run across the selected connected RunServers.
+    /// </summary>
+    public bool SendSharedEstimationRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        IReadOnlyList<string> workerEndpointIds,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<int, string>>? basicParameterOverridesByWorker,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+    {
+        id = null;
+        error = null;
+        if (String.IsNullOrWhiteSpace(projectSession.ProjectDirectory))
+        {
+            error = new CommandError("Project directory is not set.");
+            return false;
+        }
+        if (workerEndpointIds.Count == 0)
+        {
+            error = new CommandError("At least one shared-estimation worker is required.");
+            return false;
+        }
+
+        var modelSystem = msSession.ModelSystem;
+        var enabledEntries = modelSystem.EstimationGroups
+            .Where(group => group.IsEnabled)
+            .SelectMany(group => group.Parameters)
+            .Where(entry => entry.IsEnabled)
+            .ToArray();
+        var metadata = msSession.GetOptimizationParameterMeta(RunMode.Estimation);
+        if (enabledEntries.Length == 0 || enabledEntries.Length != metadata.Count)
+        {
+            error = new CommandError("Estimation requires at least one enabled estimation parameter.");
+            return false;
+        }
+        if (modelSystem.EstimationFitnessNode is null)
+        {
+            error = new CommandError("Estimation requires a fitness node.");
+            return false;
+        }
+
+        var parameterEntries = enabledEntries
+            .Select((entry, index) => (entry, nodeIndex: metadata[index].nodeIndex))
+            .ToArray();
+
+        var runId = Guid.NewGuid().ToString();
+        var runDirectory = Path.Combine(projectSession.ProjectDirectory, "runs", runName);
+        using var modelStream = new MemoryStream();
+        if (!msSession.Save(out error, modelStream))
+            return false;
+
+        var pool = new SharedEstimationWorkerPool();
+        foreach (var endpointId in workerEndpointIds.Distinct(StringComparer.Ordinal))
+        {
+            if (!_connections.TryGet(endpointId, out var hostBus) || hostBus is null)
+            {
+                pool.Dispose();
+                error = new CommandError($"RunServer '{endpointId}' is not connected.");
+                return false;
+            }
+            if (!pool.AddExistingWorker(endpointId, endpointId, hostBus, out var workerError))
+            {
+                pool.Dispose();
+                error = new CommandError(workerError ?? $"Unable to add RunServer '{endpointId}'.");
+                return false;
+            }
+        }
+
+        var lower = parameterEntries.Select(item => item.entry.Min).ToArray();
+        var upper = parameterEntries.Select(item => item.entry.Max).ToArray();
+        var initial = parameterEntries.Select(item => item.entry.NullHypothesis).ToArray();
+        var algorithm = modelSystem.EstimationAlgorithmConfig.CreateAlgorithm(
+            parameterEntries.Length, lower, upper, initial,
+            modelSystem.EstimationObjective == EstimationObjective.Maximize);
+        var request = new SharedEstimationRunRequest(
+            runId, runDirectory, startToExecute, modelStream.ToArray());
+        if (!pool.StartRun(request, out var startError, basicParameterOverridesByWorker))
+        {
+            pool.Dispose();
+            error = new CommandError(startError ?? "Unable to start shared estimation.");
+            return false;
+        }
+
+        var serverLabel = $"Shared ({workerEndpointIds.Count} workers)";
+        var runViewModel = RunsViewModel.AddRun(runId, runName, runDirectory, serverLabel, msSession, user);
+        var cancellation = new CancellationTokenSource();
+        runViewModel.SetRunMode(RunMode.Estimation, metadata, () =>
+        {
+            cancellation.Cancel();
+            pool.CancelRun("Cancelled by user.");
+        });
+        lock (_sessionsByRunId)
+            _sessionsByRunId[runId] = (msSession, user);
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var runner = new SharedEstimationCoordinatorRun(runId, algorithm, pool.Coordinator);
+                var completion = runner.Execute(
+                    progress: progress => RunsViewModel.NotifyStatus(runId,
+                        $"[Shared estimation] iteration {progress.Iteration}: best fitness = {progress.BestFitness:G6}"),
+                    cancellationToken: cancellation.Token);
+                if (!completion.Succeeded)
+                {
+                    RunsViewModel.NotifyError(runId, completion.FailureReason ?? "Shared estimation failed.",
+                        String.Empty, null, null);
+                    return;
+                }
+
+                var results = parameterEntries
+                    .Select((item, index) => (nodeIndex: item.nodeIndex, value: completion.BestParameters[index]))
+                    .ToArray();
+                RunsViewModel.NotifyOptimizationResults(runId, msSession, user, results);
+                OptimizationResultsAvailable?.Invoke(runId, msSession, results);
+                RunsViewModel.NotifyFinished(runId);
+            }
+            finally
+            {
+                cancellation.Dispose();
+                pool.Dispose();
+                lock (_sessionsByRunId)
+                    _sessionsByRunId.Remove(runId);
+            }
+        });
+
+        id = runId;
+        return true;
+    }
+
+    public bool SendRemoteSharedEstimationRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        string orchestratorEndpointId,
+        IReadOnlyList<string> workerEndpointIds,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<int, string>>? basicParameterOverridesByWorker,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+    {
+        id = null;
+        error = null;
+        if (!_connections.TryGet(orchestratorEndpointId, out var orchestrator) || orchestrator is null)
+        {
+            error = new CommandError($"RunServer '{orchestratorEndpointId}' is not connected.");
+            return false;
+        }
+        var modelSystem = msSession.ModelSystem;
+        var enabledEntries = modelSystem.EstimationGroups
+            .Where(group => group.IsEnabled)
+            .SelectMany(group => group.Parameters)
+            .Where(entry => entry.IsEnabled)
+            .ToArray();
+        var metadata = msSession.GetOptimizationParameterMeta(RunMode.Estimation);
+        if (enabledEntries.Length == 0 || enabledEntries.Length != metadata.Count)
+        {
+            error = new CommandError("Estimation requires at least one enabled estimation parameter.");
+            return false;
+        }
+        if (modelSystem.EstimationFitnessNode is null)
+        {
+            error = new CommandError("Estimation requires a fitness node.");
+            return false;
+        }
+
+        var endpoints = GetConnectedRunServers()
+            .Where(endpoint => workerEndpointIds.Contains(endpoint.Id, StringComparer.Ordinal) &&
+                               endpoint.Id != orchestratorEndpointId)
+            .ToArray();
+        if (endpoints.Length == 0)
+        {
+            error = new CommandError("Select at least one worker RunServer in addition to the orchestrator.");
+            return false;
+        }
+
+        using var modelStream = new MemoryStream();
+        if (!msSession.Save(out error, modelStream))
+            return false;
+        var entries = enabledEntries
+            .Select((entry, index) => (entry, nodeIndex: metadata[index].nodeIndex))
+            .ToArray();
+        var request = new SharedEstimationCoordinatorRequest(
+            new SharedEstimationRunRequest(Guid.NewGuid().ToString(),
+                Path.Combine(projectSession.ProjectDirectory!, "runs", runName),
+                startToExecute, modelStream.ToArray()),
+            endpoints.Select(endpoint => new SharedEstimationWorkerEndpoint(
+                endpoint.Id, endpoint.Id, endpoint.Address, endpoint.Port, endpoint.Token,
+                endpoint.CertificateFingerprint,
+                basicParameterOverridesByWorker is not null &&
+                basicParameterOverridesByWorker.TryGetValue(endpoint.Id, out var overrides)
+                    ? overrides
+                    : null)).ToArray(),
+            modelSystem.EstimationAlgorithmConfig.AlgorithmId,
+            modelSystem.EstimationAlgorithmConfig.GetParameters(),
+            entries.Select(item => item.entry.Min).ToArray(),
+            entries.Select(item => item.entry.Max).ToArray(),
+            entries.Select(item => item.entry.NullHypothesis).ToArray(),
+            modelSystem.EstimationObjective == EstimationObjective.Maximize);
+
+        if (!orchestrator.StartRemoteSharedEstimation(request, out error))
+            return false;
+
+        id = request.Run.RunId;
+        var submittedRunId = request.Run.RunId;
+        var runDirectory = request.Run.WorkingDirectory;
+        var runViewModel = RunsViewModel.AddRun(id, runName, runDirectory,
+            $"{orchestratorEndpointId} (orchestrator, {endpoints.Length} workers)", msSession, user);
+        runViewModel.SetRunMode(RunMode.Estimation, metadata, () =>
+        {
+            orchestrator.CancelSharedEstimation(submittedRunId, "Cancelled by user.", out _);
+        });
+        var initialWorkers = request.Workers.ToDictionary(worker => worker.WorkerId,
+            worker => worker, StringComparer.Ordinal);
+        var availableWorkers = GetConnectedRunServers()
+            .Where(endpoint => endpoint.Id != orchestratorEndpointId)
+            .Select(endpoint => initialWorkers.TryGetValue(endpoint.Id, out var initial)
+                ? initial
+                : new SharedEstimationWorkerEndpoint(endpoint.Id, endpoint.Id, endpoint.Address,
+                    endpoint.Port, endpoint.Token, endpoint.CertificateFingerprint))
+            .ToArray();
+        lock (_sessionsByRunId)
+        {
+            _hostBusesByRunId[submittedRunId] = orchestrator;
+            _remoteWorkerEndpointsByRunId[submittedRunId] = availableWorkers.ToDictionary(worker => worker.WorkerId,
+                worker => worker, StringComparer.Ordinal);
+        }
+        runViewModel.SetRemoteEstimationWorkers(
+            availableWorkers.Select(ToRunServerEndpoint).ToArray(),
+            initialWorkers.Keys.ToArray(),
+            workerId => ChangeRemoteEstimationWorker(submittedRunId, workerId, add: true),
+            workerId => ChangeRemoteEstimationWorker(submittedRunId, workerId, add: false));
+        lock (_sessionsByRunId)
+            _sessionsByRunId[id] = (msSession, user);
+        lock (_sessionsByRunId)
+            _remoteEstimationMetadata[id] = metadata;
+        return true;
+    }
+
+    private static RunServerEndpoint ToRunServerEndpoint(SharedEstimationWorkerEndpoint endpoint)
+        => new()
+        {
+            Id = endpoint.EndpointId,
+            Name = Settings.Default.RunServers.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, endpoint.EndpointId, StringComparison.Ordinal))?.Name
+                ?? endpoint.EndpointId,
+            Address = endpoint.Address,
+            Port = endpoint.Port,
+            Token = endpoint.Token,
+            CertificateFingerprint = endpoint.CertificateFingerprint
+        };
+
+    private string? ChangeRemoteEstimationWorker(string runId, string workerId, bool add)
+    {
+        lock (_sessionsByRunId)
+        {
+            if (!_hostBusesByRunId.TryGetValue(runId, out var bus) ||
+                !_remoteWorkerEndpointsByRunId.TryGetValue(runId, out var workers) ||
+                !workers.TryGetValue(workerId, out var worker))
+                return "The remote estimation connection or worker is unavailable.";
+            var sent = add
+                ? bus.AddRemoteEstimationWorker(runId, worker, out var error)
+                : bus.RemoveRemoteEstimationWorker(runId, worker, out error);
+            return sent ? null : error?.Message ?? "Unable to send the worker change.";
+        }
+    }
 
     /// <summary>
     /// Sends a calibration run (proportional-update loop) to the client process.
@@ -498,8 +822,27 @@ public class RunController : IDisposable
         hostBus.ClientErrorWhenRunningModelSystem += OnClientErrorWhenRunningModelSystem;
         hostBus.ClientOptimizationResultsAvailable += OnClientOptimizationResultsAvailable;
         hostBus.ClientIterationProgressAvailable += OnClientIterationProgressAvailable;
+        hostBus.SharedEstimationProgressAvailable += OnSharedEstimationProgress;
+        hostBus.SharedEstimationCompleted += OnSharedEstimationCompleted;
+        hostBus.SharedEstimationWorkerControlAcknowledged += OnSharedEstimationWorkerControlAcknowledged;
+        hostBus.SharedEstimationJobSnapshotsAvailable += OnSharedEstimationJobSnapshotsAvailable;
         hostBus.ClientRunArtifactsReceived += OnClientRunArtifactsReceived;
         hostBus.Disconnected += OnHostBusDisconnected;
+        hostBus.QuerySharedEstimationJobs(out _);
+    }
+
+    private void OnSharedEstimationJobSnapshotsAvailable(
+        object? sender, IReadOnlyList<SharedEstimationJobSnapshot> snapshots)
+    {
+        foreach (var snapshot in snapshots)
+        {
+            if (snapshot.ActiveWorkerIds is not null)
+                RunsViewModel.NotifyRemoteWorkerSnapshot(snapshot.RunId, snapshot.ActiveWorkerIds);
+            if (snapshot.Progress is not null)
+                OnSharedEstimationProgress(sender, snapshot.Progress);
+            if (snapshot.Completion is not null)
+                OnSharedEstimationCompleted(sender, snapshot.Completion);
+        }
     }
 
     private void OnHostBusDisconnected(object? sender, EventArgs e)
@@ -521,6 +864,10 @@ public class RunController : IDisposable
         hostBus.ClientErrorWhenRunningModelSystem -= OnClientErrorWhenRunningModelSystem;
         hostBus.ClientOptimizationResultsAvailable -= OnClientOptimizationResultsAvailable;
         hostBus.ClientIterationProgressAvailable -= OnClientIterationProgressAvailable;
+        hostBus.SharedEstimationProgressAvailable -= OnSharedEstimationProgress;
+        hostBus.SharedEstimationCompleted -= OnSharedEstimationCompleted;
+        hostBus.SharedEstimationWorkerControlAcknowledged -= OnSharedEstimationWorkerControlAcknowledged;
+        hostBus.SharedEstimationJobSnapshotsAvailable -= OnSharedEstimationJobSnapshotsAvailable;
         hostBus.ClientRunArtifactsReceived -= OnClientRunArtifactsReceived;
         hostBus.Disconnected -= OnHostBusDisconnected;
     }

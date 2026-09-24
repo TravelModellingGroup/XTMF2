@@ -52,6 +52,22 @@
                 <Button Grid.Column="2" Content="Clear"
                         Click="ClearFitnessNode_Click" Margin="4,0,0,0" Padding="10,5"/>
             </Grid>
+            <Grid ColumnDefinitions="150,320,Auto,*" Margin="0,8,0,0">
+                <TextBlock Grid.Column="0" Text="Input Directory:" VerticalAlignment="Center" FontSize="12" Margin="0,0,8,0"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding InputDirectoryNodes}"
+                          SelectedItem="{Binding SelectedInputDirectoryNode, Mode=TwoWay}"
+                          PlaceholderText="(none)"
+                          FontSize="12"
+                          HorizontalAlignment="Left"
+                          Width="320">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="xtmf2:Node">
+                            <TextBlock Text="{Binding Name}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </Grid>
             <!-- Algorithm + Objective row -->
             <Grid ColumnDefinitions="150,320,Auto,*,Auto,180" Margin="0,8,0,0">
                 <!-- Algorithm -->

@@ -97,7 +97,8 @@ public sealed class HostBus : IDisposable
         ClientReportedStatus = 8,
         ClientOptimizationResults = 9,
         ClientIterationProgress = 10,
-        ClientRunArtifacts = 11
+        ClientRunArtifacts = 11,
+        SharedEstimationMessage = 12
     }
 
     /// <summary>
@@ -191,6 +192,16 @@ public sealed class HostBus : IDisposable
     /// Fired after each optimisation iteration with the parameter values that were tested.
     /// </summary>
     public event IterationProgressUpdate? ClientIterationProgressAvailable;
+
+    public event EventHandler<IReadOnlyList<SharedEstimationEvaluationResult>>? SharedEstimationResultsAvailable;
+
+    public event EventHandler<SharedEstimationProgress>? SharedEstimationProgressAvailable;
+
+    public event EventHandler<SharedEstimationCompletion>? SharedEstimationCompleted;
+
+    public event EventHandler<IReadOnlyList<SharedEstimationJobSnapshot>>? SharedEstimationJobSnapshotsAvailable;
+
+    public event EventHandler<SharedEstimationWorkerControlAcknowledgement>? SharedEstimationWorkerControlAcknowledged;
 
     private static void IgnoreWarnings(Action toRun)
     {
@@ -314,6 +325,37 @@ public sealed class HostBus : IDisposable
                                 }
                             }
                             break;
+                        case In.SharedEstimationMessage:
+                            {
+                                var (_, messageType) = SharedEstimationProtocol.ReadHeader(reader);
+                                switch (messageType)
+                                {
+                                    case SharedEstimationMessageType.EvaluationResults:
+                                        IgnoreWarnings(() => SharedEstimationResultsAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadResultsPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.Progress:
+                                        IgnoreWarnings(() => SharedEstimationProgressAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadProgressPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.Complete:
+                                        IgnoreWarnings(() => SharedEstimationCompleted?.Invoke(
+                                            this, SharedEstimationProtocol.ReadCompletionPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.JobSnapshots:
+                                        IgnoreWarnings(() => SharedEstimationJobSnapshotsAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadJobSnapshotsPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.WorkerControlAcknowledgement:
+                                        IgnoreWarnings(() => SharedEstimationWorkerControlAcknowledged?.Invoke(
+                                            this, SharedEstimationProtocol.ReadWorkerControlAcknowledgementPayload(reader)));
+                                        break;
+                                    default:
+                                        throw new InvalidDataException(
+                                            $"Unexpected shared estimation message from RunServer: {messageType}.");
+                                }
+                            }
+                            break;
                         default:
                             throw new Exception($"Unsupported command: {Enum.GetName<In>(command)}");
                     }
@@ -360,6 +402,7 @@ public sealed class HostBus : IDisposable
         CancelModelRun = 2,
         KillModelRun = 3,
         RequestClientShutdown = 4,
+        SharedEstimationMessage = 5,
     }
 
     /// <summary>
@@ -497,6 +540,65 @@ public sealed class HostBus : IDisposable
             {
                 using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
                 writer.Write((int)Out.RequestClientShutdown);
+                return true;
+            }
+            catch (IOException e)
+            {
+                error = new CommandError(e.Message);
+                return false;
+            }
+        }
+    }
+
+    public bool StartSharedEstimation(SharedEstimationRunRequest request,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRunRequest(writer, request), out error);
+
+    public bool StartRemoteSharedEstimation(SharedEstimationCoordinatorRequest request,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCoordinatorRequest(writer, request), out error);
+
+    public bool AddSharedEstimationWorker(SharedEstimationWorkerRegistration registration,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteWorkerRegistration(writer, registration, remove: false), out error);
+
+    public bool RemoveSharedEstimationWorker(SharedEstimationWorkerRegistration registration,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteWorkerRegistration(writer, registration, remove: true), out error);
+
+    public bool SendSharedEstimationCandidates(IReadOnlyList<SharedEstimationCandidate> candidates,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCandidates(writer, candidates), out error);
+
+    public bool CancelSharedEstimation(string runId, string? reason,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCancel(writer, runId, reason), out error);
+
+    public bool QuerySharedEstimationJobs([NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(SharedEstimationProtocol.WriteQueryJobs, out error);
+
+    public bool AddRemoteEstimationWorker(string runId, SharedEstimationWorkerEndpoint worker,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer =>
+            SharedEstimationProtocol.WriteCoordinatorWorkerRequest(writer, runId, worker, remove: false), out error);
+
+    public bool RemoveRemoteEstimationWorker(string runId, SharedEstimationWorkerEndpoint worker,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer =>
+            SharedEstimationProtocol.WriteCoordinatorWorkerRequest(writer, runId, worker, remove: true), out error);
+
+    private bool WriteSharedEstimation(Action<BinaryWriter> writePayload,
+        [NotNullWhen(false)] out CommandError? error)
+    {
+        error = null;
+        lock (_outLock)
+        {
+            try
+            {
+                using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
+                writer.Write((int)Out.SharedEstimationMessage);
+                writePayload(writer);
+                writer.Flush();
                 return true;
             }
             catch (IOException e)

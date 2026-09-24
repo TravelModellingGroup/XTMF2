@@ -140,6 +140,24 @@ public abstract class EstimationAlgorithmConfig : INotifyPropertyChanged
     /// <summary>Default algorithm config used when no config is stored in the file.</summary>
     public static EstimationAlgorithmConfig Default => new NelderMeadConfig();
 
+    public static EstimationAlgorithmConfig? Create(string algorithmId)
+    {
+        foreach (var algorithm in AvailableAlgorithms)
+        {
+            if (algorithm.AlgorithmId != algorithmId)
+                continue;
+            return algorithm.AlgorithmId switch
+            {
+                NelderMeadConfig.Id => new NelderMeadConfig(),
+                ParticleSwarmConfig.Id => new ParticleSwarmConfig(),
+                GeneticAlgorithmConfig.Id => new GeneticAlgorithmConfig(),
+                StochasticGradientConfig.Id => new StochasticGradientConfig(),
+                _ => null
+            };
+        }
+        return null;
+    }
+
     /// <inheritdoc/>
     public override bool Equals(object? obj) =>
         obj is EstimationAlgorithmConfig other && AlgorithmId == other.AlgorithmId;

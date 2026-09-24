@@ -101,7 +101,8 @@ namespace XTMF2.Bus
             RunModelSystem = 1,
             CancelModelRun = 2,
             KillModelRun = 3,
-            KillClient = 4
+            KillClient = 4,
+            SharedEstimationMessage = 5
         }
 
         private enum Out
@@ -117,8 +118,29 @@ namespace XTMF2.Bus
             ClientReportedStatus = 8,
             ClientOptimizationResults = 9,
             ClientIterationProgress = 10,
-            ClientRunArtifacts = 11
+            ClientRunArtifacts = 11,
+            SharedEstimationMessage = 12
         }
+
+        public event Action<object, SharedEstimationRunRequest>? SharedEstimationRunRequested;
+
+        public event Action<object, SharedEstimationCoordinatorRequest>? SharedEstimationCoordinatorRequested;
+
+        public event Action<object, SharedEstimationWorkerRegistration, bool>? SharedEstimationWorkerRequested;
+
+        public event Action<object, IReadOnlyList<SharedEstimationCandidate>>? SharedEstimationCandidatesReceived;
+
+        public event Action<object, string, string?>? SharedEstimationCancellationRequested;
+
+        public event Action<object>? SharedEstimationJobsQueryRequested;
+
+        public event Action<object, string, SharedEstimationWorkerEndpoint, bool>? SharedEstimationCoordinatorWorkerRequested;
+
+        /// <summary>
+        /// Attach this RunServer as a worker for shared-estimation requests received from its host.
+        /// </summary>
+        public SharedEstimationWorkerSession AttachSharedEstimationWorker()
+            => new(this);
 
         /// <summary>
         /// This must be obtained before sending any data to the host
@@ -288,6 +310,31 @@ namespace XTMF2.Bus
             });
         }
 
+        internal void SendSharedEstimationResults(IReadOnlyList<SharedEstimationEvaluationResult> results)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteResults(writer, results));
+
+        public void SendSharedEstimationProgress(SharedEstimationProgress progress)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteProgress(writer, progress));
+
+        public void SendSharedEstimationCompletion(SharedEstimationCompletion completion)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCompletion(writer, completion));
+
+        public void SendSharedEstimationJobSnapshots(IReadOnlyList<SharedEstimationJobSnapshot> snapshots)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteJobSnapshots(writer, snapshots));
+
+        public void SendSharedEstimationWorkerControlAcknowledgement(
+            SharedEstimationWorkerControlAcknowledgement acknowledgement)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteWorkerControlAcknowledgement(writer, acknowledgement));
+
+        private void WriteSharedEstimation(Action<BinaryWriter> writePayload)
+        {
+            Write(writer =>
+            {
+                writer.Write((int)Out.SharedEstimationMessage);
+                writePayload(writer);
+            });
+        }
+
         /// <summary>
         /// Sends the final optimised parameter values to the host so the user can
         /// choose whether to apply them back to the model system.
@@ -427,6 +474,55 @@ namespace XTMF2.Bus
                             {
                                 var runId = reader.ReadString();
                                 _runScheduler.RequestCancel(runId);
+                            }
+                            break;
+                        case In.SharedEstimationMessage:
+                            {
+                                var (protocolVersion, messageType) = SharedEstimationProtocol.ReadHeader(reader);
+                                switch (messageType)
+                                {
+                                    case SharedEstimationMessageType.StartCoordinator:
+                                        SharedEstimationCoordinatorRequested?.Invoke(this,
+                                            SharedEstimationProtocol.ReadCoordinatorRequestPayload(reader));
+                                        break;
+                                    case SharedEstimationMessageType.StartRun:
+                                        SharedEstimationRunRequested?.Invoke(this,
+                                            SharedEstimationProtocol.ReadRunRequestPayload(reader, protocolVersion));
+                                        break;
+                                    case SharedEstimationMessageType.AddWorker:
+                                        SharedEstimationWorkerRequested?.Invoke(this,
+                                            SharedEstimationProtocol.ReadWorkerRegistrationPayload(reader), false);
+                                        break;
+                                    case SharedEstimationMessageType.RemoveWorker:
+                                        SharedEstimationWorkerRequested?.Invoke(this,
+                                            SharedEstimationProtocol.ReadWorkerRegistrationPayload(reader), true);
+                                        break;
+                                    case SharedEstimationMessageType.EvaluateCandidates:
+                                        SharedEstimationCandidatesReceived?.Invoke(this,
+                                            SharedEstimationProtocol.ReadCandidatesPayload(reader));
+                                        break;
+                                    case SharedEstimationMessageType.Cancel:
+                                        var cancellation = SharedEstimationProtocol.ReadCancelPayload(reader);
+                                        SharedEstimationCancellationRequested?.Invoke(this,
+                                            cancellation.RunId, cancellation.Reason);
+                                        break;
+                                    case SharedEstimationMessageType.QueryJobs:
+                                        SharedEstimationJobsQueryRequested?.Invoke(this);
+                                        break;
+                                    case SharedEstimationMessageType.AddCoordinatorWorker:
+                                        var addWorker = SharedEstimationProtocol.ReadCoordinatorWorkerRequestPayload(reader);
+                                        SharedEstimationCoordinatorWorkerRequested?.Invoke(this,
+                                            addWorker.RunId, addWorker.Worker, false);
+                                        break;
+                                    case SharedEstimationMessageType.RemoveCoordinatorWorker:
+                                        var removeWorker = SharedEstimationProtocol.ReadCoordinatorWorkerRequestPayload(reader);
+                                        SharedEstimationCoordinatorWorkerRequested?.Invoke(this,
+                                            removeWorker.RunId, removeWorker.Worker, true);
+                                        break;
+                                    default:
+                                        throw new InvalidDataException(
+                                            $"Unexpected shared estimation message to RunServer: {messageType}.");
+                                }
                             }
                             break;
                         // failsafe

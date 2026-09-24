@@ -10,7 +10,7 @@
         WindowStartupLocation="CenterOwner"
         CanResize="False">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="20">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="20">
         <TextBlock Grid.Row="0"
                    Text="Enter a name for this run:"
                    FontSize="14"
@@ -31,7 +31,7 @@
                IsVisible="{Binding IsRunNameInvalid}"/>
 
         <StackPanel Grid.Row="3"
-                    IsVisible="{Binding IsRunServerSelectionVisible}"
+                    IsVisible="{Binding IsSingleRunServerSelectionVisible}"
                     Margin="0,14,0,0"
                     Spacing="6">
             <TextBlock Text="RunServer"
@@ -49,6 +49,42 @@
             </ComboBox>
         </StackPanel>
 
+        <StackPanel Grid.Row="3"
+                    IsVisible="{Binding AllowMultipleRunServers}"
+                    Margin="0,14,0,0"
+                    Spacing="6">
+            <TextBlock Text="Estimation coordinator"
+                       FontSize="14"/>
+            <ComboBox ItemsSource="{Binding SelectedRunServers}"
+                      SelectedItem="{Binding SelectedCoordinatorRunServer}"
+                      HorizontalAlignment="Stretch"
+                      Margin="0,0,0,4">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Name}"/>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="Worker RunServers (the other selected servers)"
+                       FontSize="14"/>
+            <ListBox x:Name="RunServerListBox"
+                     ItemsSource="{Binding RunServers}"
+                     SelectionMode="Multiple"
+                     SelectionChanged="RunServerSelectionChanged"
+                     Height="130"
+                     TabIndex="1">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Name}"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Text="{Binding SelectedRunServerSummary}"
+                       FontSize="12"
+                       Foreground="{DynamicResource DlgMutedFg}"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
         <StackPanel Grid.Row="4"
                 IsVisible="{Binding IsStartSelectionVisible}"
                 Margin="0,14,0,0"
@@ -61,7 +97,15 @@
                 TabIndex="2"/>
         </StackPanel>
 
-        <StackPanel Grid.Row="5"
+        <ScrollViewer Grid.Row="5"
+                      MaxHeight="260"
+                      IsVisible="{Binding IsPathOverridesVisible}"
+                      Margin="0,14,0,0"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="PathOverridesPanel" Spacing="8"/>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="6"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="10"

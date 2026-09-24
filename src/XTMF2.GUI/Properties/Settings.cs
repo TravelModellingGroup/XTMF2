@@ -149,6 +149,8 @@ public class Settings
                 if (endpoint is null || string.IsNullOrWhiteSpace(endpoint.Address) || endpoint.Port is < 0 or > 65535)
                     continue;
 
+                endpoint.BasicParameterOverrides ??= new(StringComparer.OrdinalIgnoreCase);
+
                 if (normalized.Any(existing => existing.Id == endpoint.Id))
                     continue;
 
