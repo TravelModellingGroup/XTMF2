@@ -1,10 +1,12 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 using System.Linq;
 using XTMF2.Bus;
 using XTMF2.GUI;
 using XTMF2.GUI.Properties;
+using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Views;
 
 namespace XTMF2.GUI.Tests.Headless;
@@ -55,6 +57,24 @@ public class RunServerActivityWindowTests
             Assert.IsTrue(activityRow.Classes.Contains("activity-row"));
             Assert.IsNotNull(activityRow.Children.OfType<Button>().SingleOrDefault(button =>
                 Equals(button.Content, "✕")));
+        }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void RecoveredSnapshot_UpdatesExistingRunServerLabel()
+    {
+        Session.Dispatch(() =>
+        {
+            var runs = new RunsViewModel();
+            var snapshot = new RemoteRunSnapshot("run-recovered-label", "Forecast", RunMode.Normal,
+                "/remote/runs/forecast", "Start", "model-hash", RemoteRunState.Completed,
+                "Run completed.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
+                null, null, false, DateTimeOffset.UtcNow);
+
+            var run = runs.RestoreRemoteRun(snapshot, "Local RunServer", () => { });
+            runs.RestoreRemoteRun(snapshot, "Remote Production", () => { });
+
+            Assert.AreEqual("Remote Production", run.RunServer);
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
     }
 }

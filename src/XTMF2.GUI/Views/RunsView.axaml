@@ -73,8 +73,8 @@
                                             FontSize="14"
                                             VerticalAlignment="Center"
                                             IsEnabled="{Binding IsCompleted}"
-                                            Command="{Binding $parent[UserControl].DataContext.RemoveRunCommand}"
-                                            CommandParameter="{Binding}"/>
+                                            Click="RemoveRunButton_Click"
+                                            ToolTip.Tip="Remove this run; remote runs are deleted from their RunServer."/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -82,10 +82,11 @@
 
                     <Button Grid.Row="1"
                             Content="Clear Completed"
-                            Command="{Binding ClearCompletedRunsCommand}"
+                            Click="ClearCompletedRunsButton_Click"
                             Classes="dlg-primary"
                             HorizontalAlignment="Stretch"
-                            Margin="0,4,0,2"/>
+                            Margin="0,4,0,2"
+                            ToolTip.Tip="Clears completed local runs and remote runs whose output has transferred to this computer. Remote-only runs are kept."/>
                 </Grid>
             </Border>
 
@@ -144,6 +145,15 @@
                                 Margin="0,6,0,0"
                                 HorizontalAlignment="Left"
                                 ToolTip.Tip="Open this run's output directory in the file explorer."/>
+                            <TextBlock Text="{Binding SelectedRun.OutputTransferStatus}"
+                                   IsVisible="{Binding SelectedRun.IsRemoteRun}"
+                                   FontSize="11" Opacity="0.7" Margin="0,4,0,0"/>
+                            <Button Content="Transfer Output to This Computer"
+                                IsVisible="{Binding SelectedRun.CanTransferRemoteOutput}"
+                                Classes="dlg-primary"
+                                Margin="0,4,0,0"
+                                HorizontalAlignment="Left"
+                                Click="TransferRemoteOutputButton_Click"/>
                             <Button Content="Bind to Active Model System"
                                 IsVisible="{Binding SelectedRun.IsRecoveredRunUnbound}"
                                 Classes="dlg-primary"

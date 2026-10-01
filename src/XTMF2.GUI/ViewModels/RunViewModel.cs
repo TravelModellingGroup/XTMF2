@@ -24,6 +24,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using XTMF2.Configuration;
+using XTMF2.GUI;
 using XTMF2.GUI.Properties;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -62,29 +63,86 @@ public sealed partial class RunViewModel : ObservableObject
     public string RunName { get; }
 
     /// <summary>The directory that the run executes in and writes its output to.</summary>
-    public string RunDirectory { get; }
+    public string RunDirectory { get; private set; }
 
     /// <summary>The configured RunServer that processed this run.</summary>
-    public string RunServer { get; }
+    public string RunServer { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    private bool _isRemoteRun;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    private bool _remoteOutputAvailable;
+
+    public bool CanTransferRemoteOutput
+        => IsRemoteRun && IsCompleted && !ArtifactsAvailable && !HasPendingRemoteReceipt;
+
+    public string OutputTransferStatus => !IsRemoteRun
+        ? ArtifactsAvailable ? "Output is on this computer." : "Output has not been transferred yet."
+        : Status == RunStatus.Running ? "Output will be transferred when the run completes."
+        : ArtifactsAvailable ? "Output is on this computer."
+        : HasPendingRemoteReceipt ? "Output transfer is pending."
+        : RemoteOutputAvailable ? "Output is available on the RunServer."
+        : "RunServer output availability has not been confirmed.";
 
     /// <summary>True when this run has a known output directory that can be opened.</summary>
     public bool HasRunDirectory => ArtifactsAvailable && !string.IsNullOrWhiteSpace(RunDirectory);
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
     private bool _artifactsAvailable;
 
     internal void MarkArtifactsAvailable()
     {
         ArtifactsAvailable = true;
+        RemoteOutputAvailable = false;
+        HasPendingRemoteReceipt = false;
+        OnPropertyChanged(nameof(OutputTransferStatus));
         OnPropertyChanged(nameof(HasRunDirectory));
         OpenRunDirectoryCommand.NotifyCanExecuteChanged();
     }
 
+    internal void SetRemoteRunTracking(bool isRemoteRun)
+        => IsRemoteRun = isRemoteRun;
+
+    internal void SetLocalOutputDirectory(string directory)
+    {
+        if (RunDirectory == directory)
+            return;
+        RunDirectory = directory;
+        ArtifactsAvailable = Directory.Exists(directory);
+        if (ArtifactsAvailable)
+            RemoteOutputAvailable = false;
+        OnPropertyChanged(nameof(RunDirectory));
+        OnPropertyChanged(nameof(HasRunDirectory));
+        OpenRunDirectoryCommand.NotifyCanExecuteChanged();
+    }
+
+    internal void SetRunServer(string runServer)
+    {
+        if (RunServer == runServer)
+            return;
+        RunServer = runServer;
+        OnPropertyChanged(nameof(RunServer));
+    }
+
     internal void MarkArtifactTransferFailed(string message)
-        => AppendStatus($"Output transfer failed: {message}");
+    {
+        HasPendingRemoteReceipt = false;
+        AppendStatus($"Output transfer failed: {message}");
+        OnPropertyChanged(nameof(OutputTransferStatus));
+        OnPropertyChanged(nameof(CanTransferRemoteOutput));
+    }
 
     /// <summary>Current execution status.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
     private RunStatus _status = RunStatus.Running;
 
     /// <summary>
@@ -125,11 +183,13 @@ public sealed partial class RunViewModel : ObservableObject
     }
 
     public RunViewModel(RemoteRunSnapshot snapshot, string runServer, Action? cancelAction = null)
-        : this(snapshot.RunId, snapshot.RunName, snapshot.WorkingDirectory, runServer, null!, null!)
+        : this(snapshot.RunId, snapshot.RunName, RemoteRunOutputPaths.GetLocalDirectory(snapshot.RunId), runServer, null!, null!)
     {
         _recoveredSnapshot = snapshot;
+        IsRemoteRun = true;
+        ArtifactsAvailable = Directory.Exists(RunDirectory);
+        RemoteOutputAvailable = snapshot.ArtifactsAvailable && !ArtifactsAvailable;
         IsRecoveredRunUnbound = true;
-        HasPendingRemoteReceipt = snapshot.ArtifactsAvailable;
         SetRunMode(snapshot.RunMode,
             Array.Empty<(int nodeIndex, string name, double min, double max)>(), cancelAction ?? (() => { }));
         var parameterValues = snapshot.ProgressParameters
@@ -189,6 +249,8 @@ public sealed partial class RunViewModel : ObservableObject
     private bool _isRecoveredRunUnbound;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
     private bool _hasPendingRemoteReceipt;
 
     internal void BindRecoveredRun(ModelSystemSession session, User user,
@@ -214,7 +276,8 @@ public sealed partial class RunViewModel : ObservableObject
     internal void ApplyRecoveredSnapshot(RemoteRunSnapshot snapshot)
     {
         _recoveredSnapshot = snapshot;
-        HasPendingRemoteReceipt = snapshot.ArtifactsAvailable;
+        IsRemoteRun = true;
+        RemoteOutputAvailable = snapshot.ArtifactsAvailable && !ArtifactsAvailable;
         if (snapshot.ProgressParameters.Count > 0)
         {
             foreach (var value in snapshot.ProgressParameters)
@@ -302,7 +365,11 @@ public sealed partial class RunViewModel : ObservableObject
     }
 
     internal void SetRemoteReceiptPending(bool pending)
-        => HasPendingRemoteReceipt = pending;
+    {
+        HasPendingRemoteReceipt = pending;
+        OnPropertyChanged(nameof(OutputTransferStatus));
+        OnPropertyChanged(nameof(CanTransferRemoteOutput));
+    }
 
     private bool CanOpenRunDirectory() => HasRunDirectory;
 

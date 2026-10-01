@@ -182,7 +182,8 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
                         Path.AltDirectorySeparatorChar)),
                     _request.Run.WorkingDirectory,
                     Convert.ToHexString(SHA256.HashData(_request.Run.ModelSystem)),
-                    _request.Parameters?.ToArray(), _request.Run.ProjectId, _request.Run.ModelSystemId);
+                    _request.Parameters?.ToArray(), _request.Run.ProjectId, _request.Run.ModelSystemId,
+                    _request.Run.OwnerUserId);
             }
         }
 

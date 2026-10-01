@@ -44,6 +44,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using XTMF2;
 using XTMF2.AI;
+using XTMF2.Bus;
 using XTMF2.Editing;
 using XTMF2.GUI.AI;
 using XTMF2.GUI.Controls;
@@ -445,6 +446,22 @@ public partial class MainWindow : Window
         }
         return _runController.RetryRemoteRunReceipt(runId, out error);
     }
+
+    public bool RequestRemoteRunOutputTransfer(string runId, out string? error)
+    {
+        if (_runController is null)
+        {
+            error = "The run controller is unavailable.";
+            return false;
+        }
+        return _runController.RequestRemoteRunOutputTransfer(runId, out error);
+    }
+
+    public Task<RemoteRunDeletionResponse> DeleteRemoteRunAsync(string runId)
+        => _runController is null
+            ? Task.FromResult(new RemoteRunDeletionResponse(string.Empty, runId, false,
+                "The run controller is unavailable."))
+            : _runController.DeleteRemoteRunAsync(runId);
 
     /// <summary>
     /// Switches the active document to the Runs tab.

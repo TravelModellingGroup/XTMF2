@@ -20,6 +20,10 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using XTMF2.GUI;
 using XTMF2.GUI.ViewModels;
 
@@ -108,5 +112,115 @@ public partial class RunsView : UserControl
             return;
         if (!mainWindow.RetryRemoteRunReceipt(run.RunId, out var error))
             run.AppendStatus(error ?? "Unable to retry the remote output receipt.");
+    }
+
+    private void TransferRemoteOutputButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm?.SelectedRun is not { } run || TopLevel.GetTopLevel(this) is not MainWindow mainWindow)
+            return;
+        if (!mainWindow.RequestRemoteRunOutputTransfer(run.RunId, out var error))
+            run.AppendStatus(error ?? "Unable to request remote output transfer.");
+    }
+
+    private async void RemoveRunButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: RunViewModel run } || _vm is null)
+            return;
+        if (!run.IsRemoteRun)
+        {
+            _vm.RemoveRunCommand.Execute(run);
+            return;
+        }
+        if (TopLevel.GetTopLevel(this) is not MainWindow mainWindow)
+        {
+            run.AppendStatus("Unable to reach the RunServer controller.");
+            return;
+        }
+
+        if (!run.ArtifactsAvailable)
+        {
+            var confirmation = new ConfirmDialog("Delete Remote Run?",
+                $"The output for '{run.RunName}' ({run.RunId}) has not been transferred to this computer. " +
+                $"Deleting it from '{run.RunServer}' will permanently remove the only copy. Continue?");
+            await confirmation.ShowDialog(mainWindow);
+            if (!confirmation.Result)
+                return;
+        }
+
+        var button = sender as Button;
+        if (button is not null)
+            button.IsEnabled = false;
+        try
+        {
+            var result = await mainWindow.DeleteRemoteRunAsync(run.RunId);
+            if (!result.Deleted)
+            {
+                run.AppendStatus(result.Error ?? "The RunServer did not delete this run.");
+                return;
+            }
+            _vm.RemoveRunCommand.Execute(run);
+        }
+        catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException)
+        {
+            run.AppendStatus($"Unable to delete the remote run: {exception.Message}");
+        }
+        finally
+        {
+            if (button is not null)
+                button.IsEnabled = run.Status != RunStatus.Running;
+        }
+    }
+
+    private void ClearCompletedRunsButton_Click(object? sender, RoutedEventArgs e)
+        => _ = ClearCompletedRunsAsync(sender);
+
+    private async Task ClearCompletedRunsAsync(object? sender)
+    {
+        if (_vm is null || sender is not Button button)
+            return;
+
+        button.IsEnabled = false;
+        try
+        {
+            var completedRuns = _vm.Runs.Where(run => run.IsCompleted).ToArray();
+            var mainWindow = TopLevel.GetTopLevel(this) as MainWindow;
+            foreach (var run in completedRuns)
+            {
+                if (run.IsRemoteRun)
+                {
+                    if (!run.ArtifactsAvailable)
+                    {
+                        run.AppendStatus("Kept by Clear Completed: output has not been transferred to this computer.");
+                        continue;
+                    }
+                    if (mainWindow is null)
+                    {
+                        run.AppendStatus("Unable to clear remote run: the RunServer controller is unavailable.");
+                        continue;
+                    }
+
+                    try
+                    {
+                        var result = await mainWindow.DeleteRemoteRunAsync(run.RunId);
+                        if (!result.Deleted)
+                        {
+                            run.AppendStatus(result.Error ?? "The RunServer did not delete this run.");
+                            continue;
+                        }
+                    }
+                    catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException)
+                    {
+                        run.AppendStatus($"Unable to clear remote run: {exception.Message}");
+                        continue;
+                    }
+                }
+
+                _vm.RemoveRunCommand.Execute(run);
+            }
+        }
+        finally
+        {
+            button.IsEnabled = true;
+        }
     }
 }

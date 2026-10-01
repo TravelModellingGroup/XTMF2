@@ -38,6 +38,7 @@ public sealed class HostBus : IDisposable
     private volatile bool _Exit = false;
     private volatile bool _Exited = false;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<RunServerActivityResponse>> _pendingActivityRequests = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<RemoteRunDeletionResponse>> _pendingRemoteRunDeletionRequests = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Create a host on a given stream.
@@ -378,6 +379,11 @@ public sealed class HostBus : IDisposable
                                         if (_pendingActivityRequests.TryRemove(activityResponse.RequestId, out var pendingActivity))
                                             pendingActivity.TrySetResult(activityResponse);
                                         break;
+                                    case SharedEstimationMessageType.RemoteRunDeleted:
+                                        var deletionResponse = SharedEstimationProtocol.ReadRemoteRunDeletedPayload(reader);
+                                        if (_pendingRemoteRunDeletionRequests.TryRemove(deletionResponse.RequestId, out var pendingDeletion))
+                                            pendingDeletion.TrySetResult(deletionResponse);
+                                        break;
                                     default:
                                         throw new InvalidDataException(
                                             $"Unexpected shared estimation message from RunServer: {messageType}.");
@@ -477,7 +483,7 @@ public sealed class HostBus : IDisposable
         RunMode runMode,
         Action<string>? onIdCreated,
         [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error,
-        string? runName = null)
+        string? runName = null, Guid? ownerUserId = null)
     {
         id = null;
         lock (_outLock)
@@ -502,6 +508,7 @@ public sealed class HostBus : IDisposable
                 writer.Write(runName ?? Path.GetFileName(cwd.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
                 writer.Write(modelSystem.Project.Id.ToString("D"));
                 writer.Write(modelSystem.ModelSystemHeader.Id.ToString("D"));
+                writer.Write(ownerUserId?.ToString("D") ?? string.Empty);
                 writer.Write(memStream.Length);
                 memStream.WriteTo(_HostStream);
                 return true;
@@ -659,6 +666,45 @@ public sealed class HostBus : IDisposable
 
     public bool AcknowledgeRemoteRun(string runId, [NotNullWhen(false)] out CommandError? error)
         => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteAcknowledgeRemoteRun(writer, runId), out error);
+
+    public async Task<RemoteRunDeletionResponse> DeleteRemoteRunAsync(string runId,
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var requestId = Guid.NewGuid().ToString("N");
+        var completion = new TaskCompletionSource<RemoteRunDeletionResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_pendingRemoteRunDeletionRequests.TryAdd(requestId, completion))
+            throw new InvalidOperationException("Unable to register the remote run deletion request.");
+
+        try
+        {
+            if (!WriteSharedEstimation(writer =>
+                SharedEstimationProtocol.WriteDeleteRemoteRun(writer, requestId, runId), out var error))
+                throw new IOException(error?.Message ?? "Unable to request remote run deletion.");
+        }
+        catch
+        {
+            _pendingRemoteRunDeletionRequests.TryRemove(requestId, out _);
+            throw;
+        }
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linkedCancellation.CancelAfter(timeout ?? TimeSpan.FromSeconds(15));
+        using var registration = linkedCancellation.Token.Register(() =>
+        {
+            if (_pendingRemoteRunDeletionRequests.TryRemove(requestId, out var pending))
+                pending.TrySetCanceled(linkedCancellation.Token);
+        });
+
+        try
+        {
+            return await completion.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            _pendingRemoteRunDeletionRequests.TryRemove(requestId, out _);
+        }
+    }
 
     public bool AddRemoteEstimationWorker(string runId, SharedEstimationWorkerEndpoint worker,
         [NotNullWhen(false)] out CommandError? error)

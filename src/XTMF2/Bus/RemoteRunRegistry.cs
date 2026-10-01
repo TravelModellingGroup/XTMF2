@@ -39,7 +39,8 @@ public sealed record RemoteRunSnapshot(
     bool ArtifactsAvailable,
     DateTimeOffset UpdatedAt,
     Guid? ProjectId = null,
-    Guid? ModelSystemId = null);
+    Guid? ModelSystemId = null,
+    Guid? OwnerUserId = null);
 
 /// <summary>
 /// Owns remote run scheduling and retained run state for the lifetime of the RunServer process.
@@ -68,7 +69,7 @@ public sealed class RemoteRunRegistry : IDisposable
 
     public bool Submit(RunServerBus observer, RunContext context, string runName,
         RunMode runMode, string workingDirectory, string startToExecute, byte[] modelSystem,
-        Guid? projectId = null, Guid? modelSystemId = null)
+        Guid? projectId = null, Guid? modelSystemId = null, Guid? ownerUserId = null)
     {
         ArgumentNullException.ThrowIfNull(observer);
         ArgumentNullException.ThrowIfNull(context);
@@ -76,7 +77,7 @@ public sealed class RemoteRunRegistry : IDisposable
         var initial = new RemoteRunSnapshot(context.ID, runName, runMode, workingDirectory,
             startToExecute, Convert.ToHexString(SHA256.HashData(modelSystem)), RemoteRunState.Running,
             "Run submitted.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
-            null, null, false, DateTimeOffset.UtcNow, projectId, modelSystemId);
+            null, null, false, DateTimeOffset.UtcNow, projectId, modelSystemId, ownerUserId);
         RemoteRunJob job;
         lock (_sync)
         {
@@ -135,10 +136,11 @@ public sealed class RemoteRunRegistry : IDisposable
 
     public bool TryReadArtifacts(string runId, out byte[]? archive)
     {
+        RemoteRunJob? job;
         string path;
         lock (_sync)
         {
-            if (!_jobs.TryGetValue(runId, out var job) || !job.GetSnapshot().ArtifactsAvailable)
+            if (!_jobs.TryGetValue(runId, out job))
             {
                 archive = null;
                 return false;
@@ -148,10 +150,27 @@ public sealed class RemoteRunRegistry : IDisposable
 
         try
         {
+            if (!File.Exists(path))
+            {
+                var snapshot = job.GetSnapshot();
+                if (snapshot.State == RemoteRunState.Running || !IsPrivateRunDirectory(runId, snapshot.WorkingDirectory) ||
+                    !Directory.Exists(snapshot.WorkingDirectory))
+                {
+                    archive = null;
+                    return false;
+                }
+
+                var temporary = path + ".tmp";
+                if (File.Exists(temporary))
+                    File.Delete(temporary);
+                ZipFile.CreateFromDirectory(snapshot.WorkingDirectory, temporary, CompressionLevel.Fastest, false);
+                File.Move(temporary, path, true);
+                job.SetArtifactsAvailable();
+            }
             archive = File.ReadAllBytes(path);
             return true;
         }
-        catch (IOException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             archive = null;
             return false;
@@ -170,6 +189,83 @@ public sealed class RemoteRunRegistry : IDisposable
         job.AcknowledgeReceived();
         try { File.Delete(GetArtifactPath(runId)); } catch (IOException) { }
         return true;
+    }
+
+    private static bool IsPrivateRunDirectory(string runId, string workingDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(runId) || runId is "." or ".." ||
+            runId.Contains(Path.DirectorySeparatorChar) || runId.Contains(Path.AltDirectorySeparatorChar) ||
+            runId.Contains('\\'))
+            return false;
+        try
+        {
+            var actual = Path.GetFullPath(workingDirectory);
+            var expected = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "XTMF2", "Runs", runId));
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            if (!string.Equals(actual, expected, comparison))
+                return false;
+            if (File.Exists(actual))
+                return false;
+            return !Directory.Exists(actual) ||
+                (File.GetAttributes(actual) & FileAttributes.ReparsePoint) == 0;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    public bool DeleteRun(string runId, out string? error)
+    {
+        error = null;
+        lock (_sync)
+        {
+            if (!_jobs.TryGetValue(runId, out var job))
+            {
+                error = "The remote run was not found.";
+                return false;
+            }
+
+            var snapshot = job.GetSnapshot();
+            if (snapshot.State == RemoteRunState.Running)
+            {
+                error = "A running remote job cannot be deleted.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(runId) || runId is "." or ".." ||
+                runId.Contains(Path.DirectorySeparatorChar) || runId.Contains(Path.AltDirectorySeparatorChar) ||
+                runId.Contains('\\'))
+            {
+                error = "The remote run ID is invalid.";
+                return false;
+            }
+
+            if (!IsPrivateRunDirectory(runId, snapshot.WorkingDirectory))
+            {
+                error = "The remote run directory is outside the RunServer's private run workspace.";
+                return false;
+            }
+
+            try
+            {
+                if (Directory.Exists(snapshot.WorkingDirectory))
+                    Directory.Delete(snapshot.WorkingDirectory, recursive: true);
+
+                File.Delete(GetArtifactPath(runId));
+                File.Delete(GetArtifactPath(runId) + ".tmp");
+                File.Delete(GetManifestPath(runId));
+                _jobs.Remove(runId);
+                return true;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                error = $"Unable to remove the remote run files: {exception.Message}";
+                return false;
+            }
+        }
     }
 
     public void Cancel(string runId)
@@ -289,10 +385,12 @@ public sealed class RemoteRunRegistry : IDisposable
         public void AcknowledgeReceived()
             => Update(snapshot => snapshot with
             {
-                ArtifactsAvailable = false,
-                Status = "Completion received by a GUI.",
+                Status = "Completion received by a GUI; remote output remains available.",
                 UpdatedAt = DateTimeOffset.UtcNow
             });
+
+        public void SetArtifactsAvailable()
+            => Update(snapshot => snapshot with { ArtifactsAvailable = true, UpdatedAt = DateTimeOffset.UtcNow });
 
         public Task StartProcessingRequestFromRun(string id, Stream clientToRunStream)
         {

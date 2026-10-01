@@ -378,6 +378,9 @@ namespace XTMF2.Bus
         public void SendRemoteRunArtifacts(string runId, byte[]? archive, string? error)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, runId, archive, error));
 
+        public void SendRemoteRunDeletionResponse(RemoteRunDeletionResponse response)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRemoteRunDeleted(writer, response));
+
         public void SendSharedEstimationWorkerControlAcknowledgement(
             SharedEstimationWorkerControlAcknowledgement acknowledgement)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteWorkerControlAcknowledgement(writer, acknowledgement));
@@ -516,6 +519,9 @@ namespace XTMF2.Bus
                                 var modelSystemId = Guid.TryParse(reader.ReadString(), out var parsedModelSystemId)
                                     ? parsedModelSystemId
                                     : (Guid?)null;
+                                var ownerUserId = Guid.TryParse(reader.ReadString(), out var parsedOwnerUserId)
+                                    ? parsedOwnerUserId
+                                    : (Guid?)null;
                                 var msSize = (int)reader.ReadInt64();
                                 Console.WriteLine($"RunServer model system run issued: {id} (start '{start}', mode {runMode}, {msSize} bytes)");
                                 Console.Out.Flush();
@@ -526,7 +532,7 @@ namespace XTMF2.Bus
                                     if (_remoteRunRegistry is not null)
                                     {
                                         if (!_remoteRunRegistry.Submit(this, context, runName, runMode, cwd, start,
-                                            modelSystem, projectId, modelSystemId))
+                                            modelSystem, projectId, modelSystemId, ownerUserId))
                                             ModelRunFailed(id, "A run with this ID is already registered.", string.Empty);
                                     }
                                     else
@@ -623,6 +629,19 @@ namespace XTMF2.Bus
                                     case SharedEstimationMessageType.AcknowledgeRemoteRun:
                                         _remoteRunRegistry?.AcknowledgeReceived(
                                             SharedEstimationProtocol.ReadAcknowledgeRemoteRunPayload(reader));
+                                        break;
+                                    case SharedEstimationMessageType.DeleteRemoteRun:
+                                        {
+                                            var request = SharedEstimationProtocol.ReadDeleteRemoteRunPayload(reader);
+                                            string? error = null;
+                                            var deleted = _remoteRunRegistry is not null &&
+                                                _remoteRunRegistry.DeleteRun(request.RunId, out error);
+                                            error ??= _remoteRunRegistry is null
+                                                ? "Remote run retention is unavailable on this RunServer."
+                                                : null;
+                                            SendRemoteRunDeletionResponse(new RemoteRunDeletionResponse(
+                                                request.RequestId, request.RunId, deleted, error));
+                                        }
                                         break;
                                     case SharedEstimationMessageType.AddCoordinatorWorker:
                                         var addWorker = SharedEstimationProtocol.ReadCoordinatorWorkerRequestPayload(reader);

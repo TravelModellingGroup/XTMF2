@@ -81,7 +81,15 @@ public sealed partial class RunsViewModel : ObservableObject
         {
             if (_runsById.TryGetValue(snapshot.RunId, out var existing))
             {
-                Dispatcher.UIThread.Post(() => existing.ApplyRecoveredSnapshot(snapshot));
+                void ApplySnapshot()
+                {
+                    existing.SetRunServer(runServer);
+                    existing.ApplyRecoveredSnapshot(snapshot);
+                }
+                if (Dispatcher.UIThread.CheckAccess())
+                    ApplySnapshot();
+                else
+                    Dispatcher.UIThread.Post(ApplySnapshot);
                 return existing;
             }
         }
@@ -108,7 +116,15 @@ public sealed partial class RunsViewModel : ObservableObject
         {
             if (_runsById.TryGetValue(snapshot.RunId, out var existing))
             {
-                Dispatcher.UIThread.Post(() => existing.ApplyRecoveredSharedEstimationSnapshot(snapshot));
+                void ApplySnapshot()
+                {
+                    existing.SetRunServer(runServer);
+                    existing.ApplyRecoveredSharedEstimationSnapshot(snapshot);
+                }
+                if (Dispatcher.UIThread.CheckAccess())
+                    ApplySnapshot();
+                else
+                    Dispatcher.UIThread.Post(ApplySnapshot);
                 return existing;
             }
         }
@@ -145,6 +161,15 @@ public sealed partial class RunsViewModel : ObservableObject
         if (vm is null)
             return false;
         Dispatcher.UIThread.Post(() => vm.BindRecoveredRun(session, user, metadata));
+        return true;
+    }
+
+    internal bool SetRecoveredRunOutputDirectory(string runId, string directory)
+    {
+        var vm = FindRun(runId);
+        if (vm is null)
+            return false;
+        Dispatcher.UIThread.Post(() => vm.SetLocalOutputDirectory(directory));
         return true;
     }
 
@@ -198,6 +223,13 @@ public sealed partial class RunsViewModel : ObservableObject
         });
     }
 
+    internal void NotifyRemoteOutputAvailability(string runId, bool available)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.RemoteOutputAvailable = available && !vm.ArtifactsAvailable);
+    }
+
     internal void NotifyArtifactTransferFailed(string runId, string error)
     {
         var vm = FindRun(runId);
@@ -215,7 +247,7 @@ public sealed partial class RunsViewModel : ObservableObject
     internal void NotifyRemoteReceiptPending(string runId, bool pending)
     {
         var vm = FindRun(runId);
-        if (vm is null) return;
+        if (vm is null || !vm.IsRemoteRun) return;
         Dispatcher.UIThread.Post(() => vm.SetRemoteReceiptPending(pending));
     }
 
@@ -317,23 +349,4 @@ public sealed partial class RunsViewModel : ObservableObject
             SelectedRun = Runs.Count > 0 ? Runs[Math.Min(idx, Runs.Count - 1)] : null;
     }
 
-    /// <summary>
-    /// Removes all runs that have finished or errored from the list.
-    /// </summary>
-    [RelayCommand]
-    private void ClearCompletedRuns()
-    {
-        var wasSelected = SelectedRun;
-        for (var i = Runs.Count - 1; i >= 0; i--)
-        {
-            if (Runs[i].Status != RunStatus.Running)
-            {
-                lock (_runsLock)
-                    _runsById.Remove(Runs[i].RunId);
-                Runs.RemoveAt(i);
-            }
-        }
-        if (wasSelected is not null && !Runs.Contains(wasSelected))
-            SelectedRun = Runs.FirstOrDefault();
-    }
 }

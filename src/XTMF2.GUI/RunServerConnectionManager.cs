@@ -153,6 +153,18 @@ public sealed class RunServerConnectionManager : IDisposable
         }
     }
 
+    public bool TryGetEndpoint(HostBus hostBus, out RunServerEndpoint? endpoint)
+    {
+        ArgumentNullException.ThrowIfNull(hostBus);
+        lock (_sync)
+        {
+            var entry = _entries.Values.FirstOrDefault(candidate =>
+                ReferenceEquals(candidate.HostBus, hostBus) && candidate.State == RunServerConnectionState.Available);
+            endpoint = entry?.Endpoint.Clone();
+            return endpoint is not null;
+        }
+    }
+
     public IReadOnlyList<RunServerConnectionInfo> GetStates()
     {
         lock (_sync)

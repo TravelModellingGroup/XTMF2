@@ -214,8 +214,23 @@ public class RunController : IDisposable
     private void OnClientRunArtifactsReceived(object? sender, HostBus.RunArtifactsReceivedEventArgs args)
     {
         string? targetDirectory;
+        var hostBus = sender as HostBus;
         lock (_sessionsByRunId)
+        {
             _runDirectoriesByRunId.TryGetValue(args.RunId, out targetDirectory);
+            if (targetDirectory is null && hostBus is not null &&
+                _remoteRunBusesByRunId.TryGetValue(args.RunId, out var remoteRunBus) &&
+                ReferenceEquals(remoteRunBus, hostBus))
+            {
+                targetDirectory = RemoteRunOutputPaths.GetLocalDirectory(args.RunId);
+            }
+        }
+
+        if (targetDirectory is null && hostBus is not null &&
+            _connections.TryGetEndpoint(hostBus, out var endpoint) && endpoint is { IsLocal: false })
+        {
+            targetDirectory = RemoteRunOutputPaths.GetLocalDirectory(args.RunId);
+        }
 
         if (targetDirectory is null)
         {
@@ -469,7 +484,10 @@ public class RunController : IDisposable
             parameterEntries.Length, lower, upper, initial,
             modelSystem.EstimationObjective == EstimationObjective.Maximize);
         var request = new SharedEstimationRunRequest(
-            runId, runDirectory, startToExecute, modelStream.ToArray());
+            runId, runDirectory, startToExecute, modelStream.ToArray(),
+            ProjectId: msSession.Project.Id,
+            ModelSystemId: msSession.ModelSystemHeader.Id,
+            OwnerUserId: user.UserId);
         if (!pool.StartRun(request, out var startError, basicParameterOverridesByWorker))
         {
             pool.Dispose();
@@ -594,7 +612,7 @@ public class RunController : IDisposable
             new SharedEstimationRunRequest(Guid.NewGuid().ToString(),
                 Path.Combine(projectSession.ProjectDirectory!, "runs", runName),
                 startToExecute, modelStream.ToArray(), coordinatorOverrides,
-                msSession.Project.Id, msSession.ModelSystemHeader.Id),
+                msSession.Project.Id, msSession.ModelSystemHeader.Id, user.UserId),
             endpoints.Select(endpoint => new SharedEstimationWorkerEndpoint(
                 endpoint.Id, endpoint.Id, endpoint.Address, endpoint.Port, endpoint.Token,
                 endpoint.CertificateFingerprint,
@@ -620,6 +638,7 @@ public class RunController : IDisposable
         var runDirectory = request.Run.WorkingDirectory;
         var runViewModel = RunsViewModel.AddRun(id, runName, runDirectory,
             $"{orchestratorEndpointId} (coordinator + {endpoints.Length} remote worker(s))", msSession, user);
+        runViewModel.SetRemoteRunTracking(true);
         runViewModel.SetRunMode(RunMode.Estimation, metadata, () =>
         {
             orchestrator.CancelSharedEstimation(submittedRunId, "Cancelled by user.", out _);
@@ -751,7 +770,8 @@ public class RunController : IDisposable
                 },
                 out id,
                 out error,
-                runName))
+                runName,
+                user.UserId))
         {
             return false;
         }
@@ -760,7 +780,10 @@ public class RunController : IDisposable
             _sessionsByRunId[id] = (msSession, user);
             _hostBusesByRunId[id] = hostBus;
             _runDirectoriesByRunId[id] = runDirectory;
+            if (endpointId != LocalEndpointId)
+                _remoteRunBusesByRunId[id] = hostBus;
         }
+        runViewModel?.SetRemoteRunTracking(endpointId != LocalEndpointId);
         if (runMode != RunMode.Normal)
         {
             // Extract parameter metadata so the progress dialog can show names/bounds.
@@ -947,8 +970,9 @@ public class RunController : IDisposable
         object? sender, IReadOnlyList<SharedEstimationJobSnapshot> snapshots)
     {
         var hostBus = sender as HostBus;
-        var endpoint = _connections.GetStates().FirstOrDefault(state =>
-            _connections.TryGet(state.Endpoint.Id, out var connectedBus) && ReferenceEquals(connectedBus, hostBus))?.Endpoint;
+        var endpoint = hostBus is not null && _connections.TryGetEndpoint(hostBus, out var matchedEndpoint)
+            ? matchedEndpoint
+            : null;
         foreach (var snapshot in snapshots)
         {
             lock (_sessionsByRunId)
@@ -957,9 +981,12 @@ public class RunController : IDisposable
                 if (hostBus is not null)
                     _hostBusesByRunId[snapshot.RunId] = hostBus;
             }
+            if (!IsOwnedByCurrentUser(snapshot.OwnerUserId))
+                continue;
             var runServerName = endpoint?.Name ?? "Remote RunServer";
-            RunsViewModel.RestoreSharedEstimationRun(snapshot, runServerName,
+            var run = RunsViewModel.RestoreSharedEstimationRun(snapshot, runServerName,
                 () => hostBus?.CancelSharedEstimation(snapshot.RunId, "Cancelled by user.", out _));
+            run.SetRemoteRunTracking(endpoint is not null && !endpoint.IsLocal);
             var workers = GetConnectedRunServers()
                 .Where(worker => endpoint is null || worker.Id != endpoint.Id)
                 .Select(worker => new SharedEstimationWorkerEndpoint(worker.Id, worker.Id,
@@ -982,8 +1009,9 @@ public class RunController : IDisposable
     private void OnRemoteRunSnapshotsAvailable(object? sender, IReadOnlyList<RemoteRunSnapshot> snapshots)
     {
         var hostBus = sender as HostBus;
-        var endpoint = _connections.GetStates().FirstOrDefault(state =>
-            _connections.TryGet(state.Endpoint.Id, out var connectedBus) && ReferenceEquals(connectedBus, hostBus))?.Endpoint;
+        var endpoint = hostBus is not null && _connections.TryGetEndpoint(hostBus, out var matchedEndpoint)
+            ? matchedEndpoint
+            : null;
         foreach (var snapshot in snapshots)
         {
             string? localRunDirectory = null;
@@ -995,8 +1023,11 @@ public class RunController : IDisposable
                 if (_sessionsByRunId.ContainsKey(snapshot.RunId))
                     _runDirectoriesByRunId.TryGetValue(snapshot.RunId, out localRunDirectory);
             }
+            if (!IsOwnedByCurrentUser(snapshot.OwnerUserId))
+                continue;
             var run = RunsViewModel.RestoreRemoteRun(snapshot, endpoint?.Name ?? "Remote RunServer",
                 () => hostBus?.CancelModelRun(snapshot.RunId, out _));
+            RunsViewModel.NotifyRemoteOutputAvailability(snapshot.RunId, snapshot.ArtifactsAvailable);
             if (localRunDirectory is not null && hostBus is not null)
                 ReceiveBoundRemoteCompletion(run, snapshot, hostBus, localRunDirectory);
             TryAutomaticallyBindRecoveredRun(snapshot.RunId);
@@ -1006,12 +1037,31 @@ public class RunController : IDisposable
     public void EnableAutomaticRecoveredRunBinding(User user)
     {
         _recoveryUser = user ?? throw new ArgumentNullException(nameof(user));
-        string[] recoveredRunIds;
+        RemoteRunSnapshot[] remoteSnapshots;
+        SharedEstimationJobSnapshot[] sharedSnapshots;
         lock (_sessionsByRunId)
-            recoveredRunIds = _recoveredRemoteRuns.Keys.Concat(_recoveredSharedEstimationRuns.Keys).Distinct().ToArray();
-        foreach (var runId in recoveredRunIds)
-            TryAutomaticallyBindRecoveredRun(runId);
+        {
+            remoteSnapshots = _recoveredRemoteRuns.Values.ToArray();
+            sharedSnapshots = _recoveredSharedEstimationRuns.Values.ToArray();
+        }
+        foreach (var snapshot in remoteSnapshots)
+        {
+            HostBus? hostBus;
+            lock (_sessionsByRunId)
+                _remoteRunBusesByRunId.TryGetValue(snapshot.RunId, out hostBus);
+            OnRemoteRunSnapshotsAvailable(hostBus, [snapshot]);
+        }
+        foreach (var snapshot in sharedSnapshots)
+        {
+            HostBus? hostBus;
+            lock (_sessionsByRunId)
+                _hostBusesByRunId.TryGetValue(snapshot.RunId, out hostBus);
+            OnSharedEstimationJobSnapshotsAvailable(hostBus, [snapshot]);
+        }
     }
+
+    private bool IsOwnedByCurrentUser(Guid? ownerUserId)
+        => ownerUserId is not null && _recoveryUser is not null && ownerUserId == _recoveryUser.UserId;
 
     private void TryAutomaticallyBindRecoveredRun(string runId)
     {
@@ -1125,13 +1175,22 @@ public class RunController : IDisposable
         var localRunName = Path.GetFileName(snapshot.RunName.Replace('\\', '/').Trim('/'));
         if (string.IsNullOrWhiteSpace(localRunName) || localRunName is "." or "..")
             localRunName = runId;
-        var targetDirectory = Path.Combine(projectDirectory, "runs", localRunName);
+        var cachedOutputDirectory = RemoteRunOutputPaths.GetLocalDirectory(runId);
+        var targetDirectory = !snapshot.ArtifactsAvailable && Directory.Exists(cachedOutputDirectory)
+            ? cachedOutputDirectory
+            : Path.Combine(projectDirectory, "runs", localRunName);
         HostBus? hostBus;
         lock (_sessionsByRunId)
         {
             _remoteRunBusesByRunId.TryGetValue(runId, out hostBus);
+            _runDirectoriesByRunId[runId] = targetDirectory;
             if (hostBus is not null)
                 _pendingRemoteReceipts[runId] = (hostBus, targetDirectory);
+        }
+        if (!RunsViewModel.SetRecoveredRunOutputDirectory(runId, targetDirectory))
+        {
+            error = "The recovered run is not present in the Runs list.";
+            return false;
         }
         if (hostBus is null)
         {
@@ -1238,6 +1297,70 @@ public class RunController : IDisposable
         return true;
     }
 
+    public bool RequestRemoteRunOutputTransfer(string runId, out string? error)
+    {
+        HostBus? hostBus;
+        string targetDirectory;
+        lock (_sessionsByRunId)
+        {
+            _remoteRunBusesByRunId.TryGetValue(runId, out hostBus);
+            if (hostBus is null)
+                _hostBusesByRunId.TryGetValue(runId, out hostBus);
+            if (_runDirectoriesByRunId.TryGetValue(runId, out var knownDirectory))
+                targetDirectory = knownDirectory;
+            else
+                targetDirectory = RemoteRunOutputPaths.GetLocalDirectory(runId);
+            if (hostBus is not null)
+                _pendingRemoteReceipts[runId] = (hostBus, targetDirectory);
+        }
+
+        if (hostBus is null)
+        {
+            error = "The RunServer connection for this run is no longer available.";
+            return false;
+        }
+        RunsViewModel.NotifyRemoteReceiptPending(runId, true);
+        if (!hostBus.RequestRemoteRunArtifacts(runId, out var requestError))
+        {
+            RunsViewModel.NotifyRemoteReceiptPending(runId, false);
+            error = requestError?.Message ?? "Unable to request remote run output.";
+            return false;
+        }
+        error = null;
+        return true;
+    }
+
+    public async Task<RemoteRunDeletionResponse> DeleteRemoteRunAsync(string runId,
+        CancellationToken cancellationToken = default)
+    {
+        HostBus? hostBus;
+        lock (_sessionsByRunId)
+        {
+            _remoteRunBusesByRunId.TryGetValue(runId, out hostBus);
+            if (hostBus is null)
+                _hostBusesByRunId.TryGetValue(runId, out hostBus);
+        }
+        if (hostBus is null)
+            return new RemoteRunDeletionResponse(string.Empty, runId, false,
+                "The RunServer connection for this run is no longer available.");
+
+        var result = await hostBus.DeleteRemoteRunAsync(runId, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        if (result.Deleted)
+        {
+            lock (_sessionsByRunId)
+            {
+                _recoveredRemoteRuns.Remove(runId);
+                _remoteRunBusesByRunId.Remove(runId);
+                _hostBusesByRunId.Remove(runId);
+                _runDirectoriesByRunId.Remove(runId);
+                _pendingRemoteReceipts.Remove(runId);
+                _sessionsByRunId.Remove(runId);
+            }
+        }
+        return result;
+    }
+
     private static void PersistRemoteRunSnapshot(RemoteRunSnapshot snapshot)
     {
         var receiptDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -1260,9 +1383,9 @@ public class RunController : IDisposable
         RemoteRunSnapshot? snapshot;
         lock (_sessionsByRunId)
         {
-            if (!_pendingRemoteReceipts.TryGetValue(response.RunId, out receipt) ||
-                !_recoveredRemoteRuns.TryGetValue(response.RunId, out snapshot))
+            if (!_pendingRemoteReceipts.TryGetValue(response.RunId, out receipt))
                 return;
+            _recoveredRemoteRuns.TryGetValue(response.RunId, out snapshot);
         }
         if (response.Archive is null)
         {
@@ -1275,11 +1398,17 @@ public class RunController : IDisposable
         {
             using var archiveStream = new MemoryStream(response.Archive, writable: false);
             ExtractRunArtifacts(archiveStream, receipt.TargetDirectory);
-            PersistRemoteRunSnapshot(snapshot);
+            RunsViewModel.NotifyArtifactsTransferred(response.RunId);
+            if (snapshot is not null)
+                PersistRemoteRunSnapshot(snapshot with { ArtifactsAvailable = false });
             if (!receipt.HostBus.AcknowledgeRemoteRun(response.RunId, out var error))
                 throw new IOException(error?.Message ?? "Unable to acknowledge the remote completion.");
             lock (_sessionsByRunId)
+            {
                 _pendingRemoteReceipts.Remove(response.RunId);
+                if (snapshot is not null)
+                    _recoveredRemoteRuns[response.RunId] = snapshot with { ArtifactsAvailable = false };
+            }
             RunsViewModel.NotifyRemoteReceiptCompleted(response.RunId);
             RunsViewModel.NotifyArtifactsTransferred(response.RunId);
         }

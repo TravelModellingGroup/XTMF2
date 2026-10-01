@@ -28,7 +28,9 @@ public enum SharedEstimationMessageType
     RemoteRunArtifacts = 18,
     AcknowledgeRemoteRun = 19,
     QueryServerActivity = 20,
-    ServerActivitySnapshots = 21
+    ServerActivitySnapshots = 21,
+    DeleteRemoteRun = 22,
+    RemoteRunDeleted = 23
 }
 
 public enum SharedEstimationJobState
@@ -58,6 +60,8 @@ public sealed record RunServerActivity(
 
 public sealed record RunServerActivityResponse(string RequestId, IReadOnlyList<RunServerActivity> Activities);
 
+public sealed record RemoteRunDeletionResponse(string RequestId, string RunId, bool Deleted, string? Error);
+
 public sealed record SharedEstimationParameterMetadata(int NodeIndex, string Name, double Min, double Max);
 
 public sealed record SharedEstimationJobSnapshot(
@@ -71,7 +75,8 @@ public sealed record SharedEstimationJobSnapshot(
     string ModelSystemHash = "",
     IReadOnlyList<SharedEstimationParameterMetadata>? Parameters = null,
     Guid? ProjectId = null,
-    Guid? ModelSystemId = null);
+    Guid? ModelSystemId = null,
+    Guid? OwnerUserId = null);
 
 public sealed record SharedEstimationWorkerControlAcknowledgement(
     string RunId,
@@ -90,7 +95,8 @@ public sealed record SharedEstimationRunRequest(
     byte[] ModelSystem,
     IReadOnlyDictionary<int, string>? BasicParameterOverrides = null,
     Guid? ProjectId = null,
-    Guid? ModelSystemId = null);
+    Guid? ModelSystemId = null,
+    Guid? OwnerUserId = null);
 
 public sealed record SharedEstimationWorkerRegistration(
     string RunId,
@@ -159,6 +165,8 @@ public static class SharedEstimationProtocol
     private const int ExtendedRunRequestVersion = 2;
     private const int RemoteRunProtocolVersion = 3;
     private const int IdentityProtocolVersion = 4;
+    private const int RemoteRunDeletionProtocolVersion = 5;
+    private const int RunOwnerProtocolVersion = 6;
     private const int MaxCollectionLength = 1_000_000;
     private const int MaxServerActivities = 10_000;
 
@@ -170,7 +178,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteCoordinatorRequest(BinaryWriter writer, SharedEstimationCoordinatorRequest request)
     {
-        WriteHeader(writer, SharedEstimationMessageType.StartCoordinator, IdentityProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.StartCoordinator, RunOwnerProtocolVersion);
         WriteRunRequestPayload(writer, request.Run);
         WriteCount(writer, request.Workers.Count);
         foreach (var worker in request.Workers)
@@ -227,7 +235,8 @@ public static class SharedEstimationProtocol
             ReadRequiredString(reader), ReadRequiredString(reader), ReadRequiredString(reader),
             ReadBytes(reader), ReadOverrides(reader),
             version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null,
-            version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null);
+            version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null,
+            version >= RunOwnerProtocolVersion ? ReadOptionalGuid(reader) : null);
         var workers = new List<SharedEstimationWorkerEndpoint>(ReadCount(reader));
         for (int i = 0; i < workers.Capacity; i++)
         {
@@ -276,7 +285,8 @@ public static class SharedEstimationProtocol
         int version = reader.ReadInt32();
         var messageType = (SharedEstimationMessageType)reader.ReadInt32();
         if (version != Version && version != ExtendedRunRequestVersion && version != RemoteRunProtocolVersion &&
-            version != IdentityProtocolVersion)
+            version != IdentityProtocolVersion && version != RemoteRunDeletionProtocolVersion &&
+            version != RunOwnerProtocolVersion)
             throw new InvalidDataException($"Unsupported shared estimation protocol version: {version}.");
         if (!Enum.IsDefined(messageType))
             throw new InvalidDataException($"Unknown shared estimation message type: {(int)messageType}.");
@@ -285,7 +295,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteRunRequest(BinaryWriter writer, SharedEstimationRunRequest request)
     {
-        WriteHeader(writer, SharedEstimationMessageType.StartRun, IdentityProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.StartRun, RunOwnerProtocolVersion);
         WriteRequiredString(writer, request.RunId);
         WriteRequiredString(writer, request.WorkingDirectory);
         WriteRequiredString(writer, request.StartToExecute);
@@ -304,6 +314,7 @@ public static class SharedEstimationProtocol
         }
         WriteOptionalGuid(writer, request.ProjectId);
         WriteOptionalGuid(writer, request.ModelSystemId);
+        WriteOptionalGuid(writer, request.OwnerUserId);
     }
 
     private static void WriteRunRequestPayload(BinaryWriter writer, SharedEstimationRunRequest request)
@@ -315,6 +326,7 @@ public static class SharedEstimationProtocol
         WriteOverrides(writer, request.BasicParameterOverrides);
         WriteOptionalGuid(writer, request.ProjectId);
         WriteOptionalGuid(writer, request.ModelSystemId);
+        WriteOptionalGuid(writer, request.OwnerUserId);
     }
 
     private static void WriteOverrides(BinaryWriter writer, IReadOnlyDictionary<int, string>? overrides)
@@ -345,7 +357,8 @@ public static class SharedEstimationProtocol
             ReadBytes(reader),
             version >= ExtendedRunRequestVersion ? ReadOverrides(reader) : null,
             version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null,
-            version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null);
+            version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null,
+            version >= RunOwnerProtocolVersion ? ReadOptionalGuid(reader) : null);
     }
 
     public static void WriteWorkerRegistration(BinaryWriter writer, SharedEstimationWorkerRegistration registration,
@@ -660,7 +673,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteJobSnapshots(BinaryWriter writer, IReadOnlyList<SharedEstimationJobSnapshot> snapshots)
     {
-        WriteHeader(writer, SharedEstimationMessageType.JobSnapshots, IdentityProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.JobSnapshots, RunOwnerProtocolVersion);
         WriteCount(writer, snapshots.Count);
         foreach (var snapshot in snapshots)
         {
@@ -690,6 +703,7 @@ public static class SharedEstimationProtocol
             }
             WriteOptionalGuid(writer, snapshot.ProjectId);
             WriteOptionalGuid(writer, snapshot.ModelSystemId);
+            WriteOptionalGuid(writer, snapshot.OwnerUserId);
         }
     }
 
@@ -732,8 +746,9 @@ public static class SharedEstimationProtocol
                 }
                 var projectId = version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null;
                 var modelSystemId = version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null;
+                var ownerUserId = version >= RunOwnerProtocolVersion ? ReadOptionalGuid(reader) : null;
                 snapshots.Add(new SharedEstimationJobSnapshot(runId, state, progress, completion,
-                    workerIds, runName, workingDirectory, modelSystemHash, metadata, projectId, modelSystemId));
+                    workerIds, runName, workingDirectory, modelSystemHash, metadata, projectId, modelSystemId, ownerUserId));
             }
             else
             {
@@ -751,7 +766,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteRemoteRunSnapshots(BinaryWriter writer, IReadOnlyList<RemoteRunSnapshot> snapshots)
     {
-        WriteHeader(writer, SharedEstimationMessageType.RemoteRunSnapshots, IdentityProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.RemoteRunSnapshots, RunOwnerProtocolVersion);
         WriteCount(writer, snapshots.Count);
         foreach (var snapshot in snapshots)
         {
@@ -775,6 +790,7 @@ public static class SharedEstimationProtocol
             writer.Write(snapshot.UpdatedAt.UtcTicks);
             WriteOptionalGuid(writer, snapshot.ProjectId);
             WriteOptionalGuid(writer, snapshot.ModelSystemId);
+            WriteOptionalGuid(writer, snapshot.OwnerUserId);
         }
     }
 
@@ -819,10 +835,11 @@ public static class SharedEstimationProtocol
             var updatedAt = new DateTimeOffset(reader.ReadInt64(), TimeSpan.Zero);
             var projectId = version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null;
             var modelSystemId = version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null;
+            var ownerUserId = version >= RunOwnerProtocolVersion ? ReadOptionalGuid(reader) : null;
             snapshots.Add(new RemoteRunSnapshot(runId, runName, runMode, workingDirectory,
                 startToExecute, modelSystemHash, state, status, iteration, fitness,
                 progress, optimization, errorMessage, errorStack, artifactsAvailable, updatedAt,
-                projectId, modelSystemId));
+                projectId, modelSystemId, ownerUserId));
         }
         return snapshots;
     }
@@ -879,6 +896,40 @@ public static class SharedEstimationProtocol
 
     internal static string ReadAcknowledgeRemoteRunPayload(BinaryReader reader)
         => ReadRequiredString(reader);
+
+    public static void WriteDeleteRemoteRun(BinaryWriter writer, string requestId, string runId)
+    {
+        WriteHeader(writer, SharedEstimationMessageType.DeleteRemoteRun, RemoteRunDeletionProtocolVersion);
+        WriteRequiredString(writer, requestId);
+        WriteRequiredString(writer, runId);
+    }
+
+    public static (string RequestId, string RunId) ReadDeleteRemoteRun(BinaryReader reader)
+    {
+        ReadExpectedHeader(reader, SharedEstimationMessageType.DeleteRemoteRun);
+        return ReadDeleteRemoteRunPayload(reader);
+    }
+
+    internal static (string RequestId, string RunId) ReadDeleteRemoteRunPayload(BinaryReader reader)
+        => (ReadRequiredString(reader), ReadRequiredString(reader));
+
+    public static void WriteRemoteRunDeleted(BinaryWriter writer, RemoteRunDeletionResponse response)
+    {
+        WriteHeader(writer, SharedEstimationMessageType.RemoteRunDeleted, RemoteRunDeletionProtocolVersion);
+        WriteRequiredString(writer, response.RequestId);
+        WriteRequiredString(writer, response.RunId);
+        writer.Write(response.Deleted);
+        WriteOptionalString(writer, response.Error);
+    }
+
+    public static RemoteRunDeletionResponse ReadRemoteRunDeleted(BinaryReader reader)
+    {
+        ReadExpectedHeader(reader, SharedEstimationMessageType.RemoteRunDeleted);
+        return ReadRemoteRunDeletedPayload(reader);
+    }
+
+    internal static RemoteRunDeletionResponse ReadRemoteRunDeletedPayload(BinaryReader reader)
+        => new(ReadRequiredString(reader), ReadRequiredString(reader), reader.ReadBoolean(), ReadOptionalString(reader));
 
     public static void WriteQueryServerActivity(BinaryWriter writer, string requestId)
     {

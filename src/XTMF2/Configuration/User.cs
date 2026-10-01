@@ -36,6 +36,8 @@ namespace XTMF2
         /// </summary>
         public string UserName { get; }
 
+        public Guid UserId { get; }
+
         /// <summary>
         /// Does this user have administrative rights?
         /// </summary>
@@ -43,6 +45,7 @@ namespace XTMF2
 
         private const string UserNameProperty = "UserName";
         private const string AdminProperty = "Admin";
+        private const string UserIdProperty = "UserId";
 
         /// <summary>
         /// Lock this before editing a user's available projects
@@ -73,11 +76,14 @@ namespace XTMF2
         /// <param name="userPath">The default storage location for this user</param>
         /// <param name="userName">A unique name for this user</param>
         /// <param name="admin">Does this user have administrative privileges?</param>
-        internal User(string userPath, string userName, bool admin = false)
+        internal User(string userPath, string userName, bool admin = false, Guid? userId = null)
         {
             UserName = userName;
             IsAdmin = admin;
             UserPath = userPath;
+            UserId = userId is { } parsedUserId && parsedUserId != Guid.Empty
+                ? parsedUserId
+                : Guid.NewGuid();
         }
 
         /// <summary>
@@ -133,6 +139,7 @@ namespace XTMF2
         {
             string? userName = null;
             bool admin = false;
+            Guid? userId = null;
             try
             {
                 var buffer = File.ReadAllBytes(userFile);
@@ -151,6 +158,13 @@ namespace XTMF2
                             reader.Read();
                             admin = reader.GetBoolean();
                         }
+                        else if (reader.ValueTextEquals(UserIdProperty))
+                        {
+                            reader.Read();
+                            if (reader.TokenType == JsonTokenType.String &&
+                                Guid.TryParse(reader.GetString(), out var parsedUserId) && parsedUserId != Guid.Empty)
+                                userId = parsedUserId;
+                        }
                     }
                 }
             }
@@ -166,7 +180,9 @@ namespace XTMF2
                 error = "The user file failed to contain a user name!";
                 return false;
             }
-            user = new User(Path.GetDirectoryName(userFile)!, userName, admin);
+            user = new User(Path.GetDirectoryName(userFile)!, userName, admin, userId);
+            if (userId is null)
+                user.Save(out _);
             return true;
         }
 
@@ -191,6 +207,7 @@ namespace XTMF2
                     writer.WriteStartObject();
                     writer.WriteString(UserNameProperty, UserName);
                     writer.WriteBoolean(AdminProperty, IsAdmin);
+                    writer.WriteString(UserIdProperty, UserId);
                     writer.WriteEndObject();
                 }
                 // when we have complete copy the results

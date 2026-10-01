@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
@@ -78,6 +79,61 @@ public class RunControllerCompletionTests
         Assert.IsTrue(run.HasOptimizationResults);
         Assert.IsFalse(run.ApplyOptimizationResultsCommand.CanExecute(null));
         Assert.AreEqual(1.5, run.OptimizationParameters[0].CurrentValue);
+    }
+
+    [TestMethod]
+    public void RecoveredRemoteRun_ReportsOutputLocationAndOffersTransfer()
+    {
+        var snapshot = new RemoteRunSnapshot("run-output", "forecast", RunMode.Normal,
+            "/remote/private/run-output", "Start", "model-hash", RemoteRunState.Completed,
+            "Run completed.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
+            null, null, true, DateTimeOffset.UtcNow);
+
+        var run = new RunViewModel(snapshot, "Remote Server");
+
+        Assert.IsTrue(run.IsRemoteRun);
+        Assert.IsTrue(run.RemoteOutputAvailable);
+        Assert.IsTrue(run.CanTransferRemoteOutput);
+        Assert.IsFalse(run.ArtifactsAvailable);
+        Assert.AreNotEqual(snapshot.WorkingDirectory, run.RunDirectory);
+        Assert.AreEqual("Output is available on the RunServer.", run.OutputTransferStatus);
+
+        run.MarkArtifactsAvailable();
+
+        Assert.IsTrue(run.ArtifactsAvailable);
+        Assert.IsFalse(run.RemoteOutputAvailable);
+        Assert.IsFalse(run.CanTransferRemoteOutput);
+        Assert.AreEqual("Output is on this computer.", run.OutputTransferStatus);
+    }
+
+    [TestMethod]
+    public void RecoveredRemoteRun_UsesLocalReceiptDirectoryForOpenOutput()
+    {
+        var snapshot = new RemoteRunSnapshot("run-local-output", "forecast", RunMode.Normal,
+            "/remote/server/runs/forecast", "Start", "model-hash", RemoteRunState.Completed,
+            "Run completed.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
+            null, null, true, DateTimeOffset.UtcNow);
+        var run = new RunViewModel(snapshot, "Remote Server");
+        var localReceiptDirectory = Path.Combine(Path.GetTempPath(), "XTMF2-GUI-RunOutput", snapshot.RunId);
+
+        run.SetLocalOutputDirectory(localReceiptDirectory);
+
+        Assert.AreEqual(localReceiptDirectory, run.RunDirectory);
+        Assert.AreNotEqual(snapshot.WorkingDirectory, run.RunDirectory);
+    }
+
+    [TestMethod]
+    public void RecoveredRemoteRun_OffersTransferBeforeAvailabilitySnapshot()
+    {
+        var snapshot = new RemoteRunSnapshot("run-output-unknown", "forecast", RunMode.Normal,
+            "/remote/private/run-output-unknown", "Start", "model-hash", RemoteRunState.Completed,
+            "Run completed.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
+            null, null, false, DateTimeOffset.UtcNow);
+
+        var run = new RunViewModel(snapshot, "Remote Server");
+
+        Assert.IsFalse(run.RemoteOutputAvailable);
+        Assert.IsTrue(run.CanTransferRemoteOutput);
     }
 
     [TestMethod]
