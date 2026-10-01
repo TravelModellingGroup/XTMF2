@@ -20,6 +20,7 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
     private RunServerEndpoint? _selectedRunServer;
     private RunServerEndpoint? _selectedCoordinatorRunServer;
     private string? _selectedStartName;
+    private bool _useMultipleRunServers;
     private readonly List<RunServerEndpoint> _selectedRunServers = new();
     private readonly IReadOnlyList<PathParameter> _pathParameters;
     private readonly Dictionary<string, Dictionary<int, string>> _pathOverrides = new(StringComparer.Ordinal);
@@ -44,9 +45,25 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
         _pathOverrides.ToDictionary(pair => pair.Key, pair => (IReadOnlyDictionary<int, string>)pair.Value);
 
     public bool IsRunServerSelectionVisible => RunServers.Count > 1;
-    public bool IsSingleRunServerSelectionVisible => IsRunServerSelectionVisible && !AllowMultipleRunServers;
+    public bool IsSingleRunServerSelectionVisible => IsRunServerSelectionVisible && !UseMultipleRunServers;
+    public bool IsMultipleRunServerSelectionVisible => AllowMultipleRunServers && UseMultipleRunServers;
     public bool IsStartSelectionVisible => StartNames.Count > 1;
-    public bool IsPathOverridesVisible => AllowMultipleRunServers && _pathParameters.Count > 0 && _selectedRunServers.Count > 0;
+    public bool IsPathOverridesVisible => IsMultipleRunServerSelectionVisible && _pathParameters.Count > 0 && _selectedRunServers.Count > 0;
+
+    public bool UseMultipleRunServers
+    {
+        get => _useMultipleRunServers;
+        set
+        {
+            if (_useMultipleRunServers == value) return;
+            _useMultipleRunServers = value && AllowMultipleRunServers;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UseMultipleRunServers)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSingleRunServerSelectionVisible)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsMultipleRunServerSelectionVisible)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsPathOverridesVisible)));
+            RebuildPathEditors();
+        }
+    }
     public string SelectedRunServerSummary => _selectedRunServers.Count == 0
         ? "No RunServers selected"
         : $"Selected ({_selectedRunServers.Count}): {string.Join(", ", _selectedRunServers.Select(server => server.Name))}";
@@ -163,8 +180,8 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
                 _selectedRunServers.Add(item);
         }
         SelectedRunServer = _selectedRunServers.FirstOrDefault();
-        if (SelectedCoordinatorRunServer is null || !_selectedRunServers.Contains(SelectedCoordinatorRunServer))
-            SelectedCoordinatorRunServer = _selectedRunServers.FirstOrDefault();
+        if (SelectedCoordinatorRunServer is null || !RunServers.Contains(SelectedCoordinatorRunServer))
+            SelectedCoordinatorRunServer = RunServers.FirstOrDefault();
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsPathOverridesVisible)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedRunServerSummary)));
         RebuildPathEditors();

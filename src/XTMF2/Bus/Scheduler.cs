@@ -29,6 +29,7 @@
 */
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -39,9 +40,10 @@ namespace XTMF2.Bus
     /// </summary>
     internal sealed class Scheduler : IDisposable
     {
-        private readonly ConcurrentQueue<RunContext> _ToRun = new ConcurrentQueue<RunContext>();
-        private readonly RunServerBus _Bus;
-        private readonly CancellationTokenSource _CancelExecutionEngine;
+        private readonly ConcurrentQueue<(RunContext Context, IRunOutputSink Sink)> _ToRun = new();
+        private readonly object _inventorySync = new();
+        private readonly IRunOutputSink? _DefaultSink;
+        private readonly CancellationTokenSource _CancelExecutionEngine = new();
         private readonly SemaphoreSlim _RunsToGo = new SemaphoreSlim(0);
 
         /// <summary>
@@ -50,14 +52,44 @@ namespace XTMF2.Bus
         /// </summary>
         public RunContext? Current { get; private set; }
 
+        internal IReadOnlyList<(RunContext Context, bool IsRunning, int QueuePosition)> GetInventory()
+        {
+            lock (_inventorySync)
+            {
+                var current = Current;
+                var queued = _ToRun.ToArray();
+                var result = new List<(RunContext Context, bool IsRunning, int QueuePosition)>(queued.Length + 1);
+                if (current is not null)
+                    result.Add((current, true, 0));
+
+                var queuePosition = 0;
+                foreach (var work in queued)
+                {
+                    if (current is not null && ReferenceEquals(work.Context, current))
+                        continue;
+                    result.Add((work.Context, false, ++queuePosition));
+                }
+                return result;
+            }
+        }
+
         /// <summary>
         /// Create a new Scheduler to process the given client bus.
         /// </summary>
         /// <param name="bus">The bus to listen to.</param>
-        public Scheduler(RunServerBus bus, bool runLocal)
+        public Scheduler(IRunOutputSink bus, bool runLocal)
         {
-            _Bus = bus;
-            _CancelExecutionEngine = new CancellationTokenSource();
+            _DefaultSink = bus;
+            Start(runLocal);
+        }
+
+        internal Scheduler(bool runLocal)
+        {
+            Start(runLocal);
+        }
+
+        private void Start(bool runLocal)
+        {
             var token = _CancelExecutionEngine.Token;
             Task.Factory.StartNew(() =>
             {
@@ -65,32 +97,52 @@ namespace XTMF2.Bus
                 {
                     try
                     {
-                        Current = null;
                         _RunsToGo.Wait(token);
                         if (token.IsCancellationRequested)
                         {
                             return;
                         }
-                        if (_ToRun.TryDequeue(out var context))
+                        (RunContext Context, IRunOutputSink Sink) work;
+                        bool hasWork;
+                        lock (_inventorySync)
+                        {
+                            Current = null;
+                            hasWork = _ToRun.TryDequeue(out work);
+                            if (hasWork)
+                                Current = work.Context;
+                        }
+                        if (hasWork)
                         {
                             try
                             {
-                                Current = context;
+                                var context = work.Context;
+                                var sink = work.Sink;
                                 Console.WriteLine($"RunServer model system run started processing: {context.ID}");
                                 Console.Out.Flush();
                                 if (runLocal)
                                 {
-                                    context.RunInCurrentProcess(_Bus);
+                                    context.RunInCurrentProcess(sink);
                                 }
                                 else
                                 {
-                                    context.RunInNewProcess(_Bus);
+                                    context.RunInNewProcess(sink);
                                 }
-                                _Bus.SendRunArtifacts(context.ID, context.WorkingDirectory);
+                                if (context.KillRequested)
+                                    sink.ModelRunFailed(context.ID, "Run stopped from RunServer Activity window.", string.Empty);
+                                else
+                                    sink.SendRunArtifacts(context.ID, context.WorkingDirectory);
                             }
                             catch (Exception e)
                             {
-                                _Bus.ModelRunFailed(context.ID, e.Message, e.StackTrace, null, null);
+                                work.Sink.ModelRunFailed(work.Context.ID, e.Message, e.StackTrace, null, null);
+                            }
+                            finally
+                            {
+                                lock (_inventorySync)
+                                {
+                                    if (ReferenceEquals(Current, work.Context))
+                                        Current = null;
+                                }
                             }
                         }
                     }
@@ -137,8 +189,20 @@ namespace XTMF2.Bus
             {
                 throw new ArgumentNullException(nameof(context));
             }
-            _ToRun.Enqueue(context);
-            _RunsToGo.Release();
+            if (_DefaultSink is null)
+                throw new InvalidOperationException("A run output sink is required.");
+            Run(context, _DefaultSink);
+        }
+
+        internal void Run(RunContext context, IRunOutputSink sink)
+        {
+            ArgumentNullException.ThrowIfNull(context);
+            ArgumentNullException.ThrowIfNull(sink);
+            lock (_inventorySync)
+            {
+                _ToRun.Enqueue((context, sink));
+                _RunsToGo.Release();
+            }
         }
 
         /// <summary>
@@ -149,7 +213,45 @@ namespace XTMF2.Bus
         {
             Current?.RequestCancelRun(runId);
             foreach (var queued in _ToRun)
-                queued.RequestCancelRun(runId);
+                queued.Context.RequestCancelRun(runId);
+        }
+
+        internal bool Kill(string runId)
+        {
+            RunContext? current = null;
+            (RunContext Context, IRunOutputSink Sink)? removed = null;
+            lock (_inventorySync)
+            {
+                if (Current?.ID == runId)
+                {
+                    current = Current;
+                }
+                else
+                {
+                    var retained = new List<(RunContext Context, IRunOutputSink Sink)>();
+                    while (_ToRun.TryDequeue(out var work))
+                    {
+                        if (removed is null && work.Context.ID == runId)
+                            removed = work;
+                        else
+                            retained.Add(work);
+                    }
+                    foreach (var work in retained)
+                        _ToRun.Enqueue(work);
+                }
+            }
+
+            if (current is not null)
+            {
+                current.Kill();
+                return true;
+            }
+            if (removed is { } queued)
+            {
+                queued.Sink.ModelRunFailed(runId, "Run removed from the queue by RunServer Activity window.", string.Empty);
+                return true;
+            }
+            return false;
         }
     }
 }

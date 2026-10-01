@@ -63,6 +63,7 @@ public partial class MainWindow : Window
     private bool _documentCloseInProgress;
     private SettingsWindow? _settingsWindow;
     private RunServersWindow? _runServersWindow;
+    private RunServerActivityWindow? _runServerActivityWindow;
     private readonly HttpClient _aiHttpClient = new();
     private readonly AiProviderRegistry _aiProviders = new();
 
@@ -312,7 +313,10 @@ public partial class MainWindow : Window
 
         // Add the Runs tab so it is always visible.
         if (_runController is not null)
+        {
             Documents.Add(_runController.RunsViewModel);
+            _runController.EnableAutomaticRecoveredRunBinding(user);
+        }
 
         // Add the Projects tab as the permanent first document
         Documents.Add(new ProjectsViewModel(runtime, user));
@@ -421,6 +425,27 @@ public partial class MainWindow : Window
         ActivateDocument(editorVm);
     }
 
+    public bool BindRecoveredRunToActiveModelSystem(string runId, out string? error)
+    {
+        if (_activeEditorVm is null || _currentUser is null || _runController is null)
+        {
+            error = "This run could not be matched automatically. Open its model system, make it active, and bind it manually.";
+            return false;
+        }
+        return _runController.BindRecoveredRemoteRun(runId, _activeEditorVm.Session,
+            _activeEditorVm.User, out error);
+    }
+
+    public bool RetryRemoteRunReceipt(string runId, out string? error)
+    {
+        if (_runController is null)
+        {
+            error = "The run controller is unavailable.";
+            return false;
+        }
+        return _runController.RetryRemoteRunReceipt(runId, out error);
+    }
+
     /// <summary>
     /// Switches the active document to the Runs tab.
     /// </summary>
@@ -477,6 +502,19 @@ public partial class MainWindow : Window
         {
             _settingsWindow.Activate();
         }
+    }
+
+    private void RunServerActivity_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_runServerActivityWindow is not null && _runServerActivityWindow.IsVisible)
+        {
+            _runServerActivityWindow.Activate();
+            return;
+        }
+
+        _runServerActivityWindow = new RunServerActivityWindow(_runController);
+        _runServerActivityWindow.Closed += (_, _) => _runServerActivityWindow = null;
+        _runServerActivityWindow.Show(this);
     }
 
     private void ShowRunServersWindow()

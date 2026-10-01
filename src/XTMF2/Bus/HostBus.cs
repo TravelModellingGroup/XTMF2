@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Collections.Concurrent;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,6 +37,7 @@ public sealed class HostBus : IDisposable
     private readonly bool _Owner;
     private volatile bool _Exit = false;
     private volatile bool _Exited = false;
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<RunServerActivityResponse>> _pendingActivityRequests = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Create a host on a given stream.
@@ -202,6 +204,10 @@ public sealed class HostBus : IDisposable
 
     public event EventHandler<IReadOnlyList<SharedEstimationJobSnapshot>>? SharedEstimationJobSnapshotsAvailable;
 
+    public event EventHandler<IReadOnlyList<RemoteRunSnapshot>>? RemoteRunSnapshotsAvailable;
+
+    public event EventHandler<RemoteRunArtifactsResponse>? RemoteRunArtifactsAvailable;
+
     public event EventHandler<SharedEstimationWorkerControlAcknowledgement>? SharedEstimationWorkerControlAcknowledged;
 
     public event EventHandler<SharedEstimationStatus>? SharedEstimationStatusAvailable;
@@ -359,6 +365,19 @@ public sealed class HostBus : IDisposable
                                         IgnoreWarnings(() => SharedEstimationStatusAvailable?.Invoke(
                                             this, SharedEstimationProtocol.ReadStatusPayload(reader)));
                                         break;
+                                    case SharedEstimationMessageType.RemoteRunSnapshots:
+                                        IgnoreWarnings(() => RemoteRunSnapshotsAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadRemoteRunSnapshotsPayload(reader, protocolVersion)));
+                                        break;
+                                    case SharedEstimationMessageType.RemoteRunArtifacts:
+                                        IgnoreWarnings(() => RemoteRunArtifactsAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadRemoteRunArtifactsPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.ServerActivitySnapshots:
+                                        var activityResponse = SharedEstimationProtocol.ReadServerActivitySnapshotsPayload(reader);
+                                        if (_pendingActivityRequests.TryRemove(activityResponse.RequestId, out var pendingActivity))
+                                            pendingActivity.TrySetResult(activityResponse);
+                                        break;
                                     default:
                                         throw new InvalidDataException(
                                             $"Unexpected shared estimation message from RunServer: {messageType}.");
@@ -380,6 +399,9 @@ public sealed class HostBus : IDisposable
             finally
             {
                 _Exited = true;
+                foreach (var request in _pendingActivityRequests.ToArray())
+                    if (_pendingActivityRequests.TryRemove(request.Key, out var pending))
+                        pending.TrySetException(new IOException("The RunServer connection was closed before the activity response arrived."));
                 IgnoreWarnings(() => Disconnected?.Invoke(this, EventArgs.Empty));
             }
         })
@@ -454,7 +476,8 @@ public sealed class HostBus : IDisposable
     public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute,
         RunMode runMode,
         Action<string>? onIdCreated,
-        [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
+        [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error,
+        string? runName = null)
     {
         id = null;
         lock (_outLock)
@@ -476,6 +499,9 @@ public sealed class HostBus : IDisposable
                 writer.Write(cwd);
                 writer.Write(startToExecute);
                 writer.Write((int)runMode);
+                writer.Write(runName ?? Path.GetFileName(cwd.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
+                writer.Write(modelSystem.Project.Id.ToString("D"));
+                writer.Write(modelSystem.ModelSystemHeader.Id.ToString("D"));
                 writer.Write(memStream.Length);
                 memStream.WriteTo(_HostStream);
                 return true;
@@ -586,6 +612,54 @@ public sealed class HostBus : IDisposable
     public bool QuerySharedEstimationJobs([NotNullWhen(false)] out CommandError? error)
         => WriteSharedEstimation(SharedEstimationProtocol.WriteQueryJobs, out error);
 
+    public bool QueryRemoteRuns([NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(SharedEstimationProtocol.WriteQueryRemoteRuns, out error);
+
+    public async Task<RunServerActivityResponse> QueryServerActivityAsync(
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var requestId = Guid.NewGuid().ToString("N");
+        var completion = new TaskCompletionSource<RunServerActivityResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_pendingActivityRequests.TryAdd(requestId, completion))
+            throw new InvalidOperationException("Unable to register the RunServer activity request.");
+
+        try
+        {
+            if (!WriteSharedEstimation(writer =>
+                SharedEstimationProtocol.WriteQueryServerActivity(writer, requestId), out var error))
+                throw new IOException(error?.Message ?? "Unable to query RunServer activity.");
+        }
+        catch
+        {
+            _pendingActivityRequests.TryRemove(requestId, out _);
+            throw;
+        }
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linkedCancellation.CancelAfter(timeout ?? TimeSpan.FromSeconds(8));
+        using var registration = linkedCancellation.Token.Register(() =>
+        {
+            if (_pendingActivityRequests.TryRemove(requestId, out var pending))
+                pending.TrySetCanceled(linkedCancellation.Token);
+        });
+
+        try
+        {
+            return await completion.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            _pendingActivityRequests.TryRemove(requestId, out _);
+        }
+    }
+
+    public bool RequestRemoteRunArtifacts(string runId, [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteGetRemoteRunArtifacts(writer, runId), out error);
+
+    public bool AcknowledgeRemoteRun(string runId, [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteAcknowledgeRemoteRun(writer, runId), out error);
+
     public bool AddRemoteEstimationWorker(string runId, SharedEstimationWorkerEndpoint worker,
         [NotNullWhen(false)] out CommandError? error)
         => WriteSharedEstimation(writer =>
@@ -600,13 +674,27 @@ public sealed class HostBus : IDisposable
         [NotNullWhen(false)] out CommandError? error)
     {
         error = null;
+        using var payload = new MemoryStream();
+        try
+        {
+            using var payloadWriter = new BinaryWriter(payload, Encoding.UTF8, true);
+            writePayload(payloadWriter);
+            payloadWriter.Flush();
+        }
+        catch (ArgumentException e)
+        {
+            error = new CommandError(e.Message);
+            return false;
+        }
+
         lock (_outLock)
         {
             try
             {
                 using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
                 writer.Write((int)Out.SharedEstimationMessage);
-                writePayload(writer);
+                payload.Position = 0;
+                payload.CopyTo(_HostStream);
                 writer.Flush();
                 return true;
             }

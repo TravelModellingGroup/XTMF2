@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
 using XTMF2.Bus.Optimization;
@@ -17,6 +18,27 @@ namespace XTMF2.UnitTests.Bus;
 [TestClass]
 public class TestSharedEstimationEndToEnd
 {
+    [TestMethod]
+    public void RunServerActivityQuery_IncludesSharedEstimationWorkerAssignment()
+    {
+        CreateRunClient(true, host =>
+        {
+            var request = new SharedEstimationRunRequest(
+                "worker-activity", Directory.GetCurrentDirectory(), "Start", Array.Empty<byte>());
+            Assert.IsTrue(host.StartSharedEstimation(request, out var error), error?.Message);
+
+            var responses = Task.WhenAll(host.QueryServerActivityAsync(), host.QueryServerActivityAsync())
+                .GetAwaiter().GetResult();
+
+            Assert.AreNotEqual(responses[0].RequestId, responses[1].RequestId);
+            var activity = responses[0].Activities.Single(item => item.RunId == request.RunId);
+            Assert.AreEqual("Shared estimation worker", activity.Kind);
+            Assert.AreEqual(RunServerActivityState.Running, activity.State);
+            Assert.AreEqual("Shared estimation worker", activity.RunName);
+            Assert.IsTrue(host.CancelSharedEstimation(request.RunId, "test complete", out error), error?.Message);
+        });
+    }
+
     [TestMethod]
     public void CoordinatorEvaluatesBatchAcrossTwoRunServers()
     {

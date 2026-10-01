@@ -25,6 +25,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XTMF2.Bus;
 using XTMF2.Editing;
+using XTMF2.GUI.Properties;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -72,6 +73,79 @@ public sealed partial class RunsViewModel : ObservableObject
             SelectedRun = vm;
         });
         return vm;
+    }
+
+    internal RunViewModel RestoreRemoteRun(RemoteRunSnapshot snapshot, string runServer, Action cancelAction)
+    {
+        lock (_runsLock)
+        {
+            if (_runsById.TryGetValue(snapshot.RunId, out var existing))
+            {
+                Dispatcher.UIThread.Post(() => existing.ApplyRecoveredSnapshot(snapshot));
+                return existing;
+            }
+        }
+
+        var vm = new RunViewModel(snapshot, runServer, cancelAction);
+        lock (_runsLock)
+        {
+            if (_runsById.TryGetValue(snapshot.RunId, out var existing))
+                return existing;
+            _runsById.Add(snapshot.RunId, vm);
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            Runs.Add(vm);
+            SelectedRun ??= vm;
+        });
+        return vm;
+    }
+
+    internal RunViewModel RestoreSharedEstimationRun(
+        SharedEstimationJobSnapshot snapshot, string runServer, Action cancelAction)
+    {
+        lock (_runsLock)
+        {
+            if (_runsById.TryGetValue(snapshot.RunId, out var existing))
+            {
+                Dispatcher.UIThread.Post(() => existing.ApplyRecoveredSharedEstimationSnapshot(snapshot));
+                return existing;
+            }
+        }
+
+        var vm = new RunViewModel(snapshot, runServer, cancelAction);
+        lock (_runsLock)
+        {
+            if (_runsById.TryGetValue(snapshot.RunId, out var existing))
+                return existing;
+            _runsById.Add(snapshot.RunId, vm);
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            Runs.Add(vm);
+            SelectedRun ??= vm;
+        });
+        return vm;
+    }
+
+    internal void ConfigureRecoveredSharedEstimationWorkers(string runId,
+        IReadOnlyList<RunServerEndpoint> endpoints, IReadOnlyCollection<string> activeWorkerIds,
+        Func<string, string?> addWorker, Func<string, string?> removeWorker)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.SetRemoteEstimationWorkers(
+            endpoints, activeWorkerIds, addWorker, removeWorker));
+    }
+
+    internal bool BindRecoveredRun(string runId, ModelSystemSession session, User user,
+        IReadOnlyList<(int nodeIndex, string name, double min, double max)> metadata)
+    {
+        var vm = FindRun(runId);
+        if (vm is null)
+            return false;
+        Dispatcher.UIThread.Post(() => vm.BindRecoveredRun(session, user, metadata));
+        return true;
     }
 
     /// <summary>
@@ -131,6 +205,20 @@ public sealed partial class RunsViewModel : ObservableObject
         Dispatcher.UIThread.Post(() => vm.MarkArtifactTransferFailed(error));
     }
 
+    internal void NotifyRemoteReceiptCompleted(string runId)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.SetRemoteReceiptPending(false));
+    }
+
+    internal void NotifyRemoteReceiptPending(string runId, bool pending)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.SetRemoteReceiptPending(pending));
+    }
+
     /// <summary>
     /// Stores optimization results on the run entry so the user can apply them.
     /// Safe to call from any thread.
@@ -180,6 +268,13 @@ public sealed partial class RunsViewModel : ObservableObject
         var vm = FindRun(progress.RunId);
         if (vm is null) return;
         Dispatcher.UIThread.Post(() => vm.UpdateSharedEstimationProgress(progress));
+    }
+
+    internal void NotifyRecoveredSharedEstimationCompletion(SharedEstimationCompletion completion)
+    {
+        var vm = FindRun(completion.RunId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.ApplyRecoveredSharedEstimationCompletion(completion));
     }
 
     private RunViewModel? FindRun(string runId)

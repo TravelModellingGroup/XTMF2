@@ -42,7 +42,9 @@ public enum RunStatus
     /// <summary>The run completed successfully.</summary>
     Finished,
     /// <summary>The run encountered an error.</summary>
-    Error
+    Error,
+    /// <summary>The RunServer restarted before the run completed.</summary>
+    Interrupted
 }
 
 /// <summary>
@@ -102,11 +104,14 @@ public sealed partial class RunViewModel : ObservableObject
         RunStatus.Running  => "⏳",
         RunStatus.Finished => "✅",
         RunStatus.Error    => "❌",
+        RunStatus.Interrupted => "↻",
         _                  => "?"
     };
 
-    private readonly ModelSystemSession _session;
-    private readonly User _user;
+    private ModelSystemSession? _session;
+    private User? _user;
+    private RemoteRunSnapshot? _recoveredSnapshot;
+    private SharedEstimationJobSnapshot? _recoveredSharedEstimationSnapshot;
 
     public RunViewModel(string runId, string runName, string runDirectory, string runServer,
         ModelSystemSession session, User user)
@@ -118,6 +123,186 @@ public sealed partial class RunViewModel : ObservableObject
         _session = session;
         _user = user;
     }
+
+    public RunViewModel(RemoteRunSnapshot snapshot, string runServer, Action? cancelAction = null)
+        : this(snapshot.RunId, snapshot.RunName, snapshot.WorkingDirectory, runServer, null!, null!)
+    {
+        _recoveredSnapshot = snapshot;
+        IsRecoveredRunUnbound = true;
+        HasPendingRemoteReceipt = snapshot.ArtifactsAvailable;
+        SetRunMode(snapshot.RunMode,
+            Array.Empty<(int nodeIndex, string name, double min, double max)>(), cancelAction ?? (() => { }));
+        var parameterValues = snapshot.ProgressParameters
+            .Concat(snapshot.OptimizationResults ?? Array.Empty<RemoteRunParameterValue>())
+            .GroupBy(value => value.NodeIndex)
+            .Select(group => group.Last())
+            .ToArray();
+        foreach (var value in parameterValues)
+        {
+            var parameter = new OptimizationParameterViewModel(value.NodeIndex,
+                $"Parameter {value.NodeIndex}", 0, 0);
+            OptimizationParameters.Add(parameter);
+            _paramByIndex[value.NodeIndex] = parameter;
+        }
+        if (snapshot.ProgressParameters.Count > 0)
+            UpdateIterationProgress(snapshot.Iteration, snapshot.Fitness, 0,
+                snapshot.ProgressParameters.Select(value => (value.NodeIndex, value.Value)).ToArray());
+        if (snapshot.OptimizationResults is { Count: > 0 } results)
+        {
+            _optimizationResults = results.Select(value => (value.NodeIndex, value.Value)).ToArray();
+            HasOptimizationResults = true;
+        }
+        switch (snapshot.State)
+        {
+            case RemoteRunState.Completed:
+                MarkFinished(snapshot.Status);
+                break;
+            case RemoteRunState.Failed:
+                MarkError(snapshot.ErrorMessage ?? snapshot.Status, snapshot.ErrorStack ?? string.Empty, null, null);
+                break;
+            case RemoteRunState.Interrupted:
+                MarkInterrupted(snapshot.Status);
+                break;
+            default:
+                AppendStatus(snapshot.Status);
+                break;
+        }
+        if (snapshot.ArtifactsAvailable)
+            AppendStatus("Run output is retained on the RunServer and can be retrieved after binding this run.");
+    }
+
+    public RunViewModel(SharedEstimationJobSnapshot snapshot, string runServer, Action cancelAction)
+        : this(snapshot.RunId,
+            string.IsNullOrWhiteSpace(snapshot.RunName) ? $"Estimation {snapshot.RunId}" : snapshot.RunName,
+            snapshot.WorkingDirectory, runServer, null!, null!)
+    {
+        IsRecoveredRunUnbound = true;
+        IsRemoteSharedEstimation = true;
+        SetRunMode(RunMode.Estimation,
+            (snapshot.Parameters ?? Array.Empty<SharedEstimationParameterMetadata>())
+                .Select(parameter => (parameter.NodeIndex, parameter.Name, parameter.Min, parameter.Max)).ToArray(),
+            cancelAction);
+        ApplyRecoveredSharedEstimationSnapshot(snapshot);
+    }
+
+    [ObservableProperty]
+    private bool _isRecoveredRunUnbound;
+
+    [ObservableProperty]
+    private bool _hasPendingRemoteReceipt;
+
+    internal void BindRecoveredRun(ModelSystemSession session, User user,
+        IReadOnlyList<(int nodeIndex, string name, double min, double max)> metadata)
+    {
+        _session = session;
+        _user = user;
+        IsRecoveredRunUnbound = false;
+        SetRunMode(RunType, metadata, _cancelAction ?? (() => { }));
+        if (_recoveredSnapshot is { ProgressParameters.Count: > 0 } snapshot)
+            UpdateIterationProgress(snapshot.Iteration, snapshot.Fitness, 0,
+                snapshot.ProgressParameters.Select(value => (value.NodeIndex, value.Value)).ToArray());
+        if (_recoveredSharedEstimationSnapshot?.Progress is { } sharedProgress)
+            UpdateSharedEstimationProgress(sharedProgress);
+        if (_optimizationResults is not null)
+        {
+            _optimizationSession = session;
+            _optimizationUser = user;
+            HasOptimizationResults = true;
+        }
+    }
+
+    internal void ApplyRecoveredSnapshot(RemoteRunSnapshot snapshot)
+    {
+        _recoveredSnapshot = snapshot;
+        HasPendingRemoteReceipt = snapshot.ArtifactsAvailable;
+        if (snapshot.ProgressParameters.Count > 0)
+        {
+            foreach (var value in snapshot.ProgressParameters)
+            {
+                if (!_paramByIndex.ContainsKey(value.NodeIndex))
+                {
+                    var parameter = new OptimizationParameterViewModel(value.NodeIndex,
+                        $"Parameter {value.NodeIndex}", 0, 0);
+                    OptimizationParameters.Add(parameter);
+                    _paramByIndex[value.NodeIndex] = parameter;
+                }
+            }
+            UpdateIterationProgress(snapshot.Iteration, snapshot.Fitness, 0,
+                snapshot.ProgressParameters.Select(value => (value.NodeIndex, value.Value)).ToArray());
+        }
+        if (snapshot.OptimizationResults is { Count: > 0 } results)
+        {
+            _optimizationResults = results.Select(value => (value.NodeIndex, value.Value)).ToArray();
+            if (_session is not null && _user is not null)
+            {
+                _optimizationSession = _session;
+                _optimizationUser = _user;
+            }
+            HasOptimizationResults = true;
+        }
+        switch (snapshot.State)
+        {
+            case RemoteRunState.Completed when Status != RunStatus.Finished:
+                MarkFinished(snapshot.Status);
+                break;
+            case RemoteRunState.Failed when Status != RunStatus.Error:
+                MarkError(snapshot.ErrorMessage ?? snapshot.Status, snapshot.ErrorStack ?? string.Empty, null, null);
+                break;
+            case RemoteRunState.Interrupted when Status != RunStatus.Interrupted:
+                MarkInterrupted(snapshot.Status);
+                break;
+            case RemoteRunState.Running when Status != RunStatus.Running:
+                Status = RunStatus.Running;
+                StatusText = snapshot.Status;
+                OnPropertyChanged(nameof(StatusBadge));
+                OnPropertyChanged(nameof(IsCompleted));
+                break;
+        }
+    }
+
+    internal void ApplyRecoveredSharedEstimationSnapshot(SharedEstimationJobSnapshot snapshot)
+    {
+        _recoveredSharedEstimationSnapshot = snapshot;
+        IsRemoteSharedEstimation = true;
+        var parameters = snapshot.Parameters ?? Array.Empty<SharedEstimationParameterMetadata>();
+        if (OptimizationParameters.Count == 0 && parameters.Count > 0)
+            SetRunMode(RunMode.Estimation,
+                parameters.Select(parameter => (parameter.NodeIndex, parameter.Name, parameter.Min, parameter.Max)).ToArray(),
+                _cancelAction ?? (() => { }));
+        if (snapshot.Progress is { } progress)
+            UpdateSharedEstimationProgress(progress);
+        if (snapshot.Completion is { } completion)
+        {
+            if (!completion.Succeeded)
+            {
+                MarkError(completion.FailureReason ?? "Remote estimation failed.", string.Empty, null, null);
+                return;
+            }
+            _optimizationResults = completion.BestParameters
+                .Select((value, index) => (parameters.Count > index ? parameters[index].NodeIndex : index, value))
+                .ToArray();
+            HasOptimizationResults = _optimizationResults.Count > 0;
+            MarkFinished($"[Estimation] converged after {completion.TotalEvaluations} fitness test(s) " +
+                $"in {completion.Iterations} iteration(s). Best fitness = {completion.BestFitness:G6}.");
+            return;
+        }
+        if (snapshot.State == SharedEstimationJobState.Running && snapshot.Progress is null)
+            StatusText = "Estimation running";
+    }
+
+    internal void ApplyRecoveredSharedEstimationCompletion(SharedEstimationCompletion completion)
+    {
+        if (!IsRecoveredRunUnbound || _recoveredSharedEstimationSnapshot is not { } snapshot)
+            return;
+        ApplyRecoveredSharedEstimationSnapshot(snapshot with
+        {
+            State = SharedEstimationJobState.Completed,
+            Completion = completion
+        });
+    }
+
+    internal void SetRemoteReceiptPending(bool pending)
+        => HasPendingRemoteReceipt = pending;
 
     private bool CanOpenRunDirectory() => HasRunDirectory;
 
@@ -437,7 +622,8 @@ public sealed partial class RunViewModel : ObservableObject
         AppendStatus($"[Optimization complete] {results.Count} parameter(s) ready to apply.");
     }
 
-    private bool CanApplyOptimizationResults() => HasOptimizationResults;
+    private bool CanApplyOptimizationResults()
+        => HasOptimizationResults && _optimizationSession is not null && _optimizationUser is not null;
 
     /// <summary>
     /// Applies the optimization results back into the model system session.
@@ -505,15 +691,25 @@ public sealed partial class RunViewModel : ObservableObject
         CancelRunCommand.NotifyCanExecuteChanged();
     }
 
+    private void MarkInterrupted(string message)
+    {
+        Status = RunStatus.Interrupted;
+        StatusText = message;
+        AddMessage(message);
+        OnPropertyChanged(nameof(StatusBadge));
+        OnPropertyChanged(nameof(IsCompleted));
+        CancelRunCommand.NotifyCanExecuteChanged();
+    }
+
     /// <summary>
     /// Returns navigation context for the current failing element, when available.
     /// </summary>
     internal bool TryGetErrorNavigationTarget(out ModelSystemSession session, out User user, out Guid elementId)
     {
-        session = _session;
-        user = _user;
+        session = _session!;
+        user = _user!;
         elementId = Guid.Empty;
-        if (!_errorElementId.HasValue)
+        if (!_errorElementId.HasValue || _session is null || _user is null)
             return false;
         elementId = _errorElementId.Value;
         return true;

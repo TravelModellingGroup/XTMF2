@@ -73,8 +73,13 @@ namespace XTMF2.Bus
         /// <summary>The run mode; controls whether a single execution or an optimisation loop is performed.</summary>
         private RunMode _runMode = RunMode.Normal;
 
+        public RunMode Mode => _runMode;
+
         /// <summary>Set to true to request that the optimisation loop terminates after the current iteration.</summary>
         private volatile bool _cancelRequested;
+        private volatile bool _killRequested;
+        private readonly object _processSync = new();
+        private Process? _runProcess;
 
         private List<Action<double>>? _sharedWorkerSetters;
         private IAction? _sharedWorkerStart;
@@ -88,6 +93,31 @@ namespace XTMF2.Bus
         {
             if (ID == runId)
                 _cancelRequested = true;
+        }
+
+        internal bool KillRequested => _killRequested;
+
+        internal void Kill()
+        {
+            _cancelRequested = true;
+            _killRequested = true;
+            lock (_processSync)
+                KillProcessIfRunning(_runProcess);
+        }
+
+        private static void KillProcessIfRunning(Process? process)
+        {
+            if (process is null)
+                return;
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or
+                System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+            }
         }
 
         private RunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd, string start,
@@ -231,7 +261,7 @@ namespace XTMF2.Bus
             => new(candidate.RunId, candidate.BatchId, candidate.CandidateId,
                 double.MaxValue, message, moduleName, elementId);
 
-        private (RunBus runBus, Task readerTask) CreateRunBusLocal(RunServerBus clientBus)
+        private (RunBus runBus, Task readerTask) CreateRunBusLocal(IRunOutputSink clientBus)
         {
             string? error = null;
             Stream? clientToRunStream = null;
@@ -252,7 +282,7 @@ namespace XTMF2.Bus
             return (runBus!, readerTask!);
         }
 
-        private (Stream clientToRunStream, Process runProcess) CreateRunBusRemote(RunServerBus clientBus)
+        private (Stream clientToRunStream, Process runProcess) CreateRunBusRemote(IRunOutputSink clientBus)
         {
             string? error = null;
             Process? runProcess = null;
@@ -273,12 +303,18 @@ namespace XTMF2.Bus
                 };
                 runProcess.EnableRaisingEvents = true;
                 runProcess.Start();
+                lock (_processSync)
+                {
+                    _runProcess = runProcess;
+                    if (_killRequested)
+                        KillProcessIfRunning(runProcess);
+                }
             });
             clientBus.StartProcessingRequestFromRun(ID, clientToRunStream!);
             return (clientToRunStream!, runProcess!);
         }
 
-        private string GetExtraDlls(RunServerBus client)
+        private string GetExtraDlls(IRunOutputSink client)
         {
             var builder = new StringBuilder();
             foreach (var dll in client.ExtraDlls)
@@ -291,7 +327,7 @@ namespace XTMF2.Bus
         }
 
 
-        public void RunInNewProcess(RunServerBus client)
+        internal void RunInNewProcess(IRunOutputSink client)
         {
             // Optimisation runs always orchestrate their loop in-process; only the individual
             // model-system executions within each iteration use the out-of-process runner
@@ -302,19 +338,30 @@ namespace XTMF2.Bus
                 return;
             }
             (Stream stream, Process runProcess) = CreateRunBusRemote(client);
-            using var writer = new BinaryWriter(stream, Encoding.UTF8, false);
-            // Send the commend to start a run
-            writer.Write((int)1);
-            writer.Write(ID);
-            writer.Write(_currentWorkingDirectory);
-            writer.Write(StartToExecute);
-            writer.Write((int)_runMode);
-            writer.Write(_modelSystem.LongLength);
-            writer.Write(_modelSystem);
-            runProcess.WaitForExit();
+            try
+            {
+                using var writer = new BinaryWriter(stream, Encoding.UTF8, false);
+                writer.Write((int)1);
+                writer.Write(ID);
+                writer.Write(_currentWorkingDirectory);
+                writer.Write(StartToExecute);
+                writer.Write((int)_runMode);
+                writer.Write(_modelSystem.LongLength);
+                writer.Write(_modelSystem);
+                runProcess.WaitForExit();
+            }
+            finally
+            {
+                lock (_processSync)
+                {
+                    if (ReferenceEquals(_runProcess, runProcess))
+                        _runProcess = null;
+                }
+                runProcess.Dispose();
+            }
         }
 
-        public void RunInCurrentProcess(RunServerBus client)
+        internal void RunInCurrentProcess(IRunOutputSink client)
         {
             if (_runMode == RunMode.Estimation)
             {
@@ -365,7 +412,7 @@ namespace XTMF2.Bus
         /// validated once; each Nelder-Mead evaluation updates module values directly
         /// and re-invokes the same <see cref="IAction"/> start module.
         /// </summary>
-        private void RunEstimationLoop(RunServerBus client)
+        private void RunEstimationLoop(IRunOutputSink client)
         {
             // Build, construct, and runtime-validate the model system once.
             if (!BuildAndValidateModelSystem(out var ms, out var start, out var buildError))
@@ -545,7 +592,7 @@ namespace XTMF2.Bus
         /// same <see cref="IAction"/> start module, and reads calibration target ratios
         /// directly from the already-constructed module instances.
         /// </summary>
-        private void RunCalibrationLoop(RunServerBus client)
+        private void RunCalibrationLoop(IRunOutputSink client)
         {
             // Build, construct, and runtime-validate the model system once.
             if (!BuildAndValidateModelSystem(out var ms, out var start, out var buildError))

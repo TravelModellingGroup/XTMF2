@@ -20,6 +20,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Nodes;
 using XTMF2.Editing;
 using XTMF2.RuntimeModules;
 
@@ -100,6 +101,8 @@ namespace XTMF2.UnitTests
             var controller = runtime.ProjectController;
             const string projectName = "Test";
             CommandError error = null;
+            Guid projectId = Guid.Empty;
+            Guid modelSystemId = Guid.Empty;
             var localUser = TestHelper.GetTestUser(runtime, "ProjectPersistence");
             // delete the project just in case it survived
             controller.DeleteProject(localUser, projectName, out error);
@@ -109,6 +112,10 @@ namespace XTMF2.UnitTests
                 var project = session.Project;
                 Assert.AreEqual(projectName, project.Name);
                 Assert.AreEqual(localUser, project.Owner);
+                Assert.IsTrue(session.CreateNewModelSystem(localUser, "IdentityModel", out var header, out error), error?.Message);
+                Assert.IsNotNull(header);
+                projectId = project.Id;
+                modelSystemId = header.Id;
             }), "Unable to create project");
             var numberOfProjects = localUser.AvailableProjects.Count;
             // Simulate a shutdown of XTMF
@@ -121,6 +128,51 @@ namespace XTMF2.UnitTests
             var regainedProject = localUser.AvailableProjects.FirstOrDefault(p => p.Name == projectName);
             Assert.IsNotNull(regainedProject, $"Project '{projectName}' not found after restart");
             Assert.AreEqual(projectName, regainedProject.Name);
+            Assert.AreEqual(projectId, regainedProject.Id);
+            Assert.AreEqual(modelSystemId, regainedProject.ModelSystems.Single(header => header.Name == "IdentityModel").Id);
+        }
+
+        [TestMethod]
+        public void LegacyProjectAndModelSystemIdentityIsMigrated()
+        {
+            const string runtimeName = "LegacyIdentityMigration";
+            var runtime = TestHelper.CreateRuntime(runtimeName);
+            var controller = runtime.ProjectController;
+            var user = TestHelper.GetTestUser(runtime, runtimeName);
+            Assert.IsTrue(controller.CreateNewProject(user, "LegacyProject", out var session, out var error), error?.Message);
+            Guid originalProjectId;
+            Guid originalModelSystemId;
+            string projectFilePath;
+            using (session)
+            {
+                Assert.IsTrue(session.CreateNewModelSystem(user, "LegacyModel", out var header, out error), error?.Message);
+                originalProjectId = session.Project.Id;
+                originalModelSystemId = header.Id;
+                projectFilePath = session.Project.ProjectFilePath!;
+            }
+
+            var projectJson = JsonNode.Parse(File.ReadAllText(projectFilePath))!.AsObject();
+            projectJson.Remove("Id");
+            foreach (var header in projectJson["ModelSystemHeaders"]!.AsArray())
+                header!.AsObject().Remove("Id");
+            File.WriteAllText(projectFilePath, projectJson.ToJsonString());
+
+            runtime.Shutdown();
+            runtime = TestHelper.CreateRuntime(runtimeName);
+            user = TestHelper.GetTestUser(runtime, runtimeName, false);
+            var migratedProject = user.AvailableProjects.Single(project => project.Name == "LegacyProject");
+            var migratedModelSystemId = migratedProject.ModelSystems.Single().Id;
+            Assert.AreNotEqual(Guid.Empty, migratedProject.Id);
+            Assert.AreNotEqual(Guid.Empty, migratedModelSystemId);
+            Assert.AreNotEqual(originalProjectId, migratedProject.Id);
+            Assert.AreNotEqual(originalModelSystemId, migratedModelSystemId);
+
+            runtime.Shutdown();
+            runtime = TestHelper.CreateRuntime(runtimeName);
+            user = TestHelper.GetTestUser(runtime, runtimeName, false);
+            var reloadedProject = user.AvailableProjects.Single(project => project.Name == "LegacyProject");
+            Assert.AreEqual(migratedProject.Id, reloadedProject.Id);
+            Assert.AreEqual(migratedModelSystemId, reloadedProject.ModelSystems.Single().Id);
         }
 
         [TestMethod]

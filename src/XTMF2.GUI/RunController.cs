@@ -22,10 +22,12 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using XTMF2.Bus;
 using XTMF2.Bus.Optimization;
+using XTMF2.Controllers;
 using XTMF2.Editing;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Properties;
@@ -34,6 +36,12 @@ using System.Linq;
 
 
 namespace XTMF2.GUI;
+
+public sealed record RunServerActivityServerSnapshot(
+    RunServerEndpoint Endpoint,
+    RunServerConnectionState ConnectionState,
+    string? Error,
+    IReadOnlyList<RunServerActivity> Activities);
 
 /// <summary>
 /// Used to control XTMF from the GUI. This is a separate class from XTMFRuntime 
@@ -73,7 +81,13 @@ public class RunController : IDisposable
         _remoteEstimationMetadata = new();
     private readonly Dictionary<string, IReadOnlyDictionary<string, SharedEstimationWorkerEndpoint>>
         _remoteWorkerEndpointsByRunId = new();
+    private readonly Dictionary<string, RemoteRunSnapshot> _recoveredRemoteRuns = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SharedEstimationJobSnapshot> _recoveredSharedEstimationRuns = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HostBus> _remoteRunBusesByRunId = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (HostBus HostBus, string TargetDirectory)> _pendingRemoteReceipts = new(StringComparer.Ordinal);
     private readonly SharedEstimationCompletionGate _remoteCompletionGate = new();
+    private readonly HashSet<string> _automaticBindingAttempts = new(StringComparer.Ordinal);
+    private User? _recoveryUser;
 
     /// <summary>
     /// Fires when an estimation or calibration run completes and has results ready to be
@@ -272,6 +286,7 @@ public class RunController : IDisposable
 
     private void OnSharedEstimationCompleted(object? sender, SharedEstimationCompletion completion)
     {
+        RunsViewModel.NotifyRecoveredSharedEstimationCompletion(completion);
         ModelSystemSession? session = null;
         User? user = null;
         IReadOnlyList<(int nodeIndex, string name, double min, double max)>? metadata = null;
@@ -552,6 +567,20 @@ public class RunController : IDisposable
             .Where(endpoint => workerEndpointIds.Contains(endpoint.Id, StringComparer.Ordinal) &&
                                endpoint.Id != orchestratorEndpointId)
             .ToArray();
+        var invalidWorker = endpoints.FirstOrDefault(endpoint => endpoint.IsLocal ||
+            string.IsNullOrWhiteSpace(endpoint.Token) ||
+            string.IsNullOrWhiteSpace(endpoint.CertificateFingerprint));
+        if (invalidWorker is not null)
+        {
+            error = new CommandError(endpointError(invalidWorker));
+            return false;
+        }
+
+        static string endpointError(RunServerEndpoint endpoint)
+            => endpoint.IsLocal
+                ? $"Local RunServer '{endpoint.Name}' cannot be used as a worker with a remote coordinator. Select a network RunServer instead."
+                : $"RunServer '{endpoint.Name}' is missing its security token or certificate fingerprint.";
+
         using var modelStream = new MemoryStream();
         if (!msSession.Save(out error, modelStream))
             return false;
@@ -564,7 +593,8 @@ public class RunController : IDisposable
         var request = new SharedEstimationCoordinatorRequest(
             new SharedEstimationRunRequest(Guid.NewGuid().ToString(),
                 Path.Combine(projectSession.ProjectDirectory!, "runs", runName),
-                startToExecute, modelStream.ToArray(), coordinatorOverrides),
+                startToExecute, modelStream.ToArray(), coordinatorOverrides,
+                msSession.Project.Id, msSession.ModelSystemHeader.Id),
             endpoints.Select(endpoint => new SharedEstimationWorkerEndpoint(
                 endpoint.Id, endpoint.Id, endpoint.Address, endpoint.Port, endpoint.Token,
                 endpoint.CertificateFingerprint,
@@ -578,7 +608,9 @@ public class RunController : IDisposable
             entries.Select(item => item.entry.Max).ToArray(),
             entries.Select(item => item.entry.NullHypothesis).ToArray(),
             modelSystem.EstimationObjective == EstimationObjective.Maximize,
-            UseCoordinatorAsWorker: true);
+            UseCoordinatorAsWorker: true,
+            Parameters: metadata.Select(item => new SharedEstimationParameterMetadata(
+                item.nodeIndex, item.name, item.min, item.max)).ToArray());
 
         if (!orchestrator.StartRemoteSharedEstimation(request, out error))
             return false;
@@ -718,7 +750,8 @@ public class RunController : IDisposable
                     runViewModel = RunsViewModel.AddRun(runId, runName, runDirectory, serverLabel, msSession, user);
                 },
                 out id,
-                out error))
+                out error,
+                runName))
         {
             return false;
         }
@@ -824,6 +857,66 @@ public class RunController : IDisposable
     public IReadOnlyList<RunServerConnectionInfo> GetRunServerStates()
         => _connections.GetStates();
 
+    public async Task<IReadOnlyList<RunServerActivityServerSnapshot>> QueryRunServerActivityAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var states = _connections.GetStates();
+        var requests = states.Select(async state =>
+        {
+            if (state.State != RunServerConnectionState.Available ||
+                !_connections.TryGet(state.Endpoint.Id, out var hostBus) || hostBus is null)
+            {
+                return new RunServerActivityServerSnapshot(state.Endpoint, state.State,
+                    state.Error ?? (state.State == RunServerConnectionState.Connecting ? "Connecting" : "Not connected"),
+                    Array.Empty<RunServerActivity>());
+            }
+
+            try
+            {
+                var response = await hostBus.QueryServerActivityAsync(cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+                return new RunServerActivityServerSnapshot(state.Endpoint, state.State, null, response.Activities);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return new RunServerActivityServerSnapshot(state.Endpoint, state.State,
+                    "Timed out waiting for RunServer activity.", Array.Empty<RunServerActivity>());
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                return new RunServerActivityServerSnapshot(state.Endpoint, state.State,
+                    exception.Message, Array.Empty<RunServerActivity>());
+            }
+        }).ToArray();
+
+        return await Task.WhenAll(requests).ConfigureAwait(false);
+    }
+
+    public bool KillRunServerActivity(string endpointId, RunServerActivity activity, out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+        if (!_connections.TryGet(endpointId, out var hostBus) || hostBus is null)
+        {
+            error = $"RunServer '{endpointId}' is not connected.";
+            return false;
+        }
+
+        if (activity.Kind is "Shared estimation coordinator" or "Shared estimation worker")
+        {
+            var sent = hostBus.CancelSharedEstimation(activity.RunId,
+                "Stopped from RunServer Activity window.", out var commandError);
+            error = commandError?.Message;
+            return sent;
+        }
+        var killed = hostBus.KillModelRun(activity.RunId, out var killError);
+        error = killError?.Message;
+        return killed;
+    }
+
     private void SubscribeToHostBus(HostBus hostBus)
     {
         lock (_hostBusSubscriptionLock)
@@ -842,22 +935,379 @@ public class RunController : IDisposable
         hostBus.SharedEstimationWorkerControlAcknowledged += OnSharedEstimationWorkerControlAcknowledged;
         hostBus.SharedEstimationStatusAvailable += OnSharedEstimationStatus;
         hostBus.SharedEstimationJobSnapshotsAvailable += OnSharedEstimationJobSnapshotsAvailable;
+        hostBus.RemoteRunSnapshotsAvailable += OnRemoteRunSnapshotsAvailable;
+        hostBus.RemoteRunArtifactsAvailable += OnRemoteRunArtifactsAvailable;
         hostBus.ClientRunArtifactsReceived += OnClientRunArtifactsReceived;
         hostBus.Disconnected += OnHostBusDisconnected;
         hostBus.QuerySharedEstimationJobs(out _);
+        hostBus.QueryRemoteRuns(out _);
     }
 
     private void OnSharedEstimationJobSnapshotsAvailable(
         object? sender, IReadOnlyList<SharedEstimationJobSnapshot> snapshots)
     {
+        var hostBus = sender as HostBus;
+        var endpoint = _connections.GetStates().FirstOrDefault(state =>
+            _connections.TryGet(state.Endpoint.Id, out var connectedBus) && ReferenceEquals(connectedBus, hostBus))?.Endpoint;
         foreach (var snapshot in snapshots)
         {
-            if (snapshot.ActiveWorkerIds is not null)
-                RunsViewModel.NotifyRemoteWorkerSnapshot(snapshot.RunId, snapshot.ActiveWorkerIds);
-            if (snapshot.Progress is not null)
-                OnSharedEstimationProgress(sender, snapshot.Progress);
+            lock (_sessionsByRunId)
+            {
+                _recoveredSharedEstimationRuns[snapshot.RunId] = snapshot;
+                if (hostBus is not null)
+                    _hostBusesByRunId[snapshot.RunId] = hostBus;
+            }
+            var runServerName = endpoint?.Name ?? "Remote RunServer";
+            RunsViewModel.RestoreSharedEstimationRun(snapshot, runServerName,
+                () => hostBus?.CancelSharedEstimation(snapshot.RunId, "Cancelled by user.", out _));
+            var workers = GetConnectedRunServers()
+                .Where(worker => endpoint is null || worker.Id != endpoint.Id)
+                .Select(worker => new SharedEstimationWorkerEndpoint(worker.Id, worker.Id,
+                    worker.Address, worker.Port, worker.Token, worker.CertificateFingerprint))
+                .ToArray();
+            lock (_sessionsByRunId)
+                _remoteWorkerEndpointsByRunId[snapshot.RunId] = workers.ToDictionary(
+                    worker => worker.WorkerId, worker => worker, StringComparer.Ordinal);
+            RunsViewModel.ConfigureRecoveredSharedEstimationWorkers(snapshot.RunId,
+                workers.Select(ToRunServerEndpoint).ToArray(),
+                snapshot.ActiveWorkerIds ?? Array.Empty<string>(),
+                workerId => ChangeRemoteEstimationWorker(snapshot.RunId, workerId, add: true),
+                workerId => ChangeRemoteEstimationWorker(snapshot.RunId, workerId, add: false));
             if (snapshot.Completion is not null)
                 OnSharedEstimationCompleted(sender, snapshot.Completion);
+            TryAutomaticallyBindRecoveredRun(snapshot.RunId);
+        }
+    }
+
+    private void OnRemoteRunSnapshotsAvailable(object? sender, IReadOnlyList<RemoteRunSnapshot> snapshots)
+    {
+        var hostBus = sender as HostBus;
+        var endpoint = _connections.GetStates().FirstOrDefault(state =>
+            _connections.TryGet(state.Endpoint.Id, out var connectedBus) && ReferenceEquals(connectedBus, hostBus))?.Endpoint;
+        foreach (var snapshot in snapshots)
+        {
+            string? localRunDirectory = null;
+            lock (_sessionsByRunId)
+            {
+                _recoveredRemoteRuns[snapshot.RunId] = snapshot;
+                if (hostBus is not null)
+                    _remoteRunBusesByRunId[snapshot.RunId] = hostBus;
+                if (_sessionsByRunId.ContainsKey(snapshot.RunId))
+                    _runDirectoriesByRunId.TryGetValue(snapshot.RunId, out localRunDirectory);
+            }
+            var run = RunsViewModel.RestoreRemoteRun(snapshot, endpoint?.Name ?? "Remote RunServer",
+                () => hostBus?.CancelModelRun(snapshot.RunId, out _));
+            if (localRunDirectory is not null && hostBus is not null)
+                ReceiveBoundRemoteCompletion(run, snapshot, hostBus, localRunDirectory);
+            TryAutomaticallyBindRecoveredRun(snapshot.RunId);
+        }
+    }
+
+    public void EnableAutomaticRecoveredRunBinding(User user)
+    {
+        _recoveryUser = user ?? throw new ArgumentNullException(nameof(user));
+        string[] recoveredRunIds;
+        lock (_sessionsByRunId)
+            recoveredRunIds = _recoveredRemoteRuns.Keys.Concat(_recoveredSharedEstimationRuns.Keys).Distinct().ToArray();
+        foreach (var runId in recoveredRunIds)
+            TryAutomaticallyBindRecoveredRun(runId);
+    }
+
+    private void TryAutomaticallyBindRecoveredRun(string runId)
+    {
+        var user = _recoveryUser;
+        if (user is null)
+            return;
+
+        Guid? projectId;
+        Guid? modelSystemId;
+        lock (_sessionsByRunId)
+        {
+            if (!_automaticBindingAttempts.Add(runId))
+                return;
+            if (_recoveredRemoteRuns.TryGetValue(runId, out var remoteSnapshot))
+            {
+                projectId = remoteSnapshot.ProjectId;
+                modelSystemId = remoteSnapshot.ModelSystemId;
+            }
+            else if (_recoveredSharedEstimationRuns.TryGetValue(runId, out var estimationSnapshot))
+            {
+                projectId = estimationSnapshot.ProjectId;
+                modelSystemId = estimationSnapshot.ModelSystemId;
+            }
+            else
+            {
+                return;
+            }
+        }
+        if (projectId is null || modelSystemId is null)
+            return;
+
+        var projects = ProjectController.GetProjects(user).Where(project => project.Id == projectId).ToArray();
+        if (projects.Length != 1)
+            return;
+        var headers = projects[0].ModelSystems.Where(header => header.Id == modelSystemId).ToArray();
+        if (headers.Length != 1 ||
+            !Runtime.ProjectController.GetProjectSession(user, projects[0], out var projectSession, out _))
+            return;
+
+        using (projectSession)
+        {
+            if (!projectSession.EditModelSystem(user, headers[0], out var modelSystemSession, out _, out _) ||
+                modelSystemSession is null)
+                return;
+            if (!BindRecoveredRemoteRun(runId, modelSystemSession, user, out _))
+                modelSystemSession.Dispose();
+        }
+    }
+
+    private void ReceiveBoundRemoteCompletion(RunViewModel run, RemoteRunSnapshot snapshot,
+        HostBus hostBus, string localRunDirectory)
+    {
+        try
+        {
+            PersistRemoteRunSnapshot(snapshot);
+            if (snapshot.ArtifactsAvailable)
+            {
+                lock (_sessionsByRunId)
+                    _pendingRemoteReceipts[snapshot.RunId] = (hostBus, localRunDirectory);
+                RunsViewModel.NotifyRemoteReceiptPending(snapshot.RunId, true);
+                if (!hostBus.RequestRemoteRunArtifacts(snapshot.RunId, out var requestError))
+                    throw new IOException(requestError?.Message ?? "Unable to request remote run artifacts.");
+            }
+            else if (!hostBus.AcknowledgeRemoteRun(snapshot.RunId, out var acknowledgeError))
+            {
+                throw new IOException(acknowledgeError?.Message ?? "Unable to acknowledge the remote completion.");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            run.AppendStatus($"Remote completion receipt is pending: {exception.Message}");
+        }
+    }
+
+    public bool BindRecoveredRemoteRun(string runId, ModelSystemSession session, User user, out string? error)
+    {
+        RemoteRunSnapshot? snapshot;
+        SharedEstimationJobSnapshot? sharedSnapshot;
+        lock (_sessionsByRunId)
+        {
+            _recoveredRemoteRuns.TryGetValue(runId, out snapshot);
+            _recoveredSharedEstimationRuns.TryGetValue(runId, out sharedSnapshot);
+        }
+        if (snapshot is null && sharedSnapshot is not null)
+            return BindRecoveredSharedEstimationRun(runId, sharedSnapshot, session, user, out error);
+        if (snapshot is null)
+        {
+            error = "The remote run snapshot is no longer available.";
+            return false;
+        }
+
+        using var modelStream = new MemoryStream();
+        if (!session.Save(out var saveError, modelStream))
+        {
+            error = saveError?.Message ?? "Unable to serialize the selected model system.";
+            return false;
+        }
+        var modelHash = Convert.ToHexString(SHA256.HashData(modelStream.ToArray()));
+        if (!string.Equals(modelHash, snapshot.ModelSystemHash, StringComparison.OrdinalIgnoreCase))
+        {
+            error = "The selected model system does not match the model system used by this remote run.";
+            return false;
+        }
+
+        var projectDirectory = session.Project.ProjectDirectory;
+        if (string.IsNullOrWhiteSpace(projectDirectory))
+        {
+            error = "The selected project does not have a local directory.";
+            return false;
+        }
+        var localRunName = Path.GetFileName(snapshot.RunName.Replace('\\', '/').Trim('/'));
+        if (string.IsNullOrWhiteSpace(localRunName) || localRunName is "." or "..")
+            localRunName = runId;
+        var targetDirectory = Path.Combine(projectDirectory, "runs", localRunName);
+        HostBus? hostBus;
+        lock (_sessionsByRunId)
+        {
+            _remoteRunBusesByRunId.TryGetValue(runId, out hostBus);
+            if (hostBus is not null)
+                _pendingRemoteReceipts[runId] = (hostBus, targetDirectory);
+        }
+        if (hostBus is null)
+        {
+            error = "The RunServer connection for this run is no longer available.";
+            return false;
+        }
+        try
+        {
+            PersistRemoteRunSnapshot(snapshot);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            error = $"Unable to persist the remote run receipt: {exception.Message}";
+            return false;
+        }
+        if (snapshot.ArtifactsAvailable)
+        {
+            lock (_sessionsByRunId)
+                _pendingRemoteReceipts[runId] = (hostBus, targetDirectory);
+            if (!hostBus.RequestRemoteRunArtifacts(runId, out var requestError))
+            {
+                error = requestError?.Message ?? "Unable to request remote run artifacts.";
+                return false;
+            }
+        }
+        else
+        {
+            if (!hostBus.AcknowledgeRemoteRun(runId, out var acknowledgeError))
+            {
+                error = acknowledgeError?.Message ?? "Unable to acknowledge the remote completion.";
+                return false;
+            }
+        }
+        var metadata = session.GetOptimizationParameterMeta(snapshot.RunMode);
+        if (!RunsViewModel.BindRecoveredRun(runId, session, user, metadata))
+        {
+            error = "The recovered run is not present in the Runs list.";
+            return false;
+        }
+        lock (_sessionsByRunId)
+            _sessionsByRunId[runId] = (session, user);
+        error = null;
+        return true;
+    }
+
+    private bool BindRecoveredSharedEstimationRun(string runId, SharedEstimationJobSnapshot snapshot,
+        ModelSystemSession session, User user, out string? error)
+    {
+        using var modelStream = new MemoryStream();
+        if (!session.Save(out var saveError, modelStream))
+        {
+            error = saveError?.Message ?? "Unable to serialize the selected model system.";
+            return false;
+        }
+        var modelHash = Convert.ToHexString(SHA256.HashData(modelStream.ToArray()));
+        if (!string.Equals(modelHash, snapshot.ModelSystemHash, StringComparison.OrdinalIgnoreCase))
+        {
+            error = "The selected model system does not match the model system used by this remote estimation.";
+            return false;
+        }
+        var metadata = session.GetOptimizationParameterMeta(RunMode.Estimation);
+        if (snapshot.Parameters is { Count: > 0 } remoteParameters &&
+            (remoteParameters.Count != metadata.Count ||
+             remoteParameters.Where((parameter, index) => parameter.NodeIndex != metadata[index].nodeIndex).Any()))
+        {
+            error = "The selected model system's estimation parameters do not match the remote run.";
+            return false;
+        }
+        if (!RunsViewModel.BindRecoveredRun(runId, session, user, metadata))
+        {
+            error = "The recovered estimation is not present in the Runs list.";
+            return false;
+        }
+        SharedEstimationCompletion? pendingCompletion;
+        lock (_sessionsByRunId)
+        {
+            _sessionsByRunId[runId] = (session, user);
+            _remoteEstimationMetadata[runId] = metadata;
+            pendingCompletion = _remoteCompletionGate.MarkReady(runId);
+        }
+        if (pendingCompletion is not null)
+            OnSharedEstimationCompleted(_hostBusesByRunId.GetValueOrDefault(runId), pendingCompletion);
+        error = null;
+        return true;
+    }
+
+    public bool RetryRemoteRunReceipt(string runId, out string? error)
+    {
+        (HostBus HostBus, string TargetDirectory) receipt;
+        lock (_sessionsByRunId)
+        {
+            if (!_pendingRemoteReceipts.TryGetValue(runId, out receipt))
+            {
+                error = "There is no pending remote receipt for this run.";
+                return false;
+            }
+        }
+        if (!receipt.HostBus.RequestRemoteRunArtifacts(runId, out var requestError))
+        {
+            error = requestError?.Message ?? "Unable to request remote run artifacts.";
+            return false;
+        }
+        error = null;
+        return true;
+    }
+
+    private static void PersistRemoteRunSnapshot(RemoteRunSnapshot snapshot)
+    {
+        var receiptDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "XTMF2", "GUI", "RemoteRunReceipts");
+        Directory.CreateDirectory(receiptDirectory);
+        var key = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(snapshot.RunId)));
+        var path = Path.Combine(receiptDirectory, $"{key}.json");
+        var temporaryPath = path + ".tmp";
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals
+        };
+        File.WriteAllBytes(temporaryPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(snapshot, options));
+        File.Move(temporaryPath, path, true);
+    }
+
+    private void OnRemoteRunArtifactsAvailable(object? sender, RemoteRunArtifactsResponse response)
+    {
+        (HostBus HostBus, string TargetDirectory) receipt;
+        RemoteRunSnapshot? snapshot;
+        lock (_sessionsByRunId)
+        {
+            if (!_pendingRemoteReceipts.TryGetValue(response.RunId, out receipt) ||
+                !_recoveredRemoteRuns.TryGetValue(response.RunId, out snapshot))
+                return;
+        }
+        if (response.Archive is null)
+        {
+            RunsViewModel.NotifyArtifactTransferFailed(response.RunId,
+                response.Error ?? "The RunServer returned no artifact archive.");
+            return;
+        }
+
+        try
+        {
+            using var archiveStream = new MemoryStream(response.Archive, writable: false);
+            ExtractRunArtifacts(archiveStream, receipt.TargetDirectory);
+            PersistRemoteRunSnapshot(snapshot);
+            if (!receipt.HostBus.AcknowledgeRemoteRun(response.RunId, out var error))
+                throw new IOException(error?.Message ?? "Unable to acknowledge the remote completion.");
+            lock (_sessionsByRunId)
+                _pendingRemoteReceipts.Remove(response.RunId);
+            RunsViewModel.NotifyRemoteReceiptCompleted(response.RunId);
+            RunsViewModel.NotifyArtifactsTransferred(response.RunId);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            RunsViewModel.NotifyArtifactTransferFailed(response.RunId, exception.Message);
+        }
+    }
+
+    private static void ExtractRunArtifacts(Stream archiveStream, string targetDirectory)
+    {
+        Directory.CreateDirectory(targetDirectory);
+        var root = Path.GetFullPath(targetDirectory);
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+        using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read, leaveOpen: true);
+        foreach (var entry in archive.Entries)
+        {
+            var destination = Path.GetFullPath(Path.Combine(root, entry.FullName));
+            if (!destination.StartsWith(rootWithSeparator, StringComparison.Ordinal)
+                && !string.Equals(destination, root, StringComparison.Ordinal))
+                throw new InvalidDataException("The RunServer returned an invalid artifact path.");
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                Directory.CreateDirectory(destination);
+                continue;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            entry.ExtractToFile(destination, true);
         }
     }
 
@@ -885,6 +1335,8 @@ public class RunController : IDisposable
         hostBus.SharedEstimationWorkerControlAcknowledged -= OnSharedEstimationWorkerControlAcknowledged;
         hostBus.SharedEstimationStatusAvailable -= OnSharedEstimationStatus;
         hostBus.SharedEstimationJobSnapshotsAvailable -= OnSharedEstimationJobSnapshotsAvailable;
+        hostBus.RemoteRunSnapshotsAvailable -= OnRemoteRunSnapshotsAvailable;
+        hostBus.RemoteRunArtifactsAvailable -= OnRemoteRunArtifactsAvailable;
         hostBus.ClientRunArtifactsReceived -= OnClientRunArtifactsReceived;
         hostBus.Disconnected -= OnHostBusDisconnected;
     }

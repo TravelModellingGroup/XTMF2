@@ -3640,9 +3640,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return null;
 
         var runName = dialog.RunName?.Trim();
-        var endpointIds = dialog.SelectedRunServers.Select(endpoint => endpoint.Id).ToArray();
+        var endpointIds = dialog.UseMultipleRunServers
+            ? dialog.SelectedRunServers.Select(endpoint => endpoint.Id).ToArray()
+            : dialog.SelectedRunServer is { } selectedRunServer ? [selectedRunServer.Id] : [];
         var startName = dialog.SelectedStartName;
-        var orchestratorEndpointId = allowMultipleRunServers ? dialog.SelectedCoordinatorRunServer?.Id : null;
+        var orchestratorEndpointId = dialog.UseMultipleRunServers
+            ? dialog.SelectedCoordinatorRunServer?.Id
+            : null;
         return string.IsNullOrEmpty(runName) || endpointIds.Length == 0 || string.IsNullOrEmpty(startName)
             ? null
             : (runName, endpointIds, startName, dialog.PathOverrides, orchestratorEndpointId);

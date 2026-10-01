@@ -14,13 +14,17 @@ public class TestSharedEstimationProtocol
     [TestMethod]
     public void CoordinatorRequest_RoundTrips()
     {
+        var projectId = Guid.NewGuid();
+        var modelSystemId = Guid.NewGuid();
         var request = new SharedEstimationCoordinatorRequest(
-            new SharedEstimationRunRequest("run-remote", "/remote/runs", "Start", [1, 2, 3]),
+            new SharedEstimationRunRequest("run-remote", "/remote/runs", "Start", [1, 2, 3],
+                ProjectId: projectId, ModelSystemId: modelSystemId),
             [new SharedEstimationWorkerEndpoint("worker-1", "endpoint-1", "worker.example", 5000,
                 "token", "fingerprint", new Dictionary<int, string> { [7] = "/worker/input" })],
             "NelderMead",
             [new AlgorithmParameterDescriptor { Key = "MaxIterations", Label = "Max Iterations", Hint = "limit", Value = "12" }],
-            [0.0], [1.0], [0.5], false, UseCoordinatorAsWorker: false);
+            [0.0], [1.0], [0.5], false, UseCoordinatorAsWorker: false,
+            Parameters: [new SharedEstimationParameterMetadata(7, "Demand", 0.0, 1.0)]);
 
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
@@ -39,6 +43,63 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual(request.AlgorithmParameters[0].Value, read.AlgorithmParameters[0].Value);
         Assert.AreEqual(request.InitialValues[0], read.InitialValues[0]);
         Assert.AreEqual(request.UseCoordinatorAsWorker, read.UseCoordinatorAsWorker);
+        Assert.AreEqual(request.Parameters![0], read.Parameters![0]);
+        Assert.AreEqual(projectId, read.Run.ProjectId);
+        Assert.AreEqual(modelSystemId, read.Run.ModelSystemId);
+    }
+
+    [TestMethod]
+    public void ServerActivityQueryAndSnapshot_RoundTrip()
+    {
+        var activities = new[]
+        {
+            new RunServerActivity("run-queued", "Queued model", "Normal",
+                RunServerActivityState.Queued, "Waiting", QueuePosition: 2),
+            new RunServerActivity("run-estimation", "Shared estimation", "Shared estimation",
+                RunServerActivityState.Running, "Evaluating", Iteration: 4, Fitness: 0.25,
+                ActiveWorkers: 3, EvaluationsCompleted: 12, EvaluationsPending: 2)
+        };
+
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
+        {
+            SharedEstimationProtocol.WriteQueryServerActivity(writer, "request-17");
+            SharedEstimationProtocol.WriteServerActivitySnapshots(writer, "request-17", activities);
+        }
+
+        stream.Position = 0;
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, true);
+        Assert.AreEqual("request-17", SharedEstimationProtocol.ReadQueryServerActivity(reader));
+        var response = SharedEstimationProtocol.ReadServerActivitySnapshots(reader);
+        Assert.AreEqual("request-17", response.RequestId);
+        CollectionAssert.AreEqual(activities, response.Activities.ToArray());
+    }
+
+    [TestMethod]
+    public void ServerActivitySnapshot_RejectsNegativeCounters()
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
+        {
+            SharedEstimationProtocol.WriteHeader(writer, SharedEstimationMessageType.ServerActivitySnapshots, 3);
+            writer.Write("request-1");
+            writer.Write(1);
+            writer.Write("run-1");
+            writer.Write("Run");
+            writer.Write("Normal");
+            writer.Write((int)RunServerActivityState.Queued);
+            writer.Write("Waiting");
+            writer.Write(-1);
+            writer.Write(0);
+            writer.Write(double.NaN);
+            writer.Write(0);
+            writer.Write(0);
+            writer.Write(0);
+        }
+
+        stream.Position = 0;
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, true);
+        Assert.Throws<InvalidDataException>(() => SharedEstimationProtocol.ReadServerActivitySnapshots(reader));
     }
 
     [TestMethod]
@@ -46,7 +107,8 @@ public class TestSharedEstimationProtocol
     {
         var run = new SharedEstimationRunRequest(
             "run-1", "/shared/runs", "Start", new byte[] { 1, 2, 3 },
-            new Dictionary<int, string> { [4] = "/worker/input", [9] = "/worker/output" });
+            new Dictionary<int, string> { [4] = "/worker/input", [9] = "/worker/output" },
+            Guid.NewGuid(), Guid.NewGuid());
         var registration = new SharedEstimationWorkerRegistration("run-1", "worker-1", "server-1");
 
         using var stream = new MemoryStream();
@@ -63,6 +125,8 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual(run.RunId, readRun.RunId);
         Assert.AreEqual(run.WorkingDirectory, readRun.WorkingDirectory);
         Assert.AreEqual(run.StartToExecute, readRun.StartToExecute);
+        Assert.AreEqual(run.ProjectId, readRun.ProjectId);
+        Assert.AreEqual(run.ModelSystemId, readRun.ModelSystemId);
         Assert.HasCount(run.ModelSystem.Length, readRun.ModelSystem);
         for (int i = 0; i < run.ModelSystem.Length; i++)
             Assert.AreEqual(run.ModelSystem[i], readRun.ModelSystem[i]);
@@ -172,7 +236,7 @@ public class TestSharedEstimationProtocol
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
         {
-            writer.Write(SharedEstimationProtocol.Version + 2);
+            writer.Write(SharedEstimationProtocol.Version + 4);
             writer.Write((int)SharedEstimationMessageType.StartRun);
         }
 
@@ -192,15 +256,71 @@ public class TestSharedEstimationProtocol
     }
 
     [TestMethod]
+    public void RemoteRunReconnectMessages_RoundTrip()
+    {
+        var timestamp = DateTimeOffset.UtcNow;
+        var projectId = Guid.NewGuid();
+        var modelSystemId = Guid.NewGuid();
+        var snapshots = new[]
+        {
+            new RemoteRunSnapshot("run-1", "forecast", RunMode.Normal, "/runs/forecast", "Start",
+                "model-hash", RemoteRunState.Running, "Iteration 4", 4, 1.25,
+                [new RemoteRunParameterValue(3, 0.75)], null, null, null, false, timestamp,
+                projectId, modelSystemId),
+            new RemoteRunSnapshot("run-2", "calibration", RunMode.Calibration, "/runs/calibration", "Start",
+                "model-hash-2", RemoteRunState.Completed, "Complete", 8, 0.01,
+                [], [new RemoteRunParameterValue(5, 1.1)], null, null, true, timestamp)
+        };
+        var archive = new byte[] { 4, 5, 6, 7 };
+
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
+        {
+            SharedEstimationProtocol.WriteQueryRemoteRuns(writer);
+            SharedEstimationProtocol.WriteRemoteRunSnapshots(writer, snapshots);
+            SharedEstimationProtocol.WriteGetRemoteRunArtifacts(writer, "run-2");
+            SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, "run-2", archive);
+            SharedEstimationProtocol.WriteAcknowledgeRemoteRun(writer, "run-2");
+        }
+
+        stream.Position = 0;
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, true);
+        SharedEstimationProtocol.ReadQueryRemoteRuns(reader);
+        var readSnapshots = SharedEstimationProtocol.ReadRemoteRunSnapshots(reader);
+        Assert.HasCount(2, readSnapshots);
+        Assert.AreEqual(snapshots[0].RunId, readSnapshots[0].RunId);
+        Assert.AreEqual(snapshots[0].RunMode, readSnapshots[0].RunMode);
+        Assert.AreEqual(snapshots[0].ModelSystemHash, readSnapshots[0].ModelSystemHash);
+        Assert.AreEqual(snapshots[0].ProgressParameters[0], readSnapshots[0].ProgressParameters[0]);
+        Assert.AreEqual(snapshots[1].State, readSnapshots[1].State);
+        Assert.AreEqual(snapshots[1].OptimizationResults![0], readSnapshots[1].OptimizationResults![0]);
+        Assert.AreEqual(snapshots[1].UpdatedAt, readSnapshots[1].UpdatedAt);
+        Assert.AreEqual(projectId, readSnapshots[0].ProjectId);
+        Assert.AreEqual(modelSystemId, readSnapshots[0].ModelSystemId);
+        Assert.AreEqual("run-2", SharedEstimationProtocol.ReadGetRemoteRunArtifacts(reader));
+        var response = SharedEstimationProtocol.ReadRemoteRunArtifacts(reader);
+        Assert.AreEqual("run-2", response.RunId);
+        CollectionAssert.AreEqual(archive, response.Archive);
+        Assert.IsNull(response.Error);
+        Assert.AreEqual("run-2", SharedEstimationProtocol.ReadAcknowledgeRemoteRun(reader));
+    }
+
+    [TestMethod]
     public void JobSnapshots_RoundTrip()
     {
+        var projectId = Guid.NewGuid();
+        var modelSystemId = Guid.NewGuid();
         var progress = new SharedEstimationProgress("run-active", 4, 1.25, 8, 2, 3);
         var completion = new SharedEstimationCompletion("run-complete", true, 0.5,
             new[] { 0.25, 0.75 }, 12, 6, null);
         var snapshots = new[]
         {
-            new SharedEstimationJobSnapshot("run-active", SharedEstimationJobState.Running, progress, null),
-            new SharedEstimationJobSnapshot("run-complete", SharedEstimationJobState.Completed, null, completion)
+            new SharedEstimationJobSnapshot("run-active", SharedEstimationJobState.Running, progress, null,
+                ["worker-1"], "active-estimation", "/runs/active", "active-hash",
+                [new SharedEstimationParameterMetadata(4, "Transit cost", 0, 10)], projectId, modelSystemId),
+            new SharedEstimationJobSnapshot("run-complete", SharedEstimationJobState.Completed, null, completion,
+                ["worker-2"], "completed-estimation", "/runs/completed", "completed-hash",
+                [new SharedEstimationParameterMetadata(8, "Wait time", 0, 20)])
         };
 
         using var stream = new MemoryStream();
@@ -217,6 +337,13 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual(progress.BestFitness, read[0].Progress.BestFitness);
         Assert.AreEqual(progress.EvaluationsCompleted, read[0].Progress.EvaluationsCompleted);
         Assert.IsNull(read[0].Completion);
+        Assert.AreEqual("active-estimation", read[0].RunName);
+        Assert.AreEqual("/runs/active", read[0].WorkingDirectory);
+        Assert.AreEqual("active-hash", read[0].ModelSystemHash);
+        CollectionAssert.AreEqual(new[] { "worker-1" }, read[0].ActiveWorkerIds!.ToArray());
+        Assert.AreEqual(new SharedEstimationParameterMetadata(4, "Transit cost", 0, 10), read[0].Parameters![0]);
+        Assert.AreEqual(projectId, read[0].ProjectId);
+        Assert.AreEqual(modelSystemId, read[0].ModelSystemId);
         Assert.AreEqual(SharedEstimationJobState.Completed, read[1].State);
         Assert.IsNull(read[1].Progress);
         Assert.IsNotNull(read[1].Completion);

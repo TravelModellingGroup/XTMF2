@@ -10,7 +10,7 @@
         WindowStartupLocation="CenterOwner"
         CanResize="False">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="20">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="20">
         <TextBlock Grid.Row="0"
                    Text="Enter a name for this run:"
                    FontSize="14"
@@ -30,7 +30,13 @@
                TextWrapping="Wrap"
                IsVisible="{Binding IsRunNameInvalid}"/>
 
-        <StackPanel Grid.Row="3"
+        <CheckBox Grid.Row="3"
+              Content="Use multiple RunServers for distributed estimation"
+              IsVisible="{Binding AllowMultipleRunServers}"
+              IsChecked="{Binding UseMultipleRunServers, Mode=TwoWay}"
+              Margin="0,14,0,0"/>
+
+        <StackPanel Grid.Row="4"
                     IsVisible="{Binding IsSingleRunServerSelectionVisible}"
                     Margin="0,14,0,0"
                     Spacing="6">
@@ -49,13 +55,13 @@
             </ComboBox>
         </StackPanel>
 
-        <StackPanel Grid.Row="3"
-                    IsVisible="{Binding AllowMultipleRunServers}"
+        <StackPanel Grid.Row="4"
+                IsVisible="{Binding IsMultipleRunServerSelectionVisible}"
                     Margin="0,14,0,0"
                     Spacing="6">
             <TextBlock Text="Estimation coordinator"
                        FontSize="14"/>
-            <ComboBox ItemsSource="{Binding SelectedRunServers}"
+            <ComboBox ItemsSource="{Binding RunServers}"
                       SelectedItem="{Binding SelectedCoordinatorRunServer}"
                       HorizontalAlignment="Stretch"
                       Margin="0,0,0,4">
@@ -85,7 +91,7 @@
                        TextWrapping="Wrap"/>
         </StackPanel>
 
-        <StackPanel Grid.Row="4"
+        <StackPanel Grid.Row="5"
                 IsVisible="{Binding IsStartSelectionVisible}"
                 Margin="0,14,0,0"
                 Spacing="6">
@@ -97,7 +103,7 @@
                 TabIndex="2"/>
         </StackPanel>
 
-        <ScrollViewer Grid.Row="5"
+        <ScrollViewer Grid.Row="6"
                       MaxHeight="260"
                       IsVisible="{Binding IsPathOverridesVisible}"
                       Margin="0,14,0,0"
@@ -105,7 +111,7 @@
             <StackPanel x:Name="PathOverridesPanel" Spacing="8"/>
         </ScrollViewer>
 
-        <StackPanel Grid.Row="6"
+        <StackPanel Grid.Row="7"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="10"

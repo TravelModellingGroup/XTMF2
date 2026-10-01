@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -79,6 +80,28 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
         observer.SendSharedEstimationJobSnapshots(snapshots);
     }
 
+    public IReadOnlyList<RunServerActivity> GetActiveActivities()
+    {
+        lock (_sync)
+        {
+            return _jobs.Values
+                .Select(job => job.GetSnapshot())
+                .Where(snapshot => snapshot.State == SharedEstimationJobState.Running)
+                .Select(snapshot => new RunServerActivity(snapshot.RunId,
+                    string.IsNullOrWhiteSpace(snapshot.RunName) ? "Shared estimation" : snapshot.RunName,
+                    "Shared estimation coordinator", RunServerActivityState.Running,
+                    snapshot.Progress is { } progress
+                        ? $"Iteration {progress.Iteration}; {progress.EvaluationsCompleted} evaluations completed, {progress.EvaluationsPending} pending."
+                        : "Preparing shared estimation.",
+                    Iteration: snapshot.Progress?.Iteration ?? 0,
+                    Fitness: snapshot.Progress?.BestFitness ?? double.NaN,
+                    ActiveWorkers: snapshot.ActiveWorkerIds?.Count ?? 0,
+                    EvaluationsCompleted: snapshot.Progress?.EvaluationsCompleted ?? 0,
+                    EvaluationsPending: snapshot.Progress?.EvaluationsPending ?? 0))
+                .ToArray();
+        }
+    }
+
     public void Dispose()
     {
         RemoteJob[] jobs;
@@ -154,7 +177,12 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
             {
                 return new SharedEstimationJobSnapshot(RunId,
                     _completed ? SharedEstimationJobState.Completed : SharedEstimationJobState.Running,
-                    _progress, _completion, _pool?.WorkerIds);
+                    _progress, _completion, _pool?.WorkerIds,
+                    Path.GetFileName(_request.Run.WorkingDirectory.TrimEnd(Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar)),
+                    _request.Run.WorkingDirectory,
+                    Convert.ToHexString(SHA256.HashData(_request.Run.ModelSystem)),
+                    _request.Parameters?.ToArray(), _request.Run.ProjectId, _request.Run.ModelSystemId);
             }
         }
 

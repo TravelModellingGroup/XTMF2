@@ -87,4 +87,26 @@ public partial class RunsView : UserControl
         mainWindow.FocusEditorTab(editor);
         editor.NavigateToElementById(elementId);
     }
+
+    private void BindRecoveredRunButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm?.SelectedRun is not { IsRecoveredRunUnbound: true } run)
+            return;
+        if (TopLevel.GetTopLevel(this) is not MainWindow mainWindow)
+            return;
+        if (!mainWindow.BindRecoveredRunToActiveModelSystem(run.RunId, out var error))
+        {
+            run.AppendStatus(error ?? "Unable to bind the recovered run.");
+            return;
+        }
+        run.AppendStatus("Bound to the active model system.");
+    }
+
+    private void RetryRemoteReceiptButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm?.SelectedRun is not { } run || TopLevel.GetTopLevel(this) is not MainWindow mainWindow)
+            return;
+        if (!mainWindow.RetryRemoteRunReceipt(run.RunId, out var error))
+            run.AppendStatus(error ?? "Unable to retry the remote output receipt.");
+    }
 }
