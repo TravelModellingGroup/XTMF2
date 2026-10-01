@@ -426,6 +426,9 @@ namespace XTMF2.Bus
             var algorithm = algorithmConfig.CreateAlgorithm(n, lower, upper, initial, isMaximize);
 
             int iterationCount = 0;
+            int fitnessTestsThisIteration = 0;
+            int currentIteration = 1;
+            double lastReportedFitness = double.NaN;
             RunError? firstRunError = null;
             double[]? latestValues = null;
 
@@ -439,6 +442,7 @@ namespace XTMF2.Bus
             {
                 if (_cancelRequested) return double.MaxValue;
                 iterationCount++;
+                fitnessTestsThisIteration++;
                 for (int i = 0; i < paramEntries.Count; i++)
                     paramEntries[i].setter(values[i]);
                 try
@@ -459,7 +463,14 @@ namespace XTMF2.Bus
                     return double.MaxValue;
                 }
                 latestValues = (double[])values.Clone();
-                return fitnessReader();
+                double fitness = fitnessReader();
+                lastReportedFitness = fitness;
+                var progressValues = paramEntries
+                    .Select((p, i) => (p.nodeIndex, latestValues?[i] ?? p.entry.NullHypothesis))
+                    .ToList();
+                client.SendIterationProgress(
+                    ID, currentIteration, lastReportedFitness, fitnessTestsThisIteration, progressValues);
+                return fitness;
             }
             try
             {
@@ -481,7 +492,10 @@ namespace XTMF2.Bus
                         var progressValues = paramEntries
                             .Select((p, i) => (p.nodeIndex, latestValues?[i] ?? p.entry.NullHypothesis))
                             .ToList();
-                        client.SendIterationProgress(ID, iter, fitness, progressValues);
+                        client.SendIterationProgress(ID, iter, fitness, fitnessTestsThisIteration, progressValues);
+                        fitnessTestsThisIteration = 0;
+                        currentIteration = iter + 1;
+                        lastReportedFitness = fitness;
                     },
                     shouldCancel: () => _cancelRequested);
             }
@@ -648,7 +662,7 @@ namespace XTMF2.Bus
                     var calibProgressValues = paramEntries
                         .Select((p, i) => (p.nodeIndex, current[i]))
                         .ToList();
-                    client.SendIterationProgress(ID, iter + 1, maxDelta, calibProgressValues);
+                    client.SendIterationProgress(ID, iter + 1, maxDelta, 1, calibProgressValues);
 
                     if (converged) break;
                 }

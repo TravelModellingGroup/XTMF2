@@ -25,18 +25,28 @@ public class TestSharedEstimationCoordinator
             Candidate("candidate-2"),
             Candidate("candidate-3")
         };
-        var evaluation = coordinator.EvaluateAsync(candidates);
+        var completed = new List<(string WorkerId, SharedEstimationEvaluationResult Result)>();
+        var evaluation = coordinator.EvaluateAsync(candidates,
+            evaluationCompleted: (workerId, _, result) => completed.Add((workerId, result)));
 
+        Assert.HasCount(1, first.SentBatches.Single());
+        Assert.HasCount(1, second.SentBatches.Single());
         Assert.AreEqual("candidate-1", first.Sent.Single().CandidateId);
         Assert.AreEqual("candidate-2", second.Sent.Single().CandidateId);
 
-        second.Complete(2.0);
-        Assert.AreEqual("candidate-3", second.Sent.Skip(1).Single().CandidateId);
-        first.Complete(1.0);
-        second.Complete(3.0);
+        second.Complete("candidate-2", 2.0);
+        Assert.HasCount(1, completed);
+        Assert.AreEqual("candidate-3", second.Sent.Last().CandidateId);
+        Assert.HasCount(1, second.SentBatches.Last());
+        first.Complete("candidate-1", 1.0);
+        Assert.HasCount(2, completed);
+        second.Complete("candidate-3", 3.0);
+        Assert.HasCount(3, completed);
 
         var results = await evaluation;
         Assert.HasCount(3, results);
+        CollectionAssert.AreEquivalent(new[] { "worker-1", "worker-2", "worker-2" },
+            completed.Select(item => item.WorkerId).ToArray());
         CollectionAssert.AreEqual(
             new[] { "candidate-1", "candidate-2", "candidate-3" },
             results.Select(result => result.CandidateId).ToArray());
@@ -48,19 +58,48 @@ public class TestSharedEstimationCoordinator
         using var coordinator = new SharedEstimationCoordinator();
         using var first = new FakeWorker("worker-1");
         using var replacement = new FakeWorker("worker-2");
+        using var finalWorker = new FakeWorker("worker-3");
         Assert.IsTrue(coordinator.AddWorker(first, out var error), error);
+        Assert.IsTrue(coordinator.AddWorker(replacement, out error), error);
 
         var evaluation = coordinator.EvaluateAsync([Candidate("candidate-1")]);
         first.Disconnect();
-        Assert.AreEqual(0, coordinator.ActiveWorkerCount);
+        Assert.AreEqual(1, coordinator.ActiveWorkerCount);
 
-        Assert.IsTrue(coordinator.AddWorker(replacement, out error), error);
         Assert.AreEqual("candidate-1", replacement.Sent.Single().CandidateId);
-        replacement.Complete(4.0);
+        first.Complete("candidate-1", 99.0);
+        replacement.Disconnect();
+        Assert.IsTrue(coordinator.AddWorker(finalWorker, out error), error);
+        Assert.AreEqual("candidate-1", finalWorker.Sent.Single().CandidateId);
+        finalWorker.Complete("candidate-1", 4.0);
 
         var result = (await evaluation).Single();
         Assert.AreEqual("candidate-1", result.CandidateId);
         Assert.AreEqual(4.0, result.Fitness);
+    }
+
+    [TestMethod]
+    public async Task EvaluateAsync_DistributesSequentialCandidatesRoundRobin()
+    {
+        using var coordinator = new SharedEstimationCoordinator();
+        using var first = new FakeWorker("worker-1");
+        using var second = new FakeWorker("worker-2");
+        Assert.IsTrue(coordinator.AddWorker(first, out var error), error);
+        Assert.IsTrue(coordinator.AddWorker(second, out error), error);
+
+        var firstEvaluation = coordinator.EvaluateAsync([Candidate("candidate-1")]);
+        first.Complete("candidate-1", 1.0);
+        await firstEvaluation;
+
+        var secondEvaluation = coordinator.EvaluateAsync([Candidate("candidate-2")]);
+        Assert.AreEqual("candidate-2", second.Sent.Single().CandidateId);
+        second.Complete("candidate-2", 2.0);
+        await secondEvaluation;
+
+        var nextFirstEvaluation = coordinator.EvaluateAsync([Candidate("candidate-3")]);
+        Assert.AreEqual("candidate-3", first.Sent.Last().CandidateId);
+        first.Complete("candidate-3", 3.0);
+        await nextFirstEvaluation;
     }
 
     private static SharedEstimationCandidate Candidate(string id)
@@ -70,6 +109,7 @@ public class TestSharedEstimationCoordinator
     {
         public string WorkerId { get; } = workerId;
         public List<SharedEstimationCandidate> Sent { get; } = [];
+        public List<IReadOnlyList<SharedEstimationCandidate>> SentBatches { get; } = [];
         public bool IsDisposed { get; private set; }
 
         public event EventHandler<IReadOnlyList<SharedEstimationEvaluationResult>> ResultsReceived;
@@ -79,12 +119,13 @@ public class TestSharedEstimationCoordinator
         {
             error = null;
             Sent.AddRange(candidates);
+            SentBatches.Add(candidates.ToArray());
             return !IsDisposed;
         }
 
-        public void Complete(double fitness)
+        public void Complete(string candidateId, double fitness)
         {
-            var candidate = Sent.Last();
+            var candidate = Sent.Single(candidate => candidate.CandidateId == candidateId);
             ResultsReceived?.Invoke(this, [new SharedEstimationEvaluationResult(
                 candidate.RunId, candidate.BatchId, candidate.CandidateId, fitness, null, null, null)]);
         }

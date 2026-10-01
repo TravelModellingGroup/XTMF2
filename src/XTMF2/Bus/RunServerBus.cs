@@ -212,11 +212,12 @@ namespace XTMF2.Bus
                                     var runId = reader.ReadString();
                                     int iteration = reader.ReadInt32();
                                     double fitness = reader.ReadDouble();
+                                    int fitnessTestsThisIteration = reader.ReadInt32();
                                     int count = reader.ReadInt32();
                                     var values = new (int nodeIndex, double value)[count];
                                     for (int i = 0; i < count; i++)
                                         values[i] = (reader.ReadInt32(), reader.ReadDouble());
-                                    SendIterationProgress(runId, iteration, fitness, values);
+                                    SendIterationProgress(runId, iteration, fitness, fitnessTestsThisIteration, values);
                                 }
                                 break;
                             default:
@@ -319,6 +320,9 @@ namespace XTMF2.Bus
         public void SendSharedEstimationCompletion(SharedEstimationCompletion completion)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCompletion(writer, completion));
 
+        public void SendSharedEstimationStatus(SharedEstimationStatus status)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteStatus(writer, status));
+
         public void SendSharedEstimationJobSnapshots(IReadOnlyList<SharedEstimationJobSnapshot> snapshots)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteJobSnapshots(writer, snapshots));
 
@@ -358,7 +362,7 @@ namespace XTMF2.Bus
         /// Sends the per-iteration parameter snapshot to the host for live display.
         /// </summary>
         internal void SendIterationProgress(string runId, int iteration, double fitness,
-            IReadOnlyList<(int nodeIndex, double value)> values)
+            int fitnessTestsThisIteration, IReadOnlyList<(int nodeIndex, double value)> values)
         {
             Write((writer) =>
             {
@@ -366,6 +370,7 @@ namespace XTMF2.Bus
                 writer.Write(runId);
                 writer.Write(iteration);
                 writer.Write(fitness);
+                writer.Write(fitnessTestsThisIteration);
                 writer.Write(values.Count);
                 foreach (var (idx, val) in values)
                 {
@@ -483,7 +488,7 @@ namespace XTMF2.Bus
                                 {
                                     case SharedEstimationMessageType.StartCoordinator:
                                         SharedEstimationCoordinatorRequested?.Invoke(this,
-                                            SharedEstimationProtocol.ReadCoordinatorRequestPayload(reader));
+                                            SharedEstimationProtocol.ReadCoordinatorRequestPayload(reader, protocolVersion));
                                         break;
                                     case SharedEstimationMessageType.StartRun:
                                         SharedEstimationRunRequested?.Invoke(this,

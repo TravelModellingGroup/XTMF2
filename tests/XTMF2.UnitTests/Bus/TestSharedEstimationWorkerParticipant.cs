@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
 using XTMF2.ModelSystemConstruct;
@@ -52,6 +53,18 @@ public class TestSharedEstimationWorkerParticipant
             Assert.AreEqual("candidate-1", result.CandidateId);
             Assert.AreEqual(2.5, result.Fitness, 0.0001);
             Assert.IsNull(result.Error);
+
+            Assert.IsTrue(SharedEstimationLocalWorker.TryCreate(
+                "coordinator", CreateRuntime(), request, out var localWorker, out var localError), localError);
+            using (localWorker)
+            using (var coordinator = new SharedEstimationCoordinator())
+            {
+                Assert.IsTrue(coordinator.AddWorker(localWorker!, out var addError), addError);
+                var localResult = coordinator.EvaluateAsync([new SharedEstimationCandidate(
+                    "shared-run", 2, "coordinator-candidate", new[] { 0.25 })]).GetAwaiter().GetResult().Single();
+                Assert.AreEqual(2.5, localResult.Fitness, 0.0001);
+                Assert.IsNull(localResult.Error);
+            }
         });
     }
 }

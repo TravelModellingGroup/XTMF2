@@ -8,11 +8,11 @@ namespace XTMF2.Bus;
 
 public sealed class SharedEstimationCoordinator : IDisposable
 {
-    private const int MaximumAttempts = 3;
     private readonly object _gate = new();
     private readonly Dictionary<string, WorkerSlot> _workers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, PendingEvaluation> _pending = new(StringComparer.Ordinal);
     private readonly List<EvaluationBatch> _batches = [];
+    private string? _lastAssignedWorkerId;
     private bool _disposed;
 
     public event Action<string>? WorkerRemoved;
@@ -31,6 +31,7 @@ public sealed class SharedEstimationCoordinator : IDisposable
         ArgumentNullException.ThrowIfNull(worker);
         error = null;
         List<Dispatch> dispatches;
+        List<(EvaluationBatch Batch, SharedEstimationEvaluationResult Result)> completed = [];
         lock (_gate)
         {
             ThrowIfDisposed();
@@ -78,7 +79,8 @@ public sealed class SharedEstimationCoordinator : IDisposable
 
     public Task<IReadOnlyList<SharedEstimationEvaluationResult>> EvaluateAsync(
         IReadOnlyList<SharedEstimationCandidate> candidates,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<string, SharedEstimationCandidate, SharedEstimationEvaluationResult>? evaluationCompleted = null)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         if (candidates.Count == 0)
@@ -86,8 +88,9 @@ public sealed class SharedEstimationCoordinator : IDisposable
         if (cancellationToken.IsCancellationRequested)
             return Task.FromCanceled<IReadOnlyList<SharedEstimationEvaluationResult>>(cancellationToken);
 
-        var batch = new EvaluationBatch(candidates);
+        var batch = new EvaluationBatch(candidates, evaluationCompleted);
         List<Dispatch> dispatches;
+        List<(Action<SharedEstimationEvaluationResult>? Callback, SharedEstimationEvaluationResult Result)> completed = [];
         lock (_gate)
         {
             ThrowIfDisposed();
@@ -139,6 +142,8 @@ public sealed class SharedEstimationCoordinator : IDisposable
             return;
 
         List<Dispatch> dispatches;
+        List<(EvaluationBatch Batch, string WorkerId, SharedEstimationCandidate Candidate,
+            SharedEstimationEvaluationResult Result)> completed = [];
         lock (_gate)
         {
             if (_disposed || !_workers.ContainsKey(worker.WorkerId))
@@ -146,18 +151,39 @@ public sealed class SharedEstimationCoordinator : IDisposable
 
             foreach (var result in results)
             {
+                if (_workers.TryGetValue(worker.WorkerId, out var assignedSlot)
+                    && assignedSlot.AssignedCandidateId == result.CandidateId)
+                    assignedSlot.AssignedCandidateId = null;
+
                 if (!_pending.TryGetValue(result.CandidateId, out var pending)
                     || pending.AssignedWorkerId != worker.WorkerId)
                     continue;
 
                 _pending.Remove(result.CandidateId);
-                if (_workers.TryGetValue(worker.WorkerId, out var slot)
-                    && slot.AssignedCandidateId == result.CandidateId)
-                    slot.AssignedCandidateId = null;
                 pending.Batch.Results[result.CandidateId] = result;
-                TryCompleteBatchLocked(pending.Batch);
+                pending.Batch.PendingProgressCallbacks++;
+                completed.Add((pending.Batch, worker.WorkerId, pending.Candidate, result));
             }
             dispatches = BuildDispatchesLocked();
+        }
+
+        foreach (var item in completed)
+        {
+            try
+            {
+                item.Batch.EvaluationCompleted?.Invoke(item.WorkerId, item.Candidate, item.Result);
+            }
+            catch (Exception)
+            {
+            }
+            finally
+            {
+                lock (_gate)
+                {
+                    item.Batch.PendingProgressCallbacks--;
+                    TryCompleteBatchLocked(item.Batch);
+                }
+            }
         }
 
         SendDispatches(dispatches);
@@ -189,18 +215,25 @@ public sealed class SharedEstimationCoordinator : IDisposable
     private List<Dispatch> BuildDispatchesLocked()
     {
         var dispatches = new List<Dispatch>();
-        foreach (var slot in _workers.Values)
+        var workers = _workers.Values.ToArray();
+        if (workers.Length == 0)
+            return dispatches;
+
+        int startIndex = Array.FindIndex(workers,
+            slot => slot.Worker.WorkerId == _lastAssignedWorkerId);
+        startIndex = (startIndex + 1) % workers.Length;
+        var unassigned = _pending.Values.Where(pending => pending.AssignedWorkerId is null).ToArray();
+        int candidateIndex = 0;
+        for (int offset = 0; offset < workers.Length && candidateIndex < unassigned.Length; offset++)
         {
+            var slot = workers[(startIndex + offset) % workers.Length];
             if (slot.AssignedCandidateId is not null)
                 continue;
 
-            var pending = _pending.Values.FirstOrDefault(p => p.AssignedWorkerId is null);
-            if (pending is null)
-                break;
-
+            var pending = unassigned[candidateIndex++];
             pending.AssignedWorkerId = slot.Worker.WorkerId;
-            pending.Attempts++;
             slot.AssignedCandidateId = pending.Candidate.CandidateId;
+            _lastAssignedWorkerId = slot.Worker.WorkerId;
             dispatches.Add(new Dispatch(slot.Worker, pending.Candidate));
         }
         return dispatches;
@@ -218,30 +251,12 @@ public sealed class SharedEstimationCoordinator : IDisposable
 
     private void RequeueWorkerJobsLocked(string workerId)
     {
-        var failed = new List<PendingEvaluation>();
         foreach (var pending in _pending.Values.ToArray())
         {
             if (pending.AssignedWorkerId != workerId)
                 continue;
 
             pending.AssignedWorkerId = null;
-            if (pending.Attempts >= MaximumAttempts)
-                failed.Add(pending);
-        }
-
-        foreach (var pending in failed)
-        {
-            _pending.Remove(pending.Candidate.CandidateId);
-            pending.Batch.Results[pending.Candidate.CandidateId] =
-                new SharedEstimationEvaluationResult(
-                    pending.Candidate.RunId,
-                    pending.Candidate.BatchId,
-                    pending.Candidate.CandidateId,
-                    double.MaxValue,
-                    $"Candidate evaluation failed after {MaximumAttempts} worker attempts.",
-                    null,
-                    null);
-            TryCompleteBatchLocked(pending.Batch);
         }
     }
 
@@ -255,18 +270,12 @@ public sealed class SharedEstimationCoordinator : IDisposable
                 _pending.Remove(candidate.CandidateId);
             _batches.Remove(batch);
             batch.Completion.TrySetCanceled();
-            foreach (var slot in _workers.Values)
-            {
-                if (slot.AssignedCandidateId is not null
-                    && batch.Candidates.Any(c => c.CandidateId == slot.AssignedCandidateId))
-                    slot.AssignedCandidateId = null;
-            }
         }
     }
 
     private void TryCompleteBatchLocked(EvaluationBatch batch)
     {
-        if (batch.Results.Count != batch.Candidates.Count)
+        if (batch.Results.Count != batch.Candidates.Count || batch.PendingProgressCallbacks != 0)
             return;
         _batches.Remove(batch);
         batch.Cancellation.Dispose();
@@ -297,12 +306,15 @@ public sealed class SharedEstimationCoordinator : IDisposable
         public EvaluationBatch Batch { get; } = batch;
         public SharedEstimationCandidate Candidate { get; } = candidate;
         public string? AssignedWorkerId { get; set; }
-        public int Attempts { get; set; }
     }
 
-    private sealed class EvaluationBatch(IReadOnlyList<SharedEstimationCandidate> candidates)
+    private sealed class EvaluationBatch(
+        IReadOnlyList<SharedEstimationCandidate> candidates,
+        Action<string, SharedEstimationCandidate, SharedEstimationEvaluationResult>? evaluationCompleted)
     {
         public IReadOnlyList<SharedEstimationCandidate> Candidates { get; } = candidates;
+        public Action<string, SharedEstimationCandidate, SharedEstimationEvaluationResult>? EvaluationCompleted { get; } = evaluationCompleted;
+        public int PendingProgressCallbacks { get; set; }
         public Dictionary<string, SharedEstimationEvaluationResult> Results { get; } = new(StringComparer.Ordinal);
         public TaskCompletionSource<IReadOnlyList<SharedEstimationEvaluationResult>> Completion { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);

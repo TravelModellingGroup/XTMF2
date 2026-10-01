@@ -25,6 +25,9 @@ public sealed class SharedEstimationWorkerSession : IDisposable
 
     private void OnRunRequested(object sender, SharedEstimationRunRequest request)
     {
+        Console.WriteLine($"RunServer estimation run issued: {request.RunId}");
+        Console.Out.Flush();
+
         SharedEstimationWorkerParticipant? participant = null;
         RunError? error = null;
         try
@@ -44,6 +47,9 @@ public sealed class SharedEstimationWorkerSession : IDisposable
             _participant = participant;
             _preparationError = error;
         }
+
+        _bus.SendStatusMessage(request.RunId,
+            "[Estimation] RunServer tasked with a shared estimation run.");
     }
 
     private void OnCandidatesReceived(object sender, IReadOnlyList<SharedEstimationCandidate> candidates)
@@ -83,7 +89,8 @@ public sealed class SharedEstimationWorkerSession : IDisposable
             }
         }
 
-        _bus.SendSharedEstimationResults(results);
+        foreach (var result in results)
+            _bus.SendSharedEstimationResults([result]);
     }
 
     private void OnCancellationRequested(object sender, string runId, string? reason)

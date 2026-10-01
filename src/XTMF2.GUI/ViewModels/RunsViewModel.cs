@@ -77,13 +77,13 @@ public sealed partial class RunsViewModel : ObservableObject
     /// <summary>
     /// Marks the run with <paramref name="runId"/> as finished.  Safe to call from any thread.
     /// </summary>
-    internal void NotifyFinished(string runId)
+    internal void NotifyFinished(string runId, string? completionMessage = null)
     {
         var vm = FindRun(runId);
         if (vm is null) return;
         Dispatcher.UIThread.Post(() =>
         {
-            vm.MarkFinished();
+            vm.MarkFinished(completionMessage);
             SystemAlert.ShowRunFinished(vm.RunName);
         });
     }
@@ -151,12 +151,13 @@ public sealed partial class RunsViewModel : ObservableObject
     /// Safe to call from any thread.
     /// </summary>
     internal void NotifyIterationProgress(
-        string runId, int iteration, double fitness,
+        string runId, int iteration, double fitness, int fitnessTestsThisIteration,
         IReadOnlyList<(int nodeIndex, double value)> values)
     {
         var vm = FindRun(runId);
         if (vm is null) return;
-        Dispatcher.UIThread.Post(() => vm.UpdateIterationProgress(iteration, fitness, values));
+        Dispatcher.UIThread.Post(() => vm.UpdateIterationProgress(
+            iteration, fitness, fitnessTestsThisIteration, values));
     }
 
     internal void NotifyRemoteWorkerSnapshot(string runId, IReadOnlyCollection<string> activeWorkerIds)
@@ -172,6 +173,13 @@ public sealed partial class RunsViewModel : ObservableObject
         var vm = FindRun(acknowledgement.RunId);
         if (vm is null) return;
         Dispatcher.UIThread.Post(() => vm.ApplyRemoteWorkerAcknowledgement(acknowledgement));
+    }
+
+    internal void NotifySharedEstimationProgress(SharedEstimationProgress progress)
+    {
+        var vm = FindRun(progress.RunId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.UpdateSharedEstimationProgress(progress));
     }
 
     private RunViewModel? FindRun(string runId)

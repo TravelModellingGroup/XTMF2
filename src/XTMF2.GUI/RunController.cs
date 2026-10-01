@@ -73,7 +73,7 @@ public class RunController : IDisposable
         _remoteEstimationMetadata = new();
     private readonly Dictionary<string, IReadOnlyDictionary<string, SharedEstimationWorkerEndpoint>>
         _remoteWorkerEndpointsByRunId = new();
-    private readonly HashSet<string> _completedRemoteRuns = new(StringComparer.Ordinal);
+    private readonly SharedEstimationCompletionGate _remoteCompletionGate = new();
 
     /// <summary>
     /// Fires when an estimation or calibration run completes and has results ready to be
@@ -248,16 +248,20 @@ public class RunController : IDisposable
     }
 
     private void OnClientIterationProgressAvailable(
-        object sender, string runID, int iteration, double fitness,
+        object sender, string runID, int iteration, double fitness, int fitnessTestsThisIteration,
         IReadOnlyList<(int nodeIndex, double value)> values)
     {
-        RunsViewModel.NotifyIterationProgress(runID, iteration, fitness, values);
+        RunsViewModel.NotifyIterationProgress(runID, iteration, fitness, fitnessTestsThisIteration, values);
     }
 
     private void OnSharedEstimationProgress(object? sender, SharedEstimationProgress progress)
     {
-        RunsViewModel.NotifyStatus(progress.RunId,
-            $"[Remote estimation] iteration {progress.Iteration}: best fitness = {progress.BestFitness:G6}");
+        RunsViewModel.NotifySharedEstimationProgress(progress);
+    }
+
+    private void OnSharedEstimationStatus(object? sender, SharedEstimationStatus status)
+    {
+        RunsViewModel.NotifyStatus(status.RunId, status.Message);
     }
 
     private void OnSharedEstimationWorkerControlAcknowledged(
@@ -268,11 +272,26 @@ public class RunController : IDisposable
 
     private void OnSharedEstimationCompleted(object? sender, SharedEstimationCompletion completion)
     {
+        ModelSystemSession? session = null;
+        User? user = null;
+        IReadOnlyList<(int nodeIndex, string name, double min, double max)>? metadata = null;
+        SharedEstimationCompletion? acceptedCompletion;
         lock (_sessionsByRunId)
         {
-            if (!_completedRemoteRuns.Add(completion.RunId))
+            bool hasMetadata = _remoteEstimationMetadata.TryGetValue(completion.RunId, out metadata);
+            bool hasSession = _sessionsByRunId.TryGetValue(completion.RunId, out var entry);
+            if (hasSession)
+            {
+                session = entry.Session;
+                user = entry.User;
+            }
+            bool hasContext = hasMetadata && hasSession;
+            if (!_remoteCompletionGate.TryReceive(completion, hasContext, out acceptedCompletion) ||
+                acceptedCompletion is null)
                 return;
         }
+        if (session is null || user is null || metadata is null)
+            return;
         if (!completion.Succeeded)
         {
             RunsViewModel.NotifyError(completion.RunId,
@@ -280,23 +299,14 @@ public class RunController : IDisposable
             return;
         }
 
-        (ModelSystemSession Session, User User) entry;
-        IReadOnlyList<(int nodeIndex, string name, double min, double max)> metadata;
-        lock (_sessionsByRunId)
-        {
-            if (!_remoteEstimationMetadata.TryGetValue(completion.RunId, out var remoteMetadata))
-                return;
-            if (!_sessionsByRunId.TryGetValue(completion.RunId, out entry) ||
-                remoteMetadata is null)
-                return;
-            metadata = remoteMetadata;
-        }
-        if (completion.BestParameters.Count != metadata.Count)
+        if (metadata is null || completion.BestParameters.Count != metadata.Count)
             return;
         var results = metadata.Select((item, index) => (item.nodeIndex, completion.BestParameters[index])).ToArray();
-        RunsViewModel.NotifyOptimizationResults(completion.RunId, entry.Session, entry.User, results);
-        OptimizationResultsAvailable?.Invoke(completion.RunId, entry.Session, results);
-        RunsViewModel.NotifyFinished(completion.RunId);
+        RunsViewModel.NotifyOptimizationResults(completion.RunId, session, user, results);
+        OptimizationResultsAvailable?.Invoke(completion.RunId, session, results);
+        RunsViewModel.NotifyFinished(completion.RunId,
+            $"[Estimation] converged after {completion.TotalEvaluations} fitness test(s) " +
+            $"in {completion.Iterations} iteration(s). Best fitness = {completion.BestFitness:G6}.");
     }
 
     private void OnClientOptimizationResultsAvailable(
@@ -467,10 +477,10 @@ public class RunController : IDisposable
         {
             try
             {
-                var runner = new SharedEstimationCoordinatorRun(runId, algorithm, pool.Coordinator);
+                var runner = new SharedEstimationCoordinatorRun(runId, algorithm, pool.Coordinator,
+                    modelSystem.EstimationObjective == EstimationObjective.Maximize);
                 var completion = runner.Execute(
-                    progress: progress => RunsViewModel.NotifyStatus(runId,
-                        $"[Shared estimation] iteration {progress.Iteration}: best fitness = {progress.BestFitness:G6}"),
+                    progress: progress => RunsViewModel.NotifySharedEstimationProgress(progress),
                     cancellationToken: cancellation.Token);
                 if (!completion.Succeeded)
                 {
@@ -484,7 +494,9 @@ public class RunController : IDisposable
                     .ToArray();
                 RunsViewModel.NotifyOptimizationResults(runId, msSession, user, results);
                 OptimizationResultsAvailable?.Invoke(runId, msSession, results);
-                RunsViewModel.NotifyFinished(runId);
+                RunsViewModel.NotifyFinished(runId,
+                    $"[Estimation] converged after {completion.TotalEvaluations} fitness test(s) " +
+                    $"in {completion.Iterations} iteration(s). Best fitness = {completion.BestFitness:G6}.");
             }
             finally
             {
@@ -540,22 +552,19 @@ public class RunController : IDisposable
             .Where(endpoint => workerEndpointIds.Contains(endpoint.Id, StringComparer.Ordinal) &&
                                endpoint.Id != orchestratorEndpointId)
             .ToArray();
-        if (endpoints.Length == 0)
-        {
-            error = new CommandError("Select at least one worker RunServer in addition to the orchestrator.");
-            return false;
-        }
-
         using var modelStream = new MemoryStream();
         if (!msSession.Save(out error, modelStream))
             return false;
         var entries = enabledEntries
             .Select((entry, index) => (entry, nodeIndex: metadata[index].nodeIndex))
             .ToArray();
+        IReadOnlyDictionary<int, string>? coordinatorOverrides = null;
+        if (basicParameterOverridesByWorker is not null)
+            basicParameterOverridesByWorker.TryGetValue(orchestratorEndpointId, out coordinatorOverrides);
         var request = new SharedEstimationCoordinatorRequest(
             new SharedEstimationRunRequest(Guid.NewGuid().ToString(),
                 Path.Combine(projectSession.ProjectDirectory!, "runs", runName),
-                startToExecute, modelStream.ToArray()),
+                startToExecute, modelStream.ToArray(), coordinatorOverrides),
             endpoints.Select(endpoint => new SharedEstimationWorkerEndpoint(
                 endpoint.Id, endpoint.Id, endpoint.Address, endpoint.Port, endpoint.Token,
                 endpoint.CertificateFingerprint,
@@ -568,7 +577,8 @@ public class RunController : IDisposable
             entries.Select(item => item.entry.Min).ToArray(),
             entries.Select(item => item.entry.Max).ToArray(),
             entries.Select(item => item.entry.NullHypothesis).ToArray(),
-            modelSystem.EstimationObjective == EstimationObjective.Maximize);
+            modelSystem.EstimationObjective == EstimationObjective.Maximize,
+            UseCoordinatorAsWorker: true);
 
         if (!orchestrator.StartRemoteSharedEstimation(request, out error))
             return false;
@@ -577,7 +587,7 @@ public class RunController : IDisposable
         var submittedRunId = request.Run.RunId;
         var runDirectory = request.Run.WorkingDirectory;
         var runViewModel = RunsViewModel.AddRun(id, runName, runDirectory,
-            $"{orchestratorEndpointId} (orchestrator, {endpoints.Length} workers)", msSession, user);
+            $"{orchestratorEndpointId} (coordinator + {endpoints.Length} remote worker(s))", msSession, user);
         runViewModel.SetRunMode(RunMode.Estimation, metadata, () =>
         {
             orchestrator.CancelSharedEstimation(submittedRunId, "Cancelled by user.", out _);
@@ -602,10 +612,15 @@ public class RunController : IDisposable
             initialWorkers.Keys.ToArray(),
             workerId => ChangeRemoteEstimationWorker(submittedRunId, workerId, add: true),
             workerId => ChangeRemoteEstimationWorker(submittedRunId, workerId, add: false));
+        SharedEstimationCompletion? pendingCompletion;
         lock (_sessionsByRunId)
+        {
             _sessionsByRunId[id] = (msSession, user);
-        lock (_sessionsByRunId)
             _remoteEstimationMetadata[id] = metadata;
+            pendingCompletion = _remoteCompletionGate.MarkReady(id);
+        }
+        if (pendingCompletion is not null)
+            OnSharedEstimationCompleted(orchestrator, pendingCompletion);
         return true;
     }
 
@@ -825,6 +840,7 @@ public class RunController : IDisposable
         hostBus.SharedEstimationProgressAvailable += OnSharedEstimationProgress;
         hostBus.SharedEstimationCompleted += OnSharedEstimationCompleted;
         hostBus.SharedEstimationWorkerControlAcknowledged += OnSharedEstimationWorkerControlAcknowledged;
+        hostBus.SharedEstimationStatusAvailable += OnSharedEstimationStatus;
         hostBus.SharedEstimationJobSnapshotsAvailable += OnSharedEstimationJobSnapshotsAvailable;
         hostBus.ClientRunArtifactsReceived += OnClientRunArtifactsReceived;
         hostBus.Disconnected += OnHostBusDisconnected;
@@ -867,6 +883,7 @@ public class RunController : IDisposable
         hostBus.SharedEstimationProgressAvailable -= OnSharedEstimationProgress;
         hostBus.SharedEstimationCompleted -= OnSharedEstimationCompleted;
         hostBus.SharedEstimationWorkerControlAcknowledged -= OnSharedEstimationWorkerControlAcknowledged;
+        hostBus.SharedEstimationStatusAvailable -= OnSharedEstimationStatus;
         hostBus.SharedEstimationJobSnapshotsAvailable -= OnSharedEstimationJobSnapshotsAvailable;
         hostBus.ClientRunArtifactsReceived -= OnClientRunArtifactsReceived;
         hostBus.Disconnected -= OnHostBusDisconnected;
@@ -899,5 +916,43 @@ public class RunController : IDisposable
             }
         }
         _runServerProcess?.Dispose();
+    }
+}
+
+internal sealed class SharedEstimationCompletionGate
+{
+    private readonly object _sync = new();
+    private readonly HashSet<string> _completedRunIds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SharedEstimationCompletion> _pending = new(StringComparer.Ordinal);
+
+    public bool TryReceive(SharedEstimationCompletion completion, bool contextReady,
+        out SharedEstimationCompletion? accepted)
+    {
+        lock (_sync)
+        {
+            accepted = null;
+            if (_completedRunIds.Contains(completion.RunId))
+                return false;
+            if (!contextReady)
+            {
+                _pending[completion.RunId] = completion;
+                return true;
+            }
+
+            _pending.Remove(completion.RunId);
+            _completedRunIds.Add(completion.RunId);
+            accepted = completion;
+            return true;
+        }
+    }
+
+    public SharedEstimationCompletion? MarkReady(string runId)
+    {
+        lock (_sync)
+        {
+            if (_completedRunIds.Contains(runId) || !_pending.Remove(runId, out var completion))
+                return null;
+            return completion;
+        }
     }
 }

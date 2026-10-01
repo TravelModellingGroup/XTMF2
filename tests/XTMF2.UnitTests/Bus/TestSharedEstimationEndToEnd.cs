@@ -75,12 +75,23 @@ public class TestSharedEstimationEndToEnd
                         var algorithm = new FixedBatchAlgorithm();
                         var runner = new SharedEstimationCoordinatorRun(
                             request.RunId, algorithm, pool.Coordinator);
-                        var completion = runner.Execute();
+                        var progressUpdates = new List<SharedEstimationProgress>();
+                        var completion = runner.Execute(progressUpdates.Add);
 
                         Assert.IsTrue(completion.Succeeded, completion.FailureReason);
                         Assert.AreEqual(4, completion.TotalEvaluations);
                         Assert.AreEqual(2.5, completion.BestFitness, 0.0001);
                         Assert.AreEqual(1, completion.Iterations);
+                        Assert.IsGreaterThanOrEqualTo(4, progressUpdates.Count);
+                        Assert.IsTrue(progressUpdates.All(progress => double.IsFinite(progress.BestFitness)));
+                        Assert.AreEqual(2.5, progressUpdates[0].BestFitness, 0.0001);
+                        CollectionAssert.AreEqual(new[] { 1, 2, 3, 4 },
+                            progressUpdates.Take(4).Select(progress => progress.EvaluationsCompleted).ToArray());
+                        var finalProgress = progressUpdates.Last();
+                        Assert.AreEqual(4, finalProgress.EvaluationsByWorker.Values.Sum());
+                        CollectionAssert.AreEquivalent(new[] { "worker-1", "worker-2" },
+                            finalProgress.EvaluationsByWorker.Keys.ToArray());
+                        CollectionAssert.AreEqual(new[] { 0.1 }, finalProgress.BestParameters.ToArray());
                     });
                 });
             }

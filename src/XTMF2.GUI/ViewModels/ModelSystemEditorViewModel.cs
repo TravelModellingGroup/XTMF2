@@ -3567,7 +3567,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         var project = Session.Project;
         CommandError? runError;
-        bool started = endpointIds.Count > 1 && orchestratorEndpointId is not null
+        bool started = orchestratorEndpointId is not null
             ? _runController.SendRemoteSharedEstimationRun(project, Session, User, startToExecute, runName,
                 orchestratorEndpointId, endpointIds, pathOverrides, out _, out runError)
             : _runController.SendEstimationRun(project, Session, User, startToExecute, runName,

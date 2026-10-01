@@ -14,17 +14,27 @@ public sealed class SharedEstimationCoordinatorRun
     private readonly SharedEstimationCoordinator _coordinator;
     private readonly IEstimationAlgorithm _algorithm;
     private readonly string _runId;
+    private readonly bool _isMaximize;
+    private readonly object _progressSync = new();
+    private readonly Dictionary<string, int> _evaluationsByWorker = new(StringComparer.Ordinal);
     private long _nextBatchId;
     private long _nextCandidateId;
     private int _evaluationsCompleted;
+    private int _fitnessTestsThisIteration;
     private int _iterations;
+    private int _currentIteration;
+    private Action<SharedEstimationProgress>? _progressCallback;
+    private double _lastReportedFitness;
+    private double[] _bestObservedParameters = [];
+    private bool _hasObservedFitness;
     private string? _failureReason;
     private CancellationToken _cancellationToken;
 
     public SharedEstimationCoordinatorRun(
         string runId,
         IEstimationAlgorithm algorithm,
-        SharedEstimationCoordinator coordinator)
+        SharedEstimationCoordinator coordinator,
+        bool isMaximize = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
         ArgumentNullException.ThrowIfNull(algorithm);
@@ -32,6 +42,7 @@ public sealed class SharedEstimationCoordinatorRun
         _runId = runId;
         _algorithm = algorithm;
         _coordinator = coordinator;
+        _isMaximize = isMaximize;
     }
 
     public SharedEstimationCompletion Execute(
@@ -40,6 +51,15 @@ public sealed class SharedEstimationCoordinatorRun
         CancellationToken cancellationToken = default)
     {
         _cancellationToken = cancellationToken;
+        _fitnessTestsThisIteration = 0;
+        _evaluationsByWorker.Clear();
+        _bestObservedParameters = [];
+        _currentIteration = 1;
+        _lastReportedFitness = _algorithm.BestFitness;
+        if (!double.IsFinite(_lastReportedFitness))
+            _lastReportedFitness = _isMaximize ? double.MinValue : double.MaxValue;
+        _hasObservedFitness = false;
+        _progressCallback = progress;
         try
         {
             _algorithm.RunBatch(
@@ -47,14 +67,19 @@ public sealed class SharedEstimationCoordinatorRun
                 batchFitnessEvaluator: EvaluateBatch,
                 progressCallback: (iteration, bestFitness) =>
                 {
-                    _iterations = Math.Max(_iterations, iteration);
-                    progress?.Invoke(new SharedEstimationProgress(
-                        _runId,
-                        iteration,
-                        bestFitness,
-                        _evaluationsCompleted,
-                        0,
-                        _coordinator.ActiveWorkerCount));
+                    lock (_progressSync)
+                    {
+                        _iterations = Math.Max(_iterations, iteration);
+                        if (double.IsFinite(bestFitness))
+                        {
+                            _lastReportedFitness = bestFitness;
+                            _bestObservedParameters = (double[])_algorithm.BestParameters.Clone();
+                            _hasObservedFitness = true;
+                        }
+                        progress?.Invoke(CreateProgress(iteration));
+                        _fitnessTestsThisIteration = 0;
+                        _currentIteration = iteration + 1;
+                    }
                 },
                 shouldCancel: shouldCancel);
 
@@ -107,15 +132,15 @@ public sealed class SharedEstimationCoordinatorRun
             $"{_runId}:{Interlocked.Increment(ref _nextCandidateId)}",
             values)).ToArray();
 
-        var results = _coordinator.EvaluateAsync(candidates, _cancellationToken).GetAwaiter().GetResult();
+        var results = _coordinator.EvaluateAsync(candidates, _cancellationToken, OnEvaluationCompleted)
+            .GetAwaiter().GetResult();
         var fitnesses = new double[results.Count];
         for (int i = 0; i < results.Count; i++)
         {
-            _evaluationsCompleted++;
-            if (results[i].Error is not null)
+            if (results[i].Error is not null || !double.IsFinite(results[i].Fitness))
             {
-                _failureReason ??= results[i].Error;
-                fitnesses[i] = double.MaxValue;
+                _failureReason ??= results[i].Error ?? "A worker returned a non-finite fitness value.";
+                fitnesses[i] = _isMaximize ? double.MinValue : double.MaxValue;
             }
             else
             {
@@ -124,4 +149,35 @@ public sealed class SharedEstimationCoordinatorRun
         }
         return fitnesses;
     }
+
+    private void OnEvaluationCompleted(
+        string workerId, SharedEstimationCandidate candidate, SharedEstimationEvaluationResult result)
+    {
+        lock (_progressSync)
+        {
+            _evaluationsCompleted++;
+            _fitnessTestsThisIteration++;
+            _evaluationsByWorker[workerId] = _evaluationsByWorker.GetValueOrDefault(workerId) + 1;
+            if (result.Error is not null || !double.IsFinite(result.Fitness))
+            {
+                _failureReason ??= result.Error ?? "A worker returned a non-finite fitness value.";
+            }
+            else if (!_hasObservedFitness ||
+                     (_isMaximize ? result.Fitness > _lastReportedFitness : result.Fitness < _lastReportedFitness))
+            {
+                _lastReportedFitness = result.Fitness;
+                _bestObservedParameters = candidate.Parameters.ToArray();
+                _hasObservedFitness = true;
+            }
+
+            _progressCallback?.Invoke(CreateProgress(_currentIteration));
+        }
+    }
+
+    private SharedEstimationProgress CreateProgress(int iteration)
+        => new(_runId, iteration, _hasObservedFitness ? _lastReportedFitness : double.NaN,
+            _evaluationsCompleted, 0,
+            _coordinator.ActiveWorkerCount, _fitnessTestsThisIteration,
+            new Dictionary<string, int>(_evaluationsByWorker),
+            (double[])_bestObservedParameters.Clone());
 }

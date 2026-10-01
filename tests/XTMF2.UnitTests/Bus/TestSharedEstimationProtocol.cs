@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
 using XTMF2.Bus.Optimization;
@@ -19,7 +20,7 @@ public class TestSharedEstimationProtocol
                 "token", "fingerprint", new Dictionary<int, string> { [7] = "/worker/input" })],
             "NelderMead",
             [new AlgorithmParameterDescriptor { Key = "MaxIterations", Label = "Max Iterations", Hint = "limit", Value = "12" }],
-            [0.0], [1.0], [0.5], false);
+            [0.0], [1.0], [0.5], false, UseCoordinatorAsWorker: false);
 
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
@@ -37,6 +38,7 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual(request.AlgorithmId, read.AlgorithmId);
         Assert.AreEqual(request.AlgorithmParameters[0].Value, read.AlgorithmParameters[0].Value);
         Assert.AreEqual(request.InitialValues[0], read.InitialValues[0]);
+        Assert.AreEqual(request.UseCoordinatorAsWorker, read.UseCoordinatorAsWorker);
     }
 
     [TestMethod]
@@ -86,7 +88,10 @@ public class TestSharedEstimationProtocol
             new SharedEstimationEvaluationResult("run-1", 4, "candidate-2", double.MaxValue,
                 "worker failed", "Module", Guid.Parse("11111111-1111-1111-1111-111111111111"))
         };
-        var progress = new SharedEstimationProgress("run-1", 2, 0.25, 3, 1, 2);
+        var progress = new SharedEstimationProgress("run-1", 2, 0.25, 3, 1, 2, 2,
+            new Dictionary<string, int> { ["coordinator"] = 1, ["worker-1"] = 2 },
+            new[] { 1.0, 2.0 });
+        var status = new SharedEstimationStatus("run-1", "Estimation started with 2 workers.");
         var completion = new SharedEstimationCompletion("run-1", true, 0.25,
             new[] { 1.0, 2.0 }, 3, 2, null);
 
@@ -96,6 +101,7 @@ public class TestSharedEstimationProtocol
             SharedEstimationProtocol.WriteCandidates(writer, candidates);
             SharedEstimationProtocol.WriteResults(writer, results);
             SharedEstimationProtocol.WriteProgress(writer, progress);
+            SharedEstimationProtocol.WriteStatus(writer, status);
             SharedEstimationProtocol.WriteCompletion(writer, completion);
             SharedEstimationProtocol.WriteCancel(writer, "run-1", "user requested cancellation");
         }
@@ -119,7 +125,18 @@ public class TestSharedEstimationProtocol
         for (int i = 0; i < results.Length; i++)
             Assert.AreEqual(results[i], readResults[i]);
 
-        Assert.AreEqual(progress, SharedEstimationProtocol.ReadProgress(reader));
+        var readProgress = SharedEstimationProtocol.ReadProgress(reader);
+        Assert.AreEqual(progress.RunId, readProgress.RunId);
+        Assert.AreEqual(progress.Iteration, readProgress.Iteration);
+        Assert.AreEqual(progress.BestFitness, readProgress.BestFitness);
+        Assert.AreEqual(progress.EvaluationsCompleted, readProgress.EvaluationsCompleted);
+        Assert.AreEqual(progress.EvaluationsPending, readProgress.EvaluationsPending);
+        Assert.AreEqual(progress.ActiveWorkers, readProgress.ActiveWorkers);
+        Assert.AreEqual(progress.FitnessTestsThisIteration, readProgress.FitnessTestsThisIteration);
+        CollectionAssert.AreEquivalent(progress.EvaluationsByWorker.ToArray(),
+            readProgress.EvaluationsByWorker.ToArray());
+        CollectionAssert.AreEqual(progress.BestParameters.ToArray(), readProgress.BestParameters.ToArray());
+        Assert.AreEqual(status, SharedEstimationProtocol.ReadStatus(reader));
         var readCompletion = SharedEstimationProtocol.ReadCompletion(reader);
         Assert.AreEqual(completion.RunId, readCompletion.RunId);
         Assert.AreEqual(completion.Succeeded, readCompletion.Succeeded);
@@ -195,7 +212,10 @@ public class TestSharedEstimationProtocol
         var read = SharedEstimationProtocol.ReadJobSnapshots(reader);
         Assert.HasCount(2, read);
         Assert.AreEqual(SharedEstimationJobState.Running, read[0].State);
-        Assert.AreEqual(progress, read[0].Progress);
+        Assert.AreEqual(progress.RunId, read[0].Progress!.RunId);
+        Assert.AreEqual(progress.Iteration, read[0].Progress.Iteration);
+        Assert.AreEqual(progress.BestFitness, read[0].Progress.BestFitness);
+        Assert.AreEqual(progress.EvaluationsCompleted, read[0].Progress.EvaluationsCompleted);
         Assert.IsNull(read[0].Completion);
         Assert.AreEqual(SharedEstimationJobState.Completed, read[1].State);
         Assert.IsNull(read[1].Progress);

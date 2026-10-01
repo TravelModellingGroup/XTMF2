@@ -61,6 +61,10 @@ public sealed class HostBus : IDisposable
             GC.SuppressFinalize(this);
         }
         _Exit = true;
+        if (_Owner)
+        {
+            _HostStream.Dispose();
+        }
         while (!_Exited)
         {
             Interlocked.MemoryBarrier();
@@ -69,10 +73,6 @@ public sealed class HostBus : IDisposable
                 Task.WaitAll(Task.Delay(50));
             }
             Interlocked.MemoryBarrier();
-        }
-        if (_Owner)
-        {
-            _HostStream.Dispose();
         }
     }
 
@@ -183,9 +183,10 @@ public sealed class HostBus : IDisposable
     /// <param name="runID">The ID of the run sending the update.</param>
     /// <param name="iteration">The current iteration number (1-based).</param>
     /// <param name="fitness">The best fitness value seen so far.</param>
+    /// <param name="fitnessTestsThisIteration">Number of fitness tests completed since the previous progress update.</param>
     /// <param name="values">Ordered list of (node serialisation index, current value) pairs.</param>
     public delegate void IterationProgressUpdate(
-        object sender, string runID, int iteration, double fitness,
+        object sender, string runID, int iteration, double fitness, int fitnessTestsThisIteration,
         IReadOnlyList<(int nodeIndex, double value)> values);
 
     /// <summary>
@@ -202,6 +203,8 @@ public sealed class HostBus : IDisposable
     public event EventHandler<IReadOnlyList<SharedEstimationJobSnapshot>>? SharedEstimationJobSnapshotsAvailable;
 
     public event EventHandler<SharedEstimationWorkerControlAcknowledgement>? SharedEstimationWorkerControlAcknowledged;
+
+    public event EventHandler<SharedEstimationStatus>? SharedEstimationStatusAvailable;
 
     private static void IgnoreWarnings(Action toRun)
     {
@@ -300,11 +303,13 @@ public sealed class HostBus : IDisposable
                                 var runId = reader.ReadString();
                                 int iteration = reader.ReadInt32();
                                 double fitness = reader.ReadDouble();
+                                int fitnessTestsThisIteration = reader.ReadInt32();
                                 int count = reader.ReadInt32();
                                 var values = new (int nodeIndex, double value)[count];
                                 for (int i = 0; i < count; i++)
                                     values[i] = (reader.ReadInt32(), reader.ReadDouble());
-                                IgnoreWarnings(() => ClientIterationProgressAvailable?.Invoke(this, runId, iteration, fitness, values));
+                                IgnoreWarnings(() => ClientIterationProgressAvailable?.Invoke(
+                                    this, runId, iteration, fitness, fitnessTestsThisIteration, values));
                             }
                             break;
                         case In.ClientRunArtifacts:
@@ -327,7 +332,7 @@ public sealed class HostBus : IDisposable
                             break;
                         case In.SharedEstimationMessage:
                             {
-                                var (_, messageType) = SharedEstimationProtocol.ReadHeader(reader);
+                                var (protocolVersion, messageType) = SharedEstimationProtocol.ReadHeader(reader);
                                 switch (messageType)
                                 {
                                     case SharedEstimationMessageType.EvaluationResults:
@@ -336,7 +341,7 @@ public sealed class HostBus : IDisposable
                                         break;
                                     case SharedEstimationMessageType.Progress:
                                         IgnoreWarnings(() => SharedEstimationProgressAvailable?.Invoke(
-                                            this, SharedEstimationProtocol.ReadProgressPayload(reader)));
+                                            this, SharedEstimationProtocol.ReadProgressPayload(reader, protocolVersion)));
                                         break;
                                     case SharedEstimationMessageType.Complete:
                                         IgnoreWarnings(() => SharedEstimationCompleted?.Invoke(
@@ -344,11 +349,15 @@ public sealed class HostBus : IDisposable
                                         break;
                                     case SharedEstimationMessageType.JobSnapshots:
                                         IgnoreWarnings(() => SharedEstimationJobSnapshotsAvailable?.Invoke(
-                                            this, SharedEstimationProtocol.ReadJobSnapshotsPayload(reader)));
+                                            this, SharedEstimationProtocol.ReadJobSnapshotsPayload(reader, protocolVersion)));
                                         break;
                                     case SharedEstimationMessageType.WorkerControlAcknowledgement:
                                         IgnoreWarnings(() => SharedEstimationWorkerControlAcknowledged?.Invoke(
                                             this, SharedEstimationProtocol.ReadWorkerControlAcknowledgementPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.Status:
+                                        IgnoreWarnings(() => SharedEstimationStatusAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadStatusPayload(reader)));
                                         break;
                                     default:
                                         throw new InvalidDataException(

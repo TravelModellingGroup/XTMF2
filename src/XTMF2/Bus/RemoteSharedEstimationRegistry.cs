@@ -107,6 +107,7 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
     {
         private readonly RemoteSharedEstimationRegistry _registry;
         private readonly SharedEstimationCoordinatorRequest _request;
+        private readonly XTMFRuntime _observerRuntime;
         private readonly object _sync = new();
         private readonly CancellationTokenSource _cancellation = new();
         private RunServerBus? _observer;
@@ -121,6 +122,7 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
         {
             _registry = registry;
             _observer = observer;
+            _observerRuntime = observer.Runtime;
             _request = request;
         }
 
@@ -206,8 +208,12 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
             SharedEstimationWorkerPool? pool = null;
             try
             {
+                ReportStatus("Coordinator is preparing the estimation.");
                 if (_request.Workers.Count == 0)
-                    throw new InvalidOperationException("A remote estimation coordinator requires at least one worker.");
+                {
+                    if (!_request.UseCoordinatorAsWorker)
+                        throw new InvalidOperationException("A remote estimation coordinator requires at least one worker.");
+                }
                 if (_request.LowerBounds.Count != _request.UpperBounds.Count ||
                     _request.LowerBounds.Count != _request.InitialValues.Count)
                     throw new InvalidOperationException("The remote estimation parameter bounds are inconsistent.");
@@ -221,11 +227,24 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
                 pool = new SharedEstimationWorkerPool();
                 lock (_sync)
                     _pool = pool;
+                if (_request.UseCoordinatorAsWorker)
+                {
+                    if (!SharedEstimationLocalWorker.TryCreate("coordinator", _observerRuntime,
+                            _request.Run, out var localWorker, out var localWorkerError))
+                        throw new InvalidOperationException(localWorkerError ?? "Unable to prepare the coordinator worker.");
+                    if (!pool.Coordinator.AddWorker(localWorker!, out var addLocalError))
+                    {
+                        localWorker!.Dispose();
+                        throw new InvalidOperationException(addLocalError ?? "Unable to add the coordinator worker.");
+                    }
+                    ReportStatus("Coordinator is participating as a worker.");
+                }
                 foreach (var worker in _request.Workers)
                 {
                     if (!pool.AddWorker(worker.WorkerId, worker.EndpointId, worker.Address, worker.Port,
                             worker.Token, worker.CertificateFingerprint, out var workerError))
                         throw new InvalidOperationException(workerError ?? $"Unable to connect to worker '{worker.EndpointId}'.");
+                    ReportStatus($"Connected to worker '{worker.EndpointId}'.");
                 }
 
                 var overrides = _request.Workers
@@ -234,11 +253,13 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
                         worker => worker.BasicParameterOverrides!, StringComparer.Ordinal);
                 if (!pool.StartRun(_request.Run, out var startError, overrides))
                     throw new InvalidOperationException(startError ?? "Unable to start shared estimation workers.");
+                ReportStatus($"Estimation started with {pool.WorkerCount} worker(s).");
 
                 var algorithm = config.CreateAlgorithm(_request.LowerBounds.Count,
                     _request.LowerBounds.ToArray(), _request.UpperBounds.ToArray(), _request.InitialValues.ToArray(),
                     _request.IsMaximize);
-                var runner = new SharedEstimationCoordinatorRun(_request.Run.RunId, algorithm, pool.Coordinator);
+                var runner = new SharedEstimationCoordinatorRun(
+                    _request.Run.RunId, algorithm, pool.Coordinator, _request.IsMaximize);
                 completion = runner.Execute(
                     progress: progress =>
                     {
@@ -278,12 +299,28 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
                     _completion = completion;
                     observer = _observer;
                 }
+                ReportStatus(completion.Succeeded
+                    ? $"Estimation completed after {completion.TotalEvaluations} fitness test(s)."
+                    : $"Estimation failed: {completion.FailureReason ?? "Unknown error."}");
                 observer?.SendSharedEstimationCompletion(completion);
             }
             catch (IOException) { }
             catch (ObjectDisposedException) { }
 
             _registry.Complete(this);
+        }
+
+        private void ReportStatus(string message)
+        {
+            RunServerBus? observer;
+            lock (_sync)
+                observer = _observer;
+            try
+            {
+                observer?.SendSharedEstimationStatus(new SharedEstimationStatus(RunId, message));
+            }
+            catch (IOException) { }
+            catch (ObjectDisposedException) { }
         }
 
         private static void PersistCompletion(SharedEstimationRunRequest request,

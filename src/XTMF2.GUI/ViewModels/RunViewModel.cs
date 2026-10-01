@@ -220,6 +220,13 @@ public sealed partial class RunViewModel : ObservableObject
     [ObservableProperty]
     private double _currentFitness;
 
+    /// <summary>Number of fitness tests completed during the current iteration.</summary>
+    [ObservableProperty]
+    private int _currentIterationFitnessTests;
+
+    [ObservableProperty]
+    private string _workerEvaluationCountsDisplay = string.Empty;
+
     /// <summary>Live parameter values for each optimisation parameter.</summary>
     public ObservableCollection<OptimizationParameterViewModel> OptimizationParameters { get; } = new();
 
@@ -326,10 +333,13 @@ public sealed partial class RunViewModel : ObservableObject
     }
 
     /// <summary>Called on the UI thread whenever the client sends per-iteration progress.</summary>
-    internal void UpdateIterationProgress(int iteration, double fitness, IReadOnlyList<(int nodeIndex, double value)> values)
+    internal void UpdateIterationProgress(int iteration, double fitness, int fitnessTestsThisIteration,
+        IReadOnlyList<(int nodeIndex, double value)> values)
     {
         CurrentIteration = iteration;
-        CurrentFitness   = fitness;
+        if (!double.IsNaN(fitness))
+            CurrentFitness = fitness;
+        CurrentIterationFitnessTests = fitnessTestsThisIteration;
         foreach (var (idx, val) in values)
         {
             if (_paramByIndex.TryGetValue(idx, out var vm))
@@ -342,9 +352,46 @@ public sealed partial class RunViewModel : ObservableObject
                 : new ParameterSnapshot("?", 0, 0, v.value))
             .ToList();
         var snap = new OptimizationIterationViewModel(iteration, fitness, snapshots);
-        IterationHistory.Add(snap);
+        var existing = IterationHistory.LastOrDefault(item => item.Iteration == iteration);
+        if (existing is not null)
+        {
+            var index = IterationHistory.IndexOf(existing);
+            IterationHistory[index] = snap;
+        }
+        else
+        {
+            IterationHistory.Add(snap);
+        }
         SelectedIteration = snap;
     }
+
+    internal void UpdateSharedEstimationProgress(SharedEstimationProgress progress)
+    {
+        CurrentIteration = progress.Iteration;
+        if (!double.IsNaN(progress.BestFitness))
+            CurrentFitness = progress.BestFitness;
+        CurrentIterationFitnessTests = progress.FitnessTestsThisIteration;
+        WorkerEvaluationCountsDisplay = progress.EvaluationsByWorker is { Count: > 0 } counts
+            ? string.Join(" | ", counts.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => $"{GetWorkerDisplayName(pair.Key)}: {pair.Value}"))
+            : string.Empty;
+        if (progress.BestParameters is { Count: > 0 } bestParameters &&
+            bestParameters.Count == OptimizationParameters.Count)
+        {
+            var values = OptimizationParameters
+                .Select((parameter, index) => (parameter.NodeIndex, bestParameters[index]))
+                .ToArray();
+            UpdateIterationProgress(progress.Iteration, progress.BestFitness,
+                progress.FitnessTestsThisIteration, values);
+        }
+        AppendStatus($"[Estimation] iteration {progress.Iteration}: " +
+            $"{progress.FitnessTestsThisIteration} fitness test(s) completed; " +
+            $"best fitness {progress.BestFitness:G6}.");
+    }
+
+    private string GetWorkerDisplayName(string workerId)
+        => RemoteWorkers.FirstOrDefault(worker =>
+            string.Equals(worker.WorkerId, workerId, StringComparison.Ordinal))?.Name ?? workerId;
 
     // ── Cancel command ────────────────────────────────────────────────────
 
@@ -426,10 +473,15 @@ public sealed partial class RunViewModel : ObservableObject
     }
 
     /// <summary>Marks the run as finished successfully.</summary>
-    internal void MarkFinished()
+    internal void MarkFinished(string? completionMessage = null)
     {
         Status     = RunStatus.Finished;
-        StatusText = "Finished";
+        StatusText = completionMessage ??
+            (IsOptimizationRun && StatusText.StartsWith("[Estimation] converged", StringComparison.Ordinal)
+                ? StatusText
+                : "Finished");
+        if (completionMessage is not null)
+            AddMessage(completionMessage);
         OnPropertyChanged(nameof(StatusBadge));
         OnPropertyChanged(nameof(IsCompleted));
         CancelRunCommand.NotifyCanExecuteChanged();
