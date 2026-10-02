@@ -95,8 +95,10 @@ public class TestSharedEstimationEndToEnd
                         Assert.IsTrue(pool.StartRun(request, out poolError, overrides), poolError);
 
                         var algorithm = new FixedBatchAlgorithm();
+                        var reportPath = Path.Combine(workerRoot.FullName, "estimation_report.csv");
                         var runner = new SharedEstimationCoordinatorRun(
-                            request.RunId, algorithm, pool.Coordinator);
+                            request.RunId, algorithm, pool.Coordinator,
+                            reportPath: reportPath, parameterNames: ["Fare, USD"]);
                         var progressUpdates = new List<SharedEstimationProgress>();
                         var completion = runner.Execute(progressUpdates.Add);
 
@@ -114,6 +116,12 @@ public class TestSharedEstimationEndToEnd
                         CollectionAssert.AreEquivalent(new[] { "worker-1", "worker-2" },
                             finalProgress.EvaluationsByWorker.Keys.ToArray());
                         CollectionAssert.AreEqual(new[] { 0.1 }, finalProgress.BestParameters.ToArray());
+                        var reportLines = File.ReadAllLines(reportPath);
+                        Assert.AreEqual("Iteration,Fitness,\"Fare, USD\"", reportLines[0]);
+                        Assert.HasCount(5, reportLines);
+                        Assert.IsTrue(reportLines.Skip(1).All(line => line.StartsWith("1,2.5,", StringComparison.Ordinal)));
+                        CollectionAssert.AreEquivalent(new[] { "0.1", "0.2", "0.3", "0.4" },
+                            reportLines.Skip(1).Select(line => line.Split(',')[2]).ToArray());
                     });
                 });
             }

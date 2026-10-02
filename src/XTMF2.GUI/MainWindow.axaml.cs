@@ -38,6 +38,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -696,6 +697,43 @@ public partial class MainWindow : Window
                 if (dialog.Result == SaveChangesDialog.DialogResult.Yes
                     && !await editor.SaveModelSystemAsync())
                     return;
+            }
+
+            if (_runController is not null)
+            {
+                IReadOnlyList<RunServerActivity> localActivities;
+                try
+                {
+                    localActivities = await _runController.QueryLocalRunServerActivityAsync();
+                }
+                catch (Exception exception) when (exception is IOException or OperationCanceledException or
+                    ObjectDisposedException or InvalidOperationException)
+                {
+                    var confirmation = new ConfirmDialog("Local RunServer Status Unavailable",
+                        $"The local RunServer's workload could not be checked ({exception.Message}). " +
+                        "Closing may terminate a running model system. Close the program anyway?");
+                    await confirmation.ShowDialog(this);
+                    if (!confirmation.Result)
+                        return;
+                    localActivities = Array.Empty<RunServerActivity>();
+                }
+
+                if (localActivities.Count > 0)
+                {
+                    var runningCount = localActivities.Count(activity => activity.State == RunServerActivityState.Running);
+                    var queuedCount = localActivities.Count(activity => activity.State == RunServerActivityState.Queued);
+                    var workload = new List<string>();
+                    if (runningCount > 0)
+                        workload.Add($"{runningCount} running");
+                    if (queuedCount > 0)
+                        workload.Add($"{queuedCount} queued");
+                    var confirmation = new ConfirmDialog("Local RunServer Is Busy",
+                        $"The local RunServer has {string.Join(" and ", workload)} model system(s). " +
+                        "Closing the program will stop the Local RunServer and terminate this work. Close anyway?");
+                    await confirmation.ShowDialog(this);
+                    if (!confirmation.Result)
+                        return;
+                }
             }
 
             _allowDocumentClose = true;

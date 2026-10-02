@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using XTMF2.Bus.Optimization;
@@ -15,6 +16,8 @@ public sealed class SharedEstimationCoordinatorRun
     private readonly IEstimationAlgorithm _algorithm;
     private readonly string _runId;
     private readonly bool _isMaximize;
+    private readonly string? _reportPath;
+    private readonly IReadOnlyList<string> _parameterNames;
     private readonly object _progressSync = new();
     private readonly Dictionary<string, int> _evaluationsByWorker = new(StringComparer.Ordinal);
     private long _nextBatchId;
@@ -34,7 +37,9 @@ public sealed class SharedEstimationCoordinatorRun
         string runId,
         IEstimationAlgorithm algorithm,
         SharedEstimationCoordinator coordinator,
-        bool isMaximize = false)
+        bool isMaximize = false,
+        string? reportPath = null,
+        IReadOnlyList<string>? parameterNames = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
         ArgumentNullException.ThrowIfNull(algorithm);
@@ -43,6 +48,8 @@ public sealed class SharedEstimationCoordinatorRun
         _algorithm = algorithm;
         _coordinator = coordinator;
         _isMaximize = isMaximize;
+        _reportPath = reportPath;
+        _parameterNames = parameterNames ?? Array.Empty<string>();
     }
 
     public SharedEstimationCompletion Execute(
@@ -60,8 +67,14 @@ public sealed class SharedEstimationCoordinatorRun
             _lastReportedFitness = _isMaximize ? double.MinValue : double.MaxValue;
         _hasObservedFitness = false;
         _progressCallback = progress;
+        EstimationEvaluationReportWriter? report = null;
         try
         {
+            if (_reportPath is not null)
+            {
+                report = new EstimationEvaluationReportWriter(_reportPath, _algorithm.Name, _parameterNames);
+                _reportWriter = report;
+            }
             _algorithm.RunBatch(
                 fitnessEvaluator: EvaluateSingle,
                 batchFitnessEvaluator: EvaluateBatch,
@@ -115,6 +128,11 @@ public sealed class SharedEstimationCoordinatorRun
                 _iterations,
                 _failureReason);
         }
+        finally
+        {
+            _reportWriter = null;
+            report?.Dispose();
+        }
     }
 
     private double EvaluateSingle(double[] parameters)
@@ -158,6 +176,14 @@ public sealed class SharedEstimationCoordinatorRun
             _evaluationsCompleted++;
             _fitnessTestsThisIteration++;
             _evaluationsByWorker[workerId] = _evaluationsByWorker.GetValueOrDefault(workerId) + 1;
+            try
+            {
+                _reportWriter?.Write(_currentIteration, candidate.Parameters, result.Fitness);
+            }
+            catch (IOException exception)
+            {
+                _failureReason ??= $"Unable to write the estimation report: {exception.Message}";
+            }
             if (result.Error is not null || !double.IsFinite(result.Fitness))
             {
                 _failureReason ??= result.Error ?? "A worker returned a non-finite fitness value.";
@@ -180,4 +206,6 @@ public sealed class SharedEstimationCoordinatorRun
             _coordinator.ActiveWorkerCount, _fitnessTestsThisIteration,
             new Dictionary<string, int>(_evaluationsByWorker),
             (double[])_bestObservedParameters.Clone());
+
+    private EstimationEvaluationReportWriter? _reportWriter;
 }

@@ -511,7 +511,9 @@ public class RunController : IDisposable
             try
             {
                 var runner = new SharedEstimationCoordinatorRun(runId, algorithm, pool.Coordinator,
-                    modelSystem.EstimationObjective == EstimationObjective.Maximize);
+                    modelSystem.EstimationObjective == EstimationObjective.Maximize,
+                    Path.Combine(runDirectory, "estimation_report.csv"),
+                    metadata.Select(item => item.name).ToArray());
                 var completion = runner.Execute(
                     progress: progress => RunsViewModel.NotifySharedEstimationProgress(progress),
                     cancellationToken: cancellation.Token);
@@ -919,6 +921,17 @@ public class RunController : IDisposable
         return await Task.WhenAll(requests).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<RunServerActivity>> QueryLocalRunServerActivityAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!_connections.TryGet(LocalEndpointId, out var hostBus) || hostBus is null)
+            throw new IOException("The local RunServer is not connected.");
+
+        var response = await hostBus.QueryServerActivityAsync(cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        return response.Activities;
+    }
+
     public bool KillRunServerActivity(string endpointId, RunServerActivity activity, out string? error)
     {
         ArgumentNullException.ThrowIfNull(activity);
@@ -983,10 +996,13 @@ public class RunController : IDisposable
             }
             if (!IsOwnedByCurrentUser(snapshot.OwnerUserId))
                 continue;
+            var isRemoteRun = endpoint is null || !endpoint.IsLocal;
             var runServerName = endpoint?.Name ?? "Remote RunServer";
             var run = RunsViewModel.RestoreSharedEstimationRun(snapshot, runServerName,
                 () => hostBus?.CancelSharedEstimation(snapshot.RunId, "Cancelled by user.", out _));
-            run.SetRemoteRunTracking(endpoint is not null && !endpoint.IsLocal);
+            run.SetRemoteRunTracking(isRemoteRun);
+            if (!isRemoteRun)
+                run.SetLocalOutputDirectory(snapshot.WorkingDirectory);
             var workers = GetConnectedRunServers()
                 .Where(worker => endpoint is null || worker.Id != endpoint.Id)
                 .Select(worker => new SharedEstimationWorkerEndpoint(worker.Id, worker.Id,
@@ -1025,9 +1041,19 @@ public class RunController : IDisposable
             }
             if (!IsOwnedByCurrentUser(snapshot.OwnerUserId))
                 continue;
+            var isRemoteRun = endpoint is null || !endpoint.IsLocal;
             var run = RunsViewModel.RestoreRemoteRun(snapshot, endpoint?.Name ?? "Remote RunServer",
                 () => hostBus?.CancelModelRun(snapshot.RunId, out _));
-            RunsViewModel.NotifyRemoteOutputAvailability(snapshot.RunId, snapshot.ArtifactsAvailable);
+            run.SetRemoteRunTracking(isRemoteRun);
+            if (isRemoteRun)
+            {
+                RunsViewModel.NotifyRemoteOutputAvailability(snapshot.RunId, snapshot.ArtifactsAvailable);
+            }
+            else
+            {
+                var localOutputDirectory = localRunDirectory ?? snapshot.WorkingDirectory;
+                run.SetLocalOutputDirectory(localOutputDirectory);
+            }
             if (localRunDirectory is not null && hostBus is not null)
                 ReceiveBoundRemoteCompletion(run, snapshot, hostBus, localRunDirectory);
             TryAutomaticallyBindRecoveredRun(snapshot.RunId);

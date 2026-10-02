@@ -39,6 +39,7 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
     private readonly double _c1;   // cognitive coefficient
     private readonly double _c2;   // social coefficient
     private readonly int    _noImprovementLimit;
+    private readonly int    _randomSeed;
 
     private int      _n;
     private double[] _lower   = [];
@@ -68,16 +69,18 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
     /// <param name="socialCoeff">Global-best attraction c2 (default 1.49).</param>
     /// <param name="noImprovementLimit">Stop after this many consecutive iterations
     /// without improvement in the global best (default 5). Set to 0 to disable.</param>
+    /// <param name="randomSeed">Seed used for reproducible swarm initialization and updates.</param>
     public ParticleSwarmAlgorithm(
         int swarmSize = 29, double inertia = -0.4438,
         double cognitiveCoeff = -0.2699, double socialCoeff = 3.3950,
-        int noImprovementLimit = 5)
+        int noImprovementLimit = 5, int randomSeed = 42)
     {
         _swarmSize          = Math.Max(2, swarmSize);
         _inertia            = inertia;
         _c1                 = cognitiveCoeff;
         _c2                 = socialCoeff;
         _noImprovementLimit = Math.Max(0, noImprovementLimit);
+        _randomSeed         = randomSeed;
     }
 
     /// <inheritdoc/>
@@ -112,7 +115,7 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
     {
         if (_n == 0) return;
 
-        var rng = new Random(42);
+        var rng = new Random(_randomSeed);
 
         // Negate fitness internally when maximising so the algorithm always minimises.
         Func<double[], double> eval = _isMaximize

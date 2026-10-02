@@ -288,7 +288,10 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
                     _request.LowerBounds.ToArray(), _request.UpperBounds.ToArray(), _request.InitialValues.ToArray(),
                     _request.IsMaximize);
                 var runner = new SharedEstimationCoordinatorRun(
-                    _request.Run.RunId, algorithm, pool.Coordinator, _request.IsMaximize);
+                    _request.Run.RunId, algorithm, pool.Coordinator, _request.IsMaximize,
+                    Path.Combine(_request.Run.WorkingDirectory, "estimation_report.csv"),
+                    (_request.Parameters ?? Array.Empty<SharedEstimationParameterMetadata>())
+                        .Select(parameter => parameter.Name).ToArray());
                 completion = runner.Execute(
                     progress: progress =>
                     {

@@ -28,7 +28,7 @@ namespace XTMF2.Bus.Optimization;
 /// Uses <b>arithmetic (BLX-α) crossover</b>, <b>Gaussian mutation</b>,
 /// <b>tournament selection</b>, and optional elitism.
 /// Each gene is clamped to its per-dimension bounds after mutation.
-/// The algorithm is deterministic given a fixed random seed (42).
+/// The algorithm is deterministic given a fixed configured random seed.
 /// </remarks>
 public sealed class GeneticAlgorithm : IEstimationAlgorithm
 {
@@ -37,6 +37,7 @@ public sealed class GeneticAlgorithm : IEstimationAlgorithm
     private readonly double _mutationRate;
     private readonly int    _elitismCount;
     private readonly int    _tournamentSize;
+    private readonly int    _randomSeed;
 
     private int      _n;
     private double[] _lower   = [];
@@ -60,18 +61,21 @@ public sealed class GeneticAlgorithm : IEstimationAlgorithm
     /// <summary>
     /// Creates a new <see cref="GeneticAlgorithm"/> with the specified hyperparameters.
     /// </summary>
+    /// <param name="randomSeed">Seed used for reproducible population initialization and evolution.</param>
     public GeneticAlgorithm(
         int    populationSize = 50,
         double crossoverRate  = 0.8,
         double mutationRate   = 0.05,
         int    elitismCount   = 2,
-        int    tournamentSize = 3)
+        int    tournamentSize = 3,
+        int    randomSeed      = 42)
     {
         _populationSize = Math.Max(4, populationSize);
         _crossoverRate  = Math.Clamp(crossoverRate, 0.0, 1.0);
         _mutationRate   = Math.Clamp(mutationRate,  0.0, 1.0);
         _elitismCount   = Math.Max(0, elitismCount);
         _tournamentSize = Math.Max(2, tournamentSize);
+        _randomSeed     = randomSeed;
     }
 
     /// <inheritdoc/>
@@ -106,7 +110,7 @@ public sealed class GeneticAlgorithm : IEstimationAlgorithm
     {
         if (_n == 0) return;
 
-        var rng = new Random(42);
+        var rng = new Random(_randomSeed);
 
         // Negate fitness internally when maximising so the algorithm always minimises.
         Func<double[], double> eval = _isMaximize

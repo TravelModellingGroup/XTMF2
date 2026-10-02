@@ -478,6 +478,10 @@ namespace XTMF2.Bus
             double lastReportedFitness = double.NaN;
             RunError? firstRunError = null;
             double[]? latestValues = null;
+            using var report = new EstimationEvaluationReportWriter(
+                Path.Combine(_currentWorkingDirectory, "estimation_report.csv"),
+                algorithm.Name,
+                paramEntries.Select(parameter => parameter.entry.Node.Name ?? string.Empty).ToArray());
 
             var originalDir = Directory.GetCurrentDirectory();
             // Install a lightweight RunBus so modules inside the model system can forward
@@ -511,6 +515,7 @@ namespace XTMF2.Bus
                 }
                 latestValues = (double[])values.Clone();
                 double fitness = fitnessReader();
+                report.Write(currentIteration, values, fitness);
                 lastReportedFitness = fitness;
                 var progressValues = paramEntries
                     .Select((p, i) => (p.nodeIndex, latestValues?[i] ?? p.entry.NullHypothesis))

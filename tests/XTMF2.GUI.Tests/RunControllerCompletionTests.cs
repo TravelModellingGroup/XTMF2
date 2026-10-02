@@ -123,6 +123,34 @@ public class RunControllerCompletionTests
     }
 
     [TestMethod]
+    public void RecoveredLocalRun_DoesNotOfferOutputTransfer()
+    {
+        var snapshot = new RemoteRunSnapshot("run-local-output", "forecast", RunMode.Normal,
+            "/local/runs/forecast", "Start", "model-hash", RemoteRunState.Completed,
+            "Run completed.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
+            null, null, true, DateTimeOffset.UtcNow);
+        var localDirectory = Directory.CreateTempSubdirectory("xtmf-local-run-output-");
+        var run = new RunViewModel(snapshot, "Local RunServer");
+
+        try
+        {
+            run.SetRemoteRunTracking(false);
+            run.SetLocalOutputDirectory(localDirectory.FullName);
+
+            Assert.IsFalse(run.IsRemoteRun);
+            Assert.IsFalse(run.CanTransferRemoteOutput);
+            Assert.IsTrue(run.ArtifactsAvailable);
+            Assert.IsTrue(run.HasRunDirectory);
+            Assert.AreEqual(localDirectory.FullName, run.RunDirectory);
+            Assert.AreEqual("Output is on this computer.", run.OutputTransferStatus);
+        }
+        finally
+        {
+            localDirectory.Delete(recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void RecoveredRemoteRun_OffersTransferBeforeAvailabilitySnapshot()
     {
         var snapshot = new RemoteRunSnapshot("run-output-unknown", "forecast", RunMode.Normal,
