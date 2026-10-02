@@ -187,6 +187,17 @@ public sealed partial class RunsViewModel : ObservableObject
         });
     }
 
+    internal void NotifyConnectionLost(string runId)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (vm.Status == RunStatus.Running)
+                vm.MarkConnectionLost();
+        });
+    }
+
     /// <summary>
     /// Marks the run with <paramref name="runId"/> as failed.  Safe to call from any thread.
     /// </summary>
@@ -285,6 +296,20 @@ public sealed partial class RunsViewModel : ObservableObject
         var vm = FindRun(runId);
         if (vm is null) return;
         Dispatcher.UIThread.Post(() => vm.ApplyRemoteWorkerSnapshot(activeWorkerIds));
+    }
+
+    internal void NotifyRemoteWorkerDisconnected(string runId, string workerId)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.MarkRemoteWorkerDisconnected(workerId));
+    }
+
+    internal void ReconnectRemoteWorker(string runId, string workerId)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.ReconnectRemoteWorker(workerId));
     }
 
     internal void NotifyRemoteWorkerAcknowledgement(

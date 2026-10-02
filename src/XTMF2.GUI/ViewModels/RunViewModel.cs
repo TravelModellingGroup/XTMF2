@@ -349,8 +349,17 @@ public sealed partial class RunViewModel : ObservableObject
                 $"in {completion.Iterations} iteration(s). Best fitness = {completion.BestFitness:G6}.");
             return;
         }
-        if (snapshot.State == SharedEstimationJobState.Running && snapshot.Progress is null)
+        if (snapshot.State == SharedEstimationJobState.Running)
+        {
+            if (Status != RunStatus.Running)
+            {
+                Status = RunStatus.Running;
+                OnPropertyChanged(nameof(StatusBadge));
+                OnPropertyChanged(nameof(IsCompleted));
+                CancelRunCommand.NotifyCanExecuteChanged();
+            }
             StatusText = "Estimation running";
+        }
     }
 
     internal void ApplyRecoveredSharedEstimationCompletion(SharedEstimationCompletion completion)
@@ -537,6 +546,34 @@ public sealed partial class RunViewModel : ObservableObject
         {
             worker.IsActive = activeWorkerIds.Contains(worker.WorkerId, StringComparer.Ordinal);
             worker.IsBusy = false;
+        }
+    }
+
+    internal void MarkRemoteWorkerDisconnected(string workerId)
+    {
+        var worker = RemoteWorkers.FirstOrDefault(candidate =>
+            string.Equals(candidate.WorkerId, workerId, StringComparison.Ordinal));
+        if (worker is null)
+            return;
+        worker.IsActive = false;
+        worker.IsBusy = false;
+    }
+
+    internal void ReconnectRemoteWorker(string workerId)
+    {
+        if (Status != RunStatus.Running || _addRemoteWorkerAction is null)
+            return;
+        var worker = RemoteWorkers.FirstOrDefault(candidate =>
+            string.Equals(candidate.WorkerId, workerId, StringComparison.Ordinal));
+        if (worker is null || worker.IsActive || worker.IsBusy)
+            return;
+
+        worker.IsBusy = true;
+        var error = _addRemoteWorkerAction(workerId);
+        if (error is not null)
+        {
+            worker.IsBusy = false;
+            AppendStatus($"[Remote estimation] Unable to re-add worker: {error}");
         }
     }
 
@@ -767,6 +804,9 @@ public sealed partial class RunViewModel : ObservableObject
         OnPropertyChanged(nameof(IsCompleted));
         CancelRunCommand.NotifyCanExecuteChanged();
     }
+
+    internal void MarkConnectionLost()
+        => MarkInterrupted("RunServer connection was lost; the run status is unknown until it reconnects.");
 
     /// <summary>
     /// Returns navigation context for the current failing element, when available.

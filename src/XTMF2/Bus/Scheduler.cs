@@ -30,6 +30,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -40,11 +41,70 @@ namespace XTMF2.Bus
     /// </summary>
     internal sealed class Scheduler : IDisposable
     {
-        private readonly ConcurrentQueue<(RunContext Context, IRunOutputSink Sink)> _ToRun = new();
+        internal sealed class Reservation : IDisposable
+        {
+            private readonly object _sync = new();
+            private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            private Action? _cancellationHandler;
+            private bool _cancellationRequested;
+
+            public Task Started => _started.Task;
+            internal bool IsReleased => _released.Task.IsCompleted;
+            internal Task Released => _released.Task;
+
+            internal bool TryStart()
+            {
+                if (IsReleased)
+                    return false;
+                _started.TrySetResult();
+                return true;
+            }
+
+            internal void SetCancellationHandler(Action handler)
+            {
+                ArgumentNullException.ThrowIfNull(handler);
+                bool invoke;
+                lock (_sync)
+                {
+                    _cancellationHandler = handler;
+                    invoke = _cancellationRequested;
+                }
+                if (invoke)
+                    handler();
+            }
+
+            internal void RequestCancellation()
+            {
+                Action? handler;
+                lock (_sync)
+                {
+                    _cancellationRequested = true;
+                    handler = _cancellationHandler;
+                }
+                if (handler is null)
+                    Dispose();
+                else
+                    handler();
+            }
+
+            public void Dispose()
+            {
+                lock (_sync)
+                    _cancellationHandler = null;
+                _released.TrySetResult();
+                _started.TrySetCanceled();
+            }
+        }
+
+        private readonly ConcurrentQueue<ScheduledWork> _ToRun = new();
         private readonly object _inventorySync = new();
         private readonly IRunOutputSink? _DefaultSink;
         private readonly CancellationTokenSource _CancelExecutionEngine = new();
         private readonly SemaphoreSlim _RunsToGo = new SemaphoreSlim(0);
+        private Reservation? _currentReservation;
+
+        private readonly record struct ScheduledWork(RunContext Context, IRunOutputSink? Sink, Reservation? Reservation);
 
         /// <summary>
         /// The currently executing RunContext.
@@ -52,22 +112,22 @@ namespace XTMF2.Bus
         /// </summary>
         public RunContext? Current { get; private set; }
 
-        internal IReadOnlyList<(RunContext Context, bool IsRunning, int QueuePosition)> GetInventory()
+        internal IReadOnlyList<(RunContext Context, bool IsRunning, int QueuePosition, bool IsReservation)> GetInventory()
         {
             lock (_inventorySync)
             {
                 var current = Current;
-                var queued = _ToRun.ToArray();
-                var result = new List<(RunContext Context, bool IsRunning, int QueuePosition)>(queued.Length + 1);
+                var queued = _ToRun.ToArray().Where(work => work.Reservation?.IsReleased != true).ToArray();
+                var result = new List<(RunContext Context, bool IsRunning, int QueuePosition, bool IsReservation)>(queued.Length + 1);
                 if (current is not null)
-                    result.Add((current, true, 0));
+                    result.Add((current, true, 0, _currentReservation is not null));
 
                 var queuePosition = 0;
                 foreach (var work in queued)
                 {
                     if (current is not null && ReferenceEquals(work.Context, current))
                         continue;
-                    result.Add((work.Context, false, ++queuePosition));
+                    result.Add((work.Context, false, ++queuePosition, work.Reservation is not null));
                 }
                 return result;
             }
@@ -102,21 +162,46 @@ namespace XTMF2.Bus
                         {
                             return;
                         }
-                        (RunContext Context, IRunOutputSink Sink) work;
+                        ScheduledWork work;
                         bool hasWork;
                         lock (_inventorySync)
                         {
                             Current = null;
                             hasWork = _ToRun.TryDequeue(out work);
+                            while (hasWork && work.Reservation?.IsReleased == true)
+                                hasWork = _ToRun.TryDequeue(out work);
                             if (hasWork)
+                            {
                                 Current = work.Context;
+                                _currentReservation = work.Reservation;
+                            }
                         }
                         if (hasWork)
                         {
+                            if (work.Reservation is { } reservation)
+                            {
+                                try
+                                {
+                                    if (reservation.TryStart())
+                                        reservation.Released.Wait(token);
+                                }
+                                finally
+                                {
+                                    lock (_inventorySync)
+                                    {
+                                        if (ReferenceEquals(Current, work.Context))
+                                        {
+                                            Current = null;
+                                            _currentReservation = null;
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
                             try
                             {
                                 var context = work.Context;
-                                var sink = work.Sink;
+                                var sink = work.Sink!;
                                 Console.WriteLine($"RunServer model system run started processing: {context.ID}");
                                 Console.Out.Flush();
                                 if (runLocal)
@@ -134,14 +219,17 @@ namespace XTMF2.Bus
                             }
                             catch (Exception e)
                             {
-                                work.Sink.ModelRunFailed(work.Context.ID, e.Message, e.StackTrace, null, null);
+                                work.Sink!.ModelRunFailed(work.Context.ID, e.Message, e.StackTrace, null, null);
                             }
                             finally
                             {
                                 lock (_inventorySync)
                                 {
                                     if (ReferenceEquals(Current, work.Context))
+                                    {
                                         Current = null;
+                                        _currentReservation = null;
+                                    }
                                 }
                             }
                         }
@@ -200,9 +288,21 @@ namespace XTMF2.Bus
             ArgumentNullException.ThrowIfNull(sink);
             lock (_inventorySync)
             {
-                _ToRun.Enqueue((context, sink));
+                _ToRun.Enqueue(new ScheduledWork(context, sink, null));
                 _RunsToGo.Release();
             }
+        }
+
+        internal Reservation Reserve(RunContext context)
+        {
+            ArgumentNullException.ThrowIfNull(context);
+            var reservation = new Reservation();
+            lock (_inventorySync)
+            {
+                _ToRun.Enqueue(new ScheduledWork(context, null, reservation));
+                _RunsToGo.Release();
+            }
+            return reservation;
         }
 
         /// <summary>
@@ -219,20 +319,24 @@ namespace XTMF2.Bus
         internal bool Kill(string runId)
         {
             RunContext? current = null;
-            (RunContext Context, IRunOutputSink Sink)? removed = null;
+            ScheduledWork? removed = null;
             lock (_inventorySync)
             {
                 if (Current?.ID == runId)
                 {
                     current = Current;
+                    _currentReservation?.RequestCancellation();
                 }
                 else
                 {
-                    var retained = new List<(RunContext Context, IRunOutputSink Sink)>();
+                    var retained = new List<ScheduledWork>();
                     while (_ToRun.TryDequeue(out var work))
                     {
                         if (removed is null && work.Context.ID == runId)
+                        {
                             removed = work;
+                            work.Reservation?.RequestCancellation();
+                        }
                         else
                             retained.Add(work);
                     }
@@ -248,7 +352,8 @@ namespace XTMF2.Bus
             }
             if (removed is { } queued)
             {
-                queued.Sink.ModelRunFailed(runId, "Run removed from the queue by RunServer Activity window.", string.Empty);
+                if (queued.Reservation is null)
+                    queued.Sink!.ModelRunFailed(runId, "Run removed from the queue by RunServer Activity window.", string.Empty);
                 return true;
             }
             return false;

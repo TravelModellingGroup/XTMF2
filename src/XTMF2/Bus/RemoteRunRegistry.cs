@@ -93,6 +93,9 @@ public sealed class RemoteRunRegistry : IDisposable
         return true;
     }
 
+    internal Scheduler.Reservation ReserveWorkerSlot(RunContext context)
+        => _scheduler.Reserve(context);
+
     public void Attach(RunServerBus observer)
     {
         lock (_sync)
@@ -124,6 +127,12 @@ public sealed class RemoteRunRegistry : IDisposable
             return _scheduler.GetInventory()
                 .Select(item =>
                 {
+                    if (item.IsReservation)
+                        return new RunServerActivity(item.Context.ID, "Shared estimation worker",
+                            "Shared estimation worker",
+                            item.IsRunning ? RunServerActivityState.Running : RunServerActivityState.Queued,
+                            item.IsRunning ? "Worker has the RunServer execution slot." : "Waiting in the RunServer queue.",
+                            item.QueuePosition, ActiveWorkers: item.IsRunning ? 1 : 0);
                     var snapshot = _jobs[item.Context.ID].GetSnapshot();
                     return new RunServerActivity(snapshot.RunId, snapshot.RunName,
                         snapshot.RunMode.ToString(),

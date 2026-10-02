@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
 using XTMF2.GUI;
+using XTMF2.GUI.Properties;
 using XTMF2.GUI.ViewModels;
 using XTMF2;
 
@@ -222,5 +223,64 @@ public class RunControllerCompletionTests
         Assert.IsTrue(run.HasOptimizationResults);
         Assert.IsTrue(run.IsRecoveredRunUnbound);
         Assert.IsFalse(run.ApplyOptimizationResultsCommand.CanExecute(null));
+    }
+
+    [TestMethod]
+    public void DisconnectedEstimationWorker_IsMarkedInactiveAndReaddedAfterReconnect()
+    {
+        TestGuiHelper.RunInModelSystemContext(nameof(DisconnectedEstimationWorker_IsMarkedInactiveAndReaddedAfterReconnect),
+            (user, _, session) =>
+            {
+                var run = new RunViewModel("shared-worker-reconnect", "estimation", string.Empty,
+                    "coordinator", session, user);
+                var endpoint = new RunServerEndpoint { Id = "worker-1", Name = "Worker 1" };
+                var addRequests = 0;
+                run.SetRunMode(RunMode.Estimation,
+                    Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => { });
+                run.SetRemoteEstimationWorkers([endpoint], [endpoint.Id], _ =>
+                {
+                    addRequests++;
+                    return null;
+                }, _ => null);
+
+                run.MarkRemoteWorkerDisconnected(endpoint.Id);
+
+                Assert.IsFalse(run.RemoteWorkers.Single().IsActive);
+                run.ReconnectRemoteWorker(endpoint.Id);
+
+                Assert.AreEqual(1, addRequests);
+                Assert.IsTrue(run.RemoteWorkers.Single().IsBusy);
+                run.ApplyRemoteWorkerAcknowledgement(new SharedEstimationWorkerControlAcknowledgement(
+                    run.RunId, endpoint.Id, Add: true, Succeeded: true, Error: null, ActiveWorkerCount: 1));
+                Assert.IsTrue(run.RemoteWorkers.Single().IsActive);
+                Assert.IsFalse(run.RemoteWorkers.Single().IsBusy);
+            });
+    }
+
+    [TestMethod]
+    public void ConnectionLostRun_IsInterruptedAndRestoredWhenRecoverySnapshotIsRunning()
+    {
+        var remoteSnapshot = new RemoteRunSnapshot("run-reconnect-state", "forecast", RunMode.Normal,
+            "/remote/runs/forecast", "Start", "model-hash", RemoteRunState.Running,
+            "Run is executing.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
+            null, null, false, DateTimeOffset.UtcNow);
+        var remoteRun = new RunViewModel(remoteSnapshot, "Remote Server");
+
+        remoteRun.MarkConnectionLost();
+
+        Assert.AreEqual(RunStatus.Interrupted, remoteRun.Status);
+        remoteRun.ApplyRecoveredSnapshot(remoteSnapshot);
+        Assert.AreEqual(RunStatus.Running, remoteRun.Status);
+
+        var sharedSnapshot = new SharedEstimationJobSnapshot("shared-reconnect-state",
+            SharedEstimationJobState.Running, null, null, ["worker-1"], "estimation",
+            "/remote/runs/estimation", "model-hash");
+        var sharedRun = new RunViewModel(sharedSnapshot, "Remote Coordinator", () => { });
+
+        sharedRun.MarkConnectionLost();
+
+        Assert.AreEqual(RunStatus.Interrupted, sharedRun.Status);
+        sharedRun.ApplyRecoveredSharedEstimationSnapshot(sharedSnapshot);
+        Assert.AreEqual(RunStatus.Running, sharedRun.Status);
     }
 }

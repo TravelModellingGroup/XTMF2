@@ -20,6 +20,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.IO.Compression;
 using System.Text;
 using System.Threading;
@@ -173,6 +174,17 @@ namespace XTMF2.Bus
         /// </summary>
         public SharedEstimationWorkerSession AttachSharedEstimationWorker()
             => new(this);
+
+        internal Scheduler.Reservation ReserveSharedEstimationWorker(SharedEstimationRunRequest request)
+        {
+            var reservationId = request.RunId;
+            if (!RunContext.CreateRunContext(Runtime, reservationId, request.ModelSystem,
+                    request.WorkingDirectory, request.StartToExecute, RunMode.Estimation, out var context))
+                throw new InvalidOperationException("Unable to create the shared-estimation worker queue entry.");
+            return _remoteRunRegistry is not null
+                ? _remoteRunRegistry.ReserveWorkerSlot(context)
+                : _runScheduler!.Reserve(context);
+        }
 
         public void SetSharedActivityProviders(
             Func<IReadOnlyList<RunServerActivity>> coordinatorProvider,
@@ -685,16 +697,27 @@ namespace XTMF2.Bus
             else if (_runScheduler is not null)
             {
                 foreach (var item in _runScheduler.GetInventory())
-                    activities.Add(new RunServerActivity(item.Context.ID, item.Context.StartToExecute,
-                        item.Context.Mode.ToString(),
+                    activities.Add(new RunServerActivity(item.Context.ID,
+                        item.IsReservation ? "Shared estimation worker" : item.Context.StartToExecute,
+                        item.IsReservation ? "Shared estimation worker" : item.Context.Mode.ToString(),
                         item.IsRunning ? RunServerActivityState.Running : RunServerActivityState.Queued,
-                        item.IsRunning ? "Running" : "Queued", item.QueuePosition));
+                        item.IsReservation
+                            ? item.IsRunning ? "Worker has the RunServer execution slot." : "Waiting in the RunServer queue."
+                            : item.IsRunning ? "Running" : "Queued",
+                        item.QueuePosition, ActiveWorkers: item.IsReservation && item.IsRunning ? 1 : 0));
             }
 
             if (_coordinatorActivityProvider is not null)
                 activities.AddRange(_coordinatorActivityProvider());
             if (_workerActivityProvider is not null)
-                activities.AddRange(_workerActivityProvider());
+            {
+                var queuedWorkerRunIds = activities
+                    .Where(activity => activity.Kind == "Shared estimation worker")
+                    .Select(activity => activity.RunId)
+                    .ToHashSet(StringComparer.Ordinal);
+                activities.AddRange(_workerActivityProvider()
+                    .Where(activity => !queuedWorkerRunIds.Contains(activity.RunId)));
+            }
             return activities;
         }
 

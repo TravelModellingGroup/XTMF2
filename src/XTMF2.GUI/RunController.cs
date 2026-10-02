@@ -81,6 +81,7 @@ public class RunController : IDisposable
         _remoteEstimationMetadata = new();
     private readonly Dictionary<string, IReadOnlyDictionary<string, SharedEstimationWorkerEndpoint>>
         _remoteWorkerEndpointsByRunId = new();
+    private readonly HashSet<string> _disconnectedRunServerIds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RemoteRunSnapshot> _recoveredRemoteRuns = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SharedEstimationJobSnapshot> _recoveredSharedEstimationRuns = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HostBus> _remoteRunBusesByRunId = new(StringComparer.Ordinal);
@@ -814,7 +815,7 @@ public class RunController : IDisposable
         _hostBus = hostBus;
         _runServerProcess = runServerProcess;
         _connections = new RunServerConnectionManager();
-        _connections.StateChanged += state => RunServerStateChanged?.Invoke(state);
+        _connections.StateChanged += OnRunServerConnectionStateChanged;
         _connections.ConnectionAvailable += SubscribeToHostBus;
         _connections.AddConnection(RunServerEndpoint.CreateLocal(), hostBus, out _);
     }
@@ -867,6 +868,43 @@ public class RunController : IDisposable
 
     public void RefreshConfiguredRunServers()
         => ConnectConfiguredRunServers();
+
+    private void OnRunServerConnectionStateChanged(RunServerConnectionInfo state)
+    {
+        RunServerStateChanged?.Invoke(state);
+        if (state.Endpoint.IsLocal)
+            return;
+
+        if (state.State == RunServerConnectionState.Disconnected)
+        {
+            lock (_sessionsByRunId)
+                _disconnectedRunServerIds.Add(state.Endpoint.Id);
+            foreach (var runId in GetEstimationRunsForWorker(state.Endpoint.Id))
+                RunsViewModel.NotifyRemoteWorkerDisconnected(runId, state.Endpoint.Id);
+            return;
+        }
+
+        if (state.State != RunServerConnectionState.Available)
+            return;
+
+        bool wasDisconnected;
+        lock (_sessionsByRunId)
+            wasDisconnected = _disconnectedRunServerIds.Remove(state.Endpoint.Id);
+        if (!wasDisconnected)
+            return;
+
+        foreach (var runId in GetEstimationRunsForWorker(state.Endpoint.Id))
+            RunsViewModel.ReconnectRemoteWorker(runId, state.Endpoint.Id);
+    }
+
+    private string[] GetEstimationRunsForWorker(string endpointId)
+    {
+        lock (_sessionsByRunId)
+            return _remoteWorkerEndpointsByRunId
+                .Where(entry => entry.Value.ContainsKey(endpointId))
+                .Select(entry => entry.Key)
+                .ToArray();
+    }
 
     public bool TryGetRunServer(string endpointId, out HostBus? hostBus)
         => _connections.TryGet(endpointId, out hostBus);
@@ -1469,7 +1507,17 @@ public class RunController : IDisposable
     private void OnHostBusDisconnected(object? sender, EventArgs e)
     {
         if (sender is HostBus hostBus)
+        {
+            string[] affectedRuns;
+            lock (_sessionsByRunId)
+                affectedRuns = _hostBusesByRunId
+                    .Where(entry => ReferenceEquals(entry.Value, hostBus))
+                    .Select(entry => entry.Key)
+                    .ToArray();
+            foreach (var runId in affectedRuns)
+                RunsViewModel.NotifyConnectionLost(runId);
             UnsubscribeFromHostBus(hostBus);
+        }
     }
 
     private void UnsubscribeFromHostBus(HostBus hostBus)
