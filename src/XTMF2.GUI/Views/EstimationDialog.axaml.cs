@@ -164,6 +164,22 @@ public partial class EstimationDialog : Window, INotifyPropertyChanged
 
     public List<Node> FunctionNodes => EditorVm?.GetFunctionNodes() ?? new();
 
+    public List<Node> InputDirectoryNodes => EditorVm?.GetInputDirectoryNodes() ?? new();
+
+    private Node? _selectedInputDirectoryNode;
+    public Node? SelectedInputDirectoryNode
+    {
+        get => _selectedInputDirectoryNode;
+        set
+        {
+            if (_selectedInputDirectoryNode == value) return;
+            _selectedInputDirectoryNode = value;
+            Raise(nameof(SelectedInputDirectoryNode));
+            if (!_suppressFitnessCommand)
+                EditorVm.Session.SetEstimationInputDirectoryNode(EditorVm.User, value, out _);
+        }
+    }
+
     // ── Group enabled toggle ──────────────────────────────────────────────
 
     public bool GroupIsEnabled
@@ -215,6 +231,7 @@ public partial class EstimationDialog : Window, INotifyPropertyChanged
         SelectedGroup = GroupVms.FirstOrDefault();
         _suppressFitnessCommand = true;
         SelectedFitnessNode = EditorVm.Session.ModelSystem.EstimationFitnessNode;
+        SelectedInputDirectoryNode = EditorVm.Session.ModelSystem.EstimationInputDirectoryNode;
         _suppressFitnessCommand = false;
         // Sync algorithm selection without firing a command change.
         _suppressAlgorithmCommand = true;

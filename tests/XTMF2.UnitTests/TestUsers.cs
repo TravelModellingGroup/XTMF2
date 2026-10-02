@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.IO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2;
 using XTMF2.Editing;
@@ -73,12 +74,24 @@ namespace XTMF2.UnitTests
             // ensure the user doesn't exist before we start
             userController.Delete(userName);
             Assert.IsTrue(userController.CreateNew(userName, false, out var user, out error));
+            var userPath = user.UserPath;
+            File.WriteAllText(Path.Combine(userPath, "User.xusr"),
+                $"{{\"UserName\":\"{userName}\",\"Admin\":false}}");
             // unload XTMF to simulate it shutting down
             runtime.Shutdown();
             // rebuild XTMF
             runtime = TestHelper.CreateRuntime("UserPersistence");
             userController = runtime.UserController;
-            Assert.IsNotNull(userController.Users.FirstOrDefault(u => u.UserName == user.UserName));
+            var loadedUser = userController.Users.FirstOrDefault(u => u.UserName == user.UserName);
+            Assert.IsNotNull(loadedUser);
+            Assert.AreNotEqual(Guid.Empty, loadedUser.UserId);
+            var persistedUserId = loadedUser.UserId;
+            runtime.Shutdown();
+            runtime = TestHelper.CreateRuntime("UserPersistence");
+            userController = runtime.UserController;
+            loadedUser = userController.Users.FirstOrDefault(u => u.UserName == user.UserName);
+            Assert.IsNotNull(loadedUser);
+            Assert.AreEqual(persistedUserId, loadedUser.UserId);
             // cleanup
             Assert.IsTrue(userController.Delete(userName));
         }

@@ -20,6 +20,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.IO.Compression;
 using System.Text;
 using System.Threading;
@@ -31,13 +32,16 @@ namespace XTMF2.Bus
     /// Provides communication to the host and forwards communication
     /// to the Run.
     /// </summary>
-    public sealed class RunServerBus : IDisposable
+    public sealed class RunServerBus : IDisposable, IRunOutputSink
     {
         private readonly Stream _clientHost;
         private readonly bool _owner;
         private volatile bool _exit = false;
 
-        private readonly Scheduler _runScheduler;
+        private readonly Scheduler? _runScheduler;
+        private readonly RemoteRunRegistry? _remoteRunRegistry;
+        private Func<IReadOnlyList<RunServerActivity>>? _coordinatorActivityProvider;
+        private Func<IReadOnlyList<RunServerActivity>>? _workerActivityProvider;
         private readonly List<string> _extraDlls;
         private readonly bool _usePrivateWorkspace;
 
@@ -51,6 +55,33 @@ namespace XTMF2.Bus
         /// </summary>
         public IReadOnlyList<string> ExtraDlls => _extraDlls;
 
+        IReadOnlyList<string> IRunOutputSink.ExtraDlls => _extraDlls;
+
+        Task IRunOutputSink.StartProcessingRequestFromRun(string id, Stream clientToRunStream)
+            => StartProcessingRequestFromRun(id, clientToRunStream);
+
+        void IRunOutputSink.ModelRunFailedValidation(string runId, string? error, string? moduleName, string? elementId)
+            => ModelRunFailedValidation(runId, error, moduleName, elementId);
+
+        void IRunOutputSink.ModelRunFailed(string runId, string? message, string? stackTrace, string? moduleName, string? elementId)
+            => ModelRunFailed(runId, message, stackTrace, moduleName, elementId);
+
+        void IRunOutputSink.SendStatusMessage(string runId, string? message)
+            => SendStatusMessage(runId, message);
+
+        void IRunOutputSink.SendOptimizationResults(string runId, IReadOnlyList<(int nodeIndex, double value)> results)
+            => SendOptimizationResults(runId, results);
+
+        void IRunOutputSink.SendIterationProgress(string runId, int iteration, double fitness,
+            int fitnessTestsThisIteration, IReadOnlyList<(int nodeIndex, double value)> values)
+            => SendIterationProgress(runId, iteration, fitness, fitnessTestsThisIteration, values);
+
+        void IRunOutputSink.ModelRunComplete(string runId)
+            => ModelRunComplete(runId);
+
+        void IRunOutputSink.SendRunArtifacts(string runId, string runDirectory)
+            => SendRunArtifacts(runId, runDirectory);
+
         /// <summary>
         /// Create the bus to interact with the host.
         /// </summary>
@@ -59,10 +90,12 @@ namespace XTMF2.Bus
         /// <param name="runtime">The XTMFRuntime to work within.</param>
         /// <param name="extraDlls">Additional DLLs that the client should load.</param>
         /// <param name="runLocal">If true, the model system will be run within the same process as the GUI.  This is only intended for debugging purposes.</param>
-        public RunServerBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string>? extraDlls = null, bool runLocal = false, bool usePrivateWorkspace = false)
+        public RunServerBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string>? extraDlls = null,
+            bool runLocal = false, bool usePrivateWorkspace = false, RemoteRunRegistry? remoteRunRegistry = null)
         {
             Runtime = runtime;
-            _runScheduler = new Scheduler(this, runLocal);
+            _remoteRunRegistry = remoteRunRegistry;
+            _runScheduler = remoteRunRegistry is null ? new Scheduler(this, runLocal) : null;
             _clientHost = serverStream;
             _owner = streamOwner;
             _extraDlls = extraDlls ?? new List<string>();
@@ -74,7 +107,7 @@ namespace XTMF2.Bus
             if (managed)
             {
                 GC.SuppressFinalize(this);
-                _runScheduler.Dispose();
+                _runScheduler?.Dispose();
             }
             if (_owner)
             {
@@ -101,7 +134,8 @@ namespace XTMF2.Bus
             RunModelSystem = 1,
             CancelModelRun = 2,
             KillModelRun = 3,
-            KillClient = 4
+            KillClient = 4,
+            SharedEstimationMessage = 5
         }
 
         private enum Out
@@ -117,7 +151,47 @@ namespace XTMF2.Bus
             ClientReportedStatus = 8,
             ClientOptimizationResults = 9,
             ClientIterationProgress = 10,
-            ClientRunArtifacts = 11
+            ClientRunArtifacts = 11,
+            SharedEstimationMessage = 12
+        }
+
+        public event Action<object, SharedEstimationRunRequest>? SharedEstimationRunRequested;
+
+        public event Action<object, SharedEstimationCoordinatorRequest>? SharedEstimationCoordinatorRequested;
+
+        public event Action<object, SharedEstimationWorkerRegistration, bool>? SharedEstimationWorkerRequested;
+
+        public event Action<object, IReadOnlyList<SharedEstimationCandidate>>? SharedEstimationCandidatesReceived;
+
+        public event Action<object, string, string?>? SharedEstimationCancellationRequested;
+
+        public event Action<object>? SharedEstimationJobsQueryRequested;
+
+        public event Action<object, string, SharedEstimationWorkerEndpoint, bool>? SharedEstimationCoordinatorWorkerRequested;
+
+        /// <summary>
+        /// Attach this RunServer as a worker for shared-estimation requests received from its host.
+        /// </summary>
+        public SharedEstimationWorkerSession AttachSharedEstimationWorker()
+            => new(this);
+
+        internal Scheduler.Reservation ReserveSharedEstimationWorker(SharedEstimationRunRequest request)
+        {
+            var reservationId = request.RunId;
+            if (!RunContext.CreateRunContext(Runtime, reservationId, request.ModelSystem,
+                    request.WorkingDirectory, request.StartToExecute, RunMode.Estimation, out var context))
+                throw new InvalidOperationException("Unable to create the shared-estimation worker queue entry.");
+            return _remoteRunRegistry is not null
+                ? _remoteRunRegistry.ReserveWorkerSlot(context)
+                : _runScheduler!.Reserve(context);
+        }
+
+        public void SetSharedActivityProviders(
+            Func<IReadOnlyList<RunServerActivity>> coordinatorProvider,
+            Func<IReadOnlyList<RunServerActivity>> workerProvider)
+        {
+            _coordinatorActivityProvider = coordinatorProvider ?? throw new ArgumentNullException(nameof(coordinatorProvider));
+            _workerActivityProvider = workerProvider ?? throw new ArgumentNullException(nameof(workerProvider));
         }
 
         /// <summary>
@@ -134,8 +208,9 @@ namespace XTMF2.Bus
             }
         }
 
-        internal Task StartProcessingRequestFromRun(string id, Stream clientToRunStream)
+        internal Task StartProcessingRequestFromRun(string id, Stream clientToRunStream, IRunOutputSink? outputSink = null)
         {
+            var output = outputSink ?? this;
             return Task.Factory.StartNew(() =>
             {
                 // leaveOpen=false so the stream is disposed when the reader exits.
@@ -147,7 +222,9 @@ namespace XTMF2.Bus
                         switch ((Out)reader.ReadInt32())
                         {
                             case Out.Heartbeat:
-                                WriteHeartbeat(reader.ReadString());
+                                var heartbeatRunId = reader.ReadString();
+                                if (outputSink is null)
+                                    WriteHeartbeat(heartbeatRunId);
                                 break;
                             case Out.ClientErrorValidatingModelSystem:
                             {
@@ -155,11 +232,11 @@ namespace XTMF2.Bus
                                 var error = reader.ReadString();
                                 var moduleName = reader.ReadString();
                                 var elementId = reader.ReadString();
-                                ModelRunFailedValidation(runId,error, moduleName, elementId);
+                                output.ModelRunFailedValidation(runId, error, moduleName, elementId);
                                 return;
                             }
                             case Out.ClientErrorWhenRunningModelSystem:
-                                ModelRunFailed(
+                                output.ModelRunFailed(
                                     reader.ReadString(),
                                     reader.ReadString(),
                                     reader.ReadString(),
@@ -167,10 +244,10 @@ namespace XTMF2.Bus
                                     reader.ReadString());
                                 return;
                             case Out.ClientReportedStatus:
-                                SendStatusMessage(reader.ReadString(), reader.ReadString());
+                                output.SendStatusMessage(reader.ReadString(), reader.ReadString());
                                 break;
                             case Out.ClientFinishedModelSystem:
-                                ModelRunComplete(reader.ReadString());
+                                output.ModelRunComplete(reader.ReadString());
                                 return;
                             case Out.ProgressUpdate:
                                 SendProgressUpdate(reader.ReadString(), reader.ReadSingle());
@@ -182,7 +259,7 @@ namespace XTMF2.Bus
                                     var results = new List<(int nodeIndex, double value)>(count);
                                     for (int i = 0; i < count; i++)
                                         results.Add((reader.ReadInt32(), reader.ReadDouble()));
-                                    SendOptimizationResults(runId, results);
+                                    output.SendOptimizationResults(runId, results);
                                 }
                                 break;
                             case Out.ClientIterationProgress:
@@ -190,11 +267,12 @@ namespace XTMF2.Bus
                                     var runId = reader.ReadString();
                                     int iteration = reader.ReadInt32();
                                     double fitness = reader.ReadDouble();
+                                    int fitnessTestsThisIteration = reader.ReadInt32();
                                     int count = reader.ReadInt32();
                                     var values = new (int nodeIndex, double value)[count];
                                     for (int i = 0; i < count; i++)
                                         values[i] = (reader.ReadInt32(), reader.ReadDouble());
-                                    SendIterationProgress(runId, iteration, fitness, values);
+                                    output.SendIterationProgress(runId, iteration, fitness, fitnessTestsThisIteration, values);
                                 }
                                 break;
                             default:
@@ -288,6 +366,46 @@ namespace XTMF2.Bus
             });
         }
 
+        internal void SendSharedEstimationResults(IReadOnlyList<SharedEstimationEvaluationResult> results)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteResults(writer, results));
+
+        public void SendSharedEstimationProgress(SharedEstimationProgress progress)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteProgress(writer, progress));
+
+        public void SendSharedEstimationCompletion(SharedEstimationCompletion completion)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCompletion(writer, completion));
+
+        public void SendSharedEstimationStatus(SharedEstimationStatus status)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteStatus(writer, status));
+
+        public void SendSharedEstimationJobSnapshots(IReadOnlyList<SharedEstimationJobSnapshot> snapshots)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteJobSnapshots(writer, snapshots));
+
+        public void SendServerActivitySnapshots(string requestId, IReadOnlyList<RunServerActivity> activities)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteServerActivitySnapshots(writer, requestId, activities));
+
+        public void SendRemoteRunSnapshots(IReadOnlyList<RemoteRunSnapshot> snapshots)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRemoteRunSnapshots(writer, snapshots));
+
+        public void SendRemoteRunArtifacts(string runId, byte[]? archive, string? error)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, runId, archive, error));
+
+        public void SendRemoteRunDeletionResponse(RemoteRunDeletionResponse response)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRemoteRunDeleted(writer, response));
+
+        public void SendSharedEstimationWorkerControlAcknowledgement(
+            SharedEstimationWorkerControlAcknowledgement acknowledgement)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteWorkerControlAcknowledgement(writer, acknowledgement));
+
+        private void WriteSharedEstimation(Action<BinaryWriter> writePayload)
+        {
+            Write(writer =>
+            {
+                writer.Write((int)Out.SharedEstimationMessage);
+                writePayload(writer);
+            });
+        }
+
         /// <summary>
         /// Sends the final optimised parameter values to the host so the user can
         /// choose whether to apply them back to the model system.
@@ -311,7 +429,7 @@ namespace XTMF2.Bus
         /// Sends the per-iteration parameter snapshot to the host for live display.
         /// </summary>
         internal void SendIterationProgress(string runId, int iteration, double fitness,
-            IReadOnlyList<(int nodeIndex, double value)> values)
+            int fitnessTestsThisIteration, IReadOnlyList<(int nodeIndex, double value)> values)
         {
             Write((writer) =>
             {
@@ -319,6 +437,7 @@ namespace XTMF2.Bus
                 writer.Write(runId);
                 writer.Write(iteration);
                 writer.Write(fitness);
+                writer.Write(fitnessTestsThisIteration);
                 writer.Write(values.Count);
                 foreach (var (idx, val) in values)
                 {
@@ -405,13 +524,33 @@ namespace XTMF2.Bus
                                 var cwd = _usePrivateWorkspace ? CreateRunDirectory(id) : requestedDirectory;
                                 var start = reader.ReadString();
                                 var runMode = (RunMode)reader.ReadInt32();
+                                var runName = reader.ReadString();
+                                var projectId = Guid.TryParse(reader.ReadString(), out var parsedProjectId)
+                                    ? parsedProjectId
+                                    : (Guid?)null;
+                                var modelSystemId = Guid.TryParse(reader.ReadString(), out var parsedModelSystemId)
+                                    ? parsedModelSystemId
+                                    : (Guid?)null;
+                                var ownerUserId = Guid.TryParse(reader.ReadString(), out var parsedOwnerUserId)
+                                    ? parsedOwnerUserId
+                                    : (Guid?)null;
                                 var msSize = (int)reader.ReadInt64();
                                 Console.WriteLine($"RunServer model system run issued: {id} (start '{start}', mode {runMode}, {msSize} bytes)");
                                 Console.Out.Flush();
                                 using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
-                                if (RunContext.CreateRunContext(Runtime, id, mem.ToArray(), cwd, start, runMode, out var context))
+                                var modelSystem = mem.ToArray();
+                                if (RunContext.CreateRunContext(Runtime, id, modelSystem, cwd, start, runMode, out var context))
                                 {
-                                    _runScheduler.Run(context);
+                                    if (_remoteRunRegistry is not null)
+                                    {
+                                        if (!_remoteRunRegistry.Submit(this, context, runName, runMode, cwd, start,
+                                            modelSystem, projectId, modelSystemId, ownerUserId))
+                                            ModelRunFailed(id, "A run with this ID is already registered.", string.Empty);
+                                    }
+                                    else
+                                    {
+                                        _runScheduler!.Run(context);
+                                    }
                                 }
                                 else
                                 {
@@ -426,7 +565,110 @@ namespace XTMF2.Bus
                         case In.CancelModelRun:
                             {
                                 var runId = reader.ReadString();
-                                _runScheduler.RequestCancel(runId);
+                                if (_remoteRunRegistry is not null)
+                                    _remoteRunRegistry.Cancel(runId);
+                                else
+                                    _runScheduler!.RequestCancel(runId);
+                            }
+                            break;
+                        case In.KillModelRun:
+                            {
+                                var runId = reader.ReadString();
+                                if (_remoteRunRegistry is not null)
+                                    _remoteRunRegistry.Kill(runId);
+                                else
+                                    _runScheduler!.Kill(runId);
+                            }
+                            break;
+                        case In.SharedEstimationMessage:
+                            {
+                                var (protocolVersion, messageType) = SharedEstimationProtocol.ReadHeader(reader);
+                                switch (messageType)
+                                {
+                                    case SharedEstimationMessageType.StartCoordinator:
+                                        SharedEstimationCoordinatorRequested?.Invoke(this,
+                                            SharedEstimationProtocol.ReadCoordinatorRequestPayload(reader, protocolVersion));
+                                        break;
+                                    case SharedEstimationMessageType.StartRun:
+                                        SharedEstimationRunRequested?.Invoke(this,
+                                            SharedEstimationProtocol.ReadRunRequestPayload(reader, protocolVersion));
+                                        break;
+                                    case SharedEstimationMessageType.AddWorker:
+                                        SharedEstimationWorkerRequested?.Invoke(this,
+                                            SharedEstimationProtocol.ReadWorkerRegistrationPayload(reader), false);
+                                        break;
+                                    case SharedEstimationMessageType.RemoveWorker:
+                                        SharedEstimationWorkerRequested?.Invoke(this,
+                                            SharedEstimationProtocol.ReadWorkerRegistrationPayload(reader), true);
+                                        break;
+                                    case SharedEstimationMessageType.EvaluateCandidates:
+                                        SharedEstimationCandidatesReceived?.Invoke(this,
+                                            SharedEstimationProtocol.ReadCandidatesPayload(reader));
+                                        break;
+                                    case SharedEstimationMessageType.Cancel:
+                                        var cancellation = SharedEstimationProtocol.ReadCancelPayload(reader);
+                                        if (_remoteRunRegistry is not null)
+                                            _remoteRunRegistry.Cancel(cancellation.RunId);
+                                        else
+                                            _runScheduler?.RequestCancel(cancellation.RunId);
+                                        SharedEstimationCancellationRequested?.Invoke(this,
+                                            cancellation.RunId, cancellation.Reason);
+                                        break;
+                                    case SharedEstimationMessageType.QueryJobs:
+                                        SharedEstimationJobsQueryRequested?.Invoke(this);
+                                        break;
+                                    case SharedEstimationMessageType.QueryRemoteRuns:
+                                        if (_remoteRunRegistry is not null)
+                                        {
+                                            _remoteRunRegistry.Attach(this);
+                                            SendRemoteRunSnapshots(_remoteRunRegistry.GetSnapshots());
+                                        }
+                                        break;
+                                    case SharedEstimationMessageType.QueryServerActivity:
+                                        var requestId = SharedEstimationProtocol.ReadQueryServerActivityPayload(reader);
+                                        SendServerActivitySnapshots(requestId, GetServerActivity());
+                                        break;
+                                    case SharedEstimationMessageType.GetRemoteRunArtifacts:
+                                        {
+                                            var runId = SharedEstimationProtocol.ReadGetRemoteRunArtifactsPayload(reader);
+                                            byte[]? archive = null;
+                                            var found = _remoteRunRegistry is not null &&
+                                                _remoteRunRegistry.TryReadArtifacts(runId, out archive);
+                                            SendRemoteRunArtifacts(runId, found ? archive : null,
+                                                found ? null : "No unacknowledged artifact archive is available for this run.");
+                                        }
+                                        break;
+                                    case SharedEstimationMessageType.AcknowledgeRemoteRun:
+                                        _remoteRunRegistry?.AcknowledgeReceived(
+                                            SharedEstimationProtocol.ReadAcknowledgeRemoteRunPayload(reader));
+                                        break;
+                                    case SharedEstimationMessageType.DeleteRemoteRun:
+                                        {
+                                            var request = SharedEstimationProtocol.ReadDeleteRemoteRunPayload(reader);
+                                            string? error = null;
+                                            var deleted = _remoteRunRegistry is not null &&
+                                                _remoteRunRegistry.DeleteRun(request.RunId, out error);
+                                            error ??= _remoteRunRegistry is null
+                                                ? "Remote run retention is unavailable on this RunServer."
+                                                : null;
+                                            SendRemoteRunDeletionResponse(new RemoteRunDeletionResponse(
+                                                request.RequestId, request.RunId, deleted, error));
+                                        }
+                                        break;
+                                    case SharedEstimationMessageType.AddCoordinatorWorker:
+                                        var addWorker = SharedEstimationProtocol.ReadCoordinatorWorkerRequestPayload(reader);
+                                        SharedEstimationCoordinatorWorkerRequested?.Invoke(this,
+                                            addWorker.RunId, addWorker.Worker, false);
+                                        break;
+                                    case SharedEstimationMessageType.RemoveCoordinatorWorker:
+                                        var removeWorker = SharedEstimationProtocol.ReadCoordinatorWorkerRequestPayload(reader);
+                                        SharedEstimationCoordinatorWorkerRequested?.Invoke(this,
+                                            removeWorker.RunId, removeWorker.Worker, true);
+                                        break;
+                                    default:
+                                        throw new InvalidDataException(
+                                            $"Unexpected shared estimation message to RunServer: {messageType}.");
+                                }
                             }
                             break;
                         // failsafe
@@ -443,6 +685,40 @@ namespace XTMF2.Bus
                     return;
                 }
             }
+        }
+
+        private IReadOnlyList<RunServerActivity> GetServerActivity()
+        {
+            var activities = new List<RunServerActivity>();
+            if (_remoteRunRegistry is not null)
+            {
+                activities.AddRange(_remoteRunRegistry.GetActiveActivities());
+            }
+            else if (_runScheduler is not null)
+            {
+                foreach (var item in _runScheduler.GetInventory())
+                    activities.Add(new RunServerActivity(item.Context.ID,
+                        item.IsReservation ? "Shared estimation worker" : item.Context.StartToExecute,
+                        item.IsReservation ? "Shared estimation worker" : item.Context.Mode.ToString(),
+                        item.IsRunning ? RunServerActivityState.Running : RunServerActivityState.Queued,
+                        item.IsReservation
+                            ? item.IsRunning ? "Worker has the RunServer execution slot." : "Waiting in the RunServer queue."
+                            : item.IsRunning ? "Running" : "Queued",
+                        item.QueuePosition, ActiveWorkers: item.IsReservation && item.IsRunning ? 1 : 0));
+            }
+
+            if (_coordinatorActivityProvider is not null)
+                activities.AddRange(_coordinatorActivityProvider());
+            if (_workerActivityProvider is not null)
+            {
+                var queuedWorkerRunIds = activities
+                    .Where(activity => activity.Kind == "Shared estimation worker")
+                    .Select(activity => activity.RunId)
+                    .ToHashSet(StringComparer.Ordinal);
+                activities.AddRange(_workerActivityProvider()
+                    .Where(activity => !queuedWorkerRunIds.Contains(activity.RunId)));
+            }
+            return activities;
         }
 
         private static string CreateRunDirectory(string runId)

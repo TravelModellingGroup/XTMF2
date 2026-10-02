@@ -16,8 +16,10 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using XTMF2.Bus.Optimization;
@@ -59,8 +61,10 @@ public partial class EstimationAlgorithmConfigDialog : Window, INotifyPropertyCh
         EstimationAlgorithmConfig currentConfig)
     {
         _editorVm = editorVm;
-        _currentConfig = currentConfig;
-        Parameters = currentConfig.GetParameters();
+        _currentConfig = currentConfig.Clone();
+        Parameters = _currentConfig.GetParameters()
+            .OrderBy(parameter => parameter.Label, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
         DataContext = this;
         InitializeComponent();
     }

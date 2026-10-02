@@ -76,6 +76,7 @@ public class TestOptimizationRun
                 min: 0.0, max: 1.0, nullHypothesis: 0.5, out _, out error), error?.Message);
 
             // ── run ────────────────────────────────────────────────────────────
+            var runDirectory = Path.Combine(pSession.RunsDirectory, "EstimationRun");
             CreateRunClient(true, (runBus) =>
             {
                 bool success = false;
@@ -93,7 +94,7 @@ public class TestOptimizationRun
                 };
 
                 Assert.IsTrue(runBus.RunModelSystem(msSession,
-                    Path.Combine(pSession.RunsDirectory, "EstimationRun"),
+                    runDirectory,
                     "Start", RunMode.Estimation, out _, out error), error?.Message);
 
                 if (!sim.Wait(30000))
@@ -101,6 +102,10 @@ public class TestOptimizationRun
 
                 Assert.IsTrue(success, "Estimation run did not complete successfully: " + error?.ToString());
             });
+
+            var reportLines = File.ReadAllLines(Path.Combine(runDirectory, "estimation_report.csv"));
+            Assert.AreEqual("Iteration,Fitness,Param", reportLines[0]);
+            Assert.IsGreaterThan(1, reportLines.Length, "The estimation report should contain evaluation rows.");
         });
     }
 

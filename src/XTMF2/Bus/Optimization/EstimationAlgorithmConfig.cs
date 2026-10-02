@@ -31,9 +31,50 @@ namespace XTMF2.Bus.Optimization;
 /// </summary>
 public abstract class EstimationAlgorithmConfig : INotifyPropertyChanged
 {
+    private int _randomSeed = 42;
+
     public event PropertyChangedEventHandler? PropertyChanged;
     protected void Raise(string name) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    public int RandomSeed
+    {
+        get => _randomSeed;
+        set
+        {
+            if (_randomSeed == value) return;
+            _randomSeed = value;
+            Raise(nameof(RandomSeed));
+        }
+    }
+
+    protected AlgorithmParameterDescriptor CreateRandomSeedParameter() => new()
+    {
+        Key = "RandomSeed",
+        Label = "Random Seed",
+        Hint = "Use the same seed to reproduce stochastic search results",
+        Value = RandomSeed.ToString(CultureInfo.InvariantCulture)
+    };
+
+    protected bool TryReadRandomSeed(
+        IReadOnlyList<AlgorithmParameterDescriptor> parameters,
+        out int randomSeed,
+        out string? error)
+    {
+        randomSeed = RandomSeed;
+        error = null;
+        foreach (var parameter in parameters)
+        {
+            if (parameter.Key != "RandomSeed")
+                continue;
+            if (!int.TryParse(parameter.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out randomSeed))
+            {
+                error = "Random Seed must be a 32-bit integer.";
+                return false;
+            }
+        }
+        return true;
+    }
 
     /// <summary>Stable identifier used as the JSON type-discriminator.</summary>
     public abstract string AlgorithmId { get; }
@@ -73,6 +114,7 @@ public abstract class EstimationAlgorithmConfig : INotifyPropertyChanged
     {
         writer.WriteStartObject();
         writer.WriteString(TypeProperty, AlgorithmId);
+        writer.WriteNumber("RandomSeed", RandomSeed);
         SaveProperties(writer);
         writer.WriteEndObject();
     }
@@ -118,6 +160,11 @@ public abstract class EstimationAlgorithmConfig : INotifyPropertyChanged
             var prop = reader.GetString() ?? string.Empty;
             reader.Read();
             if (prop == TypeProperty) continue;
+            if (prop == "RandomSeed")
+            {
+                cfg.RandomSeed = reader.GetInt32();
+                continue;
+            }
             cfg.LoadProperty(prop, ref reader);
         }
         return cfg;
@@ -139,6 +186,34 @@ public abstract class EstimationAlgorithmConfig : INotifyPropertyChanged
 
     /// <summary>Default algorithm config used when no config is stored in the file.</summary>
     public static EstimationAlgorithmConfig Default => new NelderMeadConfig();
+
+    public static EstimationAlgorithmConfig? Create(string algorithmId)
+    {
+        foreach (var algorithm in AvailableAlgorithms)
+        {
+            if (algorithm.AlgorithmId != algorithmId)
+                continue;
+            return algorithm.AlgorithmId switch
+            {
+                NelderMeadConfig.Id => new NelderMeadConfig(),
+                ParticleSwarmConfig.Id => new ParticleSwarmConfig(),
+                GeneticAlgorithmConfig.Id => new GeneticAlgorithmConfig(),
+                StochasticGradientConfig.Id => new StochasticGradientConfig(),
+                _ => null
+            };
+        }
+        return null;
+    }
+
+    public EstimationAlgorithmConfig Clone()
+    {
+        var clone = Create(AlgorithmId)
+            ?? throw new InvalidOperationException($"Unknown estimation algorithm '{AlgorithmId}'.");
+        var error = clone.ApplyParameters(GetParameters());
+        if (error is not null)
+            throw new InvalidOperationException($"Unable to copy estimation algorithm configuration: {error}");
+        return clone;
+    }
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) =>
@@ -183,6 +258,7 @@ public sealed class NelderMeadConfig : EstimationAlgorithmConfig
 
     public override IReadOnlyList<AlgorithmParameterDescriptor> GetParameters() =>
     [
+        CreateRandomSeedParameter(),
         new() { Key = "MaxIterations",        Label = "Max Iterations",
                 Hint  = "Stop after this many simplex iterations",
                 Value = _maxIterations.ToString(CultureInfo.InvariantCulture) },
@@ -193,6 +269,8 @@ public sealed class NelderMeadConfig : EstimationAlgorithmConfig
 
     public override string? ApplyParameters(IReadOnlyList<AlgorithmParameterDescriptor> parameters)
     {
+        if (!TryReadRandomSeed(parameters, out var randomSeed, out var seedError))
+            return seedError;
         var inv = CultureInfo.InvariantCulture;
         int mi = _maxIterations; double tol = _convergenceTolerance;
         foreach (var p in parameters)
@@ -211,6 +289,7 @@ public sealed class NelderMeadConfig : EstimationAlgorithmConfig
         }
         _maxIterations = mi;
         _convergenceTolerance = tol;
+        RandomSeed = randomSeed;
         return null;
     }
 
@@ -313,6 +392,7 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
 
     public override IReadOnlyList<AlgorithmParameterDescriptor> GetParameters() =>
     [
+        CreateRandomSeedParameter(),
         new() { Key = "SwarmSize",            Label = "Swarm Size",
                 Hint  = "Number of particles (minimum 2)",
                 Value = _swarmSize.ToString(CultureInfo.InvariantCulture) },
@@ -338,6 +418,8 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
 
     public override string? ApplyParameters(IReadOnlyList<AlgorithmParameterDescriptor> parameters)
     {
+        if (!TryReadRandomSeed(parameters, out var randomSeed, out var seedError))
+            return seedError;
         var inv = CultureInfo.InvariantCulture;
         int swarm = _swarmSize, maxIter = _maxIterations, noImprove = _noImprovementLimit;
         double inertia = _inertia, cog = _cognitiveCoeff, soc = _socialCoeff, tol = _convergenceTolerance;
@@ -378,6 +460,7 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
         _swarmSize = swarm; _maxIterations = maxIter; _inertia = inertia;
         _cognitiveCoeff = cog; _socialCoeff = soc; _convergenceTolerance = tol;
         _noImprovementLimit = noImprove;
+        RandomSeed = randomSeed;
         return null;
     }
 
@@ -385,7 +468,8 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
         int dimensions, double[] lower, double[] upper, double[] initial,
         bool isMaximize = false)
     {
-        var alg = new ParticleSwarmAlgorithm(_swarmSize, _inertia, _cognitiveCoeff, _socialCoeff, _noImprovementLimit);
+        var alg = new ParticleSwarmAlgorithm(_swarmSize, _inertia, _cognitiveCoeff, _socialCoeff,
+            _noImprovementLimit, RandomSeed);
         alg.Initialize(dimensions, lower, upper, initial, _maxIterations, _convergenceTolerance, isMaximize);
         return alg;
     }
@@ -489,6 +573,7 @@ public sealed class GeneticAlgorithmConfig : EstimationAlgorithmConfig
 
     public override IReadOnlyList<AlgorithmParameterDescriptor> GetParameters() =>
     [
+        CreateRandomSeedParameter(),
         new() { Key = "PopulationSize",       Label = "Population Size",
                 Hint  = "Individuals per generation (minimum 4)",
                 Value = _populationSize.ToString(CultureInfo.InvariantCulture) },
@@ -514,6 +599,8 @@ public sealed class GeneticAlgorithmConfig : EstimationAlgorithmConfig
 
     public override string? ApplyParameters(IReadOnlyList<AlgorithmParameterDescriptor> parameters)
     {
+        if (!TryReadRandomSeed(parameters, out var randomSeed, out var seedError))
+            return seedError;
         var inv = CultureInfo.InvariantCulture;
         int pop = _populationSize, maxGen = _maxGenerations, elite = _elitismCount, tournament = _tournamentSize;
         double cross = _crossoverRate, mut = _mutationRate, tol = _convergenceTolerance;
@@ -554,6 +641,7 @@ public sealed class GeneticAlgorithmConfig : EstimationAlgorithmConfig
         _populationSize = pop; _maxGenerations = maxGen; _crossoverRate = cross;
         _mutationRate = mut; _elitismCount = elite; _tournamentSize = tournament;
         _convergenceTolerance = tol;
+        RandomSeed = randomSeed;
         return null;
     }
 
@@ -562,7 +650,7 @@ public sealed class GeneticAlgorithmConfig : EstimationAlgorithmConfig
         bool isMaximize = false)
     {
         var alg = new GeneticAlgorithm(_populationSize, _crossoverRate, _mutationRate,
-                                       _elitismCount, _tournamentSize);
+                                       _elitismCount, _tournamentSize, RandomSeed);
         alg.Initialize(dimensions, lower, upper, initial, _maxGenerations, _convergenceTolerance, isMaximize);
         return alg;
     }
@@ -665,6 +753,7 @@ public sealed class StochasticGradientConfig : EstimationAlgorithmConfig
 
     public override IReadOnlyList<AlgorithmParameterDescriptor> GetParameters() =>
     [
+        CreateRandomSeedParameter(),
         new() { Key = "MaxIterations",        Label = "Max Iterations",
                 Hint  = "Hard cap on SPSA iterations (each uses 3 evaluations)",
                 Value = _maxIterations.ToString(CultureInfo.InvariantCulture) },
@@ -690,6 +779,8 @@ public sealed class StochasticGradientConfig : EstimationAlgorithmConfig
 
     public override string? ApplyParameters(IReadOnlyList<AlgorithmParameterDescriptor> parameters)
     {
+        if (!TryReadRandomSeed(parameters, out var randomSeed, out var seedError))
+            return seedError;
         var inv = CultureInfo.InvariantCulture;
         int maxIter = _maxIterations;
         double tol = _convergenceTolerance, a = _a, c = _c, bigA = _bigA, alpha = _alpha, gamma = _gamma;
@@ -729,6 +820,7 @@ public sealed class StochasticGradientConfig : EstimationAlgorithmConfig
         }
         _maxIterations = maxIter; _convergenceTolerance = tol;
         _a = a; _c = c; _bigA = bigA; _alpha = alpha; _gamma = gamma;
+        RandomSeed = randomSeed;
         return null;
     }
 
@@ -736,7 +828,7 @@ public sealed class StochasticGradientConfig : EstimationAlgorithmConfig
         int dimensions, double[] lower, double[] upper, double[] initial,
         bool isMaximize = false)
     {
-        var alg = new StochasticGradientAlgorithm(_a, _c, _bigA, _alpha, _gamma);
+        var alg = new StochasticGradientAlgorithm(_a, _c, _bigA, _alpha, _gamma, RandomSeed);
         alg.Initialize(dimensions, lower, upper, initial, _maxIterations, _convergenceTolerance, isMaximize);
         return alg;
     }

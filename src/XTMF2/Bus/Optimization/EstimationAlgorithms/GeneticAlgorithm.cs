@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
 
 namespace XTMF2.Bus.Optimization;
 
@@ -27,7 +28,7 @@ namespace XTMF2.Bus.Optimization;
 /// Uses <b>arithmetic (BLX-α) crossover</b>, <b>Gaussian mutation</b>,
 /// <b>tournament selection</b>, and optional elitism.
 /// Each gene is clamped to its per-dimension bounds after mutation.
-/// The algorithm is deterministic given a fixed random seed (42).
+/// The algorithm is deterministic given a fixed configured random seed.
 /// </remarks>
 public sealed class GeneticAlgorithm : IEstimationAlgorithm
 {
@@ -36,6 +37,7 @@ public sealed class GeneticAlgorithm : IEstimationAlgorithm
     private readonly double _mutationRate;
     private readonly int    _elitismCount;
     private readonly int    _tournamentSize;
+    private readonly int    _randomSeed;
 
     private int      _n;
     private double[] _lower   = [];
@@ -59,18 +61,21 @@ public sealed class GeneticAlgorithm : IEstimationAlgorithm
     /// <summary>
     /// Creates a new <see cref="GeneticAlgorithm"/> with the specified hyperparameters.
     /// </summary>
+    /// <param name="randomSeed">Seed used for reproducible population initialization and evolution.</param>
     public GeneticAlgorithm(
         int    populationSize = 50,
         double crossoverRate  = 0.8,
         double mutationRate   = 0.05,
         int    elitismCount   = 2,
-        int    tournamentSize = 3)
+        int    tournamentSize = 3,
+        int    randomSeed      = 42)
     {
         _populationSize = Math.Max(4, populationSize);
         _crossoverRate  = Math.Clamp(crossoverRate, 0.0, 1.0);
         _mutationRate   = Math.Clamp(mutationRate,  0.0, 1.0);
         _elitismCount   = Math.Max(0, elitismCount);
         _tournamentSize = Math.Max(2, tournamentSize);
+        _randomSeed     = randomSeed;
     }
 
     /// <inheritdoc/>
@@ -93,9 +98,19 @@ public sealed class GeneticAlgorithm : IEstimationAlgorithm
                     Action<int, double>? progressCallback = null,
                     Func<bool>? shouldCancel = null)
     {
+        RunBatch(fitnessEvaluator, candidates => EvaluateSequentially(fitnessEvaluator, candidates),
+            progressCallback, shouldCancel);
+    }
+
+    /// <inheritdoc/>
+    public void RunBatch(Func<double[], double> fitnessEvaluator,
+                         Func<IReadOnlyList<double[]>, IReadOnlyList<double>> batchFitnessEvaluator,
+                         Action<int, double>? progressCallback = null,
+                         Func<bool>? shouldCancel = null)
+    {
         if (_n == 0) return;
 
-        var rng = new Random(42);
+        var rng = new Random(_randomSeed);
 
         // Negate fitness internally when maximising so the algorithm always minimises.
         Func<double[], double> eval = _isMaximize
@@ -116,9 +131,12 @@ public sealed class GeneticAlgorithm : IEstimationAlgorithm
                 population[i][d] = _lower[d] + rng.NextDouble() * (_upper[d] - _lower[d]);
         }
 
+        var initialFitness = batchFitnessEvaluator(population);
+        if (initialFitness.Count != population.Length)
+            throw new InvalidOperationException("The batch fitness evaluator must return one value per candidate.");
         for (int i = 0; i < _populationSize; i++)
         {
-            fitnesses[i] = eval(population[i]);
+            fitnesses[i] = _isMaximize ? -initialFitness[i] : initialFitness[i];
             if (fitnesses[i] < _bestInternalFitness)
             {
                 _bestInternalFitness = fitnesses[i];
@@ -164,12 +182,23 @@ public sealed class GeneticAlgorithm : IEstimationAlgorithm
 
                 Mutate(rng, child);
                 next[i]    = child;
-                nextFit[i] = eval(child);
+            }
 
+            var generated = new double[_populationSize - eliteCount][];
+            for (int i = eliteCount; i < _populationSize; i++)
+                generated[i - eliteCount] = next[i];
+            var generatedFitness = batchFitnessEvaluator(generated);
+            if (generatedFitness.Count != generated.Length)
+                throw new InvalidOperationException("The batch fitness evaluator must return one value per candidate.");
+            for (int i = eliteCount; i < _populationSize; i++)
+            {
+                nextFit[i] = _isMaximize
+                    ? -generatedFitness[i - eliteCount]
+                    : generatedFitness[i - eliteCount];
                 if (nextFit[i] < _bestInternalFitness)
                 {
                     _bestInternalFitness = nextFit[i];
-                    BestParameters       = (double[])child.Clone();
+                    BestParameters       = (double[])next[i].Clone();
                 }
             }
 
@@ -183,6 +212,15 @@ public sealed class GeneticAlgorithm : IEstimationAlgorithm
                 break;
             prevBestFitness = _bestInternalFitness;
         }
+    }
+
+    private static IReadOnlyList<double> EvaluateSequentially(
+        Func<double[], double> fitnessEvaluator, IReadOnlyList<double[]> candidates)
+    {
+        var results = new double[candidates.Count];
+        for (int i = 0; i < candidates.Count; i++)
+            results[i] = fitnessEvaluator(candidates[i]);
+        return results;
     }
 
     /// <summary>Tournament selection — returns index of the winner (lowest fitness).</summary>

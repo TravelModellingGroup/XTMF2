@@ -17,6 +17,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\XTMF2.Interfaces\XTMF2.Interfaces.csproj" />
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>XTMF2.UnitTests</_Parameter1>
+    </AssemblyAttribute>
   </ItemGroup>
 
 </Project>

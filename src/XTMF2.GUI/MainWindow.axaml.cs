@@ -38,12 +38,14 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using XTMF2;
 using XTMF2.AI;
+using XTMF2.Bus;
 using XTMF2.Editing;
 using XTMF2.GUI.AI;
 using XTMF2.GUI.Controls;
@@ -63,6 +65,7 @@ public partial class MainWindow : Window
     private bool _documentCloseInProgress;
     private SettingsWindow? _settingsWindow;
     private RunServersWindow? _runServersWindow;
+    private RunServerActivityWindow? _runServerActivityWindow;
     private readonly HttpClient _aiHttpClient = new();
     private readonly AiProviderRegistry _aiProviders = new();
 
@@ -312,7 +315,10 @@ public partial class MainWindow : Window
 
         // Add the Runs tab so it is always visible.
         if (_runController is not null)
+        {
             Documents.Add(_runController.RunsViewModel);
+            _runController.EnableAutomaticRecoveredRunBinding(user);
+        }
 
         // Add the Projects tab as the permanent first document
         Documents.Add(new ProjectsViewModel(runtime, user));
@@ -421,6 +427,43 @@ public partial class MainWindow : Window
         ActivateDocument(editorVm);
     }
 
+    public bool BindRecoveredRunToActiveModelSystem(string runId, out string? error)
+    {
+        if (_activeEditorVm is null || _currentUser is null || _runController is null)
+        {
+            error = "This run could not be matched automatically. Open its model system, make it active, and bind it manually.";
+            return false;
+        }
+        return _runController.BindRecoveredRemoteRun(runId, _activeEditorVm.Session,
+            _activeEditorVm.User, out error);
+    }
+
+    public bool RetryRemoteRunReceipt(string runId, out string? error)
+    {
+        if (_runController is null)
+        {
+            error = "The run controller is unavailable.";
+            return false;
+        }
+        return _runController.RetryRemoteRunReceipt(runId, out error);
+    }
+
+    public bool RequestRemoteRunOutputTransfer(string runId, out string? error)
+    {
+        if (_runController is null)
+        {
+            error = "The run controller is unavailable.";
+            return false;
+        }
+        return _runController.RequestRemoteRunOutputTransfer(runId, out error);
+    }
+
+    public Task<RemoteRunDeletionResponse> DeleteRemoteRunAsync(string runId)
+        => _runController is null
+            ? Task.FromResult(new RemoteRunDeletionResponse(string.Empty, runId, false,
+                "The run controller is unavailable."))
+            : _runController.DeleteRemoteRunAsync(runId);
+
     /// <summary>
     /// Switches the active document to the Runs tab.
     /// </summary>
@@ -477,6 +520,19 @@ public partial class MainWindow : Window
         {
             _settingsWindow.Activate();
         }
+    }
+
+    private void RunServerActivity_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_runServerActivityWindow is not null && _runServerActivityWindow.IsVisible)
+        {
+            _runServerActivityWindow.Activate();
+            return;
+        }
+
+        _runServerActivityWindow = new RunServerActivityWindow(_runController);
+        _runServerActivityWindow.Closed += (_, _) => _runServerActivityWindow = null;
+        _runServerActivityWindow.Show(this);
     }
 
     private void ShowRunServersWindow()
@@ -641,6 +697,43 @@ public partial class MainWindow : Window
                 if (dialog.Result == SaveChangesDialog.DialogResult.Yes
                     && !await editor.SaveModelSystemAsync())
                     return;
+            }
+
+            if (_runController is not null)
+            {
+                IReadOnlyList<RunServerActivity> localActivities;
+                try
+                {
+                    localActivities = await _runController.QueryLocalRunServerActivityAsync();
+                }
+                catch (Exception exception) when (exception is IOException or OperationCanceledException or
+                    ObjectDisposedException or InvalidOperationException)
+                {
+                    var confirmation = new ConfirmDialog("Local RunServer Status Unavailable",
+                        $"The local RunServer's workload could not be checked ({exception.Message}). " +
+                        "Closing may terminate a running model system. Close the program anyway?");
+                    await confirmation.ShowDialog(this);
+                    if (!confirmation.Result)
+                        return;
+                    localActivities = Array.Empty<RunServerActivity>();
+                }
+
+                if (localActivities.Count > 0)
+                {
+                    var runningCount = localActivities.Count(activity => activity.State == RunServerActivityState.Running);
+                    var queuedCount = localActivities.Count(activity => activity.State == RunServerActivityState.Queued);
+                    var workload = new List<string>();
+                    if (runningCount > 0)
+                        workload.Add($"{runningCount} running");
+                    if (queuedCount > 0)
+                        workload.Add($"{queuedCount} queued");
+                    var confirmation = new ConfirmDialog("Local RunServer Is Busy",
+                        $"The local RunServer has {string.Join(" and ", workload)} model system(s). " +
+                        "Closing the program will stop the Local RunServer and terminate this work. Close anyway?");
+                    await confirmation.ShowDialog(this);
+                    if (!confirmation.Result)
+                        return;
+                }
             }
 
             _allowDocumentClose = true;

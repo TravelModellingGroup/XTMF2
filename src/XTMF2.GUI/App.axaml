@@ -332,6 +332,12 @@
         <Style Selector="Window.neon-dialog TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource DlgFg}"/>
         </Style>
+        <Style Selector="Window.neon-dialog Grid.activity-row">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Window.neon-dialog Grid.activity-row:pointerover">
+            <Setter Property="Background" Value="{DynamicResource DlgSelected}"/>
+        </Style>
         <Style Selector="Window.neon-dialog TextBox">
             <Setter Property="Background" Value="{DynamicResource DlgInputBg}"/>
             <Setter Property="Foreground" Value="{DynamicResource DlgFg}"/>

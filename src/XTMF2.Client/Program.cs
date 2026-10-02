@@ -179,6 +179,8 @@ namespace XTMF2.Client
             Console.Out.Flush();
             using (tcpListener)
             using (var shutdown = new CancellationTokenSource())
+            using (var remoteEstimationRegistry = new RemoteSharedEstimationRegistry())
+            using (var remoteRunRegistry = new RemoteRunRegistry())
             {
                 Console.CancelKeyPress += (_, eventArgs) =>
                 {
@@ -212,13 +214,16 @@ namespace XTMF2.Client
                     Console.Out.Flush();
                     var acceptedClient = client;
                     _ = securityDirectory is null
-                        ? Task.Run(() => RunTcpClientUnsecured(acceptedClient, extraDlls))
-                        : Task.Run(() => RunTcpClient(acceptedClient, certificate!, token!, extraDlls));
+                        ? Task.Run(() => RunTcpClientUnsecured(acceptedClient, extraDlls,
+                            remoteEstimationRegistry, remoteRunRegistry))
+                        : Task.Run(() => RunTcpClient(acceptedClient, certificate!, token!, extraDlls,
+                            remoteEstimationRegistry, remoteRunRegistry));
                 }
             }
         }
 
-        private static void RunTcpClientUnsecured(TcpClient client, List<string> extraDlls)
+        private static void RunTcpClientUnsecured(TcpClient client, List<string> extraDlls,
+            RemoteSharedEstimationRegistry remoteEstimationRegistry, RemoteRunRegistry remoteRunRegistry)
         {
             var remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown endpoint";
             Console.WriteLine($"Local RunServer connection accepted from {remoteEndpoint}");
@@ -228,7 +233,9 @@ namespace XTMF2.Client
             {
                 try
                 {
-                    RunClient(stream, extraDlls, usePrivateWorkspace: true);
+                    RunClient(stream, extraDlls, usePrivateWorkspace: true,
+                        remoteEstimationRegistry: remoteEstimationRegistry,
+                        remoteRunRegistry: remoteRunRegistry);
                 }
                 catch (Exception ex)
                 {
@@ -238,7 +245,8 @@ namespace XTMF2.Client
             }
         }
 
-        private static void RunTcpClient(TcpClient client, X509Certificate2 certificate, string token, List<string> extraDlls)
+        private static void RunTcpClient(TcpClient client, X509Certificate2 certificate, string token, List<string> extraDlls,
+            RemoteSharedEstimationRegistry remoteEstimationRegistry, RemoteRunRegistry remoteRunRegistry)
         {
             var remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown endpoint";
             using (client)
@@ -255,7 +263,9 @@ namespace XTMF2.Client
                 {
                     try
                     {
-                        RunClient(stream, extraDlls, usePrivateWorkspace: true);
+                        RunClient(stream, extraDlls, usePrivateWorkspace: true,
+                            remoteEstimationRegistry: remoteEstimationRegistry,
+                            remoteRunRegistry: remoteRunRegistry);
                     }
                     catch (Exception ex)
                     {
@@ -268,7 +278,9 @@ namespace XTMF2.Client
             }
         }
 
-        private static void RunClient(Stream serverStream, List<string> extraDlls, SystemConfiguration? config = null, bool usePrivateWorkspace = false)
+        private static void RunClient(Stream serverStream, List<string> extraDlls, SystemConfiguration? config = null,
+            bool usePrivateWorkspace = false, RemoteSharedEstimationRegistry? remoteEstimationRegistry = null,
+            RemoteRunRegistry? remoteRunRegistry = null)
         {
             var runtime = XTMFRuntime.CreateRuntime(config);
             var loadedConfig = runtime.SystemConfiguration;
@@ -276,8 +288,24 @@ namespace XTMF2.Client
             {
                 loadedConfig.LoadAssembly(dll);
             }
-            using var clientBus = new RunServerBus(serverStream, true, runtime, extraDlls, System.Diagnostics.Debugger.IsAttached, usePrivateWorkspace);
-            clientBus.ProcessRequests();
+            using var ownedRemoteEstimationRegistry = remoteEstimationRegistry is null
+                ? new RemoteSharedEstimationRegistry()
+                : null;
+            var registry = remoteEstimationRegistry ?? ownedRemoteEstimationRegistry!;
+            using var clientBus = new RunServerBus(serverStream, true, runtime, extraDlls,
+                System.Diagnostics.Debugger.IsAttached, usePrivateWorkspace, remoteRunRegistry);
+            using var sharedEstimationWorker = clientBus.AttachSharedEstimationWorker();
+            using var remoteCoordinator = new RemoteSharedEstimationCoordinatorSession(clientBus, registry);
+            clientBus.SetSharedActivityProviders(registry.GetActiveActivities,
+                sharedEstimationWorker.GetActiveActivities);
+            try
+            {
+                clientBus.ProcessRequests();
+            }
+            finally
+            {
+                remoteRunRegistry?.Detach(clientBus);
+            }
         }
     }
 }

@@ -68,6 +68,23 @@ In XTMF2, open **Settings**, open **RunServers**, and add a remote endpoint. Ent
 
 The GUI pins the server certificate to this fingerprint and authenticates with the token before creating the RunServer bus. A mismatched certificate or token is rejected. Do not expose the TCP port to untrusted networks; use firewall rules or a private network as appropriate.
 
+## Distributed estimation
+
+Estimation runs can evaluate candidate parameter vectors concurrently across multiple connected RunServers. Normal model runs and calibration runs continue to use one RunServer.
+
+To start a distributed estimation run:
+
+1. Connect the required RunServers from **Settings** > **RunServers**.
+2. Open the model system and choose **Run Estimation**.
+3. Select two or more RunServers in the run configuration dialog and choose the orchestrator RunServer. The other selected servers are workers.
+4. If the model has an estimation `InputDirectory`, review its worker-local value for each selected worker. These values are saved in the GUI settings by model node ID and are reused on later estimation runs.
+
+The orchestrator RunServer owns the estimation algorithm and connects directly to the workers. Each worker constructs and validates its own local copy of the model. Input-directory overrides are applied only to that worker's copy; the saved model system is not modified. The orchestrator must be able to reach every worker's configured TCP endpoint.
+
+After submission, the GUI is not required for the optimization to continue. The orchestrator persists `estimation-completion.json` in the run directory when the job finishes, including the best parameter values and completion status.
+
+RunServers that receive path overrides must be running the current shared-estimation worker build. Runs without path overrides retain the version-1 shared-estimation protocol and remain compatible with workers that support the original distributed-estimation protocol.
+
 ## Main Branches
 
 There are 4 major branches for XTMF 2 intended for different purposes:
