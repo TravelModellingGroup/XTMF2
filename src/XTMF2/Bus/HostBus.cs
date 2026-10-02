@@ -242,7 +242,8 @@ public sealed class HostBus : IDisposable
                 using var reader = new BinaryReader(_HostStream, Encoding.UTF8, true);
                 while (!_Exit)
                 {
-                    var command = (In)reader.ReadInt32();
+                    var commandValue = reader.ReadInt32();
+                    var command = (In)commandValue;
                     switch (command)
                     {
                         case In.Heartbeat:
@@ -391,7 +392,8 @@ public sealed class HostBus : IDisposable
                             }
                             break;
                         default:
-                            throw new Exception($"Unsupported command: {Enum.GetName<In>(command)}");
+                            throw new InvalidDataException(
+                                $"Unsupported command value {commandValue}: {Enum.GetName<In>(command) ?? "unknown"}.");
                     }
                     System.Threading.Interlocked.MemoryBarrier();
                 }

@@ -216,8 +216,6 @@ public static class SharedEstimationProtocol
             writer.Write(parameter.Min);
             writer.Write(parameter.Max);
         }
-        WriteOptionalGuid(writer, request.Run.ProjectId);
-        WriteOptionalGuid(writer, request.Run.ModelSystemId);
     }
 
     public static SharedEstimationCoordinatorRequest ReadCoordinatorRequest(BinaryReader reader)

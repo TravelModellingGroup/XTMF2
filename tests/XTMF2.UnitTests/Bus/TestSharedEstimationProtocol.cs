@@ -48,6 +48,7 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual(projectId, read.Run.ProjectId);
         Assert.AreEqual(modelSystemId, read.Run.ModelSystemId);
         Assert.AreEqual(ownerUserId, read.Run.OwnerUserId);
+        Assert.AreEqual(stream.Length, stream.Position);
     }
 
     [TestMethod]

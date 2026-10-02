@@ -19,6 +19,94 @@ namespace XTMF2.UnitTests.Bus;
 public class TestSharedEstimationEndToEnd
 {
     [TestMethod]
+    public void LocalRunServerCoordinator_CanEvaluateAsItsOwnWorker()
+    {
+        RunInModelSystemContext(nameof(LocalRunServerCoordinator_CanEvaluateAsItsOwnWorker),
+            (user, projectSession, session) =>
+            {
+                XTMF2.Editing.CommandError error = null;
+                var modelSystem = session.ModelSystem;
+                Assert.IsTrue(session.AddModelSystemStart(user, modelSystem.GlobalBoundary, "Start",
+                    Rectangle.Hidden, out Start start, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(user, modelSystem.GlobalBoundary, "Ignore",
+                    typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignore, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(user, modelSystem.GlobalBoundary, "Action",
+                    typeof(SimpleTestModule), Rectangle.Hidden, out var action, out error), error?.Message);
+                Assert.IsTrue(session.AddLink(user, start, start.Hooks[0], ignore, out _, out error), error?.Message);
+                Assert.IsTrue(session.AddLink(user, ignore, ignore.Hooks[0], action, out _, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(user, modelSystem.GlobalBoundary, "Fitness",
+                    typeof(BasicParameter<float>), Rectangle.Hidden, out var fitness, out error), error?.Message);
+                Assert.IsTrue(session.SetParameterValue(user, fitness, "2.5", out error), error?.Message);
+                Assert.IsTrue(session.SetEstimationFitnessNode(user, fitness, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(user, modelSystem.GlobalBoundary, "Parameter",
+                    typeof(SetableParameter<float>), Rectangle.Hidden, out var parameter, out error), error?.Message);
+                Assert.IsTrue(session.SetParameterValue(user, parameter, "0.5", out error), error?.Message);
+                Assert.IsTrue(session.AddEstimationGroup(user, "Group", out var group, out error), error?.Message);
+                Assert.IsTrue(session.AddEstimationParameter(user, group!, parameter,
+                    0.0, 1.0, 0.5, out _, out error), error?.Message);
+
+                using var serialized = new MemoryStream();
+                Assert.IsTrue(session.Save(out error, serialized), error?.Message);
+                var runId = Guid.NewGuid().ToString("N");
+                var runDirectory = Path.Combine(Path.GetTempPath(), "XTMF2-LocalCoordinator", runId);
+                Directory.CreateDirectory(runDirectory);
+                var config = modelSystem.EstimationAlgorithmConfig;
+                var metadata = session.GetOptimizationParameterMeta(RunMode.Estimation);
+                var request = new SharedEstimationCoordinatorRequest(
+                    new SharedEstimationRunRequest(runId, runDirectory, "Start", serialized.ToArray(),
+                        ProjectId: Guid.NewGuid(), ModelSystemId: Guid.NewGuid()),
+                    Array.Empty<SharedEstimationWorkerEndpoint>(),
+                    config.AlgorithmId,
+                    config.GetParameters(),
+                    metadata.Select(item => item.min).ToArray(),
+                    metadata.Select(item => item.max).ToArray(),
+                    metadata.Select(item => 0.5).ToArray(),
+                    IsMaximize: false,
+                    UseCoordinatorAsWorker: true,
+                    Parameters: metadata.Select(item => new SharedEstimationParameterMetadata(
+                        item.nodeIndex, item.name, item.min, item.max)).ToArray());
+
+                try
+                {
+                    CreateRunClient(true, host =>
+                    {
+                        var statuses = new List<string>();
+                        var progressUpdates = new List<SharedEstimationProgress>();
+                        var completion = new TaskCompletionSource<SharedEstimationCompletion>(
+                            TaskCreationOptions.RunContinuationsAsynchronously);
+                        host.SharedEstimationStatusAvailable += (_, status) =>
+                        {
+                            if (status.RunId == runId)
+                                statuses.Add(status.Message);
+                        };
+                        host.SharedEstimationProgressAvailable += (_, progress) =>
+                        {
+                            if (progress.RunId == runId)
+                                progressUpdates.Add(progress);
+                        };
+                        host.SharedEstimationCompleted += (_, result) =>
+                        {
+                            if (result.RunId == runId)
+                                completion.TrySetResult(result);
+                        };
+                        Assert.IsTrue(host.StartRemoteSharedEstimation(request, out var startError), startError?.Message);
+                        Assert.IsTrue(completion.Task.Wait(TimeSpan.FromSeconds(30)),
+                            $"The local coordinator did not report completion. Statuses: {string.Join(" | ", statuses)}; " +
+                            $"progress updates: {progressUpdates.Count}.");
+                        Assert.IsTrue(completion.Task.Result.Succeeded, completion.Task.Result.FailureReason);
+                        Assert.AreEqual(2.5, completion.Task.Result.BestFitness, 0.0001);
+                        Assert.IsTrue(File.Exists(Path.Combine(runDirectory, "estimation_report.csv")));
+                    });
+                }
+                finally
+                {
+                    if (Directory.Exists(runDirectory))
+                        Directory.Delete(runDirectory, recursive: true);
+                }
+            });
+    }
+
+    [TestMethod]
     public void RunServerActivityQuery_IncludesSharedEstimationWorkerAssignment()
     {
         CreateRunClient(true, host =>
