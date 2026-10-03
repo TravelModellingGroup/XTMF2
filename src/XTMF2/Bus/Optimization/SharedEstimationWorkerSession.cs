@@ -2,16 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading.Channels;
+using XTMF2.Bus;
 
-namespace XTMF2.Bus;
+namespace XTMF2.Bus.Optimization;
 
 /// <summary>
 /// Binds shared-estimation protocol events on a RunServerBus to a prepared worker participant.
 /// </summary>
 public sealed class SharedEstimationWorkerSession : IDisposable
 {
-    private sealed record WorkerCommand(IReadOnlyList<SharedEstimationCandidate> Candidates);
-
     private readonly RunServerBus _bus;
     private readonly object _sync = new();
     private SharedEstimationWorkerParticipant? _participant;
@@ -19,19 +18,18 @@ public sealed class SharedEstimationWorkerSession : IDisposable
     private RunError? _preparationError;
     private bool _disposed;
     private long? _activeBatchId;
-    private int _activeCandidateCount;
     private string? _processingRunId;
     private Scheduler.Reservation? _reservation;
     private readonly List<Scheduler.Reservation> _reservationsToReleaseWhenIdle = new();
     private TaskCompletionSource<bool>? _assignmentReady;
     private bool _evaluatingCandidate;
-    private readonly Channel<WorkerCommand> _candidateQueue = Channel.CreateUnbounded<WorkerCommand>();
+    private readonly Channel<SharedEstimationCandidate> _candidateQueue = Channel.CreateUnbounded<SharedEstimationCandidate>();
 
     internal SharedEstimationWorkerSession(RunServerBus bus)
     {
         _bus = bus;
         _bus.SharedEstimationRunRequested += OnRunRequested;
-        _bus.SharedEstimationCandidatesReceived += OnCandidatesReceived;
+        _bus.SharedEstimationCandidateReceived += OnCandidateReceived;
         _bus.SharedEstimationCancellationRequested += OnCancellationRequested;
         _ = Task.Run(ProcessCandidateQueueAsync);
     }
@@ -114,15 +112,24 @@ public sealed class SharedEstimationWorkerSession : IDisposable
             _preparationError = error;
         }
         ready.TrySetResult(true);
+        try
+        {
+            _bus.SendSharedEstimationWorkerReady(new SharedEstimationWorkerReady(
+                request.RunId, participant is not null && error is null, error?.Message));
+        }
+        catch (Exception exception) when (exception is System.IO.IOException or ObjectDisposedException
+            or InvalidOperationException or ArgumentException)
+        {
+        }
         if (error is not null)
             _bus.SendStatusMessage(request.RunId, $"[Estimation] Worker preparation failed: {error.Message}");
         else
             _bus.SendStatusMessage(request.RunId, "[Estimation] Worker has the RunServer execution slot.");
     }
 
-    private void OnCandidatesReceived(object sender, IReadOnlyList<SharedEstimationCandidate> candidates)
+    private void OnCandidateReceived(object sender, SharedEstimationCandidate candidate)
     {
-        _candidateQueue.Writer.TryWrite(new WorkerCommand(candidates));
+        _candidateQueue.Writer.TryWrite(candidate);
     }
 
     public IReadOnlyList<RunServerActivity> GetActiveActivities()
@@ -138,81 +145,87 @@ public sealed class SharedEstimationWorkerSession : IDisposable
                 new RunServerActivity(activityRunId, "Shared estimation worker", "Shared estimation worker",
                     RunServerActivityState.Running,
                     isEvaluating
-                        ? $"Evaluating {_activeCandidateCount} candidate(s), batch {_activeBatchId}."
+                        ? $"Evaluating candidate, batch {_activeBatchId}."
                         : "Worker has the RunServer execution slot.",
                     ActiveWorkers: 1,
-                    EvaluationsPending: _activeCandidateCount)
+                    EvaluationsPending: isEvaluating ? 1 : 0)
             ];
         }
     }
 
     private async Task ProcessCandidateQueueAsync()
     {
-        await foreach (var command in _candidateQueue.Reader.ReadAllAsync())
+        await foreach (var candidate in _candidateQueue.Reader.ReadAllAsync())
         {
-            ProcessCandidates(command.Candidates);
+            ProcessCandidate(candidate);
         }
     }
 
-    private void ProcessCandidates(IReadOnlyList<SharedEstimationCandidate> candidates)
+    private void ProcessCandidate(SharedEstimationCandidate candidate)
     {
-        SharedEstimationWorkerParticipant? participant;
-        RunError? preparationError;
-        string? runId;
-        lock (_sync)
-        {
-            if (_disposed)
-                return;
-            participant = _participant;
-            preparationError = _preparationError;
-            runId = _runId;
-        }
-
-        var results = new SharedEstimationEvaluationResult[candidates.Count];
         Task<bool>? readyTask;
+        Scheduler.Reservation? assignmentReservation;
+        string? assignmentRunId;
         lock (_sync)
         {
             readyTask = _assignmentReady?.Task;
-            if (candidates.Count > 0)
-            {
-                _processingRunId = candidates[0].RunId;
-                _activeBatchId = candidates[0].BatchId;
-                _activeCandidateCount = candidates.Count;
-            }
+            assignmentReservation = _reservation;
+            assignmentRunId = _runId;
+            _processingRunId = candidate.RunId;
+            _activeBatchId = candidate.BatchId;
         }
         try
         {
-            var isReady = readyTask is not null && readyTask.GetAwaiter().GetResult();
-            for (int i = 0; i < candidates.Count; i++)
+            var preparationCompleted = readyTask is not null && readyTask.GetAwaiter().GetResult();
+            bool isReady;
+            SharedEstimationWorkerParticipant? participant;
+            RunError? preparationError;
+            string? runId;
+            lock (_sync)
             {
-                var candidate = candidates[i];
-                if (!isReady || runId is null || candidate.RunId != runId)
+                if (_disposed)
+                    return;
+                isReady = preparationCompleted
+                    && assignmentReservation is not null
+                    && ReferenceEquals(_reservation, assignmentReservation)
+                    && _runId == assignmentRunId;
+                participant = _participant;
+                preparationError = _preparationError;
+                runId = assignmentRunId;
+            }
+
+            SharedEstimationEvaluationResult result;
+            if (!isReady || runId is null || candidate.RunId != runId)
+            {
+                result = CreateError(candidate, "No matching shared-estimation run is active.", null, null);
+            }
+            else if (preparationError is not null)
+            {
+                result = CreateError(candidate, preparationError.Message ?? "Worker preparation failed.",
+                    preparationError.ModuleName, preparationError.ElementId);
+            }
+            else if (participant is null)
+            {
+                result = CreateError(candidate, "The shared-estimation worker is not prepared.", null, null);
+            }
+            else
+            {
+                bool shouldEvaluate;
+                lock (_sync)
                 {
-                    results[i] = CreateError(candidate, "No matching shared-estimation run is active.", null, null);
+                    shouldEvaluate = _runId == candidate.RunId;
+                    if (shouldEvaluate)
+                        _evaluatingCandidate = true;
                 }
-                else if (preparationError is not null)
+                if (!shouldEvaluate)
                 {
-                    results[i] = CreateError(candidate, preparationError.Message ?? "Worker preparation failed.",
-                        preparationError.ModuleName, preparationError.ElementId);
-                }
-                else if (participant is null)
-                {
-                    results[i] = CreateError(candidate, "The shared-estimation worker is not prepared.", null, null);
+                    result = CreateError(candidate, "The shared-estimation assignment was removed.", null, null);
                 }
                 else
                 {
-                    lock (_sync)
-                    {
-                        if (_runId != candidate.RunId)
-                        {
-                            results[i] = CreateError(candidate, "The shared-estimation assignment was removed.", null, null);
-                            continue;
-                        }
-                        _evaluatingCandidate = true;
-                    }
                     try
                     {
-                        results[i] = participant.Evaluate(candidate);
+                        result = participant.Evaluate(candidate);
                     }
                     finally
                     {
@@ -229,18 +242,16 @@ public sealed class SharedEstimationWorkerSession : IDisposable
                 }
             }
 
-            foreach (var result in results)
-                _bus.SendSharedEstimationResults([result]);
+            _bus.SendSharedEstimationResult(result);
         }
         finally
         {
             lock (_sync)
             {
-                if (candidates.Count > 0 && _processingRunId == candidates[0].RunId)
+                if (_processingRunId == candidate.RunId)
                 {
                     _processingRunId = null;
                     _activeBatchId = null;
-                    _activeCandidateCount = 0;
                 }
             }
         }
@@ -278,7 +289,6 @@ public sealed class SharedEstimationWorkerSession : IDisposable
                 release = _reservation;
                 _reservation = null;
                 _activeBatchId = null;
-                _activeCandidateCount = 0;
             }
         }
         if (release is not null)
@@ -302,7 +312,6 @@ public sealed class SharedEstimationWorkerSession : IDisposable
             _participant = null;
             _preparationError = null;
             _activeBatchId = null;
-            _activeCandidateCount = 0;
             _processingRunId = null;
             _assignmentReady?.TrySetResult(false);
             _assignmentReady = null;
@@ -315,7 +324,7 @@ public sealed class SharedEstimationWorkerSession : IDisposable
 
         _candidateQueue.Writer.TryComplete();
         _bus.SharedEstimationRunRequested -= OnRunRequested;
-        _bus.SharedEstimationCandidatesReceived -= OnCandidatesReceived;
+        _bus.SharedEstimationCandidateReceived -= OnCandidateReceived;
         _bus.SharedEstimationCancellationRequested -= OnCancellationRequested;
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
@@ -13,7 +14,7 @@ using XTMF2.RuntimeModules;
 using XTMF2.UnitTests.Modules;
 using static XTMF2.UnitTests.TestHelper;
 
-namespace XTMF2.UnitTests.Bus;
+namespace XTMF2.UnitTests.Bus.Optimization;
 
 [TestClass]
 public class TestSharedEstimationEndToEnd
@@ -181,6 +182,8 @@ public class TestSharedEstimationEndToEnd
                         Assert.IsTrue(pool.AddExistingWorker("worker-1", "worker-1", firstHost, out var poolError), poolError);
                         Assert.IsTrue(pool.AddExistingWorker("worker-2", "worker-2", secondHost, out poolError), poolError);
                         Assert.IsTrue(pool.StartRun(request, out poolError, overrides), poolError);
+                        Assert.IsTrue(SpinWait.SpinUntil(() => pool.WorkerCount == 2,
+                            TimeSpan.FromSeconds(10)), "Both RunServers should report readiness before evaluation starts.");
 
                         var algorithm = new FixedBatchAlgorithm();
                         var reportPath = Path.Combine(workerRoot.FullName, "estimation_report.csv");

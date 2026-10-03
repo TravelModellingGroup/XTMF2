@@ -4,6 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
 using XTMF2.Bus;
+using XTMF2.Bus.Optimization;
 using XTMF2.GUI;
 using XTMF2.GUI.Properties;
 using XTMF2.GUI.ViewModels;

@@ -27,6 +27,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using XTMF2.Bus;
+using XTMF2.Bus.Optimization;
 using XTMF2.Configuration;
 
 namespace XTMF2.Client

@@ -10,6 +10,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using XTMF2.Bus;
+using XTMF2.Bus.Optimization;
 
 namespace XTMF2.GUI.Views;
 

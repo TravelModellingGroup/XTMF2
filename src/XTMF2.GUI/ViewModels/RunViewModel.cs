@@ -29,6 +29,7 @@ using XTMF2.GUI.Properties;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XTMF2.Bus;
+using XTMF2.Bus.Optimization;
 using XTMF2.Editing;
 
 namespace XTMF2.GUI.ViewModels;

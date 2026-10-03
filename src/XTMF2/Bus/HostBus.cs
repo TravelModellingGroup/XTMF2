@@ -24,6 +24,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using XTMF2.Bus.Optimization;
 using XTMF2.Editing;
 
 namespace XTMF2.Bus;
@@ -197,7 +198,7 @@ public sealed class HostBus : IDisposable
     /// </summary>
     public event IterationProgressUpdate? ClientIterationProgressAvailable;
 
-    public event EventHandler<IReadOnlyList<SharedEstimationEvaluationResult>>? SharedEstimationResultsAvailable;
+    public event EventHandler<SharedEstimationEvaluationResult>? SharedEstimationResultAvailable;
 
     public event EventHandler<SharedEstimationProgress>? SharedEstimationProgressAvailable;
 
@@ -212,6 +213,8 @@ public sealed class HostBus : IDisposable
     public event EventHandler<SharedEstimationWorkerControlAcknowledgement>? SharedEstimationWorkerControlAcknowledged;
 
     public event EventHandler<SharedEstimationStatus>? SharedEstimationStatusAvailable;
+
+    public event EventHandler<SharedEstimationWorkerReady>? SharedEstimationWorkerReadyAvailable;
 
     private static void IgnoreWarnings(Action toRun)
     {
@@ -340,16 +343,16 @@ public sealed class HostBus : IDisposable
                             break;
                         case In.SharedEstimationMessage:
                             {
-                                var (protocolVersion, messageType) = SharedEstimationProtocol.ReadHeader(reader);
+                                var (_, messageType) = SharedEstimationProtocol.ReadHeader(reader);
                                 switch (messageType)
                                 {
-                                    case SharedEstimationMessageType.EvaluationResults:
-                                        IgnoreWarnings(() => SharedEstimationResultsAvailable?.Invoke(
-                                            this, SharedEstimationProtocol.ReadResultsPayload(reader)));
+                                    case SharedEstimationMessageType.EvaluationResult:
+                                        IgnoreWarnings(() => SharedEstimationResultAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadResultPayload(reader)));
                                         break;
                                     case SharedEstimationMessageType.Progress:
                                         IgnoreWarnings(() => SharedEstimationProgressAvailable?.Invoke(
-                                            this, SharedEstimationProtocol.ReadProgressPayload(reader, protocolVersion)));
+                                            this, SharedEstimationProtocol.ReadProgressPayload(reader)));
                                         break;
                                     case SharedEstimationMessageType.Complete:
                                         IgnoreWarnings(() => SharedEstimationCompleted?.Invoke(
@@ -357,7 +360,7 @@ public sealed class HostBus : IDisposable
                                         break;
                                     case SharedEstimationMessageType.JobSnapshots:
                                         IgnoreWarnings(() => SharedEstimationJobSnapshotsAvailable?.Invoke(
-                                            this, SharedEstimationProtocol.ReadJobSnapshotsPayload(reader, protocolVersion)));
+                                            this, SharedEstimationProtocol.ReadJobSnapshotsPayload(reader)));
                                         break;
                                     case SharedEstimationMessageType.WorkerControlAcknowledgement:
                                         IgnoreWarnings(() => SharedEstimationWorkerControlAcknowledged?.Invoke(
@@ -367,9 +370,13 @@ public sealed class HostBus : IDisposable
                                         IgnoreWarnings(() => SharedEstimationStatusAvailable?.Invoke(
                                             this, SharedEstimationProtocol.ReadStatusPayload(reader)));
                                         break;
+                                    case SharedEstimationMessageType.WorkerReady:
+                                        var readiness = SharedEstimationProtocol.ReadWorkerReadyPayload(reader);
+                                        IgnoreWarnings(() => SharedEstimationWorkerReadyAvailable?.Invoke(this, readiness));
+                                        break;
                                     case SharedEstimationMessageType.RemoteRunSnapshots:
                                         IgnoreWarnings(() => RemoteRunSnapshotsAvailable?.Invoke(
-                                            this, SharedEstimationProtocol.ReadRemoteRunSnapshotsPayload(reader, protocolVersion)));
+                                            this, SharedEstimationProtocol.ReadRemoteRunSnapshotsPayload(reader)));
                                         break;
                                     case SharedEstimationMessageType.RemoteRunArtifacts:
                                         IgnoreWarnings(() => RemoteRunArtifactsAvailable?.Invoke(
@@ -586,7 +593,7 @@ public sealed class HostBus : IDisposable
                 writer.Write((int)Out.RequestClientShutdown);
                 return true;
             }
-            catch (IOException e)
+            catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException or ArgumentException)
             {
                 error = new CommandError(e.Message);
                 return false;
@@ -610,9 +617,9 @@ public sealed class HostBus : IDisposable
         [NotNullWhen(false)] out CommandError? error)
         => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteWorkerRegistration(writer, registration, remove: true), out error);
 
-    public bool SendSharedEstimationCandidates(IReadOnlyList<SharedEstimationCandidate> candidates,
+    public bool SendSharedEstimationCandidate(SharedEstimationCandidate candidate,
         [NotNullWhen(false)] out CommandError? error)
-        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCandidates(writer, candidates), out error);
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCandidate(writer, candidate), out error);
 
     public bool CancelSharedEstimation(string runId, string? reason,
         [NotNullWhen(false)] out CommandError? error)
@@ -746,7 +753,7 @@ public sealed class HostBus : IDisposable
                 writer.Flush();
                 return true;
             }
-            catch (IOException e)
+            catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException or ArgumentException)
             {
                 error = new CommandError(e.Message);
                 return false;

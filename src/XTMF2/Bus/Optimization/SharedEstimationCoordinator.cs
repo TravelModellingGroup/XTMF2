@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using XTMF2.Bus;
 
-namespace XTMF2.Bus;
+namespace XTMF2.Bus.Optimization;
 
 public sealed class SharedEstimationCoordinator : IDisposable
 {
@@ -22,11 +24,11 @@ public sealed class SharedEstimationCoordinator : IDisposable
         get
         {
             lock (_gate)
-                return _workers.Count;
+                return _workers.Values.Count(slot => slot.IsReady);
         }
     }
 
-    public bool AddWorker(ISharedEstimationWorker worker, out string? error)
+    public bool AddWorker(ISharedEstimationWorker worker, out string? error, bool isReady = true)
     {
         ArgumentNullException.ThrowIfNull(worker);
         error = null;
@@ -41,11 +43,38 @@ public sealed class SharedEstimationCoordinator : IDisposable
                 return false;
             }
 
-            var slot = new WorkerSlot(worker);
+            var slot = new WorkerSlot(worker, isReady);
             _workers.Add(worker.WorkerId, slot);
-            worker.ResultsReceived += OnWorkerResultsReceived;
+            worker.ResultReceived += OnWorkerResultReceived;
             worker.Disconnected += OnWorkerDisconnected;
             dispatches = BuildDispatchesLocked();
+        }
+
+        SendDispatches(dispatches);
+        return true;
+    }
+
+    public bool SetWorkerReady(string workerId, bool isReady, out string? error)
+    {
+        error = null;
+        List<Dispatch> dispatches;
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            if (!_workers.TryGetValue(workerId, out var slot))
+            {
+                error = $"Worker '{workerId}' is not registered.";
+                return false;
+            }
+
+            slot.IsReady = isReady;
+            if (!isReady && slot.AssignedCandidateId is { } candidateId)
+            {
+                if (_pending.TryGetValue(candidateId, out var pending))
+                    pending.AssignedWorkerId = null;
+                slot.AssignedCandidateId = null;
+            }
+            dispatches = isReady ? BuildDispatchesLocked() : [];
         }
 
         SendDispatches(dispatches);
@@ -136,7 +165,7 @@ public sealed class SharedEstimationCoordinator : IDisposable
             slot.Worker.Dispose();
     }
 
-    private void OnWorkerResultsReceived(object? sender, IReadOnlyList<SharedEstimationEvaluationResult> results)
+    private void OnWorkerResultReceived(object? sender, SharedEstimationEvaluationResult result)
     {
         if (sender is not ISharedEstimationWorker worker)
             return;
@@ -149,16 +178,13 @@ public sealed class SharedEstimationCoordinator : IDisposable
             if (_disposed || !_workers.ContainsKey(worker.WorkerId))
                 return;
 
-            foreach (var result in results)
+            if (_workers.TryGetValue(worker.WorkerId, out var assignedSlot)
+                && assignedSlot.AssignedCandidateId == result.CandidateId)
+                assignedSlot.AssignedCandidateId = null;
+
+            if (_pending.TryGetValue(result.CandidateId, out var pending)
+                && pending.AssignedWorkerId == worker.WorkerId)
             {
-                if (_workers.TryGetValue(worker.WorkerId, out var assignedSlot)
-                    && assignedSlot.AssignedCandidateId == result.CandidateId)
-                    assignedSlot.AssignedCandidateId = null;
-
-                if (!_pending.TryGetValue(result.CandidateId, out var pending)
-                    || pending.AssignedWorkerId != worker.WorkerId)
-                    continue;
-
                 _pending.Remove(result.CandidateId);
                 pending.Batch.Results[result.CandidateId] = result;
                 pending.Batch.PendingProgressCallbacks++;
@@ -192,23 +218,38 @@ public sealed class SharedEstimationCoordinator : IDisposable
     private void OnWorkerDisconnected(object? sender, EventArgs e)
     {
         if (sender is ISharedEstimationWorker worker)
-            RemoveWorkerAfterDisconnect(worker.WorkerId);
+            RemoveWorkerAfterDisconnect(worker);
     }
 
-    private void RemoveWorkerAfterDisconnect(string workerId)
+    private void RemoveWorkerAfterDisconnect(ISharedEstimationWorker worker)
     {
         WorkerSlot? slot;
         List<Dispatch> dispatches;
         lock (_gate)
         {
-            if (_disposed || !_workers.Remove(workerId, out slot))
-                return;
-            Unsubscribe(slot);
-            RequeueWorkerJobsLocked(workerId);
-            dispatches = BuildDispatchesLocked();
+            if (_disposed || !_workers.TryGetValue(worker.WorkerId, out slot)
+                || !ReferenceEquals(slot.Worker, worker))
+            {
+                slot = null;
+                dispatches = [];
+            }
+            else
+            {
+                _workers.Remove(worker.WorkerId);
+                Unsubscribe(slot);
+                RequeueWorkerJobsLocked(worker.WorkerId);
+                dispatches = BuildDispatchesLocked();
+            }
         }
 
-        WorkerRemoved?.Invoke(workerId);
+        if (slot is null)
+        {
+            worker.Dispose();
+            return;
+        }
+
+        slot.Worker.Dispose();
+        WorkerRemoved?.Invoke(worker.WorkerId);
         SendDispatches(dispatches);
     }
 
@@ -227,7 +268,7 @@ public sealed class SharedEstimationCoordinator : IDisposable
         for (int offset = 0; offset < workers.Length && candidateIndex < unassigned.Length; offset++)
         {
             var slot = workers[(startIndex + offset) % workers.Length];
-            if (slot.AssignedCandidateId is not null)
+            if (!slot.IsReady || slot.AssignedCandidateId is not null)
                 continue;
 
             var pending = unassigned[candidateIndex++];
@@ -242,11 +283,31 @@ public sealed class SharedEstimationCoordinator : IDisposable
     private void SendDispatches(IReadOnlyList<Dispatch> dispatches)
     {
         foreach (var dispatch in dispatches)
+            _ = Task.Run(() => SendDispatch(dispatch));
+    }
+
+    private void SendDispatch(Dispatch dispatch)
+    {
+        lock (_gate)
         {
-            if (dispatch.Worker.SendCandidates([dispatch.Candidate], out _))
-                continue;
-            RemoveWorkerAfterDisconnect(dispatch.Worker.WorkerId);
+            if (_disposed
+                || !_workers.TryGetValue(dispatch.Worker.WorkerId, out var slot)
+                || !ReferenceEquals(slot.Worker, dispatch.Worker)
+                || slot.AssignedCandidateId != dispatch.Candidate.CandidateId)
+                return;
         }
+
+        bool sent;
+        try
+        {
+            sent = dispatch.Worker.SendCandidate(dispatch.Candidate, out _);
+        }
+        catch (Exception exception) when (exception is IOException or ObjectDisposedException or InvalidOperationException)
+        {
+            sent = false;
+        }
+        if (!sent)
+            RemoveWorkerAfterDisconnect(dispatch.Worker);
     }
 
     private void RequeueWorkerJobsLocked(string workerId)
@@ -286,7 +347,7 @@ public sealed class SharedEstimationCoordinator : IDisposable
 
     private void Unsubscribe(WorkerSlot slot)
     {
-        slot.Worker.ResultsReceived -= OnWorkerResultsReceived;
+        slot.Worker.ResultReceived -= OnWorkerResultReceived;
         slot.Worker.Disconnected -= OnWorkerDisconnected;
     }
 
@@ -295,9 +356,10 @@ public sealed class SharedEstimationCoordinator : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
 
-    private sealed class WorkerSlot(ISharedEstimationWorker worker)
+    private sealed class WorkerSlot(ISharedEstimationWorker worker, bool isReady)
     {
         public ISharedEstimationWorker Worker { get; } = worker;
+        public bool IsReady { get; set; } = isReady;
         public string? AssignedCandidateId { get; set; }
     }
 

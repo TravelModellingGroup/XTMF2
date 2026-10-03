@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using XTMF2.Bus;
 
-namespace XTMF2.Bus;
+namespace XTMF2.Bus.Optimization;
 
 /// <summary>Evaluates shared-estimation candidates in the coordinator RunServer process.</summary>
 public sealed class SharedEstimationLocalWorker : ISharedEstimationWorker
@@ -18,7 +19,7 @@ public sealed class SharedEstimationLocalWorker : ISharedEstimationWorker
 
     public string WorkerId { get; }
 
-    public event EventHandler<IReadOnlyList<SharedEstimationEvaluationResult>>? ResultsReceived;
+    public event EventHandler<SharedEstimationEvaluationResult>? ResultReceived;
 
     public event EventHandler? Disconnected
     {
@@ -50,7 +51,7 @@ public sealed class SharedEstimationLocalWorker : ISharedEstimationWorker
         return true;
     }
 
-    public bool SendCandidates(IReadOnlyList<SharedEstimationCandidate> candidates, out string? error)
+    public bool SendCandidate(SharedEstimationCandidate candidate, out string? error)
     {
         if (_disposed)
         {
@@ -58,8 +59,8 @@ public sealed class SharedEstimationLocalWorker : ISharedEstimationWorker
             return false;
         }
 
-        var results = _participant.Evaluate(candidates);
-        ResultsReceived?.Invoke(this, results);
+        var result = _participant.Evaluate(candidate);
+        ResultReceived?.Invoke(this, result);
         error = null;
         return true;
     }

@@ -25,6 +25,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using XTMF2.Bus.Optimization;
 
 namespace XTMF2.Bus
 {
@@ -161,7 +162,7 @@ namespace XTMF2.Bus
 
         public event Action<object, SharedEstimationWorkerRegistration, bool>? SharedEstimationWorkerRequested;
 
-        public event Action<object, IReadOnlyList<SharedEstimationCandidate>>? SharedEstimationCandidatesReceived;
+        public event Action<object, SharedEstimationCandidate>? SharedEstimationCandidateReceived;
 
         public event Action<object, string, string?>? SharedEstimationCancellationRequested;
 
@@ -366,8 +367,8 @@ namespace XTMF2.Bus
             });
         }
 
-        internal void SendSharedEstimationResults(IReadOnlyList<SharedEstimationEvaluationResult> results)
-            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteResults(writer, results));
+        internal void SendSharedEstimationResult(SharedEstimationEvaluationResult result)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteResult(writer, result));
 
         public void SendSharedEstimationProgress(SharedEstimationProgress progress)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteProgress(writer, progress));
@@ -377,6 +378,9 @@ namespace XTMF2.Bus
 
         public void SendSharedEstimationStatus(SharedEstimationStatus status)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteStatus(writer, status));
+
+        internal void SendSharedEstimationWorkerReady(SharedEstimationWorkerReady readiness)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteWorkerReady(writer, readiness));
 
         public void SendSharedEstimationJobSnapshots(IReadOnlyList<SharedEstimationJobSnapshot> snapshots)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteJobSnapshots(writer, snapshots));
@@ -582,16 +586,16 @@ namespace XTMF2.Bus
                             break;
                         case In.SharedEstimationMessage:
                             {
-                                var (protocolVersion, messageType) = SharedEstimationProtocol.ReadHeader(reader);
+                                var (_, messageType) = SharedEstimationProtocol.ReadHeader(reader);
                                 switch (messageType)
                                 {
                                     case SharedEstimationMessageType.StartCoordinator:
                                         SharedEstimationCoordinatorRequested?.Invoke(this,
-                                            SharedEstimationProtocol.ReadCoordinatorRequestPayload(reader, protocolVersion));
+                                            SharedEstimationProtocol.ReadCoordinatorRequestPayload(reader));
                                         break;
                                     case SharedEstimationMessageType.StartRun:
                                         SharedEstimationRunRequested?.Invoke(this,
-                                            SharedEstimationProtocol.ReadRunRequestPayload(reader, protocolVersion));
+                                            SharedEstimationProtocol.ReadRunRequestPayload(reader));
                                         break;
                                     case SharedEstimationMessageType.AddWorker:
                                         SharedEstimationWorkerRequested?.Invoke(this,
@@ -601,9 +605,9 @@ namespace XTMF2.Bus
                                         SharedEstimationWorkerRequested?.Invoke(this,
                                             SharedEstimationProtocol.ReadWorkerRegistrationPayload(reader), true);
                                         break;
-                                    case SharedEstimationMessageType.EvaluateCandidates:
-                                        SharedEstimationCandidatesReceived?.Invoke(this,
-                                            SharedEstimationProtocol.ReadCandidatesPayload(reader));
+                                    case SharedEstimationMessageType.EvaluateCandidate:
+                                        SharedEstimationCandidateReceived?.Invoke(this,
+                                            SharedEstimationProtocol.ReadCandidatePayload(reader));
                                         break;
                                     case SharedEstimationMessageType.Cancel:
                                         var cancellation = SharedEstimationProtocol.ReadCancelPayload(reader);

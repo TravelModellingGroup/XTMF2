@@ -31,6 +31,7 @@ using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using XTMF2.Bus.Optimization;
 using XTMF2;
 using XTMF2.AI;
 using XTMF2.Editing;

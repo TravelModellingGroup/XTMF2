@@ -6,9 +6,9 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using XTMF2.Bus.Optimization;
+using XTMF2.Bus;
 
-namespace XTMF2.Bus;
+namespace XTMF2.Bus.Optimization;
 
 /// <summary>
 /// Owns remote shared-estimation jobs for the lifetime of a RunServer process.
@@ -254,6 +254,7 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
                     throw new InvalidOperationException(configError);
 
                 pool = new SharedEstimationWorkerPool();
+                pool.WorkerPreparationFailed += OnWorkerPreparationFailed;
                 lock (_sync)
                     _pool = pool;
                 if (_request.UseCoordinatorAsWorker)
@@ -272,7 +273,11 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
                 {
                     if (!pool.AddWorker(worker.WorkerId, worker.EndpointId, worker.Address, worker.Port,
                             worker.Token, worker.CertificateFingerprint, out var workerError))
-                        throw new InvalidOperationException(workerError ?? $"Unable to connect to worker '{worker.EndpointId}'.");
+                    {
+                        ReportStatus($"Unable to connect to worker '{worker.EndpointId}': " +
+                            (workerError ?? "connection failed; estimation will continue without it."));
+                        continue;
+                    }
                     ReportStatus($"Connected to worker '{worker.EndpointId}'.");
                 }
 
@@ -317,6 +322,8 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
             }
             finally
             {
+                if (pool is not null)
+                    pool.WorkerPreparationFailed -= OnWorkerPreparationFailed;
                 pool?.Dispose();
                 lock (_sync)
                     _pool = null;
@@ -353,6 +360,12 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
             }
             catch (IOException) { }
             catch (ObjectDisposedException) { }
+        }
+
+        private void OnWorkerPreparationFailed(string reason)
+        {
+            ReportStatus(reason);
+            Cancel(reason);
         }
 
         private static void PersistCompletion(SharedEstimationRunRequest request,

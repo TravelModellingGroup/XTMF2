@@ -46,6 +46,7 @@ using System.Threading.Tasks;
 using XTMF2;
 using XTMF2.AI;
 using XTMF2.Bus;
+using XTMF2.Bus.Optimization;
 using XTMF2.Editing;
 using XTMF2.GUI.AI;
 using XTMF2.GUI.Controls;

@@ -1,8 +1,8 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using XTMF2.Bus;
 
-namespace XTMF2.Bus;
+namespace XTMF2.Bus.Optimization;
 
 public sealed class SharedEstimationWorkerParticipant
 {
@@ -39,12 +39,4 @@ public sealed class SharedEstimationWorkerParticipant
     public SharedEstimationEvaluationResult Evaluate(SharedEstimationCandidate candidate)
         => _context.EvaluateSharedEstimationCandidate(candidate);
 
-    public IReadOnlyList<SharedEstimationEvaluationResult> Evaluate(
-        IReadOnlyList<SharedEstimationCandidate> candidates)
-    {
-        var results = new SharedEstimationEvaluationResult[candidates.Count];
-        for (int i = 0; i < candidates.Count; i++)
-            results[i] = Evaluate(candidates[i]);
-        return results;
-    }
 }

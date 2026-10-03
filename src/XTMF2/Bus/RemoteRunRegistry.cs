@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
+using XTMF2.Bus.Optimization;
 
 namespace XTMF2.Bus;
 

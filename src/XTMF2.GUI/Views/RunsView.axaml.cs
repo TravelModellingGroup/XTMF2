@@ -32,6 +32,7 @@ namespace XTMF2.GUI.Views;
 public partial class RunsView : UserControl
 {
     private RunsViewModel? _vm;
+    private RemoteEstimationWorkersWindow? _workerWindow;
 
     public RunsView()
     {
@@ -71,6 +72,30 @@ public partial class RunsView : UserControl
     {
         if (_vm?.SelectedRun is not { IsOptimizationRun: true } run) return;
         var window = new OptimizationProgressWindow(run);
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        if (owner is not null)
+            window.Show(owner);
+        else
+            window.Show();
+    }
+
+    private void EstimationWorkersButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm?.SelectedRun is not { IsRemoteSharedEstimation: true } run)
+            return;
+        if (_workerWindow is { } existingWindow)
+        {
+            existingWindow.Activate();
+            return;
+        }
+
+        var window = new RemoteEstimationWorkersWindow(run);
+        _workerWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_workerWindow, window))
+                _workerWindow = null;
+        };
         var owner = TopLevel.GetTopLevel(this) as Window;
         if (owner is not null)
             window.Show(owner);

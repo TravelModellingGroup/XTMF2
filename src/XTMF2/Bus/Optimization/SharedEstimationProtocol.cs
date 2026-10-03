@@ -1,17 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using XTMF2.Bus.Optimization;
+using XTMF2.Bus;
 
-namespace XTMF2.Bus;
+namespace XTMF2.Bus.Optimization;
 
 public enum SharedEstimationMessageType
 {
     StartRun = 0,
     AddWorker = 1,
     RemoveWorker = 2,
-    EvaluateCandidates = 3,
-    EvaluationResults = 4,
+    EvaluateCandidate = 3,
+    EvaluationResult = 4,
     Progress = 5,
     Complete = 6,
     Cancel = 7,
@@ -30,7 +30,8 @@ public enum SharedEstimationMessageType
     QueryServerActivity = 20,
     ServerActivitySnapshots = 21,
     DeleteRemoteRun = 22,
-    RemoteRunDeleted = 23
+    RemoteRunDeleted = 23,
+    WorkerReady = 24
 }
 
 public enum SharedEstimationJobState
@@ -87,6 +88,8 @@ public sealed record SharedEstimationWorkerControlAcknowledgement(
     int ActiveWorkerCount);
 
 public sealed record SharedEstimationStatus(string RunId, string Message);
+
+public sealed record SharedEstimationWorkerReady(string RunId, bool Succeeded, string? Error);
 
 public sealed record SharedEstimationRunRequest(
     string RunId,
@@ -162,23 +165,18 @@ public sealed record SharedEstimationCompletion(
 public static class SharedEstimationProtocol
 {
     public const int Version = 1;
-    private const int ExtendedRunRequestVersion = 2;
-    private const int RemoteRunProtocolVersion = 3;
-    private const int IdentityProtocolVersion = 4;
-    private const int RemoteRunDeletionProtocolVersion = 5;
-    private const int RunOwnerProtocolVersion = 6;
     private const int MaxCollectionLength = 1_000_000;
     private const int MaxServerActivities = 10_000;
 
-    public static void WriteHeader(BinaryWriter writer, SharedEstimationMessageType messageType, int version = Version)
+    public static void WriteHeader(BinaryWriter writer, SharedEstimationMessageType messageType)
     {
-        writer.Write(version);
+        writer.Write(Version);
         writer.Write((int)messageType);
     }
 
     public static void WriteCoordinatorRequest(BinaryWriter writer, SharedEstimationCoordinatorRequest request)
     {
-        WriteHeader(writer, SharedEstimationMessageType.StartCoordinator, RunOwnerProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.StartCoordinator);
         WriteRunRequestPayload(writer, request.Run);
         WriteCount(writer, request.Workers.Count);
         foreach (var worker in request.Workers)
@@ -220,21 +218,18 @@ public static class SharedEstimationProtocol
 
     public static SharedEstimationCoordinatorRequest ReadCoordinatorRequest(BinaryReader reader)
     {
-        var (version, messageType) = ReadHeader(reader);
+        var (_, messageType) = ReadHeader(reader);
         if (messageType != SharedEstimationMessageType.StartCoordinator)
             throw new InvalidDataException($"Expected {SharedEstimationMessageType.StartCoordinator} message but received {messageType}.");
-        return ReadCoordinatorRequestPayload(reader, version);
+        return ReadCoordinatorRequestPayload(reader);
     }
 
-    internal static SharedEstimationCoordinatorRequest ReadCoordinatorRequestPayload(
-        BinaryReader reader, int version = Version)
+    internal static SharedEstimationCoordinatorRequest ReadCoordinatorRequestPayload(BinaryReader reader)
     {
         var run = new SharedEstimationRunRequest(
             ReadRequiredString(reader), ReadRequiredString(reader), ReadRequiredString(reader),
             ReadBytes(reader), ReadOverrides(reader),
-            version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null,
-            version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null,
-            version >= RunOwnerProtocolVersion ? ReadOptionalGuid(reader) : null);
+            ReadOptionalGuid(reader), ReadOptionalGuid(reader), ReadOptionalGuid(reader));
         var workers = new List<SharedEstimationWorkerEndpoint>(ReadCount(reader));
         for (int i = 0; i < workers.Capacity; i++)
         {
@@ -258,33 +253,26 @@ public static class SharedEstimationProtocol
         var upperBounds = ReadDoubles(reader);
         var initialValues = ReadDoubles(reader);
         var isMaximize = reader.ReadBoolean();
-        var useCoordinatorAsWorker = version >= ExtendedRunRequestVersion ? reader.ReadBoolean() : true;
-        IReadOnlyList<SharedEstimationParameterMetadata>? parameterMetadata = null;
-        if (version >= RemoteRunProtocolVersion)
+        var useCoordinatorAsWorker = reader.ReadBoolean();
+        var metadataCount = ReadCount(reader);
+        var values = new SharedEstimationParameterMetadata[metadataCount];
+        for (var index = 0; index < metadataCount; index++)
         {
-            var metadataCount = ReadCount(reader);
-            var values = new SharedEstimationParameterMetadata[metadataCount];
-            for (var index = 0; index < metadataCount; index++)
-            {
-                var nodeIndex = reader.ReadInt32();
-                if (nodeIndex < 0)
-                    throw new InvalidDataException("Parameter node indices must be non-negative.");
-                values[index] = new SharedEstimationParameterMetadata(nodeIndex, ReadRequiredString(reader),
-                    reader.ReadDouble(), reader.ReadDouble());
-            }
-            parameterMetadata = values;
+            var nodeIndex = reader.ReadInt32();
+            if (nodeIndex < 0)
+                throw new InvalidDataException("Parameter node indices must be non-negative.");
+            values[index] = new SharedEstimationParameterMetadata(nodeIndex, ReadRequiredString(reader),
+                reader.ReadDouble(), reader.ReadDouble());
         }
         return new SharedEstimationCoordinatorRequest(run, workers, algorithmId, parameters,
-            lowerBounds, upperBounds, initialValues, isMaximize, useCoordinatorAsWorker, parameterMetadata);
+            lowerBounds, upperBounds, initialValues, isMaximize, useCoordinatorAsWorker, values);
     }
 
     public static (int Version, SharedEstimationMessageType MessageType) ReadHeader(BinaryReader reader)
     {
         int version = reader.ReadInt32();
         var messageType = (SharedEstimationMessageType)reader.ReadInt32();
-        if (version != Version && version != ExtendedRunRequestVersion && version != RemoteRunProtocolVersion &&
-            version != IdentityProtocolVersion && version != RemoteRunDeletionProtocolVersion &&
-            version != RunOwnerProtocolVersion)
+        if (version != Version)
             throw new InvalidDataException($"Unsupported shared estimation protocol version: {version}.");
         if (!Enum.IsDefined(messageType))
             throw new InvalidDataException($"Unknown shared estimation message type: {(int)messageType}.");
@@ -293,7 +281,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteRunRequest(BinaryWriter writer, SharedEstimationRunRequest request)
     {
-        WriteHeader(writer, SharedEstimationMessageType.StartRun, RunOwnerProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.StartRun);
         WriteRequiredString(writer, request.RunId);
         WriteRequiredString(writer, request.WorkingDirectory);
         WriteRequiredString(writer, request.StartToExecute);
@@ -340,23 +328,20 @@ public static class SharedEstimationProtocol
 
     public static SharedEstimationRunRequest ReadRunRequest(BinaryReader reader)
     {
-        var (version, messageType) = ReadHeader(reader);
+        var (_, messageType) = ReadHeader(reader);
         if (messageType != SharedEstimationMessageType.StartRun)
             throw new InvalidDataException($"Expected {SharedEstimationMessageType.StartRun} message but received {messageType}.");
-        return ReadRunRequestPayload(reader, version);
+        return ReadRunRequestPayload(reader);
     }
 
-    internal static SharedEstimationRunRequest ReadRunRequestPayload(BinaryReader reader, int version = Version)
+    internal static SharedEstimationRunRequest ReadRunRequestPayload(BinaryReader reader)
     {
         return new SharedEstimationRunRequest(
             ReadRequiredString(reader),
             ReadRequiredString(reader),
             ReadRequiredString(reader),
             ReadBytes(reader),
-            version >= ExtendedRunRequestVersion ? ReadOverrides(reader) : null,
-            version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null,
-            version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null,
-            version >= RunOwnerProtocolVersion ? ReadOptionalGuid(reader) : null);
+            ReadOverrides(reader), ReadOptionalGuid(reader), ReadOptionalGuid(reader), ReadOptionalGuid(reader));
     }
 
     public static void WriteWorkerRegistration(BinaryWriter writer, SharedEstimationWorkerRegistration registration,
@@ -452,39 +437,40 @@ public static class SharedEstimationProtocol
     internal static SharedEstimationStatus ReadStatusPayload(BinaryReader reader)
         => new(ReadRequiredString(reader), ReadRequiredString(reader));
 
-    public static void WriteCandidates(BinaryWriter writer, IReadOnlyList<SharedEstimationCandidate> candidates)
+    public static void WriteWorkerReady(BinaryWriter writer, SharedEstimationWorkerReady readiness)
     {
-        WriteHeader(writer, SharedEstimationMessageType.EvaluateCandidates);
-        WriteCount(writer, candidates.Count);
-        foreach (var candidate in candidates)
-        {
-            WriteRequiredString(writer, candidate.RunId);
-            writer.Write(candidate.BatchId);
-            WriteRequiredString(writer, candidate.CandidateId);
-            WriteDoubles(writer, candidate.Parameters);
-        }
+        WriteHeader(writer, SharedEstimationMessageType.WorkerReady);
+        WriteRequiredString(writer, readiness.RunId);
+        writer.Write(readiness.Succeeded);
+        WriteOptionalString(writer, readiness.Error);
     }
 
-    public static IReadOnlyList<SharedEstimationCandidate> ReadCandidates(BinaryReader reader)
+    public static SharedEstimationWorkerReady ReadWorkerReady(BinaryReader reader)
     {
-        ReadExpectedHeader(reader, SharedEstimationMessageType.EvaluateCandidates);
-        return ReadCandidatesPayload(reader);
+        ReadExpectedHeader(reader, SharedEstimationMessageType.WorkerReady);
+        return ReadWorkerReadyPayload(reader);
     }
 
-    internal static IReadOnlyList<SharedEstimationCandidate> ReadCandidatesPayload(BinaryReader reader)
+    internal static SharedEstimationWorkerReady ReadWorkerReadyPayload(BinaryReader reader)
+        => new(ReadRequiredString(reader), reader.ReadBoolean(), ReadOptionalString(reader));
+
+    public static void WriteCandidate(BinaryWriter writer, SharedEstimationCandidate candidate)
     {
-        int count = ReadCount(reader);
-        var candidates = new List<SharedEstimationCandidate>(count);
-        for (int i = 0; i < count; i++)
-        {
-            candidates.Add(new SharedEstimationCandidate(
-                ReadRequiredString(reader),
-                reader.ReadInt64(),
-                ReadRequiredString(reader),
-                ReadDoubles(reader)));
-        }
-        return candidates;
+        WriteHeader(writer, SharedEstimationMessageType.EvaluateCandidate);
+        WriteRequiredString(writer, candidate.RunId);
+        writer.Write(candidate.BatchId);
+        WriteRequiredString(writer, candidate.CandidateId);
+        WriteDoubles(writer, candidate.Parameters);
     }
+
+    public static SharedEstimationCandidate ReadCandidate(BinaryReader reader)
+    {
+        ReadExpectedHeader(reader, SharedEstimationMessageType.EvaluateCandidate);
+        return ReadCandidatePayload(reader);
+    }
+
+    internal static SharedEstimationCandidate ReadCandidatePayload(BinaryReader reader)
+        => new(ReadRequiredString(reader), reader.ReadInt64(), ReadRequiredString(reader), ReadDoubles(reader));
 
     private static IReadOnlyDictionary<int, string>? ReadOverrides(BinaryReader reader)
     {
@@ -502,56 +488,40 @@ public static class SharedEstimationProtocol
         return overrides;
     }
 
-    public static void WriteResults(BinaryWriter writer, IReadOnlyList<SharedEstimationEvaluationResult> results)
+    public static void WriteResult(BinaryWriter writer, SharedEstimationEvaluationResult result)
     {
-        WriteHeader(writer, SharedEstimationMessageType.EvaluationResults);
-        WriteCount(writer, results.Count);
-        foreach (var result in results)
-        {
-            WriteRequiredString(writer, result.RunId);
-            writer.Write(result.BatchId);
-            WriteRequiredString(writer, result.CandidateId);
-            writer.Write(result.Fitness);
-            WriteOptionalString(writer, result.Error);
-            WriteOptionalString(writer, result.ModuleName);
-            writer.Write(result.ElementId?.ToString() ?? string.Empty);
-        }
+        WriteHeader(writer, SharedEstimationMessageType.EvaluationResult);
+        WriteRequiredString(writer, result.RunId);
+        writer.Write(result.BatchId);
+        WriteRequiredString(writer, result.CandidateId);
+        writer.Write(result.Fitness);
+        WriteOptionalString(writer, result.Error);
+        WriteOptionalString(writer, result.ModuleName);
+        writer.Write(result.ElementId?.ToString() ?? string.Empty);
     }
 
-    public static IReadOnlyList<SharedEstimationEvaluationResult> ReadResults(BinaryReader reader)
+    public static SharedEstimationEvaluationResult ReadResult(BinaryReader reader)
     {
-        ReadExpectedHeader(reader, SharedEstimationMessageType.EvaluationResults);
-        return ReadResultsPayload(reader);
+        ReadExpectedHeader(reader, SharedEstimationMessageType.EvaluationResult);
+        return ReadResultPayload(reader);
     }
 
-    internal static IReadOnlyList<SharedEstimationEvaluationResult> ReadResultsPayload(BinaryReader reader)
+    internal static SharedEstimationEvaluationResult ReadResultPayload(BinaryReader reader)
     {
-        int count = ReadCount(reader);
-        var results = new List<SharedEstimationEvaluationResult>(count);
-        for (int i = 0; i < count; i++)
-        {
-            var runId = ReadRequiredString(reader);
-            var batchId = reader.ReadInt64();
-            var candidateId = ReadRequiredString(reader);
-            var fitness = reader.ReadDouble();
-            var error = ReadOptionalString(reader);
-            var moduleName = ReadOptionalString(reader);
-            var elementIdText = reader.ReadString();
-            results.Add(new SharedEstimationEvaluationResult(
-                runId,
-                batchId,
-                candidateId,
-                fitness,
-                error,
-                moduleName,
-                Guid.TryParse(elementIdText, out var elementId) ? elementId : null));
-        }
-        return results;
+        var runId = ReadRequiredString(reader);
+        var batchId = reader.ReadInt64();
+        var candidateId = ReadRequiredString(reader);
+        var fitness = reader.ReadDouble();
+        var error = ReadOptionalString(reader);
+        var moduleName = ReadOptionalString(reader);
+        var elementIdText = reader.ReadString();
+        return new SharedEstimationEvaluationResult(runId, batchId, candidateId, fitness, error, moduleName,
+            Guid.TryParse(elementIdText, out var elementId) ? elementId : null);
     }
 
     public static void WriteProgress(BinaryWriter writer, SharedEstimationProgress progress)
     {
-        WriteHeader(writer, SharedEstimationMessageType.Progress, ExtendedRunRequestVersion);
+        WriteHeader(writer, SharedEstimationMessageType.Progress);
         WriteProgressPayload(writer, progress);
     }
 
@@ -576,13 +546,13 @@ public static class SharedEstimationProtocol
 
     public static SharedEstimationProgress ReadProgress(BinaryReader reader)
     {
-        var (version, messageType) = ReadHeader(reader);
+        var (_, messageType) = ReadHeader(reader);
         if (messageType != SharedEstimationMessageType.Progress)
             throw new InvalidDataException($"Expected {SharedEstimationMessageType.Progress} message but received {messageType}.");
-        return ReadProgressPayload(reader, version);
+        return ReadProgressPayload(reader);
     }
 
-    internal static SharedEstimationProgress ReadProgressPayload(BinaryReader reader, int version = Version)
+    internal static SharedEstimationProgress ReadProgressPayload(BinaryReader reader)
     {
         var runId = ReadRequiredString(reader);
         var iteration = reader.ReadInt32();
@@ -591,19 +561,13 @@ public static class SharedEstimationProtocol
         var evaluationsPending = reader.ReadInt32();
         var activeWorkers = reader.ReadInt32();
         var fitnessTestsThisIteration = reader.ReadInt32();
-        IReadOnlyDictionary<string, int>? evaluationsByWorker = null;
-        IReadOnlyList<double>? bestParameters = null;
-        if (version >= ExtendedRunRequestVersion)
-        {
-            var count = ReadCount(reader);
-            var workerCounts = new Dictionary<string, int>(count, StringComparer.Ordinal);
-            for (int i = 0; i < count; i++)
-                workerCounts.Add(ReadRequiredString(reader), reader.ReadInt32());
-            evaluationsByWorker = workerCounts;
-            bestParameters = ReadDoubles(reader);
-        }
+        var count = ReadCount(reader);
+        var workerCounts = new Dictionary<string, int>(count, StringComparer.Ordinal);
+        for (int i = 0; i < count; i++)
+            workerCounts.Add(ReadRequiredString(reader), reader.ReadInt32());
+        var bestParameters = ReadDoubles(reader);
         return new SharedEstimationProgress(runId, iteration, bestFitness, evaluationsCompleted,
-            evaluationsPending, activeWorkers, fitnessTestsThisIteration, evaluationsByWorker, bestParameters);
+            evaluationsPending, activeWorkers, fitnessTestsThisIteration, workerCounts, bestParameters);
     }
 
     public static void WriteCompletion(BinaryWriter writer, SharedEstimationCompletion completion)
@@ -671,7 +635,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteJobSnapshots(BinaryWriter writer, IReadOnlyList<SharedEstimationJobSnapshot> snapshots)
     {
-        WriteHeader(writer, SharedEstimationMessageType.JobSnapshots, RunOwnerProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.JobSnapshots);
         WriteCount(writer, snapshots.Count);
         foreach (var snapshot in snapshots)
         {
@@ -707,14 +671,13 @@ public static class SharedEstimationProtocol
 
     public static IReadOnlyList<SharedEstimationJobSnapshot> ReadJobSnapshots(BinaryReader reader)
     {
-        var (version, messageType) = ReadHeader(reader);
+        var (_, messageType) = ReadHeader(reader);
         if (messageType != SharedEstimationMessageType.JobSnapshots)
             throw new InvalidDataException($"Expected {SharedEstimationMessageType.JobSnapshots} message but received {messageType}.");
-        return ReadJobSnapshotsPayload(reader, version);
+        return ReadJobSnapshotsPayload(reader);
     }
 
-    internal static IReadOnlyList<SharedEstimationJobSnapshot> ReadJobSnapshotsPayload(
-        BinaryReader reader, int version = Version)
+    internal static IReadOnlyList<SharedEstimationJobSnapshot> ReadJobSnapshotsPayload(BinaryReader reader)
     {
         var snapshots = new List<SharedEstimationJobSnapshot>(ReadCount(reader));
         for (int i = 0; i < snapshots.Capacity; i++)
@@ -723,48 +686,41 @@ public static class SharedEstimationProtocol
             var state = (SharedEstimationJobState)reader.ReadInt32();
             if (!Enum.IsDefined(state))
                 throw new InvalidDataException($"Unknown shared estimation job state: {(int)state}.");
-            var progress = reader.ReadBoolean() ? ReadProgressPayload(reader, version) : null;
+            var progress = reader.ReadBoolean() ? ReadProgressPayload(reader) : null;
             var completion = reader.ReadBoolean() ? ReadCompletionPayload(reader) : null;
-            if (version >= RemoteRunProtocolVersion)
+            var runName = ReadRequiredString(reader);
+            var workingDirectory = ReadRequiredString(reader);
+            var modelSystemHash = ReadRequiredString(reader);
+            var workerIds = new string[ReadCount(reader)];
+            for (var workerIndex = 0; workerIndex < workerIds.Length; workerIndex++)
+                workerIds[workerIndex] = ReadRequiredString(reader);
+            var metadata = new SharedEstimationParameterMetadata[ReadCount(reader)];
+            for (var parameterIndex = 0; parameterIndex < metadata.Length; parameterIndex++)
             {
-                var runName = ReadRequiredString(reader);
-                var workingDirectory = ReadRequiredString(reader);
-                var modelSystemHash = ReadRequiredString(reader);
-                var workerIds = new string[ReadCount(reader)];
-                for (var workerIndex = 0; workerIndex < workerIds.Length; workerIndex++)
-                    workerIds[workerIndex] = ReadRequiredString(reader);
-                var metadata = new SharedEstimationParameterMetadata[ReadCount(reader)];
-                for (var parameterIndex = 0; parameterIndex < metadata.Length; parameterIndex++)
-                {
-                    var nodeIndex = reader.ReadInt32();
-                    if (nodeIndex < 0)
-                        throw new InvalidDataException("Parameter node indices must be non-negative.");
-                    metadata[parameterIndex] = new SharedEstimationParameterMetadata(nodeIndex,
-                        ReadRequiredString(reader), reader.ReadDouble(), reader.ReadDouble());
-                }
-                var projectId = version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null;
-                var modelSystemId = version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null;
-                var ownerUserId = version >= RunOwnerProtocolVersion ? ReadOptionalGuid(reader) : null;
-                snapshots.Add(new SharedEstimationJobSnapshot(runId, state, progress, completion,
-                    workerIds, runName, workingDirectory, modelSystemHash, metadata, projectId, modelSystemId, ownerUserId));
+                var nodeIndex = reader.ReadInt32();
+                if (nodeIndex < 0)
+                    throw new InvalidDataException("Parameter node indices must be non-negative.");
+                metadata[parameterIndex] = new SharedEstimationParameterMetadata(nodeIndex,
+                    ReadRequiredString(reader), reader.ReadDouble(), reader.ReadDouble());
             }
-            else
-            {
-                snapshots.Add(new SharedEstimationJobSnapshot(runId, state, progress, completion));
-            }
+            var projectId = ReadOptionalGuid(reader);
+            var modelSystemId = ReadOptionalGuid(reader);
+            var ownerUserId = ReadOptionalGuid(reader);
+            snapshots.Add(new SharedEstimationJobSnapshot(runId, state, progress, completion,
+                workerIds, runName, workingDirectory, modelSystemHash, metadata, projectId, modelSystemId, ownerUserId));
         }
         return snapshots;
     }
 
     public static void WriteQueryRemoteRuns(BinaryWriter writer)
-        => WriteHeader(writer, SharedEstimationMessageType.QueryRemoteRuns, RemoteRunProtocolVersion);
+        => WriteHeader(writer, SharedEstimationMessageType.QueryRemoteRuns);
 
     public static void ReadQueryRemoteRuns(BinaryReader reader)
         => ReadExpectedHeader(reader, SharedEstimationMessageType.QueryRemoteRuns);
 
     public static void WriteRemoteRunSnapshots(BinaryWriter writer, IReadOnlyList<RemoteRunSnapshot> snapshots)
     {
-        WriteHeader(writer, SharedEstimationMessageType.RemoteRunSnapshots, RunOwnerProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.RemoteRunSnapshots);
         WriteCount(writer, snapshots.Count);
         foreach (var snapshot in snapshots)
         {
@@ -794,17 +750,15 @@ public static class SharedEstimationProtocol
 
     public static IReadOnlyList<RemoteRunSnapshot> ReadRemoteRunSnapshots(BinaryReader reader)
     {
-        var (version, messageType) = ReadHeader(reader);
-        if (messageType != SharedEstimationMessageType.RemoteRunSnapshots || version < RemoteRunProtocolVersion)
-            throw new InvalidDataException("Expected a version 3 remote-run snapshot message.");
+        var (_, messageType) = ReadHeader(reader);
+        if (messageType != SharedEstimationMessageType.RemoteRunSnapshots)
+            throw new InvalidDataException($"Expected {SharedEstimationMessageType.RemoteRunSnapshots} message but received {messageType}.");
 
-        return ReadRemoteRunSnapshotsPayload(reader, version);
+        return ReadRemoteRunSnapshotsPayload(reader);
     }
 
-    internal static IReadOnlyList<RemoteRunSnapshot> ReadRemoteRunSnapshotsPayload(BinaryReader reader, int version)
+    internal static IReadOnlyList<RemoteRunSnapshot> ReadRemoteRunSnapshotsPayload(BinaryReader reader)
     {
-        if (version < RemoteRunProtocolVersion)
-            throw new InvalidDataException("Remote-run snapshots require protocol version 3.");
         int count = ReadCount(reader);
         var snapshots = new List<RemoteRunSnapshot>(count);
         for (int i = 0; i < count; i++)
@@ -831,9 +785,9 @@ public static class SharedEstimationProtocol
             var errorStack = ReadOptionalString(reader);
             var artifactsAvailable = reader.ReadBoolean();
             var updatedAt = new DateTimeOffset(reader.ReadInt64(), TimeSpan.Zero);
-            var projectId = version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null;
-            var modelSystemId = version >= IdentityProtocolVersion ? ReadOptionalGuid(reader) : null;
-            var ownerUserId = version >= RunOwnerProtocolVersion ? ReadOptionalGuid(reader) : null;
+            var projectId = ReadOptionalGuid(reader);
+            var modelSystemId = ReadOptionalGuid(reader);
+            var ownerUserId = ReadOptionalGuid(reader);
             snapshots.Add(new RemoteRunSnapshot(runId, runName, runMode, workingDirectory,
                 startToExecute, modelSystemHash, state, status, iteration, fitness,
                 progress, optimization, errorMessage, errorStack, artifactsAvailable, updatedAt,
@@ -844,7 +798,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteGetRemoteRunArtifacts(BinaryWriter writer, string runId)
     {
-        WriteHeader(writer, SharedEstimationMessageType.GetRemoteRunArtifacts, RemoteRunProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.GetRemoteRunArtifacts);
         WriteRequiredString(writer, runId);
     }
 
@@ -859,7 +813,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteRemoteRunArtifacts(BinaryWriter writer, string runId, byte[]? archive, string? error = null)
     {
-        WriteHeader(writer, SharedEstimationMessageType.RemoteRunArtifacts, RemoteRunProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.RemoteRunArtifacts);
         WriteRequiredString(writer, runId);
         writer.Write(archive is not null);
         if (archive is not null)
@@ -882,7 +836,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteAcknowledgeRemoteRun(BinaryWriter writer, string runId)
     {
-        WriteHeader(writer, SharedEstimationMessageType.AcknowledgeRemoteRun, RemoteRunProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.AcknowledgeRemoteRun);
         WriteRequiredString(writer, runId);
     }
 
@@ -897,7 +851,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteDeleteRemoteRun(BinaryWriter writer, string requestId, string runId)
     {
-        WriteHeader(writer, SharedEstimationMessageType.DeleteRemoteRun, RemoteRunDeletionProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.DeleteRemoteRun);
         WriteRequiredString(writer, requestId);
         WriteRequiredString(writer, runId);
     }
@@ -913,7 +867,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteRemoteRunDeleted(BinaryWriter writer, RemoteRunDeletionResponse response)
     {
-        WriteHeader(writer, SharedEstimationMessageType.RemoteRunDeleted, RemoteRunDeletionProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.RemoteRunDeleted);
         WriteRequiredString(writer, response.RequestId);
         WriteRequiredString(writer, response.RunId);
         writer.Write(response.Deleted);
@@ -931,7 +885,7 @@ public static class SharedEstimationProtocol
 
     public static void WriteQueryServerActivity(BinaryWriter writer, string requestId)
     {
-        WriteHeader(writer, SharedEstimationMessageType.QueryServerActivity, RemoteRunProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.QueryServerActivity);
         WriteRequiredString(writer, requestId);
     }
 
@@ -950,7 +904,7 @@ public static class SharedEstimationProtocol
         if (activities.Count > MaxServerActivities)
             throw new ArgumentOutOfRangeException(nameof(activities), $"Activity response cannot exceed {MaxServerActivities} entries.");
 
-        WriteHeader(writer, SharedEstimationMessageType.ServerActivitySnapshots, RemoteRunProtocolVersion);
+        WriteHeader(writer, SharedEstimationMessageType.ServerActivitySnapshots);
         WriteRequiredString(writer, requestId);
         writer.Write(activities.Count);
         foreach (var activity in activities)
@@ -971,9 +925,9 @@ public static class SharedEstimationProtocol
 
     public static RunServerActivityResponse ReadServerActivitySnapshots(BinaryReader reader)
     {
-        var (version, messageType) = ReadHeader(reader);
-        if (messageType != SharedEstimationMessageType.ServerActivitySnapshots || version < RemoteRunProtocolVersion)
-            throw new InvalidDataException("Expected a version 3 RunServer activity snapshot message.");
+        var (_, messageType) = ReadHeader(reader);
+        if (messageType != SharedEstimationMessageType.ServerActivitySnapshots)
+            throw new InvalidDataException($"Expected {SharedEstimationMessageType.ServerActivitySnapshots} message but received {messageType}.");
         return ReadServerActivitySnapshotsPayload(reader);
     }
 

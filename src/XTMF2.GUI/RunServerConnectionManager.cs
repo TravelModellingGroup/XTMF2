@@ -270,7 +270,13 @@ public sealed class RunServerConnectionManager : IDisposable
     private static void DisposeHostBus(HostBus? hostBus)
     {
         if (hostBus is null) return;
-        hostBus.RequestClientShutdown(out _);
-        hostBus.Dispose();
+        try
+        {
+            hostBus.RequestClientShutdown(out _);
+        }
+        finally
+        {
+            hostBus.Dispose();
+        }
     }
 }

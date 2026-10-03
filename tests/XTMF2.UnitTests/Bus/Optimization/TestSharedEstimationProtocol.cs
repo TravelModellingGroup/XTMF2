@@ -6,7 +6,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
 using XTMF2.Bus.Optimization;
 
-namespace XTMF2.UnitTests.Bus;
+namespace XTMF2.UnitTests.Bus.Optimization;
 
 [TestClass]
 public class TestSharedEstimationProtocol
@@ -84,7 +84,7 @@ public class TestSharedEstimationProtocol
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
         {
-            SharedEstimationProtocol.WriteHeader(writer, SharedEstimationMessageType.ServerActivitySnapshots, 3);
+            SharedEstimationProtocol.WriteHeader(writer, SharedEstimationMessageType.ServerActivitySnapshots);
             writer.Write("request-1");
             writer.Write(1);
             writer.Write("run-1");
@@ -142,20 +142,11 @@ public class TestSharedEstimationProtocol
     }
 
     [TestMethod]
-    public void EvaluationProgressAndCompletionMessages_RoundTrip()
+    public void CandidateResultProgressAndCompletionMessages_RoundTrip()
     {
-        var candidates = new[]
-        {
-            new SharedEstimationCandidate("run-1", 4, "candidate-1", new[] { 1.0, 2.0 }),
-            new SharedEstimationCandidate("run-1", 4, "candidate-2", new[] { 3.0, 4.0 })
-        };
-        var results = new[]
-        {
-            new SharedEstimationEvaluationResult("run-1", 4, "candidate-1", 0.25,
-                null, null, null),
-            new SharedEstimationEvaluationResult("run-1", 4, "candidate-2", double.MaxValue,
-                "worker failed", "Module", Guid.Parse("11111111-1111-1111-1111-111111111111"))
-        };
+        var candidate = new SharedEstimationCandidate("run-1", 4, "candidate-1", new[] { 1.0, 2.0 });
+        var result = new SharedEstimationEvaluationResult("run-1", 4, "candidate-1", 0.25,
+            "worker failed", "Module", Guid.Parse("11111111-1111-1111-1111-111111111111"));
         var progress = new SharedEstimationProgress("run-1", 2, 0.25, 3, 1, 2, 2,
             new Dictionary<string, int> { ["coordinator"] = 1, ["worker-1"] = 2 },
             new[] { 1.0, 2.0 });
@@ -166,8 +157,8 @@ public class TestSharedEstimationProtocol
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
         {
-            SharedEstimationProtocol.WriteCandidates(writer, candidates);
-            SharedEstimationProtocol.WriteResults(writer, results);
+            SharedEstimationProtocol.WriteCandidate(writer, candidate);
+            SharedEstimationProtocol.WriteResult(writer, result);
             SharedEstimationProtocol.WriteProgress(writer, progress);
             SharedEstimationProtocol.WriteStatus(writer, status);
             SharedEstimationProtocol.WriteCompletion(writer, completion);
@@ -176,22 +167,12 @@ public class TestSharedEstimationProtocol
 
         stream.Position = 0;
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, true);
-        var readCandidates = SharedEstimationProtocol.ReadCandidates(reader);
-        Assert.HasCount(candidates.Length, readCandidates);
-        for (int i = 0; i < candidates.Length; i++)
-        {
-            Assert.AreEqual(candidates[i].RunId, readCandidates[i].RunId);
-            Assert.AreEqual(candidates[i].BatchId, readCandidates[i].BatchId);
-            Assert.AreEqual(candidates[i].CandidateId, readCandidates[i].CandidateId);
-            Assert.HasCount(candidates[i].Parameters.Count, readCandidates[i].Parameters);
-            for (int j = 0; j < candidates[i].Parameters.Count; j++)
-                Assert.AreEqual(candidates[i].Parameters[j], readCandidates[i].Parameters[j]);
-        }
-
-        var readResults = SharedEstimationProtocol.ReadResults(reader);
-        Assert.HasCount(results.Length, readResults);
-        for (int i = 0; i < results.Length; i++)
-            Assert.AreEqual(results[i], readResults[i]);
+        var readCandidate = SharedEstimationProtocol.ReadCandidate(reader);
+        Assert.AreEqual(candidate.RunId, readCandidate.RunId);
+        Assert.AreEqual(candidate.BatchId, readCandidate.BatchId);
+        Assert.AreEqual(candidate.CandidateId, readCandidate.CandidateId);
+        CollectionAssert.AreEqual(candidate.Parameters.ToArray(), readCandidate.Parameters.ToArray());
+        Assert.AreEqual(result, SharedEstimationProtocol.ReadResult(reader));
 
         var readProgress = SharedEstimationProtocol.ReadProgress(reader);
         Assert.AreEqual(progress.RunId, readProgress.RunId);
@@ -219,7 +200,29 @@ public class TestSharedEstimationProtocol
     }
 
     [TestMethod]
-    public void LegacyRunRequestWithoutOverrides_RoundTripsAsVersionOnePayload()
+    public void WorkerReadyMessage_RoundTripsSuccessAndFailure()
+    {
+        var readiness = new[]
+        {
+            new SharedEstimationWorkerReady("run-ready", true, null),
+            new SharedEstimationWorkerReady("run-failed", false, "Model preparation failed.")
+        };
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
+        {
+            foreach (var item in readiness)
+                SharedEstimationProtocol.WriteWorkerReady(writer, item);
+        }
+
+        stream.Position = 0;
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, true);
+        foreach (var item in readiness)
+            Assert.AreEqual(item, SharedEstimationProtocol.ReadWorkerReady(reader));
+        Assert.AreEqual(stream.Length, stream.Position);
+    }
+
+    [TestMethod]
+    public void RunRequestWithoutOverrides_RoundTripsAsVersionOnePayload()
     {
         var run = new SharedEstimationRunRequest("run-legacy", "/shared/runs", "Start", new byte[] { 4, 5 });
         using var stream = new MemoryStream();
@@ -240,7 +243,7 @@ public class TestSharedEstimationProtocol
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
         {
-            writer.Write(SharedEstimationProtocol.Version + 6);
+            writer.Write(SharedEstimationProtocol.Version + 1);
             writer.Write((int)SharedEstimationMessageType.StartRun);
         }
 

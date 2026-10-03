@@ -3,12 +3,13 @@ using System.IO;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
+using XTMF2.Bus.Optimization;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
 using XTMF2.UnitTests.Modules;
 using static XTMF2.UnitTests.TestHelper;
 
-namespace XTMF2.UnitTests.Bus;
+namespace XTMF2.UnitTests.Bus.Optimization;
 
 [TestClass]
 public class TestSharedEstimationWorkerParticipant

@@ -1,0 +1,95 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+        x:Class="XTMF2.GUI.Views.RemoteEstimationWorkersWindow"
+        x:DataType="vm:RunViewModel"
+        x:CompileBindings="True"
+        Classes="neon-dialog"
+        Title="Estimation Workers"
+        Width="500"
+        Height="420"
+        MinWidth="380"
+        MinHeight="280"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="{Binding RunName}"
+                       FontSize="18"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource DlgAccent}"
+                       TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="Add or remove RunServers participating in this estimation."
+                       FontSize="12"
+                       Opacity="0.65"
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <Border Grid.Row="1" Classes="dlg-list" ClipToBounds="True">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="RemoteWorkersList" ItemsSource="{Binding RemoteWorkers}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RemoteEstimationWorkerViewModel"
+                                      x:CompileBindings="False">
+                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                  Margin="8,6">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="13"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Endpoint.Address}"
+                                               FontSize="11"
+                                               Opacity="0.55"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Margin="8,0"
+                                        Spacing="2">
+                                    <TextBlock Text="Active"
+                                           IsVisible="{Binding IsActive}"
+                                           Opacity="0.65"/>
+                                    <TextBlock Text="Updating..."
+                                           IsVisible="{Binding IsBusy}"
+                                           Opacity="0.65"/>
+                                </StackPanel>
+                                <Button Grid.Column="2"
+                                        Content="Add"
+                                        IsVisible="{Binding IsInactive}"
+                                        IsEnabled="{Binding IsNotBusy}"
+                                        Command="{Binding $parent[Window].DataContext.AddRemoteWorkerCommand}"
+                                        CommandParameter="{Binding}"
+                                        Padding="10,4"/>
+                                <Button Grid.Column="2"
+                                        Content="Remove"
+                                        IsVisible="{Binding IsActive}"
+                                        IsEnabled="{Binding IsNotBusy}"
+                                        Command="{Binding $parent[Window].DataContext.RemoveRemoteWorkerCommand}"
+                                        CommandParameter="{Binding}"
+                                        Padding="10,4"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource DlgSep}"
+                BorderThickness="0,1,0,0"
+                Margin="0,8,0,0"
+                Padding="0,8,0,0">
+            <Button Content="Close"
+                    HorizontalAlignment="Right"
+                    Padding="24,8"
+                    IsCancel="True"
+                    Click="CloseButton_Click"/>
+        </Border>
+    </Grid>
+</Window>

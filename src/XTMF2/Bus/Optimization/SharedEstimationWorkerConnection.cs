@@ -2,13 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
+using XTMF2.Bus;
 using XTMF2.Editing;
 
-namespace XTMF2.Bus;
+namespace XTMF2.Bus.Optimization;
 
 public sealed class SharedEstimationWorkerConnection : ISharedEstimationWorker
 {
     private bool _disposed;
+    private int _disconnected;
     private readonly bool _ownsBus;
 
     private SharedEstimationWorkerConnection(string workerId, string endpointId, HostBus bus, bool ownsBus)
@@ -17,7 +20,8 @@ public sealed class SharedEstimationWorkerConnection : ISharedEstimationWorker
         EndpointId = endpointId;
         Bus = bus;
         _ownsBus = ownsBus;
-        Bus.SharedEstimationResultsAvailable += OnResultsReceived;
+        Bus.SharedEstimationResultAvailable += OnResultReceived;
+        Bus.SharedEstimationWorkerReadyAvailable += OnWorkerReady;
         Bus.Disconnected += OnDisconnected;
     }
 
@@ -27,7 +31,11 @@ public sealed class SharedEstimationWorkerConnection : ISharedEstimationWorker
 
     public HostBus Bus { get; }
 
-    public event EventHandler<IReadOnlyList<SharedEstimationEvaluationResult>>? ResultsReceived;
+    internal bool IsDisconnected => Volatile.Read(ref _disconnected) != 0;
+
+    public event EventHandler<SharedEstimationEvaluationResult>? ResultReceived;
+
+    public event EventHandler<SharedEstimationWorkerReady>? WorkerReadyReceived;
 
     public event EventHandler? Disconnected;
 
@@ -80,22 +88,37 @@ public sealed class SharedEstimationWorkerConnection : ISharedEstimationWorker
         if (_disposed)
             return;
         _disposed = true;
-        Bus.SharedEstimationResultsAvailable -= OnResultsReceived;
+        Bus.SharedEstimationResultAvailable -= OnResultReceived;
+        Bus.SharedEstimationWorkerReadyAvailable -= OnWorkerReady;
         Bus.Disconnected -= OnDisconnected;
         if (_ownsBus)
             Bus.Dispose();
     }
 
-    public bool SendCandidates(IReadOnlyList<SharedEstimationCandidate> candidates, out string? error)
+    public bool SendCandidate(SharedEstimationCandidate candidate, out string? error)
     {
-        var sent = Bus.SendSharedEstimationCandidates(candidates, out CommandError? commandError);
-        error = commandError?.Message;
-        return sent;
+        try
+        {
+            var sent = Bus.SendSharedEstimationCandidate(candidate, out CommandError? commandError);
+            error = commandError?.Message;
+            return sent;
+        }
+        catch (Exception exception) when (exception is IOException or ObjectDisposedException or InvalidOperationException)
+        {
+            error = exception.Message;
+            return false;
+        }
     }
 
-    private void OnResultsReceived(object? sender, IReadOnlyList<SharedEstimationEvaluationResult> results)
-        => ResultsReceived?.Invoke(this, results);
+    private void OnResultReceived(object? sender, SharedEstimationEvaluationResult result)
+        => ResultReceived?.Invoke(this, result);
+
+    private void OnWorkerReady(object? sender, SharedEstimationWorkerReady readiness)
+        => WorkerReadyReceived?.Invoke(this, readiness);
 
     private void OnDisconnected(object? sender, EventArgs e)
-        => Disconnected?.Invoke(this, e);
+    {
+        Interlocked.Exchange(ref _disconnected, 1);
+        Disconnected?.Invoke(this, e);
+    }
 }

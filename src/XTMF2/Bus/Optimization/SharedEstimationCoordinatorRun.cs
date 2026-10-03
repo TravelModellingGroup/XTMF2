@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using XTMF2.Bus.Optimization;
+using XTMF2.Bus;
 
-namespace XTMF2.Bus;
+namespace XTMF2.Bus.Optimization;
 
 /// <summary>
 /// Adapts an initialized estimation algorithm to the shared worker coordinator.

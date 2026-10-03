@@ -1,6 +1,7 @@
 using System;
+using XTMF2.Bus;
 
-namespace XTMF2.Bus;
+namespace XTMF2.Bus.Optimization;
 
 /// <summary>
 /// Adapts one RunServer connection to the process-level remote estimation registry.
