@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -26,16 +27,19 @@ public class TestSharedEstimationCoordinator
             Candidate("candidate-2"),
             Candidate("candidate-3")
         };
-        var completed = new List<(string WorkerId, SharedEstimationEvaluationResult Result)>();
+        var completed = new ConcurrentQueue<(string WorkerId, SharedEstimationEvaluationResult Result)>();
         var evaluation = coordinator.EvaluateAsync(candidates,
-            evaluationCompleted: (workerId, _, result) => completed.Add((workerId, result)));
+            evaluationCompleted: (workerId, _, result) => completed.Enqueue((workerId, result)));
 
+        await first.WaitForSentCountAsync(1);
+        await second.WaitForSentCountAsync(1);
         Assert.HasCount(1, first.Sent);
         Assert.HasCount(1, second.Sent);
         Assert.AreEqual("candidate-1", first.Sent.Single().CandidateId);
         Assert.AreEqual("candidate-2", second.Sent.Single().CandidateId);
 
         second.Complete("candidate-2", 2.0);
+        await second.WaitForSentCountAsync(2);
         Assert.HasCount(1, completed);
         Assert.AreEqual("candidate-3", second.Sent.Last().CandidateId);
         first.Complete("candidate-1", 1.0);
@@ -53,14 +57,13 @@ public class TestSharedEstimationCoordinator
     }
 
     [TestMethod]
-    public async Task EvaluateAsync_SendsInitialRemoteCandidateBeforeRefillingLocalWorker()
+    public async Task EvaluateAsync_AllowsSynchronousWorkersToCompleteDuringAsyncDispatch()
     {
         using var coordinator = new SharedEstimationCoordinator();
         using var local = new FakeWorker("coordinator");
         using var remote = new FakeWorker("remote");
         local.OnSend = candidate => local.Complete(candidate.CandidateId, 1.0);
-        int localSendsWhenRemoteStarts = 0;
-        remote.OnSend = _ => localSendsWhenRemoteStarts = local.Sent.Count;
+        remote.OnSend = candidate => remote.Complete(candidate.CandidateId, 2.0);
         Assert.IsTrue(coordinator.AddWorker(local, out var error), error);
         Assert.IsTrue(coordinator.AddWorker(remote, out error), error);
 
@@ -71,10 +74,14 @@ public class TestSharedEstimationCoordinator
             Candidate("candidate-4")
         ]);
 
-        Assert.AreEqual(1, localSendsWhenRemoteStarts,
-            "The remote candidate should be sent before synchronous local refills consume later candidates.");
-        remote.Complete("candidate-2", 2.0);
-        Assert.HasCount(4, await evaluation);
+        var results = await evaluation;
+        await local.WaitForSentCountAsync(1);
+        await remote.WaitForSentCountAsync(1);
+
+        Assert.HasCount(4, results);
+        CollectionAssert.AreEqual(
+            new[] { "candidate-1", "candidate-2", "candidate-3", "candidate-4" },
+            results.Select(result => result.CandidateId).ToArray());
     }
 
     [TestMethod]
@@ -88,13 +95,16 @@ public class TestSharedEstimationCoordinator
         Assert.IsTrue(coordinator.AddWorker(replacement, out error), error);
 
         var evaluation = coordinator.EvaluateAsync([Candidate("candidate-1")]);
+        await first.WaitForSentCountAsync(1);
         first.Disconnect();
         Assert.AreEqual(1, coordinator.ActiveWorkerCount);
 
+        await replacement.WaitForSentCountAsync(1);
         Assert.AreEqual("candidate-1", replacement.Sent.Single().CandidateId);
         first.Complete("candidate-1", 99.0);
         replacement.Disconnect();
         Assert.IsTrue(coordinator.AddWorker(finalWorker, out error), error);
+        await finalWorker.WaitForSentCountAsync(1);
         Assert.AreEqual("candidate-1", finalWorker.Sent.Single().CandidateId);
         finalWorker.Complete("candidate-1", 4.0);
 
@@ -116,10 +126,12 @@ public class TestSharedEstimationCoordinator
 
         var evaluation = coordinator.EvaluateAsync([Candidate("candidate-send-error")]);
 
+        await failedWorker.WaitForDisposedAsync();
         Assert.IsTrue(failedWorker.IsDisposed);
         Assert.AreEqual(0, coordinator.ActiveWorkerCount);
         Assert.IsFalse(evaluation.IsCompleted);
         Assert.IsTrue(coordinator.AddWorker(replacement, out error), error);
+        await replacement.WaitForSentCountAsync(1);
         Assert.AreEqual("candidate-send-error", replacement.Sent.Single().CandidateId);
         replacement.Complete("candidate-send-error", 6.0);
 
@@ -137,15 +149,18 @@ public class TestSharedEstimationCoordinator
         Assert.IsTrue(coordinator.AddWorker(second, out error), error);
 
         var firstEvaluation = coordinator.EvaluateAsync([Candidate("candidate-1")]);
+        await first.WaitForSentCountAsync(1);
         first.Complete("candidate-1", 1.0);
         await firstEvaluation;
 
         var secondEvaluation = coordinator.EvaluateAsync([Candidate("candidate-2")]);
+        await second.WaitForSentCountAsync(1);
         Assert.AreEqual("candidate-2", second.Sent.Single().CandidateId);
         second.Complete("candidate-2", 2.0);
         await secondEvaluation;
 
         var nextFirstEvaluation = coordinator.EvaluateAsync([Candidate("candidate-3")]);
+        await first.WaitForSentCountAsync(2);
         Assert.AreEqual("candidate-3", first.Sent.Last().CandidateId);
         first.Complete("candidate-3", 3.0);
         await nextFirstEvaluation;
@@ -156,9 +171,21 @@ public class TestSharedEstimationCoordinator
 
     private sealed class FakeWorker(string workerId) : ISharedEstimationWorker
     {
+        private readonly object _sync = new();
+        private readonly List<SharedEstimationCandidate> _sent = [];
+        private TaskCompletionSource _sentChanged = NewSignal();
+        private readonly TaskCompletionSource _disposed = NewSignal();
+
         public string WorkerId { get; } = workerId;
-        public List<SharedEstimationCandidate> Sent { get; } = [];
-        public bool IsDisposed { get; private set; }
+        public IReadOnlyList<SharedEstimationCandidate> Sent
+        {
+            get
+            {
+                lock (_sync)
+                    return _sent.ToArray();
+            }
+        }
+        public bool IsDisposed => _disposed.Task.IsCompleted;
         public Exception SendException { get; init; } = null!;
         public Action<SharedEstimationCandidate> OnSend { get; set; } = null!;
 
@@ -170,10 +197,34 @@ public class TestSharedEstimationCoordinator
             if (SendException is not null)
                 throw SendException;
             error = null;
-            Sent.Add(candidate);
+            TaskCompletionSource changed;
+            lock (_sync)
+            {
+                _sent.Add(candidate);
+                changed = _sentChanged;
+                _sentChanged = NewSignal();
+            }
+            changed.TrySetResult();
             OnSend?.Invoke(candidate);
             return !IsDisposed;
         }
+
+        public async Task WaitForSentCountAsync(int count)
+        {
+            while (true)
+            {
+                Task changed;
+                lock (_sync)
+                {
+                    if (_sent.Count >= count)
+                        return;
+                    changed = _sentChanged.Task;
+                }
+                await changed.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+
+        public Task WaitForDisposedAsync() => _disposed.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         public void Complete(string candidateId, double fitness)
         {
@@ -184,6 +235,9 @@ public class TestSharedEstimationCoordinator
 
         public void Disconnect() => Disconnected?.Invoke(this, EventArgs.Empty);
 
-        public void Dispose() => IsDisposed = true;
+        public void Dispose() => _disposed.TrySetResult();
+
+        private static TaskCompletionSource NewSignal()
+            => new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }
