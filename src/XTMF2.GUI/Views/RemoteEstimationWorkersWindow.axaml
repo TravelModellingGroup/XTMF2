@@ -57,6 +57,8 @@
                                            Opacity="0.65"/>
                                      <TextBlock Text="{Binding ActiveWorkerCountDisplay}"
                                          Opacity="0.65"/>
+                                     <TextBlock Text="{Binding EvaluationCountDisplay}"
+                                         Opacity="0.65"/>
                                     <TextBlock Text="Updating..."
                                            IsVisible="{Binding IsBusy}"
                                            Opacity="0.65"/>
@@ -64,14 +66,14 @@
                                 <Button Grid.Column="2"
                                         Content="Add"
                                         IsVisible="{Binding IsInactive}"
-                                        IsEnabled="{Binding IsNotBusy}"
+                                        IsEnabled="{Binding CanAdd}"
                                         Command="{Binding $parent[Window].DataContext.AddRemoteWorkerCommand}"
                                         CommandParameter="{Binding}"
                                         Padding="10,4"/>
                                 <Button Grid.Column="2"
                                         Content="Remove"
                                         IsVisible="{Binding IsActive}"
-                                        IsEnabled="{Binding IsNotBusy}"
+                                        IsEnabled="{Binding CanRemove}"
                                         Command="{Binding $parent[Window].DataContext.RemoveRemoteWorkerCommand}"
                                         CommandParameter="{Binding}"
                                         Padding="10,4"/>

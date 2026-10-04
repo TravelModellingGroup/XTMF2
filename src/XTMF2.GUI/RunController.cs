@@ -650,7 +650,7 @@ public class RunController : IDisposable
         var runDirectory = request.Run.WorkingDirectory;
         var runViewModel = RunsViewModel.AddRun(id, runName, runDirectory,
             $"{orchestratorEndpointId} (coordinator + {endpoints.Length} remote worker(s))", msSession, user);
-        runViewModel.SetRemoteRunTracking(true);
+        runViewModel.SetRemoteRunTracking(orchestratorEndpointId != LocalEndpointId);
         runViewModel.SetRunMode(RunMode.Estimation, metadata, () =>
         {
             orchestrator.CancelSharedEstimation(submittedRunId, "Cancelled by user.", out _);
@@ -670,13 +670,23 @@ public class RunController : IDisposable
             _remoteWorkerEndpointsByRunId[submittedRunId] = availableWorkers.ToDictionary(worker => worker.WorkerId,
                 worker => worker, StringComparer.Ordinal);
         }
+        var workerRows = availableWorkers.Select(ToRunServerEndpoint).ToList();
+        var configuredWorkerCounts = availableWorkers.ToDictionary(worker => worker.WorkerId,
+            worker => worker.ConcurrentRuns, StringComparer.Ordinal);
+        if (request.UseCoordinatorAsWorker)
+        {
+            var coordinatorEndpoint = GetConnectedRunServers()
+                .FirstOrDefault(candidate => candidate.Id == orchestratorEndpointId);
+            workerRows.Add(ToCoordinatorRunServerEndpoint(coordinatorEndpoint, orchestratorEndpointId));
+            configuredWorkerCounts[RemoteEstimationWorkerViewModel.CoordinatorWorkerId] =
+                request.CoordinatorConcurrentRuns;
+        }
         runViewModel.SetRemoteEstimationWorkers(
-            availableWorkers.Select(ToRunServerEndpoint).ToArray(),
+            workerRows,
             initialWorkers.Keys.ToArray(),
             workerId => ChangeRemoteEstimationWorker(submittedRunId, workerId, add: true),
             workerId => ChangeRemoteEstimationWorker(submittedRunId, workerId, add: false),
-            availableWorkers.ToDictionary(worker => worker.WorkerId,
-                worker => worker.ConcurrentRuns, StringComparer.Ordinal));
+            configuredWorkerCounts);
         SharedEstimationCompletion? pendingCompletion;
         lock (_sessionsByRunId)
         {
@@ -700,6 +710,17 @@ public class RunController : IDisposable
             Port = endpoint.Port,
             Token = endpoint.Token,
             CertificateFingerprint = endpoint.CertificateFingerprint
+        };
+
+    private static RunServerEndpoint ToCoordinatorRunServerEndpoint(
+        RunServerEndpoint? endpoint, string fallbackName)
+        => new()
+        {
+            Id = RemoteEstimationWorkerViewModel.CoordinatorWorkerId,
+            Name = $"Coordinator ({endpoint?.Name ?? fallbackName})",
+            Address = endpoint?.Address ?? fallbackName,
+            Port = endpoint?.Port ?? 0,
+            IsLocal = endpoint?.IsLocal ?? false
         };
 
     private string? ChangeRemoteEstimationWorker(string runId, string workerId, bool add)
@@ -1060,8 +1081,12 @@ public class RunController : IDisposable
             lock (_sessionsByRunId)
                 _remoteWorkerEndpointsByRunId[snapshot.RunId] = workers.ToDictionary(
                     worker => worker.WorkerId, worker => worker, StringComparer.Ordinal);
+            var workerRows = workers.Select(ToRunServerEndpoint).ToList();
+            if (snapshot.ConfiguredWorkerCounts?.ContainsKey(
+                    RemoteEstimationWorkerViewModel.CoordinatorWorkerId) == true)
+                workerRows.Add(ToCoordinatorRunServerEndpoint(endpoint, runServerName));
             RunsViewModel.ConfigureRecoveredSharedEstimationWorkers(snapshot.RunId,
-                workers.Select(ToRunServerEndpoint).ToArray(),
+                workerRows,
                 snapshot.ActiveWorkerIds ?? Array.Empty<string>(),
                 workerId => ChangeRemoteEstimationWorker(snapshot.RunId, workerId, add: true),
                 workerId => ChangeRemoteEstimationWorker(snapshot.RunId, workerId, add: false),
@@ -1422,7 +1447,7 @@ public class RunController : IDisposable
 
         var result = await hostBus.DeleteRemoteRunAsync(runId, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
-        if (result.Deleted)
+        if (result.IsDeletedOrNotFound)
         {
             lock (_sessionsByRunId)
             {

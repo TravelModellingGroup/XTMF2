@@ -486,9 +486,6 @@ public sealed partial class RunViewModel : ObservableObject
     [ObservableProperty]
     private int _currentIterationFitnessTests;
 
-    [ObservableProperty]
-    private string _workerEvaluationCountsDisplay = string.Empty;
-
     /// <summary>Live parameter values for each optimisation parameter.</summary>
     public ObservableCollection<OptimizationParameterViewModel> OptimizationParameters { get; } = new();
 
@@ -552,7 +549,7 @@ public sealed partial class RunViewModel : ObservableObject
         foreach (var worker in RemoteWorkers)
         {
             worker.SetActiveWorkerCount(CountWorkerSlots(activeWorkerIds, worker.WorkerId));
-            worker.IsActive = worker.ActiveWorkerCount > 0;
+            worker.IsActive = worker.IsCoordinator || worker.ActiveWorkerCount > 0;
             worker.IsBusy = false;
         }
     }
@@ -570,6 +567,9 @@ public sealed partial class RunViewModel : ObservableObject
 
     internal void ReconnectRemoteWorker(string workerId)
     {
+        if (string.Equals(workerId, RemoteEstimationWorkerViewModel.CoordinatorWorkerId,
+            StringComparison.Ordinal))
+            return;
         if (Status != RunStatus.Running || _addRemoteWorkerAction is null)
             return;
         var worker = RemoteWorkers.FirstOrDefault(candidate =>
@@ -590,7 +590,7 @@ public sealed partial class RunViewModel : ObservableObject
     {
         var worker = RemoteWorkers.FirstOrDefault(candidate =>
             string.Equals(candidate.WorkerId, acknowledgement.WorkerId, StringComparison.Ordinal));
-        if (worker is null)
+        if (worker is null || worker.IsCoordinator)
             return;
         worker.IsBusy = false;
         if (acknowledgement.Succeeded)
@@ -610,7 +610,7 @@ public sealed partial class RunViewModel : ObservableObject
     [RelayCommand]
     private void AddRemoteWorker(RemoteEstimationWorkerViewModel worker)
     {
-        if (worker.IsActive || worker.IsBusy || _addRemoteWorkerAction is null)
+        if (worker.IsCoordinator || worker.IsActive || worker.IsBusy || _addRemoteWorkerAction is null)
             return;
         worker.IsBusy = true;
         var error = _addRemoteWorkerAction(worker.WorkerId);
@@ -624,7 +624,7 @@ public sealed partial class RunViewModel : ObservableObject
     [RelayCommand]
     private void RemoveRemoteWorker(RemoteEstimationWorkerViewModel worker)
     {
-        if (!worker.IsActive || worker.IsBusy || _removeRemoteWorkerAction is null)
+        if (worker.IsCoordinator || !worker.IsActive || worker.IsBusy || _removeRemoteWorkerAction is null)
             return;
         worker.IsBusy = true;
         var error = _removeRemoteWorkerAction(worker.WorkerId);
@@ -676,11 +676,12 @@ public sealed partial class RunViewModel : ObservableObject
         CurrentIterationFitnessTests = progress.FitnessTestsThisIteration;
         var activeWorkers = progress.ActiveWorkerIds?.ToArray() ?? Array.Empty<string>();
         foreach (var worker in RemoteWorkers)
+        {
             worker.SetActiveWorkerCount(CountWorkerSlots(activeWorkers, worker.WorkerId));
-        WorkerEvaluationCountsDisplay = progress.EvaluationsByWorker is { Count: > 0 } counts
-            ? string.Join(" | ", counts.OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                .Select(pair => $"{GetWorkerDisplayName(pair.Key)}: {pair.Value}"))
-            : string.Empty;
+            worker.SetCompletedEvaluations(progress.EvaluationsByWorker is { } counts
+                ? CountWorkerEvaluations(counts, worker.WorkerId)
+                : 0);
+        }
         if (progress.BestParameters is { Count: > 0 } bestParameters &&
             bestParameters.Count == OptimizationParameters.Count)
         {
@@ -695,15 +696,20 @@ public sealed partial class RunViewModel : ObservableObject
             $"best fitness {progress.BestFitness:G6}.");
     }
 
-    private string GetWorkerDisplayName(string workerId)
-        => RemoteWorkers.FirstOrDefault(worker =>
-            string.Equals(worker.WorkerId, workerId, StringComparison.Ordinal))?.Name ?? workerId;
-
     private static int CountWorkerSlots(IReadOnlyCollection<string> workerIds, string endpointId)
     {
         var slotPrefix = endpointId + "#run-";
         return workerIds.Count(workerId => workerId == endpointId ||
             workerId.StartsWith(slotPrefix, StringComparison.Ordinal));
+    }
+
+    private static int CountWorkerEvaluations(IReadOnlyDictionary<string, int> evaluationsByWorker,
+        string endpointId)
+    {
+        var slotPrefix = endpointId + "#run-";
+        return evaluationsByWorker
+            .Where(pair => pair.Key == endpointId || pair.Key.StartsWith(slotPrefix, StringComparison.Ordinal))
+            .Sum(pair => pair.Value);
     }
 
     // ── Cancel command ────────────────────────────────────────────────────
@@ -790,6 +796,7 @@ public sealed partial class RunViewModel : ObservableObject
     internal void MarkFinished(string? completionMessage = null)
     {
         Status     = RunStatus.Finished;
+        MarkSharedEstimationOutputAvailableIfPresent();
         StatusText = completionMessage ??
             (IsOptimizationRun && StatusText.StartsWith("[Estimation] converged", StringComparison.Ordinal)
                 ? StatusText
@@ -805,6 +812,7 @@ public sealed partial class RunViewModel : ObservableObject
     internal void MarkError(string errorMessage, string stack, string? moduleName, Guid? elementId)
     {
         Status     = RunStatus.Error;
+        MarkSharedEstimationOutputAvailableIfPresent();
         StatusText = errorMessage;
         ErrorModuleName = moduleName;
         _errorElementId = elementId;
@@ -822,6 +830,7 @@ public sealed partial class RunViewModel : ObservableObject
     private void MarkInterrupted(string message)
     {
         Status = RunStatus.Interrupted;
+        MarkSharedEstimationOutputAvailableIfPresent();
         StatusText = message;
         AddMessage(message);
         OnPropertyChanged(nameof(StatusBadge));
@@ -831,6 +840,12 @@ public sealed partial class RunViewModel : ObservableObject
 
     internal void MarkConnectionLost()
         => MarkInterrupted("RunServer connection was lost; the run status is unknown until it reconnects.");
+
+    private void MarkSharedEstimationOutputAvailableIfPresent()
+    {
+        if (IsRemoteSharedEstimation && Directory.Exists(RunDirectory))
+            MarkArtifactsAvailable();
+    }
 
     /// <summary>
     /// Returns navigation context for the current failing element, when available.

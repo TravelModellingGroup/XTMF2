@@ -76,7 +76,7 @@
             <Grid ColumnDefinitions="*,Auto" Margin="4,0,8,0">
                 <TextBlock Text="RunServer" FontSize="12" Opacity="0.65"/>
                 <TextBlock Grid.Column="1" Text="Runs" FontSize="12" Opacity="0.65"
-                           HorizontalAlignment="Center" Width="86"/>
+                           HorizontalAlignment="Center" Width="120"/>
             </Grid>
             <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding RunServerChoices}">
@@ -93,7 +93,7 @@
                                                Maximum="32"
                                                Increment="1"
                                                FormatString="0"
-                                               Width="86"
+                                               Width="120"
                                                IsEnabled="{Binding CanConfigureRuns}"
                                                HorizontalContentAlignment="Right"/>
                             </Grid>

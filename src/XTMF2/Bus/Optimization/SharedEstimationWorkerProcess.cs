@@ -11,7 +11,10 @@ namespace XTMF2.Bus.Optimization;
 
 internal sealed class SharedEstimationWorkerProcess : IDisposable
 {
+    private const string WorkerDirectoriesName = ".xtmf-estimation-workers";
     private readonly string _runId;
+    private readonly string _workerDirectory;
+    private readonly string _workerDirectoriesRoot;
     private readonly Process _process;
     private readonly Stream _stream;
     private readonly BinaryReader _reader;
@@ -20,9 +23,12 @@ internal sealed class SharedEstimationWorkerProcess : IDisposable
     private readonly object _writeSync = new();
     private int _disposed;
 
-    private SharedEstimationWorkerProcess(string runId, Process process, Stream stream)
+    private SharedEstimationWorkerProcess(string runId, string workerDirectory,
+        string workerDirectoriesRoot, Process process, Stream stream)
     {
         _runId = runId;
+        _workerDirectory = workerDirectory;
+        _workerDirectoriesRoot = workerDirectoriesRoot;
         _process = process;
         _stream = stream;
         _reader = new BinaryReader(stream, Encoding.UTF8, true);
@@ -38,6 +44,9 @@ internal sealed class SharedEstimationWorkerProcess : IDisposable
         error = null;
         Process? process = null;
         Stream? stream = null;
+        var workerDirectoriesRoot = Path.Combine(Path.GetFullPath(request.WorkingDirectory),
+            WorkerDirectoriesName);
+        var workerDirectory = Path.Combine(workerDirectoriesRoot, Guid.NewGuid().ToString("N"));
         try
         {
             var runAssemblyDirectory = Path.GetDirectoryName(typeof(RunServerBus).Assembly.Location)!;
@@ -71,8 +80,10 @@ internal sealed class SharedEstimationWorkerProcess : IDisposable
                 }, timeoutMilliseconds: 15000))
                 throw new IOException(error ?? "Unable to connect to the XTMF2.Run worker process.");
 
-            var candidateWorker = new SharedEstimationWorkerProcess(request.RunId, process!, stream!);
-            SharedEstimationProtocol.WriteRunRequest(candidateWorker._writer, request);
+            var candidateWorker = new SharedEstimationWorkerProcess(request.RunId,
+                workerDirectory, workerDirectoriesRoot, process!, stream!);
+            SharedEstimationProtocol.WriteRunRequest(candidateWorker._writer,
+                request with { WorkingDirectory = workerDirectory });
             candidateWorker._writer.Flush();
             var readiness = SharedEstimationProtocol.ReadWorkerReady(candidateWorker._reader);
             if (readiness.RunId != request.RunId || !readiness.Succeeded)
@@ -103,6 +114,7 @@ internal sealed class SharedEstimationWorkerProcess : IDisposable
                 }
                 process.Dispose();
             }
+            DeleteWorkerDirectories(workerDirectory, workerDirectoriesRoot);
             return false;
         }
     }
@@ -148,7 +160,10 @@ internal sealed class SharedEstimationWorkerProcess : IDisposable
         try
         {
             if (!_process.HasExited)
+            {
                 _process.Kill(entireProcessTree: true);
+                _process.WaitForExit();
+            }
         }
         catch (Exception exception) when (exception is InvalidOperationException
             or System.ComponentModel.Win32Exception or NotSupportedException)
@@ -158,6 +173,7 @@ internal sealed class SharedEstimationWorkerProcess : IDisposable
         _reader.Dispose();
         _writer.Dispose();
         _process.Dispose();
+        DeleteWorkerDirectories(_workerDirectory, _workerDirectoriesRoot);
     }
 
     public void Dispose()
@@ -172,7 +188,10 @@ internal sealed class SharedEstimationWorkerProcess : IDisposable
                 _writer.Flush();
             }
             if (!_process.WaitForExit(1000))
+            {
                 _process.Kill(entireProcessTree: true);
+                _process.WaitForExit();
+            }
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException
             or System.ComponentModel.Win32Exception or ObjectDisposedException or NotSupportedException)
@@ -180,7 +199,10 @@ internal sealed class SharedEstimationWorkerProcess : IDisposable
             try
             {
                 if (!_process.HasExited)
+                {
                     _process.Kill(entireProcessTree: true);
+                    _process.WaitForExit();
+                }
             }
             catch (Exception killException) when (killException is InvalidOperationException
                 or System.ComponentModel.Win32Exception or NotSupportedException)
@@ -193,6 +215,23 @@ internal sealed class SharedEstimationWorkerProcess : IDisposable
             _reader.Dispose();
             _writer.Dispose();
             _process.Dispose();
+            DeleteWorkerDirectories(_workerDirectory, _workerDirectoriesRoot);
+        }
+    }
+
+    private static void DeleteWorkerDirectories(string workerDirectory, string workerDirectoriesRoot)
+    {
+        try
+        {
+            if (Directory.Exists(workerDirectory))
+                Directory.Delete(workerDirectory, recursive: true);
+            if (Directory.Exists(workerDirectoriesRoot) &&
+                !Directory.EnumerateFileSystemEntries(workerDirectoriesRoot).Any())
+                Directory.Delete(workerDirectoriesRoot);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or ArgumentException or NotSupportedException)
+        {
         }
     }
 }

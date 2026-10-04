@@ -99,6 +99,8 @@ public class TestSharedEstimationEndToEnd
                         Assert.AreEqual(2.5, completion.Task.Result.BestFitness, 0.0001);
                         Assert.IsTrue(progressUpdates.Any(progress => progress.ActiveWorkers == 2));
                         Assert.IsTrue(File.Exists(Path.Combine(runDirectory, "estimation_report.csv")));
+                        Assert.IsFalse(Directory.Exists(Path.Combine(runDirectory,
+                            ".xtmf-estimation-workers")), "Worker scratch directories should be removed before completion is reported.");
                     });
                 }
                 finally
@@ -138,23 +140,43 @@ public class TestSharedEstimationEndToEnd
 
             using var serialized = new MemoryStream();
             Assert.IsTrue(session.Save(out error, serialized), error?.Message);
-            var request = new SharedEstimationRunRequest(
-                "worker-activity", Directory.GetCurrentDirectory(), "Start", serialized.ToArray());
-            CreateRunClient(true, host =>
+            var workerRoot = Directory.CreateTempSubdirectory("xtmf-worker-cancel-");
+            try
             {
-                Assert.IsTrue(host.StartSharedEstimation(request, out var startError), startError?.Message);
+                var request = new SharedEstimationRunRequest(
+                    "worker-activity", workerRoot.FullName, "Start", serialized.ToArray());
+                CreateRunClient(true, host =>
+                {
+                    var ready = new TaskCompletionSource<SharedEstimationWorkerReady>(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    host.SharedEstimationWorkerReadyAvailable += (_, workerReady) =>
+                    {
+                        if (workerReady.RunId == request.RunId)
+                            ready.TrySetResult(workerReady);
+                    };
+                    Assert.IsTrue(host.StartSharedEstimation(request, out var startError), startError?.Message);
+                    Assert.IsTrue(ready.Task.Wait(TimeSpan.FromSeconds(10)), "The worker process did not become ready.");
+                    Assert.IsTrue(ready.Task.Result.Succeeded, ready.Task.Result.Error);
 
-                var responses = Task.WhenAll(host.QueryServerActivityAsync(), host.QueryServerActivityAsync())
-                    .GetAwaiter().GetResult();
+                    var responses = Task.WhenAll(host.QueryServerActivityAsync(), host.QueryServerActivityAsync())
+                        .GetAwaiter().GetResult();
 
-                Assert.AreNotEqual(responses[0].RequestId, responses[1].RequestId);
-                var activity = responses[0].Activities.Single(item => item.RunId == request.RunId);
-                Assert.AreEqual("Shared estimation worker", activity.Kind);
-                Assert.AreEqual(RunServerActivityState.Running, activity.State);
-                Assert.AreEqual("Shared estimation worker", activity.RunName);
-                Assert.IsTrue(host.CancelSharedEstimation(request.RunId, "test complete", out var cancelError),
-                    cancelError?.Message);
-            });
+                    Assert.AreNotEqual(responses[0].RequestId, responses[1].RequestId);
+                    var activity = responses[0].Activities.Single(item => item.RunId == request.RunId);
+                    Assert.AreEqual("Shared estimation worker", activity.Kind);
+                    Assert.AreEqual(RunServerActivityState.Running, activity.State);
+                    Assert.AreEqual("Shared estimation worker", activity.RunName);
+                    Assert.IsTrue(host.CancelSharedEstimation(request.RunId, "test complete", out var cancelError),
+                        cancelError?.Message);
+                    Assert.IsTrue(SpinWait.SpinUntil(() => !Directory.Exists(Path.Combine(
+                            workerRoot.FullName, ".xtmf-estimation-workers")),
+                        TimeSpan.FromSeconds(5)), "Cancellation should delete worker scratch directories.");
+                });
+            }
+            finally
+            {
+                workerRoot.Delete(true);
+            }
         });
     }
 
@@ -195,7 +217,7 @@ public class TestSharedEstimationEndToEnd
             Assert.IsTrue(session.Save(out error, serialized), error?.Message);
             var pathNodeIndex = FindSerializedNodeIndex(serialized.ToArray(), "Path");
             var request = new SharedEstimationRunRequest(
-                "shared-e2e", Directory.GetCurrentDirectory(), "Start", serialized.ToArray());
+                "shared-e2e", workerRoot.FullName, "Start", serialized.ToArray());
             var overrides = new Dictionary<string, IReadOnlyDictionary<int, string>>
             {
                 ["worker-1"] = new Dictionary<int, string> { [pathNodeIndex] = firstPath },
@@ -243,6 +265,11 @@ public class TestSharedEstimationEndToEnd
                         Assert.IsTrue(reportLines.Skip(1).All(line => line.StartsWith("1,2.5,", StringComparison.Ordinal)));
                         CollectionAssert.AreEquivalent(new[] { "0.1", "0.2", "0.3", "0.4" },
                             reportLines.Skip(1).Select(line => line.Split(',')[2]).ToArray());
+                        pool.Dispose();
+                        Assert.IsTrue(File.Exists(reportPath), "Coordinator estimation output should remain in the run directory.");
+                        Assert.IsTrue(SpinWait.SpinUntil(() => !Directory.Exists(Path.Combine(
+                                workerRoot.FullName, ".xtmf-estimation-workers")),
+                            TimeSpan.FromSeconds(5)), "Worker scratch directories should be deleted when workers terminate.");
                     });
                 });
             }

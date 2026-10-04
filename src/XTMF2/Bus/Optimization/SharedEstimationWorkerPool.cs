@@ -280,17 +280,27 @@ public sealed class SharedEstimationWorkerPool : IDisposable
 
     public void Dispose()
     {
+        SharedEstimationRunRequest? activeRun;
+        SharedEstimationWorkerConnection[] connections;
         lock (_sync)
         {
             if (_disposed)
                 return;
             _disposed = true;
+            activeRun = _activeRun;
+            connections = _connections.Values.ToArray();
             _activeRun = null;
             _activeOverrides = null;
             _awaitingReadiness.Clear();
             foreach (var connection in _connections.Values)
                 connection.WorkerReadyReceived -= OnWorkerReadyReceived;
             _connections.Clear();
+        }
+
+        if (activeRun is not null)
+        {
+            foreach (var connection in connections)
+                connection.Bus.CancelSharedEstimation(activeRun.RunId, "Shared estimation worker released.", out _);
         }
         Coordinator.Dispose();
     }

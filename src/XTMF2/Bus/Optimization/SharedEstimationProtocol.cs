@@ -62,7 +62,11 @@ public sealed record RunServerActivity(
 
 public sealed record RunServerActivityResponse(string RequestId, IReadOnlyList<RunServerActivity> Activities);
 
-public sealed record RemoteRunDeletionResponse(string RequestId, string RunId, bool Deleted, string? Error);
+public sealed record RemoteRunDeletionResponse(string RequestId, string RunId, bool Deleted, string? Error)
+{
+    public bool IsDeletedOrNotFound => Deleted ||
+        string.Equals(Error, "The remote run was not found.", StringComparison.Ordinal);
+}
 
 public sealed record SharedEstimationParameterMetadata(int NodeIndex, string Name, double Min, double Max);
 

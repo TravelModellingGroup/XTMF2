@@ -190,9 +190,17 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
                     Convert.ToHexString(SHA256.HashData(_request.Run.ModelSystem)),
                     _request.Parameters?.ToArray(), _request.Run.ProjectId, _request.Run.ModelSystemId,
                     _request.Run.OwnerUserId,
-                    _request.Workers.ToDictionary(worker => worker.WorkerId,
-                        worker => worker.ConcurrentRuns, StringComparer.Ordinal));
+                    GetConfiguredWorkerCounts());
             }
+        }
+
+        private IReadOnlyDictionary<string, int> GetConfiguredWorkerCounts()
+        {
+            var counts = _request.Workers.ToDictionary(worker => worker.WorkerId,
+                worker => worker.ConcurrentRuns, StringComparer.Ordinal);
+            if (_request.UseCoordinatorAsWorker)
+                counts["coordinator"] = _request.CoordinatorConcurrentRuns;
+            return counts;
         }
 
         public SharedEstimationWorkerControlAcknowledgement ChangeWorker(

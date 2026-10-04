@@ -178,7 +178,7 @@ public partial class RunsView : UserControl
         try
         {
             var result = await mainWindow.DeleteRemoteRunAsync(run.RunId);
-            if (!result.Deleted)
+            if (!result.IsDeletedOrNotFound)
             {
                 run.AppendStatus(result.Error ?? "The RunServer did not delete this run.");
                 return;
@@ -227,7 +227,7 @@ public partial class RunsView : UserControl
                     try
                     {
                         var result = await mainWindow.DeleteRemoteRunAsync(run.RunId);
-                        if (!result.Deleted)
+                        if (!result.IsDeletedOrNotFound)
                         {
                             run.AppendStatus(result.Error ?? "The RunServer did not delete this run.");
                             continue;

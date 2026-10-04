@@ -57,12 +57,76 @@ public class RemoteEstimationWorkersWindowTests
 
             run.UpdateSharedEstimationProgress(new SharedEstimationProgress(
                 "shared-run", 1, 0.5, 2, 0, 2, 2,
-                new System.Collections.Generic.Dictionary<string, int>(),
+                new System.Collections.Generic.Dictionary<string, int>
+                {
+                    ["server-2"] = 2,
+                    ["server-2#run-2"] = 3,
+                    ["server-3"] = 7,
+                    ["coordinator"] = 11
+                },
                 Array.Empty<double>(), ["server-2", "server-2#run-2"]));
 
             Assert.AreEqual(2, worker.ActiveWorkerCount);
             Assert.AreEqual("2 / 3 workers", worker.ActiveWorkerCountDisplay);
+            Assert.AreEqual(5, worker.CompletedEvaluations);
+            Assert.AreEqual("Tests: 5", worker.EvaluationCountDisplay);
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void CoordinatorWorker_IsShownButCannotBeRemoved()
+    {
+        Session.Dispatch(() =>
+        {
+            var removalRequested = false;
+            var run = CreateRun();
+            run.SetRemoteEstimationWorkers(
+                [new RunServerEndpoint
+                {
+                    Id = RemoteEstimationWorkerViewModel.CoordinatorWorkerId,
+                    Name = "Coordinator",
+                    Address = "127.0.0.1"
+                }],
+                [RemoteEstimationWorkerViewModel.CoordinatorWorkerId],
+                _ => null,
+                _ =>
+                {
+                    removalRequested = true;
+                    return null;
+                },
+                new System.Collections.Generic.Dictionary<string, int>
+                {
+                    [RemoteEstimationWorkerViewModel.CoordinatorWorkerId] = 2
+                });
+            var coordinator = run.RemoteWorkers[0];
+
+            run.UpdateSharedEstimationProgress(new SharedEstimationProgress(
+                "shared-run", 1, 0.5, 2, 0, 2, 2,
+                new System.Collections.Generic.Dictionary<string, int>
+                {
+                    ["coordinator"] = 4,
+                    ["coordinator#run-2"] = 6
+                },
+                Array.Empty<double>(), ["coordinator", "coordinator#run-2"]));
+            run.RemoveRemoteWorkerCommand.Execute(coordinator);
+
+            Assert.IsTrue(coordinator.IsCoordinator);
+            Assert.IsTrue(coordinator.IsActive);
+            Assert.IsFalse(coordinator.CanRemove);
+            Assert.AreEqual(2, coordinator.ActiveWorkerCount);
+            Assert.AreEqual("Tests: 10", coordinator.EvaluationCountDisplay);
+            Assert.IsFalse(removalRequested);
+        }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void LocalCoordinatorRun_DoesNotOfferRemoteOutputTransfer()
+    {
+        var run = CreateRun();
+        run.SetRemoteRunTracking(false);
+        run.MarkFinished("Cancelled");
+
+        Assert.IsFalse(run.CanTransferRemoteOutput);
     }
 
     private static RunViewModel CreateRun()

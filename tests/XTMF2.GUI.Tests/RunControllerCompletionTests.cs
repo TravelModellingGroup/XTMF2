@@ -16,6 +16,18 @@ namespace XTMF2.GUI.Tests;
 public class RunControllerCompletionTests
 {
     [TestMethod]
+    public void RemoteRunDeletion_NotFoundCountsAsAlreadyDeleted()
+    {
+        var missing = new RemoteRunDeletionResponse("request", "run-missing", false,
+            "The remote run was not found.");
+        var rejected = new RemoteRunDeletionResponse("request", "run-running", false,
+            "A running remote job cannot be deleted.");
+
+        Assert.IsTrue(missing.IsDeletedOrNotFound);
+        Assert.IsFalse(rejected.IsDeletedOrNotFound);
+    }
+
+    [TestMethod]
     public void CompletionReceivedBeforeRunRegistration_IsReleasedAfterRegistration()
     {
         var gate = new SharedEstimationCompletionGate();
@@ -150,6 +162,81 @@ public class RunControllerCompletionTests
         {
             localDirectory.Delete(recursive: true);
         }
+    }
+
+    [TestMethod]
+    public void LocalCoordinatorEstimation_OffersRunDirectoryAfterCompletionOrCancellation()
+    {
+        var completedDirectory = Directory.CreateTempSubdirectory("xtmf-estimation-completed-");
+        var cancelledDirectory = Directory.CreateTempSubdirectory("xtmf-estimation-cancelled-");
+        try
+        {
+            var completedRun = CreateLocalCoordinatorEstimationRun("run-completed", completedDirectory.FullName);
+            completedRun.MarkFinished("Estimation completed.");
+
+            Assert.IsTrue(completedRun.HasRunDirectory);
+            Assert.IsTrue(completedRun.OpenRunDirectoryCommand.CanExecute(null));
+            Assert.IsFalse(completedRun.CanTransferRemoteOutput);
+
+            var cancelledRun = CreateLocalCoordinatorEstimationRun("run-cancelled", cancelledDirectory.FullName);
+            cancelledRun.MarkError("Cancelled by user.", string.Empty, null, null);
+
+            Assert.IsTrue(cancelledRun.HasRunDirectory);
+            Assert.IsTrue(cancelledRun.OpenRunDirectoryCommand.CanExecute(null));
+            Assert.IsFalse(cancelledRun.CanTransferRemoteOutput);
+        }
+        finally
+        {
+            completedDirectory.Delete(recursive: true);
+            cancelledDirectory.Delete(recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void RemoteCoordinatorEstimation_DoesNotOfferTransferWhenOutputIsAlreadyLocal()
+    {
+        var localDirectory = Directory.CreateTempSubdirectory("xtmf-remote-estimation-output-");
+        try
+        {
+            var run = CreateLocalCoordinatorEstimationRun(
+                "run-remote-estimation", localDirectory.FullName, isRemote: true);
+            run.MarkFinished("Estimation completed.");
+
+            Assert.IsTrue(run.IsRemoteRun);
+            Assert.IsTrue(run.ArtifactsAvailable);
+            Assert.IsTrue(run.HasRunDirectory);
+            Assert.IsFalse(run.CanTransferRemoteOutput);
+            Assert.AreEqual("Output is on this computer.", run.OutputTransferStatus);
+        }
+        finally
+        {
+            localDirectory.Delete(recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void RemoteCoordinatorEstimation_StillOffersTransferWhenOutputIsNotLocal()
+    {
+        var missingDirectory = Path.Combine(Path.GetTempPath(), $"xtmf-remote-estimation-missing-{Guid.NewGuid():N}");
+        var run = CreateLocalCoordinatorEstimationRun("run-remote-estimation-missing",
+            missingDirectory, isRemote: true);
+
+        run.MarkFinished("Estimation completed.");
+
+        Assert.IsFalse(run.ArtifactsAvailable);
+        Assert.IsTrue(run.CanTransferRemoteOutput);
+    }
+
+    private static RunViewModel CreateLocalCoordinatorEstimationRun(string runId, string runDirectory,
+        bool isRemote = false)
+    {
+        var run = new RunViewModel(runId, "estimation", runDirectory, "Local RunServer", null!, null!);
+        run.SetRunMode(RunMode.Estimation,
+            Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => { });
+        run.SetRemoteRunTracking(isRemote);
+        run.SetRemoteEstimationWorkers(Array.Empty<RunServerEndpoint>(), Array.Empty<string>(),
+            _ => null, _ => null);
+        return run;
     }
 
     [TestMethod]
