@@ -347,7 +347,6 @@ namespace XTMF2.Client
                 return false;
 
             string? deploymentDirectory = null;
-            Process? deployedProcess = null;
             try
             {
                 var processDirectory = Path.GetDirectoryName(processPath);
@@ -356,52 +355,23 @@ namespace XTMF2.Client
 
                 deploymentDirectory = Path.Combine(processDirectory, ".deployments",
                     DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" + Guid.NewGuid().ToString("N"));
-                CopyDirectory(processDirectory, deploymentDirectory);
-                var deployedModulesDirectory = Path.Combine(deploymentDirectory, "Modules");
-                if (Directory.Exists(deployedModulesDirectory))
-                    Directory.Delete(deployedModulesDirectory, recursive: true);
-                using (var archive = ZipFile.OpenRead(Path.Combine(stagingRoot, "deployment.zip")))
-                {
-                    foreach (var entry in archive.Entries)
-                    {
-                        var destination = Path.GetFullPath(Path.Combine(deploymentDirectory,
-                            entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
-                        var root = Path.GetFullPath(deploymentDirectory + Path.DirectorySeparatorChar);
-                        if (!destination.StartsWith(root, StringComparison.Ordinal))
-                            throw new InvalidDataException("Deployment archive contains an unsafe path.");
-                        if (string.IsNullOrEmpty(entry.Name))
-                        {
-                            Directory.CreateDirectory(destination);
-                            continue;
-                        }
-                        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                        entry.ExtractToFile(destination, overwrite: true);
-                    }
-                }
+                Directory.CreateDirectory(deploymentDirectory);
+                var archivePath = Path.Combine(deploymentDirectory, "deployment.zip");
+                File.Copy(Path.Combine(stagingRoot, "deployment.zip"), archivePath);
+                ExtractDeploymentArchive(archivePath, deploymentDirectory);
+                EnsureDeploymentPayload(deploymentDirectory);
 
                 var readyFile = Path.Combine(deploymentDirectory, ".deployment-ready");
-                var deployedProcessPath = Path.Combine(deploymentDirectory, Path.GetFileName(processPath));
-                var startInfo = new ProcessStartInfo(deployedProcessPath)
-                {
-                    UseShellExecute = false,
-                    WorkingDirectory = deploymentDirectory
-                };
-                startInfo.Environment["XTMF2_DEPLOYMENT_MANIFEST"] =
-                    Path.Combine(deploymentDirectory, "deployment-manifest.txt");
-                startInfo.Environment["XTMF2_DEPLOYMENT_READY_FILE"] = readyFile;
-                foreach (var argument in _originalArguments)
-                    startInfo.ArgumentList.Add(argument);
-                deployedProcess = Process.Start(startInfo)
-                    ?? throw new InvalidOperationException("Unable to start the deployed RunServer.");
                 var watchdogInfo = new ProcessStartInfo(processPath)
                 {
                     UseShellExecute = false,
                     WorkingDirectory = processDirectory
                 };
                 watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG"] = "1";
-                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_CHILD_PID"] = deployedProcess.Id.ToString();
+                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_OLD_PID"] =
+                    Environment.ProcessId.ToString();
                 watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_READY_FILE"] = readyFile;
-                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_OLD_PATH"] = processPath;
+                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_PROCESS_PATH"] = processPath;
                 watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_DEPLOYMENT_DIRECTORY"] = deploymentDirectory;
                 foreach (var argument in _originalArguments)
                     watchdogInfo.ArgumentList.Add(argument);
@@ -414,14 +384,6 @@ namespace XTMF2.Client
                 InvalidOperationException or System.ComponentModel.Win32Exception)
             {
                 Console.Error.WriteLine($"Unable to restart RunServer: {exception.Message}");
-                try
-                {
-                    if (deployedProcess is not null && !deployedProcess.HasExited)
-                        deployedProcess.Kill(entireProcessTree: true);
-                }
-                catch (InvalidOperationException)
-                {
-                }
                 if (deploymentDirectory is not null)
                 {
                     try
@@ -435,19 +397,6 @@ namespace XTMF2.Client
                 }
                 return false;
             }
-        }
-
-        private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
-        {
-            Directory.CreateDirectory(destinationDirectory);
-            foreach (var directory in Directory.EnumerateDirectories(sourceDirectory))
-            {
-                if (string.Equals(Path.GetFileName(directory), ".deployments", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                CopyDirectory(directory, Path.Combine(destinationDirectory, Path.GetFileName(directory)));
-            }
-            foreach (var file in Directory.EnumerateFiles(sourceDirectory))
-                File.Copy(file, Path.Combine(destinationDirectory, Path.GetFileName(file)), overwrite: true);
         }
 
         private static void SignalDeploymentReady()
@@ -469,21 +418,21 @@ namespace XTMF2.Client
         private static void RunDeploymentWatchdog(string[] arguments)
         {
             var readyFile = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_READY_FILE");
-            var oldProcessPath = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_OLD_PATH");
+            var processPath = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_PROCESS_PATH");
             var deploymentDirectory = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_DEPLOYMENT_DIRECTORY");
-            if (string.IsNullOrWhiteSpace(readyFile) || string.IsNullOrWhiteSpace(oldProcessPath))
+            if (string.IsNullOrWhiteSpace(readyFile) || string.IsNullOrWhiteSpace(processPath) ||
+                string.IsNullOrWhiteSpace(deploymentDirectory))
                 return;
 
-            var childPidText = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_CHILD_PID");
-            _ = int.TryParse(childPidText, out var childPid);
+            var oldProcessIdText = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_OLD_PID");
+            _ = int.TryParse(oldProcessIdText, out var oldProcessId);
+            var installationDirectory = Path.GetDirectoryName(processPath) ?? Environment.CurrentDirectory;
             var deadline = DateTime.UtcNow.AddSeconds(30);
             while (DateTime.UtcNow < deadline)
             {
-                if (File.Exists(readyFile))
-                    return;
                 try
                 {
-                    if (childPid > 0 && Process.GetProcessById(childPid).HasExited)
+                    if (oldProcessId <= 0 || Process.GetProcessById(oldProcessId).HasExited)
                         break;
                 }
                 catch (ArgumentException)
@@ -493,23 +442,165 @@ namespace XTMF2.Client
                 Thread.Sleep(250);
             }
 
+            string? backupDirectory = null;
+            Process? deployedProcess = null;
             try
             {
-                var startInfo = new ProcessStartInfo(oldProcessPath)
+                if (oldProcessId > 0)
+                {
+                    try
+                    {
+                        if (!Process.GetProcessById(oldProcessId).HasExited)
+                            throw new InvalidOperationException("The previous RunServer process did not exit before activation.");
+                    }
+                    catch (ArgumentException)
+                    {
+                    }
+                }
+
+                backupDirectory = Path.Combine(deploymentDirectory, ".backup");
+                Directory.CreateDirectory(backupDirectory);
+                EnsureDeploymentPayload(deploymentDirectory);
+                ReplaceDeploymentFile(Path.Combine(installationDirectory, "XTMF2.dll"),
+                    Path.Combine(deploymentDirectory, "XTMF2.dll"), Path.Combine(backupDirectory, "XTMF2.dll"));
+                ReplaceDeploymentDirectory(Path.Combine(installationDirectory, "Modules"),
+                    Path.Combine(deploymentDirectory, "Modules"), Path.Combine(backupDirectory, "Modules"));
+
+                var startInfo = new ProcessStartInfo(processPath)
                 {
                     UseShellExecute = false,
-                    WorkingDirectory = Path.GetDirectoryName(oldProcessPath) ?? Environment.CurrentDirectory
+                    WorkingDirectory = installationDirectory
                 };
+                ClearDeploymentWatchdogEnvironment(startInfo);
+                startInfo.Environment["XTMF2_DEPLOYMENT_MANIFEST"] =
+                    Path.Combine(deploymentDirectory, "deployment-manifest.txt");
+                startInfo.Environment["XTMF2_DEPLOYMENT_READY_FILE"] = readyFile;
                 foreach (var argument in arguments)
                     startInfo.ArgumentList.Add(argument);
-                Process.Start(startInfo);
-                if (!string.IsNullOrWhiteSpace(deploymentDirectory) && Directory.Exists(deploymentDirectory))
-                    Directory.Delete(deploymentDirectory, recursive: true);
+                deployedProcess = Process.Start(startInfo)
+                    ?? throw new InvalidOperationException("Unable to start the deployed RunServer.");
+
+                var readyDeadline = DateTime.UtcNow.AddSeconds(30);
+                while (!File.Exists(readyFile) && DateTime.UtcNow < readyDeadline)
+                {
+                    if (deployedProcess.HasExited)
+                        throw new InvalidOperationException("The deployed RunServer exited before becoming ready.");
+                    Thread.Sleep(250);
+                }
+                if (!File.Exists(readyFile))
+                    throw new InvalidOperationException("The deployed RunServer did not become ready.");
+
+                Directory.Delete(backupDirectory, recursive: true);
+                Directory.Delete(deploymentDirectory, recursive: true);
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
             {
-                Console.Error.WriteLine($"Unable to restore the previous RunServer version: {exception.Message}");
+                Console.Error.WriteLine($"Unable to activate the deployed RunServer: {exception.Message}");
+                if (backupDirectory is null)
+                    return;
+                try
+                {
+                    if (deployedProcess is not null && !deployedProcess.HasExited)
+                        deployedProcess.Kill(entireProcessTree: true);
+                    RestoreDeploymentFile(Path.Combine(installationDirectory, "XTMF2.dll"),
+                        Path.Combine(backupDirectory ?? string.Empty, "XTMF2.dll"));
+                    RestoreDeploymentDirectory(Path.Combine(installationDirectory, "Modules"),
+                        Path.Combine(backupDirectory ?? string.Empty, "Modules"));
+                    var rollbackInfo = new ProcessStartInfo(processPath)
+                    {
+                        UseShellExecute = false,
+                        WorkingDirectory = installationDirectory
+                    };
+                    ClearDeploymentWatchdogEnvironment(rollbackInfo);
+                    foreach (var argument in arguments)
+                        rollbackInfo.ArgumentList.Add(argument);
+                    Process.Start(rollbackInfo);
+                }
+                catch (Exception rollbackException) when (rollbackException is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                    Console.Error.WriteLine($"Unable to restore the previous RunServer version: {rollbackException.Message}");
+                }
             }
+        }
+
+        private static void ClearDeploymentWatchdogEnvironment(ProcessStartInfo startInfo)
+        {
+            startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG");
+            startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_OLD_PID");
+            startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_READY_FILE");
+            startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_PROCESS_PATH");
+            startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_DEPLOYMENT_DIRECTORY");
+        }
+
+        private static void ReplaceDeploymentFile(string destination, string staged, string backup)
+        {
+            if (!File.Exists(staged))
+                throw new InvalidDataException($"Deployment is missing required file '{Path.GetFileName(staged)}'.");
+            if (File.Exists(destination))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+                File.Move(destination, backup, overwrite: true);
+            }
+            File.Move(staged, destination, overwrite: true);
+        }
+
+        private static void ExtractDeploymentArchive(string archivePath, string destinationRoot)
+        {
+            using var archive = ZipFile.OpenRead(archivePath);
+            foreach (var entry in archive.Entries)
+            {
+                var destination = Path.GetFullPath(Path.Combine(destinationRoot,
+                    entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
+                var root = Path.GetFullPath(destinationRoot + Path.DirectorySeparatorChar);
+                if (!destination.StartsWith(root, StringComparison.Ordinal))
+                    throw new InvalidDataException("Deployment archive contains an unsafe path.");
+                if (string.IsNullOrEmpty(entry.Name))
+                {
+                    Directory.CreateDirectory(destination);
+                    continue;
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                entry.ExtractToFile(destination, overwrite: true);
+            }
+        }
+
+        private static void EnsureDeploymentPayload(string deploymentDirectory)
+        {
+            var runtimePath = Path.Combine(deploymentDirectory, "XTMF2.dll");
+            var modulesPath = Path.Combine(deploymentDirectory, "Modules");
+            if (File.Exists(runtimePath) && Directory.Exists(modulesPath))
+                return;
+
+            var archivePath = Path.Combine(deploymentDirectory, "deployment.zip");
+            if (!File.Exists(archivePath))
+                throw new InvalidDataException("Deployment staging data is incomplete.");
+            ExtractDeploymentArchive(archivePath, deploymentDirectory);
+            if (!File.Exists(runtimePath) || !Directory.Exists(modulesPath))
+                throw new InvalidDataException("Deployment archive is missing XTMF2.dll or Modules.");
+        }
+
+        private static void RestoreDeploymentFile(string destination, string backup)
+        {
+            if (File.Exists(backup))
+                File.Move(backup, destination, overwrite: true);
+        }
+
+        private static void ReplaceDeploymentDirectory(string destination, string staged, string backup)
+        {
+            if (!Directory.Exists(staged))
+                throw new InvalidDataException("Deployment is missing the required Modules directory.");
+            if (Directory.Exists(destination))
+                Directory.Move(destination, backup);
+            Directory.Move(staged, destination);
+        }
+
+        private static void RestoreDeploymentDirectory(string destination, string backup)
+        {
+            if (!Directory.Exists(backup))
+                return;
+            if (Directory.Exists(destination))
+                Directory.Delete(destination, recursive: true);
+            Directory.Move(backup, destination);
         }
 
         private static void LogDeploymentStartupSummary()
