@@ -62,10 +62,16 @@ public class TestSharedEstimationWorkerPool
         Assert.AreEqual(payload.Length, payload.Position);
 
         var startFrameLength = stream.GetWrittenBytes().Length;
+        var candidateFrameLength = GetFrameLength(writer =>
+        {
+            writer.Write(5);
+            SharedEstimationProtocol.WriteCandidate(writer, candidate);
+        });
         Assert.AreEqual(0, pool.WorkerCount);
         Assert.IsFalse(evaluation.IsCompleted);
         stream.SignalWorkerReady("run-reconnected", succeeded: true);
-        Assert.IsTrue(stream.WaitForWrittenBytes(startFrameLength + 1, TimeSpan.FromSeconds(3)));
+        Assert.IsTrue(stream.WaitForWrittenBytes(startFrameLength + candidateFrameLength,
+            TimeSpan.FromSeconds(3)));
 
         using var completedPayload = new MemoryStream(stream.GetWrittenBytes());
         using var completedReader = new BinaryReader(completedPayload);
@@ -125,6 +131,14 @@ public class TestSharedEstimationWorkerPool
         _ = reader.ReadInt32();
         SharedEstimationProtocol.ReadHeader(reader);
         return SharedEstimationProtocol.ReadRunRequestPayload(reader).WorkerSlotCount;
+    }
+
+    private static int GetFrameLength(Action<BinaryWriter> writeFrame)
+    {
+        using var frame = new MemoryStream();
+        using (var writer = new BinaryWriter(frame, System.Text.Encoding.UTF8, true))
+            writeFrame(writer);
+        return checked((int)frame.Length);
     }
 
     private sealed class RecordingDuplexStream : Stream
