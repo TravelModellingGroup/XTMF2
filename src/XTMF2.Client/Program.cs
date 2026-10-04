@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Linq;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -41,6 +42,11 @@ namespace XTMF2.Client
         static void Main(string[] args)
         {
             _originalArguments = args;
+            if (string.Equals(Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG"), "1", StringComparison.Ordinal))
+            {
+                RunDeploymentWatchdog(args);
+                return;
+            }
             LogDeploymentStartupSummary();
             if (args.Length == 0)
             {
@@ -183,6 +189,7 @@ namespace XTMF2.Client
             if (certificate is not null)
                 Console.WriteLine($"Certificate fingerprint: {RunServerSecurity.GetFingerprint(certificate)}");
             Console.Out.Flush();
+            SignalDeploymentReady();
             using (tcpListener)
             using (var shutdown = new CancellationTokenSource())
             using (var remoteEstimationRegistry = new RemoteSharedEstimationRegistry())
@@ -339,13 +346,15 @@ namespace XTMF2.Client
             if (string.IsNullOrWhiteSpace(processPath))
                 return false;
 
+            string? deploymentDirectory = null;
+            Process? deployedProcess = null;
             try
             {
                 var processDirectory = Path.GetDirectoryName(processPath);
                 if (string.IsNullOrWhiteSpace(processDirectory))
                     return false;
 
-                var deploymentDirectory = Path.Combine(processDirectory, ".deployments",
+                deploymentDirectory = Path.Combine(processDirectory, ".deployments",
                     DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" + Guid.NewGuid().ToString("N"));
                 CopyDirectory(processDirectory, deploymentDirectory);
                 var deployedModulesDirectory = Path.Combine(deploymentDirectory, "Modules");
@@ -359,7 +368,7 @@ namespace XTMF2.Client
                             entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
                         var root = Path.GetFullPath(deploymentDirectory + Path.DirectorySeparatorChar);
                         if (!destination.StartsWith(root, StringComparison.Ordinal))
-                            return false;
+                            throw new InvalidDataException("Deployment archive contains an unsafe path.");
                         if (string.IsNullOrEmpty(entry.Name))
                         {
                             Directory.CreateDirectory(destination);
@@ -370,6 +379,7 @@ namespace XTMF2.Client
                     }
                 }
 
+                var readyFile = Path.Combine(deploymentDirectory, ".deployment-ready");
                 var deployedProcessPath = Path.Combine(deploymentDirectory, Path.GetFileName(processPath));
                 var startInfo = new ProcessStartInfo(deployedProcessPath)
                 {
@@ -378,15 +388,51 @@ namespace XTMF2.Client
                 };
                 startInfo.Environment["XTMF2_DEPLOYMENT_MANIFEST"] =
                     Path.Combine(deploymentDirectory, "deployment-manifest.txt");
+                startInfo.Environment["XTMF2_DEPLOYMENT_READY_FILE"] = readyFile;
                 foreach (var argument in _originalArguments)
                     startInfo.ArgumentList.Add(argument);
-                Process.Start(startInfo);
+                deployedProcess = Process.Start(startInfo)
+                    ?? throw new InvalidOperationException("Unable to start the deployed RunServer.");
+                var watchdogInfo = new ProcessStartInfo(processPath)
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = processDirectory
+                };
+                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG"] = "1";
+                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_CHILD_PID"] = deployedProcess.Id.ToString();
+                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_READY_FILE"] = readyFile;
+                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_OLD_PATH"] = processPath;
+                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_DEPLOYMENT_DIRECTORY"] = deploymentDirectory;
+                foreach (var argument in _originalArguments)
+                    watchdogInfo.ArgumentList.Add(argument);
+                if (Process.Start(watchdogInfo) is null)
+                    throw new InvalidOperationException("Unable to start the deployment watchdog.");
                 Environment.Exit(0);
                 return true;
             }
-            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+            catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException or
+                InvalidOperationException or System.ComponentModel.Win32Exception)
             {
                 Console.Error.WriteLine($"Unable to restart RunServer: {exception.Message}");
+                try
+                {
+                    if (deployedProcess is not null && !deployedProcess.HasExited)
+                        deployedProcess.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                if (deploymentDirectory is not null)
+                {
+                    try
+                    {
+                        Directory.Delete(deploymentDirectory, recursive: true);
+                    }
+                    catch (IOException cleanupException)
+                    {
+                        Console.Error.WriteLine($"Unable to clean up failed deployment: {cleanupException.Message}");
+                    }
+                }
                 return false;
             }
         }
@@ -404,6 +450,68 @@ namespace XTMF2.Client
                 File.Copy(file, Path.Combine(destinationDirectory, Path.GetFileName(file)), overwrite: true);
         }
 
+        private static void SignalDeploymentReady()
+        {
+            var readyFile = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_READY_FILE");
+            if (string.IsNullOrWhiteSpace(readyFile))
+                return;
+
+            try
+            {
+                File.WriteAllText(readyFile, "ready");
+            }
+            catch (IOException exception)
+            {
+                Console.Error.WriteLine($"Unable to signal RunServer readiness: {exception.Message}");
+            }
+        }
+
+        private static void RunDeploymentWatchdog(string[] arguments)
+        {
+            var readyFile = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_READY_FILE");
+            var oldProcessPath = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_OLD_PATH");
+            var deploymentDirectory = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_DEPLOYMENT_DIRECTORY");
+            if (string.IsNullOrWhiteSpace(readyFile) || string.IsNullOrWhiteSpace(oldProcessPath))
+                return;
+
+            var childPidText = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_CHILD_PID");
+            _ = int.TryParse(childPidText, out var childPid);
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (File.Exists(readyFile))
+                    return;
+                try
+                {
+                    if (childPid > 0 && Process.GetProcessById(childPid).HasExited)
+                        break;
+                }
+                catch (ArgumentException)
+                {
+                    break;
+                }
+                Thread.Sleep(250);
+            }
+
+            try
+            {
+                var startInfo = new ProcessStartInfo(oldProcessPath)
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = Path.GetDirectoryName(oldProcessPath) ?? Environment.CurrentDirectory
+                };
+                foreach (var argument in arguments)
+                    startInfo.ArgumentList.Add(argument);
+                Process.Start(startInfo);
+                if (!string.IsNullOrWhiteSpace(deploymentDirectory) && Directory.Exists(deploymentDirectory))
+                    Directory.Delete(deploymentDirectory, recursive: true);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                Console.Error.WriteLine($"Unable to restore the previous RunServer version: {exception.Message}");
+            }
+        }
+
         private static void LogDeploymentStartupSummary()
         {
             var manifestPath = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_MANIFEST");
@@ -412,7 +520,13 @@ namespace XTMF2.Client
 
             try
             {
-                var modules = File.ReadAllLines(manifestPath);
+                var modules = File.ReadAllLines(manifestPath)
+                    .Where(module => module.Length <= 256 &&
+                        !module.Any(char.IsControl) &&
+                        (module.Equals("XTMF2.dll", StringComparison.Ordinal) ||
+                         module.StartsWith("Modules/", StringComparison.Ordinal)))
+                    .Take(4096)
+                    .ToArray();
                 Console.WriteLine($"RunServer restarted with deployment containing {modules.Length} module file(s):");
                 foreach (var module in modules)
                     Console.WriteLine($"  {module}");

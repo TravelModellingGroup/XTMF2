@@ -51,4 +51,28 @@ public class TestDeploymentProtocol
         DeploymentProtocol.ReadHeader(reader);
         Assert.Throws<InvalidDataException>(() => DeploymentProtocol.ReadStatusPayload(reader));
     }
+
+    [TestMethod]
+    public void RequestId_RequiresGuidWithoutSeparators()
+    {
+        Assert.IsTrue(DeploymentProtocol.IsValidRequestId(Guid.NewGuid().ToString("N")));
+        Assert.IsFalse(DeploymentProtocol.IsValidRequestId("../../deployment"));
+        Assert.IsFalse(DeploymentProtocol.IsValidRequestId("request-1"));
+    }
+
+    [TestMethod]
+    public void DeployArchive_RejectsArchiveAboveMaximum()
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true);
+        writer.Write(1);
+        writer.Write((int)DeploymentMessageType.DeployArchive);
+        writer.Write(Guid.NewGuid().ToString("N"));
+        writer.Write(DeploymentProtocol.MaxArchiveBytes + 1);
+        writer.Flush();
+        stream.Position = 0;
+        using var reader = new BinaryReader(stream);
+        DeploymentProtocol.ReadHeader(reader);
+        Assert.Throws<InvalidDataException>(() => DeploymentProtocol.ReadDeployArchive(reader));
+    }
 }

@@ -35,6 +35,13 @@ public static class DeploymentProtocol
 {
     private const int ProtocolVersion = 1;
     private const int MaxStringLength = 1024;
+    public const int MaxArchiveBytes = 512 * 1024 * 1024;
+    public const int MaxArchiveEntries = 4096;
+    public const long MaxExpandedArchiveBytes = 1024L * 1024 * 1024;
+    public const long MaxArchiveEntryBytes = 256L * 1024 * 1024;
+
+    public static bool IsValidRequestId(string requestId)
+        => Guid.TryParseExact(requestId, "N", out _);
 
     public static void WriteBeginDrain(BinaryWriter writer, string requestId)
     {
@@ -77,7 +84,7 @@ public static class DeploymentProtocol
     {
         WriteHeader(writer, DeploymentMessageType.DeployArchive);
         WriteString(writer, requestId);
-        if (archive.Length > 512 * 1024 * 1024)
+        if (archive.Length > MaxArchiveBytes)
             throw new ArgumentException("Deployment archive exceeds the 512 MB limit.", nameof(archive));
         writer.Write(archive.Length);
         WriteString(writer, sha256);
@@ -120,7 +127,7 @@ public static class DeploymentProtocol
     {
         var requestId = ReadString(reader);
         var length = reader.ReadInt32();
-        if (length < 0 || length > 512 * 1024 * 1024)
+        if (length < 0 || length > MaxArchiveBytes)
             throw new InvalidDataException("Deployment archive length is invalid.");
         var sha256 = ReadString(reader);
         var archive = reader.ReadBytes(length);

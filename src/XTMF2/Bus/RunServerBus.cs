@@ -23,6 +23,7 @@ using System.IO;
 using System.Linq;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Security;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -54,6 +55,8 @@ namespace XTMF2.Bus
         private readonly bool _usePrivateWorkspace;
         private readonly bool _allowDeployment;
         private string? _stagedDeploymentRoot;
+        private string? _stagedDeploymentRequestId;
+        private bool _deploymentIdle;
 
         /// <summary>
         /// The link to the XTMFRuntime
@@ -699,6 +702,9 @@ namespace XTMF2.Bus
                             break;
                         case In.DeploymentMessage:
                             {
+                                if (!_allowDeployment)
+                                    throw new SecurityException("Deployment operations require an authenticated connection.");
+
                                 var (_, messageType) = DeploymentProtocol.ReadHeader(reader);
                                 switch (messageType)
                                 {
@@ -771,12 +777,23 @@ namespace XTMF2.Bus
 
         private void BeginDeploymentDrain(string requestId)
         {
+            if (!DeploymentProtocol.IsValidRequestId(requestId))
+                throw new InvalidDataException("Invalid deployment request ID.");
+
             Console.WriteLine($"Deployment queued: {requestId}. Waiting for active RunServer work to finish.");
             Console.Out.Flush();
             lock (_deploymentSync)
             {
+                if (_deploymentRequests.Count != 0)
+                {
+                    SendDeploymentFailure(requestId, "Another deployment is already in progress.");
+                    return;
+                }
                 if (!_deploymentRequests.Add(requestId))
                     return;
+                _deploymentIdle = false;
+                _stagedDeploymentRoot = null;
+                _stagedDeploymentRequestId = null;
             }
 
             try
@@ -796,9 +813,22 @@ namespace XTMF2.Bus
 
         private void CancelDeploymentDrain(string requestId)
         {
+            if (!DeploymentProtocol.IsValidRequestId(requestId))
+                throw new InvalidDataException("Invalid deployment request ID.");
+
+            lock (_deploymentSync)
+            {
+                if (!_deploymentRequests.Contains(requestId))
+                    return;
+            }
             _cancelDeploymentDrain?.Invoke();
             lock (_deploymentSync)
+            {
                 _deploymentRequests.Remove(requestId);
+                _deploymentIdle = false;
+                _stagedDeploymentRoot = null;
+                _stagedDeploymentRequestId = null;
+            }
             SendDeploymentStatus(new RunServerDrainStatus(requestId, RunServerDrainState.Cancelled,
                 0, 0, "RunServer deployment drain cancelled."));
         }
@@ -821,7 +851,7 @@ namespace XTMF2.Bus
                     SendDeploymentStatus(new RunServerDrainStatus(requestId, RunServerDrainState.Idle,
                         0, 0, "RunServer is idle and ready for deployment."));
                     lock (_deploymentSync)
-                        _deploymentRequests.Remove(requestId);
+                        _deploymentIdle = true;
                     SendDeploymentCompleted(new RunServerDrainStatus(requestId, RunServerDrainState.Idle,
                         0, 0, "RunServer is idle and ready for deployment."));
                     return;
@@ -856,11 +886,17 @@ namespace XTMF2.Bus
 
         private void StageDeploymentArchive((string RequestId, byte[] Archive, string Sha256) deployment)
         {
-            if (!_allowDeployment)
+            if (!DeploymentProtocol.IsValidRequestId(deployment.RequestId))
+                throw new InvalidDataException("Invalid deployment request ID.");
+
+            lock (_deploymentSync)
             {
-                SendDeploymentFailure(deployment.RequestId,
-                    "RunServer deployment is available only over an authenticated connection.");
-                return;
+                if (!_deploymentRequests.Contains(deployment.RequestId) || !_deploymentIdle)
+                {
+                    SendDeploymentFailure(deployment.RequestId,
+                        "Deployment archive received before the matching drain completed.");
+                    return;
+                }
             }
 
             var actualHash = Convert.ToHexString(SHA256.HashData(deployment.Archive));
@@ -874,17 +910,27 @@ namespace XTMF2.Bus
             {
                 using var archiveStream = new MemoryStream(deployment.Archive, writable: false);
                 using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read, leaveOpen: false);
+                if (archive.Entries.Count > DeploymentProtocol.MaxArchiveEntries)
+                    throw new InvalidDataException("Deployment archive contains too many entries.");
+                long expandedBytes = 0;
                 foreach (var entry in archive.Entries)
                 {
                     if (Path.IsPathRooted(entry.FullName) || entry.FullName.Contains("..", StringComparison.Ordinal))
                         throw new InvalidDataException("Deployment archive contains an unsafe path.");
+                    if (entry.Length < 0 || entry.Length > DeploymentProtocol.MaxArchiveEntryBytes ||
+                        (expandedBytes += entry.Length) > DeploymentProtocol.MaxExpandedArchiveBytes)
+                        throw new InvalidDataException("Deployment archive expands beyond the allowed limit.");
                 }
 
                 var stagingRoot = Path.Combine(Path.GetTempPath(), "XTMF2", "Deployments", deployment.RequestId);
                 Directory.CreateDirectory(stagingRoot);
                 var archivePath = Path.Combine(stagingRoot, "deployment.zip");
                 File.WriteAllBytes(archivePath, deployment.Archive);
-                _stagedDeploymentRoot = stagingRoot;
+                lock (_deploymentSync)
+                {
+                    _stagedDeploymentRoot = stagingRoot;
+                    _stagedDeploymentRequestId = deployment.RequestId;
+                }
                 Console.WriteLine($"Deployment staged: {deployment.RequestId}. Archive hash verified.");
                 Console.Out.Flush();
                 SendDeploymentStaged(new RunServerDrainStatus(deployment.RequestId, RunServerDrainState.Staged,
@@ -905,14 +951,19 @@ namespace XTMF2.Bus
 
         private void ActivateDeployment(string requestId)
         {
-            if (!_allowDeployment)
-            {
-                SendDeploymentFailure(requestId,
-                    "RunServer deployment is available only over an authenticated connection.");
-                return;
-            }
+            if (!DeploymentProtocol.IsValidRequestId(requestId))
+                throw new InvalidDataException("Invalid deployment request ID.");
 
-            var stagingRoot = _stagedDeploymentRoot;
+            string? stagingRoot;
+            lock (_deploymentSync)
+            {
+                if (!string.Equals(_stagedDeploymentRequestId, requestId, StringComparison.Ordinal))
+                {
+                    SendDeploymentFailure(requestId, "Deployment activation does not match the staged archive.");
+                    return;
+                }
+                stagingRoot = _stagedDeploymentRoot;
+            }
             if (stagingRoot is null || !Directory.Exists(stagingRoot))
             {
                 SendDeploymentFailure(requestId, "No verified deployment archive is staged.");
