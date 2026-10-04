@@ -580,6 +580,7 @@ namespace XTMF2.Bus
             }
 
             // algorithm.BestFitness already returns the user-facing value.
+            report.Dispose();
             client.SendStatusMessage(ID,
                 $"[Estimation] converged after {iterationCount} evaluations. " +
                 $"Best fitness = {algorithm.BestFitness:G6}. ");
