@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using XTMF2.Bus;
 
 namespace XTMF2.Bus.Optimization;
@@ -77,7 +78,8 @@ public sealed record SharedEstimationJobSnapshot(
     IReadOnlyList<SharedEstimationParameterMetadata>? Parameters = null,
     Guid? ProjectId = null,
     Guid? ModelSystemId = null,
-    Guid? OwnerUserId = null);
+    Guid? OwnerUserId = null,
+    IReadOnlyDictionary<string, int>? ConfiguredWorkerCounts = null);
 
 public sealed record SharedEstimationWorkerControlAcknowledgement(
     string RunId,
@@ -99,7 +101,8 @@ public sealed record SharedEstimationRunRequest(
     IReadOnlyDictionary<int, string>? BasicParameterOverrides = null,
     Guid? ProjectId = null,
     Guid? ModelSystemId = null,
-    Guid? OwnerUserId = null);
+    Guid? OwnerUserId = null,
+    int WorkerSlotCount = 1);
 
 public sealed record SharedEstimationWorkerRegistration(
     string RunId,
@@ -113,7 +116,24 @@ public sealed record SharedEstimationWorkerEndpoint(
     int Port,
     string Token,
     string CertificateFingerprint,
-    IReadOnlyDictionary<int, string>? BasicParameterOverrides = null);
+    IReadOnlyDictionary<int, string>? BasicParameterOverrides = null,
+    int ConcurrentRuns = 1)
+{
+    public const int MaximumConcurrentRuns = 32;
+
+    public IReadOnlyList<SharedEstimationWorkerEndpoint> CreateWorkerSlots()
+    {
+        if (ConcurrentRuns < 1 || ConcurrentRuns > MaximumConcurrentRuns)
+            throw new ArgumentOutOfRangeException(nameof(ConcurrentRuns));
+        return Enumerable.Range(0, ConcurrentRuns)
+            .Select(slotIndex => this with
+            {
+                WorkerId = slotIndex == 0 ? WorkerId : $"{WorkerId}#run-{slotIndex + 1}",
+                ConcurrentRuns = 1
+            })
+            .ToArray();
+    }
+}
 
 public sealed record SharedEstimationCoordinatorRequest(
     SharedEstimationRunRequest Run,
@@ -125,7 +145,8 @@ public sealed record SharedEstimationCoordinatorRequest(
     IReadOnlyList<double> InitialValues,
     bool IsMaximize,
     bool UseCoordinatorAsWorker = true,
-    IReadOnlyList<SharedEstimationParameterMetadata>? Parameters = null);
+    IReadOnlyList<SharedEstimationParameterMetadata>? Parameters = null,
+    int CoordinatorConcurrentRuns = 1);
 
 public sealed record SharedEstimationCandidate(
     string RunId,
@@ -151,7 +172,8 @@ public sealed record SharedEstimationProgress(
     int ActiveWorkers,
     int FitnessTestsThisIteration = 0,
     IReadOnlyDictionary<string, int>? EvaluationsByWorker = null,
-    IReadOnlyList<double>? BestParameters = null);
+    IReadOnlyList<double>? BestParameters = null,
+    IReadOnlyList<string>? ActiveWorkerIds = null);
 
 public sealed record SharedEstimationCompletion(
     string RunId,
@@ -188,6 +210,7 @@ public static class SharedEstimationProtocol
             WriteRequiredString(writer, worker.Token);
             WriteRequiredString(writer, worker.CertificateFingerprint);
             WriteOverrides(writer, worker.BasicParameterOverrides);
+            WriteConcurrentRuns(writer, worker.ConcurrentRuns);
         }
         WriteRequiredString(writer, request.AlgorithmId);
         WriteCount(writer, request.AlgorithmParameters.Count);
@@ -203,6 +226,7 @@ public static class SharedEstimationProtocol
         WriteDoubles(writer, request.InitialValues);
         writer.Write(request.IsMaximize);
         writer.Write(request.UseCoordinatorAsWorker);
+        WriteConcurrentRuns(writer, request.CoordinatorConcurrentRuns);
         var parameterMetadata = request.Parameters ?? Array.Empty<SharedEstimationParameterMetadata>();
         WriteCount(writer, parameterMetadata.Count);
         foreach (var parameter in parameterMetadata)
@@ -229,13 +253,19 @@ public static class SharedEstimationProtocol
         var run = new SharedEstimationRunRequest(
             ReadRequiredString(reader), ReadRequiredString(reader), ReadRequiredString(reader),
             ReadBytes(reader), ReadOverrides(reader),
-            ReadOptionalGuid(reader), ReadOptionalGuid(reader), ReadOptionalGuid(reader));
+            ReadOptionalGuid(reader), ReadOptionalGuid(reader), ReadOptionalGuid(reader), ReadConcurrentRuns(reader));
         var workers = new List<SharedEstimationWorkerEndpoint>(ReadCount(reader));
         for (int i = 0; i < workers.Capacity; i++)
         {
+            var workerId = ReadRequiredString(reader);
+            var endpointId = ReadRequiredString(reader);
+            var address = ReadRequiredString(reader);
+            var port = reader.ReadInt32();
+            var token = ReadRequiredString(reader);
+            var fingerprint = ReadRequiredString(reader);
+            var overrides = ReadOverrides(reader);
             workers.Add(new SharedEstimationWorkerEndpoint(
-                ReadRequiredString(reader), ReadRequiredString(reader), ReadRequiredString(reader),
-                reader.ReadInt32(), ReadRequiredString(reader), ReadRequiredString(reader), ReadOverrides(reader)));
+                workerId, endpointId, address, port, token, fingerprint, overrides, ReadConcurrentRuns(reader)));
         }
         var algorithmId = ReadRequiredString(reader);
         var parameters = new List<AlgorithmParameterDescriptor>(ReadCount(reader));
@@ -254,6 +284,7 @@ public static class SharedEstimationProtocol
         var initialValues = ReadDoubles(reader);
         var isMaximize = reader.ReadBoolean();
         var useCoordinatorAsWorker = reader.ReadBoolean();
+        var coordinatorConcurrentRuns = ReadConcurrentRuns(reader);
         var metadataCount = ReadCount(reader);
         var values = new SharedEstimationParameterMetadata[metadataCount];
         for (var index = 0; index < metadataCount; index++)
@@ -265,7 +296,8 @@ public static class SharedEstimationProtocol
                 reader.ReadDouble(), reader.ReadDouble());
         }
         return new SharedEstimationCoordinatorRequest(run, workers, algorithmId, parameters,
-            lowerBounds, upperBounds, initialValues, isMaximize, useCoordinatorAsWorker, values);
+            lowerBounds, upperBounds, initialValues, isMaximize, useCoordinatorAsWorker, values,
+            coordinatorConcurrentRuns);
     }
 
     public static (int Version, SharedEstimationMessageType MessageType) ReadHeader(BinaryReader reader)
@@ -301,6 +333,7 @@ public static class SharedEstimationProtocol
         WriteOptionalGuid(writer, request.ProjectId);
         WriteOptionalGuid(writer, request.ModelSystemId);
         WriteOptionalGuid(writer, request.OwnerUserId);
+        WriteConcurrentRuns(writer, request.WorkerSlotCount);
     }
 
     private static void WriteRunRequestPayload(BinaryWriter writer, SharedEstimationRunRequest request)
@@ -313,6 +346,7 @@ public static class SharedEstimationProtocol
         WriteOptionalGuid(writer, request.ProjectId);
         WriteOptionalGuid(writer, request.ModelSystemId);
         WriteOptionalGuid(writer, request.OwnerUserId);
+        WriteConcurrentRuns(writer, request.WorkerSlotCount);
     }
 
     private static void WriteOverrides(BinaryWriter writer, IReadOnlyDictionary<int, string>? overrides)
@@ -324,6 +358,22 @@ public static class SharedEstimationProtocol
             writer.Write(pair.Key);
             WriteRequiredString(writer, pair.Value);
         }
+    }
+
+    private static void WriteConcurrentRuns(BinaryWriter writer, int concurrentRuns)
+    {
+        if (concurrentRuns < 1 || concurrentRuns > SharedEstimationWorkerEndpoint.MaximumConcurrentRuns)
+            throw new ArgumentOutOfRangeException(nameof(concurrentRuns),
+                $"Concurrent runs must be between 1 and {SharedEstimationWorkerEndpoint.MaximumConcurrentRuns}.");
+        writer.Write(concurrentRuns);
+    }
+
+    private static int ReadConcurrentRuns(BinaryReader reader)
+    {
+        var concurrentRuns = reader.ReadInt32();
+        if (concurrentRuns < 1 || concurrentRuns > SharedEstimationWorkerEndpoint.MaximumConcurrentRuns)
+            throw new InvalidDataException("The RunServer concurrent-run count is outside the supported range.");
+        return concurrentRuns;
     }
 
     public static SharedEstimationRunRequest ReadRunRequest(BinaryReader reader)
@@ -341,7 +391,8 @@ public static class SharedEstimationProtocol
             ReadRequiredString(reader),
             ReadRequiredString(reader),
             ReadBytes(reader),
-            ReadOverrides(reader), ReadOptionalGuid(reader), ReadOptionalGuid(reader), ReadOptionalGuid(reader));
+            ReadOverrides(reader), ReadOptionalGuid(reader), ReadOptionalGuid(reader), ReadOptionalGuid(reader),
+            ReadConcurrentRuns(reader));
     }
 
     public static void WriteWorkerRegistration(BinaryWriter writer, SharedEstimationWorkerRegistration registration,
@@ -385,6 +436,7 @@ public static class SharedEstimationProtocol
         WriteRequiredString(writer, worker.Token);
         WriteRequiredString(writer, worker.CertificateFingerprint);
         WriteOverrides(writer, worker.BasicParameterOverrides);
+        WriteConcurrentRuns(writer, worker.ConcurrentRuns);
     }
 
     public static (string RunId, SharedEstimationWorkerEndpoint Worker) ReadCoordinatorWorkerRequest(BinaryReader reader, bool remove)
@@ -397,7 +449,7 @@ public static class SharedEstimationProtocol
 
     internal static (string RunId, SharedEstimationWorkerEndpoint Worker) ReadCoordinatorWorkerRequestPayload(BinaryReader reader)
         => (ReadRequiredString(reader), new SharedEstimationWorkerEndpoint(ReadRequiredString(reader), ReadRequiredString(reader), ReadRequiredString(reader),
-            reader.ReadInt32(), ReadRequiredString(reader), ReadRequiredString(reader), ReadOverrides(reader)));
+            reader.ReadInt32(), ReadRequiredString(reader), ReadRequiredString(reader), ReadOverrides(reader), ReadConcurrentRuns(reader)));
 
     public static void WriteWorkerControlAcknowledgement(BinaryWriter writer,
         SharedEstimationWorkerControlAcknowledgement acknowledgement)
@@ -542,6 +594,10 @@ public static class SharedEstimationProtocol
             writer.Write(workerCount.Value);
         }
         WriteDoubles(writer, progress.BestParameters ?? Array.Empty<double>());
+        var activeWorkers = progress.ActiveWorkerIds ?? Array.Empty<string>();
+        WriteCount(writer, activeWorkers.Count);
+        foreach (var workerId in activeWorkers)
+            WriteRequiredString(writer, workerId);
     }
 
     public static SharedEstimationProgress ReadProgress(BinaryReader reader)
@@ -566,8 +622,12 @@ public static class SharedEstimationProtocol
         for (int i = 0; i < count; i++)
             workerCounts.Add(ReadRequiredString(reader), reader.ReadInt32());
         var bestParameters = ReadDoubles(reader);
+        var activeWorkerIds = new string[ReadCount(reader)];
+        for (var index = 0; index < activeWorkerIds.Length; index++)
+            activeWorkerIds[index] = ReadRequiredString(reader);
         return new SharedEstimationProgress(runId, iteration, bestFitness, evaluationsCompleted,
-            evaluationsPending, activeWorkers, fitnessTestsThisIteration, workerCounts, bestParameters);
+            evaluationsPending, activeWorkers, fitnessTestsThisIteration, workerCounts, bestParameters,
+            activeWorkerIds);
     }
 
     public static void WriteCompletion(BinaryWriter writer, SharedEstimationCompletion completion)
@@ -666,6 +726,14 @@ public static class SharedEstimationProtocol
             WriteOptionalGuid(writer, snapshot.ProjectId);
             WriteOptionalGuid(writer, snapshot.ModelSystemId);
             WriteOptionalGuid(writer, snapshot.OwnerUserId);
+            var configuredWorkerCounts = snapshot.ConfiguredWorkerCounts ??
+                new Dictionary<string, int>();
+            WriteCount(writer, configuredWorkerCounts.Count);
+            foreach (var workerCount in configuredWorkerCounts.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+            {
+                WriteRequiredString(writer, workerCount.Key);
+                writer.Write(workerCount.Value);
+            }
         }
     }
 
@@ -706,8 +774,19 @@ public static class SharedEstimationProtocol
             var projectId = ReadOptionalGuid(reader);
             var modelSystemId = ReadOptionalGuid(reader);
             var ownerUserId = ReadOptionalGuid(reader);
+            var configuredWorkerCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            var workerCount = ReadCount(reader);
+            for (var workerIndex = 0; workerIndex < workerCount; workerIndex++)
+            {
+                var workerId = ReadRequiredString(reader);
+                var count = reader.ReadInt32();
+                if (count < 1 || count > 32)
+                    throw new InvalidDataException("Configured worker counts must be between 1 and 32.");
+                configuredWorkerCounts.Add(workerId, count);
+            }
             snapshots.Add(new SharedEstimationJobSnapshot(runId, state, progress, completion,
-                workerIds, runName, workingDirectory, modelSystemHash, metadata, projectId, modelSystemId, ownerUserId));
+                workerIds, runName, workingDirectory, modelSystemHash, metadata, projectId, modelSystemId,
+                ownerUserId, configuredWorkerCounts));
         }
         return snapshots;
     }

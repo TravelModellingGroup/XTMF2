@@ -97,11 +97,132 @@ namespace XTMF2.Bus
             }
         }
 
+        internal sealed class ReservationLease : IDisposable
+        {
+            private readonly ReservationGroup _group;
+            private Action? _cancellationHandler;
+            private bool _disposed;
+
+            internal ReservationLease(ReservationGroup group) => _group = group;
+
+            internal Task Started => _group.Started;
+
+            internal void SetCancellationHandler(Action handler)
+            {
+                ArgumentNullException.ThrowIfNull(handler);
+                _group.SetCancellationHandler(this, handler);
+            }
+
+            internal void CancelGroup() => _group.Cancel();
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _group.Release(this);
+            }
+
+            internal void InvokeCancellationHandler() => _cancellationHandler?.Invoke();
+
+            internal void SetHandler(Action handler) => _cancellationHandler = handler;
+        }
+
+        internal sealed class ReservationGroup
+        {
+            private readonly object _sync = new();
+            private readonly Reservation _reservation;
+            private readonly Action _completed;
+            private readonly HashSet<ReservationLease> _leases = [];
+            private int _expectedSlotCount;
+            private int _joinedSlotCount;
+            private bool _cancelled;
+            private bool _released;
+
+            internal ReservationGroup(Reservation reservation, int expectedSlotCount, Action completed)
+            {
+                _reservation = reservation;
+                _expectedSlotCount = expectedSlotCount;
+                _completed = completed;
+                _reservation.SetCancellationHandler(Cancel);
+            }
+
+            internal Task Started => _reservation.Started;
+
+            internal ReservationLease Join(int expectedSlotCount)
+            {
+                lock (_sync)
+                {
+                    if (_released || _cancelled)
+                        throw new InvalidOperationException("The shared estimation scheduler task is no longer active.");
+                    _expectedSlotCount = Math.Max(_expectedSlotCount, expectedSlotCount);
+                    _joinedSlotCount++;
+                    var lease = new ReservationLease(this);
+                    _leases.Add(lease);
+                    return lease;
+                }
+            }
+
+            internal void SetCancellationHandler(ReservationLease lease, Action handler)
+            {
+                bool invoke;
+                lock (_sync)
+                {
+                    lease.SetHandler(handler);
+                    invoke = _cancelled;
+                }
+                if (invoke)
+                    handler();
+            }
+
+            internal void Release(ReservationLease lease)
+            {
+                bool complete;
+                lock (_sync)
+                {
+                    _leases.Remove(lease);
+                    complete = !_released && _leases.Count == 0
+                        && (_cancelled || _joinedSlotCount >= _expectedSlotCount);
+                    if (complete)
+                        _released = true;
+                }
+                if (complete)
+                    Complete();
+            }
+
+            internal void Cancel()
+            {
+                Action[] handlers;
+                bool complete;
+                lock (_sync)
+                {
+                    _cancelled = true;
+                    handlers = _leases.Select(lease => (Action?)lease.InvokeCancellationHandler)
+                        .Where(handler => handler is not null)
+                        .Cast<Action>()
+                        .ToArray();
+                    complete = !_released && _leases.Count == 0;
+                    if (complete)
+                        _released = true;
+                }
+                foreach (var handler in handlers)
+                    handler();
+                if (complete)
+                    Complete();
+            }
+
+            private void Complete()
+            {
+                _reservation.Dispose();
+                _completed();
+            }
+        }
+
         private readonly ConcurrentQueue<ScheduledWork> _ToRun = new();
         private readonly object _inventorySync = new();
         private readonly IRunOutputSink? _DefaultSink;
         private readonly CancellationTokenSource _CancelExecutionEngine = new();
         private readonly SemaphoreSlim _RunsToGo = new SemaphoreSlim(0);
+        private readonly Dictionary<string, ReservationGroup> _reservationGroups = new(StringComparer.Ordinal);
         private Reservation? _currentReservation;
 
         private readonly record struct ScheduledWork(RunContext Context, IRunOutputSink? Sink, Reservation? Reservation);
@@ -305,6 +426,37 @@ namespace XTMF2.Bus
             return reservation;
         }
 
+        internal ReservationLease ReserveGroup(string groupId, RunContext context, int expectedSlotCount)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(groupId);
+            if (expectedSlotCount < 1)
+                throw new ArgumentOutOfRangeException(nameof(expectedSlotCount));
+
+            lock (_inventorySync)
+            {
+                if (_reservationGroups.TryGetValue(groupId, out var existing))
+                    return existing.Join(expectedSlotCount);
+
+                var reservation = new Reservation();
+                ReservationGroup? group = null;
+                group = new ReservationGroup(reservation, expectedSlotCount,
+                    () => RemoveReservationGroup(groupId, group!));
+                _reservationGroups.Add(groupId, group);
+                _ToRun.Enqueue(new ScheduledWork(context, null, reservation));
+                _RunsToGo.Release();
+                return group.Join(expectedSlotCount);
+            }
+        }
+
+        private void RemoveReservationGroup(string groupId, ReservationGroup group)
+        {
+            lock (_inventorySync)
+            {
+                if (_reservationGroups.TryGetValue(groupId, out var current) && ReferenceEquals(current, group))
+                    _reservationGroups.Remove(groupId);
+            }
+        }
+
         /// <summary>
         /// Requests cancellation of the currently executing run if its ID matches.
         /// Also cancels a queued run with the matching ID.
@@ -319,13 +471,14 @@ namespace XTMF2.Bus
         internal bool Kill(string runId)
         {
             RunContext? current = null;
+            Reservation? currentReservation = null;
             ScheduledWork? removed = null;
             lock (_inventorySync)
             {
                 if (Current?.ID == runId)
                 {
                     current = Current;
-                    _currentReservation?.RequestCancellation();
+                    currentReservation = _currentReservation;
                 }
                 else
                 {
@@ -347,6 +500,7 @@ namespace XTMF2.Bus
 
             if (current is not null)
             {
+                currentReservation?.RequestCancellation();
                 current.Kill();
                 return true;
             }

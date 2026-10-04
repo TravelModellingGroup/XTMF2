@@ -17,6 +17,7 @@ namespace XTMF2.Run
             List<string> dllsToLoad = new List<string>();
             string? error = null;
             string? runID = null;
+            var sharedEstimationWorker = false;
             for (int i = 0; i < args.Length; i++)
             {
                 switch (args[i].ToLowerInvariant())
@@ -44,6 +45,9 @@ namespace XTMF2.Run
                     case "-remote":
                         Console.WriteLine("Remote connections are not supported yet.");
                         return;
+                    case "-sharedestimationworker":
+                        sharedEstimationWorker = true;
+                        break;
                     case "-tcp":
                         if (i + 2 >= args.Length)
                         {
@@ -69,7 +73,7 @@ namespace XTMF2.Run
                                 Console.WriteLine("No runID was provided!");
                                 return;
                             }
-                            Run(runID, tcpStream!, dllsToLoad);
+                            Run(runID, tcpStream!, dllsToLoad, sharedEstimationWorker);
                         }
                         finally
                         {
@@ -100,7 +104,7 @@ namespace XTMF2.Run
                                 Console.WriteLine("Unable to create a connection to the XTMF2.Client!");
                                 return;
                             }
-                            Run(runID, toClient, dllsToLoad);
+                            Run(runID, toClient, dllsToLoad, sharedEstimationWorker);
                         }
                         finally
                         {
@@ -115,7 +119,8 @@ namespace XTMF2.Run
             }
         }
 
-        private static void Run(string runID, Stream toClient, List<string> dllsToLoad)
+        private static void Run(string runID, Stream toClient, List<string> dllsToLoad,
+            bool sharedEstimationWorker)
         {
             var runtime = XTMFRuntime.CreateRuntime();
             var config = runtime.SystemConfiguration;
@@ -124,7 +129,10 @@ namespace XTMF2.Run
                 config.LoadAssembly(dll);
             }
             using var runBus = new RunBus(runID, toClient, true, runtime);
-            runBus.ProcessRequests();
+            if (sharedEstimationWorker)
+                runBus.ProcessSharedEstimationWorkerRequests();
+            else
+                runBus.ProcessRequests();
         }
     }
 }

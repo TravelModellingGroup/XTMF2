@@ -65,7 +65,8 @@ public class TestSharedEstimationEndToEnd
                     IsMaximize: false,
                     UseCoordinatorAsWorker: true,
                     Parameters: metadata.Select(item => new SharedEstimationParameterMetadata(
-                        item.nodeIndex, item.name, item.min, item.max)).ToArray());
+                        item.nodeIndex, item.name, item.min, item.max)).ToArray(),
+                    CoordinatorConcurrentRuns: 2);
 
                 try
                 {
@@ -96,6 +97,7 @@ public class TestSharedEstimationEndToEnd
                             $"progress updates: {progressUpdates.Count}.");
                         Assert.IsTrue(completion.Task.Result.Succeeded, completion.Task.Result.FailureReason);
                         Assert.AreEqual(2.5, completion.Task.Result.BestFitness, 0.0001);
+                        Assert.IsTrue(progressUpdates.Any(progress => progress.ActiveWorkers == 2));
                         Assert.IsTrue(File.Exists(Path.Combine(runDirectory, "estimation_report.csv")));
                     });
                 }
@@ -110,21 +112,49 @@ public class TestSharedEstimationEndToEnd
     [TestMethod]
     public void RunServerActivityQuery_IncludesSharedEstimationWorkerAssignment()
     {
-        CreateRunClient(true, host =>
+        RunInModelSystemContext(nameof(RunServerActivityQuery_IncludesSharedEstimationWorkerAssignment),
+            (user, projectSession, session) =>
         {
+            CommandError error = null;
+            var modelSystem = session.ModelSystem;
+            Assert.IsTrue(session.AddModelSystemStart(user, modelSystem.GlobalBoundary, "Start",
+                Rectangle.Hidden, out Start start, out error), error?.Message);
+            Assert.IsTrue(session.AddNode(user, modelSystem.GlobalBoundary, "Ignore",
+                typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignore, out error), error?.Message);
+            Assert.IsTrue(session.AddNode(user, modelSystem.GlobalBoundary, "Action",
+                typeof(SimpleTestModule), Rectangle.Hidden, out var action, out error), error?.Message);
+            Assert.IsTrue(session.AddLink(user, start, start.Hooks[0], ignore, out _, out error), error?.Message);
+            Assert.IsTrue(session.AddLink(user, ignore, ignore.Hooks[0], action, out _, out error), error?.Message);
+            Assert.IsTrue(session.AddNode(user, modelSystem.GlobalBoundary, "Fitness",
+                typeof(BasicParameter<float>), Rectangle.Hidden, out var fitness, out error), error?.Message);
+            Assert.IsTrue(session.SetParameterValue(user, fitness, "2.5", out error), error?.Message);
+            Assert.IsTrue(session.SetEstimationFitnessNode(user, fitness, out error), error?.Message);
+            Assert.IsTrue(session.AddNode(user, modelSystem.GlobalBoundary, "Parameter",
+                typeof(SetableParameter<float>), Rectangle.Hidden, out var parameter, out error), error?.Message);
+            Assert.IsTrue(session.SetParameterValue(user, parameter, "0.5", out error), error?.Message);
+            Assert.IsTrue(session.AddEstimationGroup(user, "Group", out var group, out error), error?.Message);
+            Assert.IsTrue(session.AddEstimationParameter(user, group!, parameter,
+                0.0, 1.0, 0.5, out _, out error), error?.Message);
+
+            using var serialized = new MemoryStream();
+            Assert.IsTrue(session.Save(out error, serialized), error?.Message);
             var request = new SharedEstimationRunRequest(
-                "worker-activity", Directory.GetCurrentDirectory(), "Start", Array.Empty<byte>());
-            Assert.IsTrue(host.StartSharedEstimation(request, out var error), error?.Message);
+                "worker-activity", Directory.GetCurrentDirectory(), "Start", serialized.ToArray());
+            CreateRunClient(true, host =>
+            {
+                Assert.IsTrue(host.StartSharedEstimation(request, out var startError), startError?.Message);
 
-            var responses = Task.WhenAll(host.QueryServerActivityAsync(), host.QueryServerActivityAsync())
-                .GetAwaiter().GetResult();
+                var responses = Task.WhenAll(host.QueryServerActivityAsync(), host.QueryServerActivityAsync())
+                    .GetAwaiter().GetResult();
 
-            Assert.AreNotEqual(responses[0].RequestId, responses[1].RequestId);
-            var activity = responses[0].Activities.Single(item => item.RunId == request.RunId);
-            Assert.AreEqual("Shared estimation worker", activity.Kind);
-            Assert.AreEqual(RunServerActivityState.Running, activity.State);
-            Assert.AreEqual("Shared estimation worker", activity.RunName);
-            Assert.IsTrue(host.CancelSharedEstimation(request.RunId, "test complete", out error), error?.Message);
+                Assert.AreNotEqual(responses[0].RequestId, responses[1].RequestId);
+                var activity = responses[0].Activities.Single(item => item.RunId == request.RunId);
+                Assert.AreEqual("Shared estimation worker", activity.Kind);
+                Assert.AreEqual(RunServerActivityState.Running, activity.State);
+                Assert.AreEqual("Shared estimation worker", activity.RunName);
+                Assert.IsTrue(host.CancelSharedEstimation(request.RunId, "test complete", out var cancelError),
+                    cancelError?.Message);
+            });
         });
     }
 

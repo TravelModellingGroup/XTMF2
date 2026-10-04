@@ -530,22 +530,29 @@ public sealed partial class RunViewModel : ObservableObject
         IReadOnlyList<RunServerEndpoint> endpoints,
         IReadOnlyCollection<string> activeWorkerIds,
         Func<string, string?> addWorker,
-        Func<string, string?> removeWorker)
+        Func<string, string?> removeWorker,
+        IReadOnlyDictionary<string, int>? configuredWorkerCounts = null)
     {
         IsRemoteSharedEstimation = true;
         _addRemoteWorkerAction = addWorker;
         _removeRemoteWorkerAction = removeWorker;
         RemoteWorkers.Clear();
         foreach (var endpoint in endpoints)
-            RemoteWorkers.Add(new RemoteEstimationWorkerViewModel(endpoint,
-                activeWorkerIds.Contains(endpoint.Id, StringComparer.Ordinal)));
+        {
+            var configuredCount = configuredWorkerCounts is not null &&
+                configuredWorkerCounts.TryGetValue(endpoint.Id, out var count) ? count : 1;
+            var worker = new RemoteEstimationWorkerViewModel(endpoint,
+                activeWorkerIds.Contains(endpoint.Id, StringComparer.Ordinal), configuredCount);
+            RemoteWorkers.Add(worker);
+        }
     }
 
     internal void ApplyRemoteWorkerSnapshot(IReadOnlyCollection<string> activeWorkerIds)
     {
         foreach (var worker in RemoteWorkers)
         {
-            worker.IsActive = activeWorkerIds.Contains(worker.WorkerId, StringComparer.Ordinal);
+            worker.SetActiveWorkerCount(CountWorkerSlots(activeWorkerIds, worker.WorkerId));
+            worker.IsActive = worker.ActiveWorkerCount > 0;
             worker.IsBusy = false;
         }
     }
@@ -557,6 +564,7 @@ public sealed partial class RunViewModel : ObservableObject
         if (worker is null)
             return;
         worker.IsActive = false;
+        worker.SetActiveWorkerCount(0);
         worker.IsBusy = false;
     }
 
@@ -586,7 +594,12 @@ public sealed partial class RunViewModel : ObservableObject
             return;
         worker.IsBusy = false;
         if (acknowledgement.Succeeded)
-            worker.IsActive = acknowledgement.Add;
+        {
+            if (acknowledgement.Add)
+                worker.IsActive = true;
+            else
+                worker.SetActiveWorkerCount(0);
+        }
         else
             AppendStatus($"[Remote estimation] Worker change failed: {acknowledgement.Error}");
     }
@@ -661,6 +674,9 @@ public sealed partial class RunViewModel : ObservableObject
         if (!double.IsNaN(progress.BestFitness))
             CurrentFitness = progress.BestFitness;
         CurrentIterationFitnessTests = progress.FitnessTestsThisIteration;
+        var activeWorkers = progress.ActiveWorkerIds?.ToArray() ?? Array.Empty<string>();
+        foreach (var worker in RemoteWorkers)
+            worker.SetActiveWorkerCount(CountWorkerSlots(activeWorkers, worker.WorkerId));
         WorkerEvaluationCountsDisplay = progress.EvaluationsByWorker is { Count: > 0 } counts
             ? string.Join(" | ", counts.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                 .Select(pair => $"{GetWorkerDisplayName(pair.Key)}: {pair.Value}"))
@@ -682,6 +698,13 @@ public sealed partial class RunViewModel : ObservableObject
     private string GetWorkerDisplayName(string workerId)
         => RemoteWorkers.FirstOrDefault(worker =>
             string.Equals(worker.WorkerId, workerId, StringComparison.Ordinal))?.Name ?? workerId;
+
+    private static int CountWorkerSlots(IReadOnlyCollection<string> workerIds, string endpointId)
+    {
+        var slotPrefix = endpointId + "#run-";
+        return workerIds.Count(workerId => workerId == endpointId ||
+            workerId.StartsWith(slotPrefix, StringComparison.Ordinal));
+    }
 
     // ── Cancel command ────────────────────────────────────────────────────
 

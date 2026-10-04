@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
+using XTMF2.Bus.Optimization;
 using XTMF2.GUI.Properties;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Views;
@@ -44,6 +45,26 @@ public class RemoteEstimationWorkersWindowTests
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
     }
 
+    [TestMethod]
+    public void WorkerWindow_ShowsReadyCountAgainstConfiguredCapacity()
+    {
+        Session.Dispatch(() =>
+        {
+            var run = CreateRun();
+            var worker = run.RemoteWorkers[0];
+
+            Assert.AreEqual("0 / 3 workers", worker.ActiveWorkerCountDisplay);
+
+            run.UpdateSharedEstimationProgress(new SharedEstimationProgress(
+                "shared-run", 1, 0.5, 2, 0, 2, 2,
+                new System.Collections.Generic.Dictionary<string, int>(),
+                Array.Empty<double>(), ["server-2", "server-2#run-2"]));
+
+            Assert.AreEqual(2, worker.ActiveWorkerCount);
+            Assert.AreEqual("2 / 3 workers", worker.ActiveWorkerCountDisplay);
+        }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
     private static RunViewModel CreateRun()
     {
         var run = new RunViewModel("shared-run", "Shared forecast", "/runs/shared", "server-1",
@@ -51,9 +72,10 @@ public class RemoteEstimationWorkersWindowTests
         run.SetRunMode(RunMode.Estimation, Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => { });
         run.SetRemoteEstimationWorkers(
             [new RunServerEndpoint { Id = "server-2", Name = "Remote Two", Address = "10.0.0.2", Port = 5000 }],
-            Array.Empty<string>(),
+            ["server-2"],
             _ => null,
-            _ => null);
+            _ => null,
+            new System.Collections.Generic.Dictionary<string, int> { ["server-2"] = 3 });
         return run;
     }
 }

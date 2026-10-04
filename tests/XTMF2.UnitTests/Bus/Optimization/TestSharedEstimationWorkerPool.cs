@@ -83,6 +83,24 @@ public class TestSharedEstimationWorkerPool
     }
 
     [TestMethod]
+    public void StartRun_SendsSharedEndpointSlotCountToEachWorker()
+    {
+        var firstStream = new RecordingDuplexStream();
+        var secondStream = new RecordingDuplexStream();
+        using var firstBus = new HostBus(firstStream, true);
+        using var secondBus = new HostBus(secondStream, true);
+        using var pool = new SharedEstimationWorkerPool();
+        Assert.IsTrue(pool.AddExistingWorker("worker-1", "endpoint-1", firstBus, out var error), error);
+        Assert.IsTrue(pool.AddExistingWorker("worker-2", "endpoint-1", secondBus, out error), error);
+
+        Assert.IsTrue(pool.StartRun(new SharedEstimationRunRequest("run-slots", "/tmp/run-slots",
+            "Start", [1]), out error), error);
+
+        Assert.AreEqual(2, ReadWorkerSlotCount(firstStream.GetWrittenBytes()));
+        Assert.AreEqual(2, ReadWorkerSlotCount(secondStream.GetWrittenBytes()));
+    }
+
+    [TestMethod]
     public async Task StartRun_ReportsFailureWhenOnlyWorkerCannotPrepare()
     {
         var stream = new RecordingDuplexStream();
@@ -98,6 +116,15 @@ public class TestSharedEstimationWorkerPool
 
         Assert.AreEqual("Model preparation failed.", await failure.Task.WaitAsync(TimeSpan.FromSeconds(3)));
         Assert.AreEqual(0, pool.WorkerCount);
+    }
+
+    private static int ReadWorkerSlotCount(byte[] frame)
+    {
+        using var stream = new MemoryStream(frame);
+        using var reader = new BinaryReader(stream);
+        _ = reader.ReadInt32();
+        SharedEstimationProtocol.ReadHeader(reader);
+        return SharedEstimationProtocol.ReadRunRequestPayload(reader).WorkerSlotCount;
     }
 
     private sealed class RecordingDuplexStream : Stream

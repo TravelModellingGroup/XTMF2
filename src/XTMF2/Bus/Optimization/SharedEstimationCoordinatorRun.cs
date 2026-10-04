@@ -205,7 +205,8 @@ public sealed class SharedEstimationCoordinatorRun
             _evaluationsCompleted, 0,
             _coordinator.ActiveWorkerCount, _fitnessTestsThisIteration,
             new Dictionary<string, int>(_evaluationsByWorker),
-            (double[])_bestObservedParameters.Clone());
+            (double[])_bestObservedParameters.Clone(),
+            _coordinator.ReadyWorkerIds);
 
     private EstimationEvaluationReportWriter? _reportWriter;
 }

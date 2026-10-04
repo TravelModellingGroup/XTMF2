@@ -13,14 +13,14 @@ public sealed class SharedEstimationWorkerSession : IDisposable
 {
     private readonly RunServerBus _bus;
     private readonly object _sync = new();
-    private SharedEstimationWorkerParticipant? _participant;
+    private SharedEstimationWorkerProcess? _workerProcess;
     private string? _runId;
     private RunError? _preparationError;
     private bool _disposed;
     private long? _activeBatchId;
     private string? _processingRunId;
-    private Scheduler.Reservation? _reservation;
-    private readonly List<Scheduler.Reservation> _reservationsToReleaseWhenIdle = new();
+    private Scheduler.ReservationLease? _reservation;
+    private readonly List<Scheduler.ReservationLease> _reservationsToReleaseWhenIdle = new();
     private TaskCompletionSource<bool>? _assignmentReady;
     private bool _evaluatingCandidate;
     private readonly Channel<SharedEstimationCandidate> _candidateQueue = Channel.CreateUnbounded<SharedEstimationCandidate>();
@@ -39,7 +39,7 @@ public sealed class SharedEstimationWorkerSession : IDisposable
         Console.WriteLine($"RunServer estimation run issued: {request.RunId}");
         Console.Out.Flush();
 
-        Scheduler.Reservation reservation;
+        Scheduler.ReservationLease reservation;
         try
         {
             reservation = _bus.ReserveSharedEstimationWorker(request);
@@ -50,7 +50,8 @@ public sealed class SharedEstimationWorkerSession : IDisposable
                 $"[Estimation] Unable to queue worker: {exception.Message}");
             return;
         }
-        Scheduler.Reservation? previousReservation;
+        Scheduler.ReservationLease? previousReservation;
+        SharedEstimationWorkerProcess? previousWorkerProcess;
         var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_sync)
         {
@@ -60,13 +61,15 @@ public sealed class SharedEstimationWorkerSession : IDisposable
                 return;
             }
             previousReservation = _reservation;
+            previousWorkerProcess = _workerProcess;
             _runId = request.RunId;
-            _participant = null;
+            _workerProcess = null;
             _preparationError = null;
             _reservation = reservation;
             _assignmentReady = ready;
             reservation.SetCancellationHandler(() => ClearAssignment(request.RunId, reservation));
         }
+        previousWorkerProcess?.Dispose();
         if (previousReservation is not null)
             ReleaseOrDefer(previousReservation);
 
@@ -77,7 +80,7 @@ public sealed class SharedEstimationWorkerSession : IDisposable
     }
 
     private async Task PrepareWhenScheduled(SharedEstimationRunRequest request,
-        Scheduler.Reservation reservation, TaskCompletionSource<bool> ready)
+        Scheduler.ReservationLease reservation, TaskCompletionSource<bool> ready)
     {
         try
         {
@@ -89,11 +92,14 @@ public sealed class SharedEstimationWorkerSession : IDisposable
             return;
         }
 
-        SharedEstimationWorkerParticipant? participant = null;
+        SharedEstimationWorkerProcess? workerProcess = null;
         RunError? error = null;
         try
         {
-            SharedEstimationWorkerParticipant.TryCreate(_bus.Runtime, request, out participant, out error);
+            if (!SharedEstimationWorkerProcess.TryStart(request, _bus.ExtraDlls,
+                    out workerProcess, out var processError))
+                error = new RunError(RunErrorType.Validation,
+                    processError ?? "Unable to start the estimation worker process.", null, string.Empty);
         }
         catch (Exception exception)
         {
@@ -104,25 +110,29 @@ public sealed class SharedEstimationWorkerSession : IDisposable
         {
             if (_disposed || !ReferenceEquals(_reservation, reservation))
             {
+                workerProcess?.Dispose();
                 reservation.Dispose();
                 ready.TrySetResult(false);
                 return;
             }
-            _participant = participant;
+            _workerProcess = workerProcess;
             _preparationError = error;
         }
         ready.TrySetResult(true);
         try
         {
             _bus.SendSharedEstimationWorkerReady(new SharedEstimationWorkerReady(
-                request.RunId, participant is not null && error is null, error?.Message));
+                request.RunId, workerProcess is not null && error is null, error?.Message));
         }
         catch (Exception exception) when (exception is System.IO.IOException or ObjectDisposedException
             or InvalidOperationException or ArgumentException)
         {
         }
         if (error is not null)
+        {
             _bus.SendStatusMessage(request.RunId, $"[Estimation] Worker preparation failed: {error.Message}");
+            ClearAssignment(request.RunId, reservation);
+        }
         else
             _bus.SendStatusMessage(request.RunId, "[Estimation] Worker has the RunServer execution slot.");
     }
@@ -164,7 +174,7 @@ public sealed class SharedEstimationWorkerSession : IDisposable
     private void ProcessCandidate(SharedEstimationCandidate candidate)
     {
         Task<bool>? readyTask;
-        Scheduler.Reservation? assignmentReservation;
+        Scheduler.ReservationLease? assignmentReservation;
         string? assignmentRunId;
         lock (_sync)
         {
@@ -178,7 +188,7 @@ public sealed class SharedEstimationWorkerSession : IDisposable
         {
             var preparationCompleted = readyTask is not null && readyTask.GetAwaiter().GetResult();
             bool isReady;
-            SharedEstimationWorkerParticipant? participant;
+            SharedEstimationWorkerProcess? activeWorkerProcess;
             RunError? preparationError;
             string? runId;
             lock (_sync)
@@ -189,7 +199,7 @@ public sealed class SharedEstimationWorkerSession : IDisposable
                     && assignmentReservation is not null
                     && ReferenceEquals(_reservation, assignmentReservation)
                     && _runId == assignmentRunId;
-                participant = _participant;
+                activeWorkerProcess = _workerProcess;
                 preparationError = _preparationError;
                 runId = assignmentRunId;
             }
@@ -204,7 +214,7 @@ public sealed class SharedEstimationWorkerSession : IDisposable
                 result = CreateError(candidate, preparationError.Message ?? "Worker preparation failed.",
                     preparationError.ModuleName, preparationError.ElementId);
             }
-            else if (participant is null)
+            else if (activeWorkerProcess is null)
             {
                 result = CreateError(candidate, "The shared-estimation worker is not prepared.", null, null);
             }
@@ -225,11 +235,11 @@ public sealed class SharedEstimationWorkerSession : IDisposable
                 {
                     try
                     {
-                        result = participant.Evaluate(candidate);
+                        result = activeWorkerProcess.Evaluate(candidate);
                     }
                     finally
                     {
-                        Scheduler.Reservation[] release;
+                        Scheduler.ReservationLease[] release;
                         lock (_sync)
                         {
                             _evaluatingCandidate = false;
@@ -258,9 +268,17 @@ public sealed class SharedEstimationWorkerSession : IDisposable
     }
 
     private void OnCancellationRequested(object sender, string runId, string? reason)
-        => ClearAssignment(runId);
+    {
+        Scheduler.ReservationLease? reservation;
+        lock (_sync)
+            reservation = _runId == runId ? _reservation : null;
+        if (reservation is null)
+            ClearAssignment(runId);
+        else
+            reservation.CancelGroup();
+    }
 
-    private void ReleaseOrDefer(Scheduler.Reservation reservation)
+    private void ReleaseOrDefer(Scheduler.ReservationLease reservation)
     {
         lock (_sync)
         {
@@ -273,16 +291,18 @@ public sealed class SharedEstimationWorkerSession : IDisposable
         reservation.Dispose();
     }
 
-    private void ClearAssignment(string runId, Scheduler.Reservation? expectedReservation = null)
+    private void ClearAssignment(string runId, Scheduler.ReservationLease? expectedReservation = null)
     {
-        Scheduler.Reservation? release = null;
+        Scheduler.ReservationLease? release = null;
+        SharedEstimationWorkerProcess? workerProcess = null;
         lock (_sync)
         {
             if (!_disposed && _runId == runId
                 && (expectedReservation is null || ReferenceEquals(_reservation, expectedReservation)))
             {
                 _runId = null;
-                _participant = null;
+                workerProcess = _workerProcess;
+                _workerProcess = null;
                 _preparationError = null;
                 _assignmentReady?.TrySetResult(false);
                 _assignmentReady = null;
@@ -291,6 +311,7 @@ public sealed class SharedEstimationWorkerSession : IDisposable
                 _activeBatchId = null;
             }
         }
+        workerProcess?.Dispose();
         if (release is not null)
             ReleaseOrDefer(release);
     }
@@ -302,14 +323,16 @@ public sealed class SharedEstimationWorkerSession : IDisposable
 
     public void Dispose()
     {
-        Scheduler.Reservation? release;
+        Scheduler.ReservationLease? release;
+        SharedEstimationWorkerProcess? workerProcess;
         lock (_sync)
         {
             if (_disposed)
                 return;
             _disposed = true;
             _runId = null;
-            _participant = null;
+            workerProcess = _workerProcess;
+            _workerProcess = null;
             _preparationError = null;
             _activeBatchId = null;
             _processingRunId = null;
@@ -319,6 +342,7 @@ public sealed class SharedEstimationWorkerSession : IDisposable
             _reservation = null;
         }
 
+        workerProcess?.Dispose();
         if (release is not null)
             ReleaseOrDefer(release);
 

@@ -556,6 +556,7 @@ public class RunController : IDisposable
         string orchestratorEndpointId,
         IReadOnlyList<string> workerEndpointIds,
         IReadOnlyDictionary<string, IReadOnlyDictionary<int, string>>? basicParameterOverridesByWorker,
+        IReadOnlyDictionary<string, int>? concurrentRunsByEndpoint,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
     {
@@ -622,7 +623,11 @@ public class RunController : IDisposable
                 basicParameterOverridesByWorker is not null &&
                 basicParameterOverridesByWorker.TryGetValue(endpoint.Id, out var overrides)
                     ? overrides
-                    : null)).ToArray(),
+                    : null,
+                concurrentRunsByEndpoint is not null &&
+                concurrentRunsByEndpoint.TryGetValue(endpoint.Id, out var concurrentRuns)
+                    ? concurrentRuns
+                    : 1)).ToArray(),
             modelSystem.EstimationAlgorithmConfig.AlgorithmId,
             modelSystem.EstimationAlgorithmConfig.GetParameters(),
             entries.Select(item => item.entry.Min).ToArray(),
@@ -631,7 +636,11 @@ public class RunController : IDisposable
             modelSystem.EstimationObjective == EstimationObjective.Maximize,
             UseCoordinatorAsWorker: true,
             Parameters: metadata.Select(item => new SharedEstimationParameterMetadata(
-                item.nodeIndex, item.name, item.min, item.max)).ToArray());
+                item.nodeIndex, item.name, item.min, item.max)).ToArray(),
+            CoordinatorConcurrentRuns: concurrentRunsByEndpoint is not null &&
+                concurrentRunsByEndpoint.TryGetValue(orchestratorEndpointId, out var coordinatorConcurrentRuns)
+                    ? coordinatorConcurrentRuns
+                    : 1);
 
         if (!orchestrator.StartRemoteSharedEstimation(request, out error))
             return false;
@@ -665,7 +674,9 @@ public class RunController : IDisposable
             availableWorkers.Select(ToRunServerEndpoint).ToArray(),
             initialWorkers.Keys.ToArray(),
             workerId => ChangeRemoteEstimationWorker(submittedRunId, workerId, add: true),
-            workerId => ChangeRemoteEstimationWorker(submittedRunId, workerId, add: false));
+            workerId => ChangeRemoteEstimationWorker(submittedRunId, workerId, add: false),
+            availableWorkers.ToDictionary(worker => worker.WorkerId,
+                worker => worker.ConcurrentRuns, StringComparer.Ordinal));
         SharedEstimationCompletion? pendingCompletion;
         lock (_sessionsByRunId)
         {
@@ -1053,7 +1064,8 @@ public class RunController : IDisposable
                 workers.Select(ToRunServerEndpoint).ToArray(),
                 snapshot.ActiveWorkerIds ?? Array.Empty<string>(),
                 workerId => ChangeRemoteEstimationWorker(snapshot.RunId, workerId, add: true),
-                workerId => ChangeRemoteEstimationWorker(snapshot.RunId, workerId, add: false));
+                workerId => ChangeRemoteEstimationWorker(snapshot.RunId, workerId, add: false),
+                snapshot.ConfiguredWorkerCounts);
             if (snapshot.Completion is not null)
                 OnSharedEstimationCompleted(sender, snapshot.Completion);
             TryAutomaticallyBindRecoveredRun(snapshot.RunId);

@@ -73,18 +73,34 @@
             </ComboBox>
             <TextBlock Text="Worker RunServers (the other selected servers)"
                        FontSize="14"/>
-            <ListBox x:Name="RunServerListBox"
-                     ItemsSource="{Binding RunServers}"
-                     SelectionMode="Multiple"
-                     SelectionChanged="RunServerSelectionChanged"
-                     Height="130"
-                     TabIndex="1">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding Name}"/>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <Grid ColumnDefinitions="*,Auto" Margin="4,0,8,0">
+                <TextBlock Text="RunServer" FontSize="12" Opacity="0.65"/>
+                <TextBlock Grid.Column="1" Text="Runs" FontSize="12" Opacity="0.65"
+                           HorizontalAlignment="Center" Width="86"/>
+            </Grid>
+            <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding RunServerChoices}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:RunServerChoice">
+                            <Grid ColumnDefinitions="*,Auto" Margin="4,2">
+                                <CheckBox Content="{Binding Name}"
+                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                          VerticalAlignment="Center"
+                                          MinHeight="32"/>
+                                <NumericUpDown Grid.Column="1"
+                                               Value="{Binding ConcurrentRuns, Mode=TwoWay}"
+                                               Minimum="1"
+                                               Maximum="32"
+                                               Increment="1"
+                                               FormatString="0"
+                                               Width="86"
+                                               IsEnabled="{Binding CanConfigureRuns}"
+                                               HorizontalContentAlignment="Right"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
             <TextBlock Text="{Binding SelectedRunServerSummary}"
                        FontSize="12"
                        Foreground="{DynamicResource DlgMutedFg}"

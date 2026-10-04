@@ -219,14 +219,14 @@ namespace XTMF2.Bus
 
             lock (this)
             {
-                var originalDir = Directory.GetCurrentDirectory();
                 using var loopRunBus = new RunBus(ID, _ => { }, _runtime);
                 var loopRun = new Run(ID, _modelSystem, StartToExecute, _runtime,
                     _currentWorkingDirectory, RunMode.Estimation);
                 loopRunBus.CurrentRun = loopRun;
                 try
                 {
-                    Directory.SetCurrentDirectory(_currentWorkingDirectory);
+                    using var workingDirectoryLease = SharedEstimationWorkingDirectoryLease.Acquire(
+                        _currentWorkingDirectory);
                     for (int i = 0; i < _sharedWorkerSetters.Count; i++)
                         _sharedWorkerSetters[i](candidate.Parameters[i]);
                     _sharedWorkerStart.Invoke();
@@ -249,7 +249,6 @@ namespace XTMF2.Bus
                 }
                 finally
                 {
-                    Directory.SetCurrentDirectory(originalDir);
                     if (ReferenceEquals(loopRunBus.CurrentRun, loopRun))
                         loopRunBus.CurrentRun = null;
                 }

@@ -147,12 +147,13 @@ public sealed partial class RunsViewModel : ObservableObject
 
     internal void ConfigureRecoveredSharedEstimationWorkers(string runId,
         IReadOnlyList<RunServerEndpoint> endpoints, IReadOnlyCollection<string> activeWorkerIds,
-        Func<string, string?> addWorker, Func<string, string?> removeWorker)
+        Func<string, string?> addWorker, Func<string, string?> removeWorker,
+        IReadOnlyDictionary<string, int>? configuredWorkerCounts = null)
     {
         var vm = FindRun(runId);
         if (vm is null) return;
         Dispatcher.UIThread.Post(() => vm.SetRemoteEstimationWorkers(
-            endpoints, activeWorkerIds, addWorker, removeWorker));
+            endpoints, activeWorkerIds, addWorker, removeWorker, configuredWorkerCounts));
     }
 
     internal bool BindRecoveredRun(string runId, ModelSystemSession session, User user,

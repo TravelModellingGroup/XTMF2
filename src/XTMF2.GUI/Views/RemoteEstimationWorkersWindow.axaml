@@ -55,6 +55,8 @@
                                     <TextBlock Text="Active"
                                            IsVisible="{Binding IsActive}"
                                            Opacity="0.65"/>
+                                     <TextBlock Text="{Binding ActiveWorkerCountDisplay}"
+                                         Opacity="0.65"/>
                                     <TextBlock Text="Updating..."
                                            IsVisible="{Binding IsBusy}"
                                            Opacity="0.65"/>

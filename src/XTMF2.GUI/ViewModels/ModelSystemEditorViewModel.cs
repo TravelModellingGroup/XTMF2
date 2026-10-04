@@ -3522,7 +3522,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             defaultRunName,
             availableStarts.Select(start => start.Name).ToList());
         if (runConfiguration is null) return;
-        var (runName, endpointIds, startToExecute, _, _) = runConfiguration.Value;
+        var (runName, endpointIds, startToExecute, _, _, _) = runConfiguration.Value;
 
         var project = Session.Project;
         if (!_runController.SendRun(project, Session, User, startToExecute, runName, endpointIds[0], out _, out var runError))
@@ -3564,13 +3564,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             allowMultipleRunServers: true,
             inputDirectoryParameters);
         if (runConfiguration is null) return;
-        var (runName, endpointIds, startToExecute, pathOverrides, orchestratorEndpointId) = runConfiguration.Value;
+        var (runName, endpointIds, startToExecute, pathOverrides, orchestratorEndpointId,
+            concurrentRunsByEndpoint) = runConfiguration.Value;
 
         var project = Session.Project;
         CommandError? runError;
         bool started = orchestratorEndpointId is not null
             ? _runController.SendRemoteSharedEstimationRun(project, Session, User, startToExecute, runName,
-                orchestratorEndpointId, endpointIds, pathOverrides, out _, out runError)
+                orchestratorEndpointId, endpointIds, pathOverrides, concurrentRunsByEndpoint,
+                out _, out runError)
             : _runController.SendEstimationRun(project, Session, User, startToExecute, runName,
                 endpointIds[0], out _, out runError);
         if (!started)
@@ -3602,7 +3604,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             defaultRunName,
             availableStarts.Select(start => start.Name).ToList());
         if (runConfiguration is null) return;
-        var (runName, endpointIds, startToExecute, _, _) = runConfiguration.Value;
+        var (runName, endpointIds, startToExecute, _, _, _) = runConfiguration.Value;
 
         var project = Session.Project;
         if (!_runController.SendCalibrationRun(project, Session, User, startToExecute, runName, endpointIds[0], out _, out var runError))
@@ -3617,7 +3619,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     private async Task<(string RunName, IReadOnlyList<string> EndpointIds, string StartName,
         IReadOnlyDictionary<string, IReadOnlyDictionary<int, string>> PathOverrides,
-        string? OrchestratorEndpointId)?> ConfigureRunAsync(
+        string? OrchestratorEndpointId,
+        IReadOnlyDictionary<string, int> ConcurrentRunsByEndpoint)?> ConfigureRunAsync(
         string title,
         string defaultRunName,
         IReadOnlyList<string> startNames,
@@ -3650,7 +3653,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             : null;
         return string.IsNullOrEmpty(runName) || endpointIds.Length == 0 || string.IsNullOrEmpty(startName)
             ? null
-            : (runName, endpointIds, startName, dialog.PathOverrides, orchestratorEndpointId);
+            : (runName, endpointIds, startName, dialog.PathOverrides, orchestratorEndpointId,
+                dialog.ConcurrentRunsByEndpoint);
     }
 
     /// <summary>Save the model system to its project file.</summary>

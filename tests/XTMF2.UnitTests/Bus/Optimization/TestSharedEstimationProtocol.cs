@@ -19,13 +19,14 @@ public class TestSharedEstimationProtocol
         var ownerUserId = Guid.NewGuid();
         var request = new SharedEstimationCoordinatorRequest(
             new SharedEstimationRunRequest("run-remote", "/remote/runs", "Start", [1, 2, 3],
-            ProjectId: projectId, ModelSystemId: modelSystemId, OwnerUserId: ownerUserId),
+            ProjectId: projectId, ModelSystemId: modelSystemId, OwnerUserId: ownerUserId, WorkerSlotCount: 3),
             [new SharedEstimationWorkerEndpoint("worker-1", "endpoint-1", "worker.example", 5000,
-                "token", "fingerprint", new Dictionary<int, string> { [7] = "/worker/input" })],
+                "token", "fingerprint", new Dictionary<int, string> { [7] = "/worker/input" }, ConcurrentRuns: 3)],
             "NelderMead",
             [new AlgorithmParameterDescriptor { Key = "MaxIterations", Label = "Max Iterations", Hint = "limit", Value = "12" }],
             [0.0], [1.0], [0.5], false, UseCoordinatorAsWorker: false,
-            Parameters: [new SharedEstimationParameterMetadata(7, "Demand", 0.0, 1.0)]);
+            Parameters: [new SharedEstimationParameterMetadata(7, "Demand", 0.0, 1.0)],
+            CoordinatorConcurrentRuns: 2);
 
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
@@ -38,16 +39,19 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual(request.Workers[0].EndpointId, read.Workers[0].EndpointId);
         Assert.AreEqual(request.Workers[0].Address, read.Workers[0].Address);
         Assert.AreEqual(request.Workers[0].Port, read.Workers[0].Port);
+        Assert.AreEqual(3, read.Workers[0].ConcurrentRuns);
         Assert.AreEqual(request.Workers[0].BasicParameterOverrides![7],
             read.Workers[0].BasicParameterOverrides![7]);
         Assert.AreEqual(request.AlgorithmId, read.AlgorithmId);
         Assert.AreEqual(request.AlgorithmParameters[0].Value, read.AlgorithmParameters[0].Value);
         Assert.AreEqual(request.InitialValues[0], read.InitialValues[0]);
         Assert.AreEqual(request.UseCoordinatorAsWorker, read.UseCoordinatorAsWorker);
+        Assert.AreEqual(2, read.CoordinatorConcurrentRuns);
         Assert.AreEqual(request.Parameters![0], read.Parameters![0]);
         Assert.AreEqual(projectId, read.Run.ProjectId);
         Assert.AreEqual(modelSystemId, read.Run.ModelSystemId);
         Assert.AreEqual(ownerUserId, read.Run.OwnerUserId);
+        Assert.AreEqual(3, read.Run.WorkerSlotCount);
         Assert.AreEqual(stream.Length, stream.Position);
     }
 
@@ -111,7 +115,7 @@ public class TestSharedEstimationProtocol
         var run = new SharedEstimationRunRequest(
             "run-1", "/shared/runs", "Start", new byte[] { 1, 2, 3 },
             new Dictionary<int, string> { [4] = "/worker/input", [9] = "/worker/output" },
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), WorkerSlotCount: 4);
         var registration = new SharedEstimationWorkerRegistration("run-1", "worker-1", "server-1");
 
         using var stream = new MemoryStream();
@@ -131,6 +135,7 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual(run.ProjectId, readRun.ProjectId);
         Assert.AreEqual(run.ModelSystemId, readRun.ModelSystemId);
         Assert.AreEqual(run.OwnerUserId, readRun.OwnerUserId);
+        Assert.AreEqual(run.WorkerSlotCount, readRun.WorkerSlotCount);
         Assert.HasCount(run.ModelSystem.Length, readRun.ModelSystem);
         for (int i = 0; i < run.ModelSystem.Length; i++)
             Assert.AreEqual(run.ModelSystem[i], readRun.ModelSystem[i]);
@@ -149,7 +154,7 @@ public class TestSharedEstimationProtocol
             "worker failed", "Module", Guid.Parse("11111111-1111-1111-1111-111111111111"));
         var progress = new SharedEstimationProgress("run-1", 2, 0.25, 3, 1, 2, 2,
             new Dictionary<string, int> { ["coordinator"] = 1, ["worker-1"] = 2 },
-            new[] { 1.0, 2.0 });
+            new[] { 1.0, 2.0 }, ["worker-1", "worker-1#run-2"]);
         var status = new SharedEstimationStatus("run-1", "Estimation started with 2 workers.");
         var completion = new SharedEstimationCompletion("run-1", true, 0.25,
             new[] { 1.0, 2.0 }, 3, 2, null);
@@ -185,6 +190,7 @@ public class TestSharedEstimationProtocol
         CollectionAssert.AreEquivalent(progress.EvaluationsByWorker.ToArray(),
             readProgress.EvaluationsByWorker.ToArray());
         CollectionAssert.AreEqual(progress.BestParameters.ToArray(), readProgress.BestParameters.ToArray());
+        CollectionAssert.AreEquivalent(progress.ActiveWorkerIds.ToArray(), readProgress.ActiveWorkerIds.ToArray());
         Assert.AreEqual(status, SharedEstimationProtocol.ReadStatus(reader));
         var readCompletion = SharedEstimationProtocol.ReadCompletion(reader);
         Assert.AreEqual(completion.RunId, readCompletion.RunId);
@@ -347,7 +353,8 @@ public class TestSharedEstimationProtocol
         {
             new SharedEstimationJobSnapshot("run-active", SharedEstimationJobState.Running, progress, null,
                 ["worker-1"], "active-estimation", "/runs/active", "active-hash",
-                [new SharedEstimationParameterMetadata(4, "Transit cost", 0, 10)], projectId, modelSystemId, ownerUserId),
+                [new SharedEstimationParameterMetadata(4, "Transit cost", 0, 10)], projectId, modelSystemId, ownerUserId,
+                new Dictionary<string, int> { ["worker-1"] = 3 }),
             new SharedEstimationJobSnapshot("run-complete", SharedEstimationJobState.Completed, null, completion,
                 ["worker-2"], "completed-estimation", "/runs/completed", "completed-hash",
                 [new SharedEstimationParameterMetadata(8, "Wait time", 0, 20)])
@@ -375,6 +382,7 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual(projectId, read[0].ProjectId);
         Assert.AreEqual(ownerUserId, read[0].OwnerUserId);
         Assert.AreEqual(modelSystemId, read[0].ModelSystemId);
+        Assert.AreEqual(3, read[0].ConfiguredWorkerCounts!["worker-1"]);
         Assert.AreEqual(SharedEstimationJobState.Completed, read[1].State);
         Assert.IsNull(read[1].Progress);
         Assert.IsNotNull(read[1].Completion);
@@ -392,7 +400,7 @@ public class TestSharedEstimationProtocol
     public void CoordinatorWorkerControl_RoundTrips()
     {
         var worker = new SharedEstimationWorkerEndpoint("worker-2", "server-2", "host", 5001,
-            "token", "fingerprint", new Dictionary<int, string> { [3] = "/input" });
+            "token", "fingerprint", new Dictionary<int, string> { [3] = "/input" }, ConcurrentRuns: 4);
         var acknowledgement = new SharedEstimationWorkerControlAcknowledgement(
             "run-1", "worker-2", true, false, "already active", 2);
 
@@ -409,7 +417,33 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual("run-1", readWorkerRequest.RunId);
         Assert.AreEqual(worker.WorkerId, readWorkerRequest.Worker.WorkerId);
         Assert.AreEqual(worker.Address, readWorkerRequest.Worker.Address);
+        Assert.AreEqual(worker.ConcurrentRuns, readWorkerRequest.Worker.ConcurrentRuns);
         Assert.AreEqual(worker.BasicParameterOverrides![3], readWorkerRequest.Worker.BasicParameterOverrides![3]);
         Assert.AreEqual(acknowledgement, SharedEstimationProtocol.ReadWorkerControlAcknowledgement(reader));
+    }
+
+    [TestMethod]
+    public void WorkerEndpoint_CreatesOneSlotPerConfiguredRun()
+    {
+        var endpoint = new SharedEstimationWorkerEndpoint("worker-a", "server-a", "host", 5001,
+            "token", "fingerprint", ConcurrentRuns: 3);
+
+        var slots = endpoint.CreateWorkerSlots();
+
+        Assert.HasCount(3, slots);
+        CollectionAssert.AreEqual(new[] { "worker-a", "worker-a#run-2", "worker-a#run-3" },
+            slots.Select(slot => slot.WorkerId).ToArray());
+        Assert.IsTrue(slots.All(slot => slot.EndpointId == endpoint.EndpointId));
+        Assert.IsTrue(slots.All(slot => slot.ConcurrentRuns == 1));
+
+        var configuredWorker = endpoint with
+        {
+            BasicParameterOverrides = new Dictionary<int, string> { [8] = "/worker/input" }
+        };
+        Assert.IsTrue(configuredWorker.CreateWorkerSlots()
+            .All(slot => slot.BasicParameterOverrides![8] == "/worker/input"));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            (endpoint with { ConcurrentRuns = SharedEstimationWorkerEndpoint.MaximumConcurrentRuns + 1 })
+                .CreateWorkerSlots());
     }
 }

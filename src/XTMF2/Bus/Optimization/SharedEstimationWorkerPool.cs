@@ -129,6 +129,7 @@ public sealed class SharedEstimationWorkerPool : IDisposable
             }
         }
 
+        var failedEndpointIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var connection in connections)
         {
             bool started;
@@ -143,8 +144,19 @@ public sealed class SharedEstimationWorkerPool : IDisposable
             }
             if (!started)
             {
+                failedEndpointIds.Add(connection.EndpointId);
                 lock (_sync)
                     _awaitingReadiness.Remove(connection.WorkerId);
+                Coordinator.RemoveWorker(connection.WorkerId, out _);
+            }
+        }
+
+        foreach (var endpointId in failedEndpointIds)
+        {
+            foreach (var connection in connections.Where(connection => connection.EndpointId == endpointId))
+            {
+                connection.Bus.CancelSharedEstimation(request.RunId,
+                    "A worker slot on this RunServer failed to start.", out _);
                 Coordinator.RemoveWorker(connection.WorkerId, out _);
             }
         }
@@ -298,9 +310,21 @@ public sealed class SharedEstimationWorkerPool : IDisposable
 
     private SharedEstimationRunRequest CreateWorkerRequest(string workerId)
     {
-        if (_activeRun is null || _activeOverrides is null
-            || !_activeOverrides.TryGetValue(workerId, out var overrides))
-            return _activeRun!;
-        return _activeRun with { BasicParameterOverrides = overrides };
+        lock (_sync)
+        {
+            if (_activeRun is null)
+                throw new InvalidOperationException("There is no active shared-estimation run.");
+
+            if (!_connections.TryGetValue(workerId, out var worker))
+                return _activeRun;
+            var slotCount = _connections.Values.Count(connection => connection.EndpointId == worker.EndpointId);
+            IReadOnlyDictionary<int, string>? overrides = null;
+            _activeOverrides?.TryGetValue(workerId, out overrides);
+            return _activeRun with
+            {
+                BasicParameterOverrides = overrides ?? _activeRun.BasicParameterOverrides,
+                WorkerSlotCount = Math.Max(1, slotCount)
+            };
+        }
     }
 }

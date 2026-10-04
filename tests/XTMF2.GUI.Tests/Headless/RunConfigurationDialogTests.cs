@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -76,12 +77,43 @@ public class RunConfigurationDialogTests
                 [local, remote], ["Start"], allowMultipleRunServers: true);
             dialog.UseMultipleRunServers = true;
             dialog.SelectedCoordinatorRunServer = remote;
-            var workerList = dialog.FindControl<ListBox>("RunServerListBox");
-            Assert.IsNotNull(workerList);
-            workerList.SelectedItems!.Add(local);
+            dialog.RunServerChoices.Single(choice => choice.Endpoint.Id == local.Id).IsSelected = true;
 
             Assert.AreSame(remote, dialog.SelectedCoordinatorRunServer);
             Assert.Contains(remote, dialog.RunServers);
+        }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void ServerRows_UseCheckboxSelectionAndIndependentRunCounts()
+    {
+        Session.Dispatch(() =>
+        {
+            var coordinator = new RunServerEndpoint { Id = "coordinator", Name = "Coordinator" };
+            var local = new RunServerEndpoint { Id = "local", Name = "Local" };
+            var remote = new RunServerEndpoint { Id = "remote-1", Name = "Remote 1" };
+            var dialog = new RunConfigurationDialog("Run Estimation", "estimation",
+                [coordinator, local, remote], ["Start"], allowMultipleRunServers: true);
+            dialog.UseMultipleRunServers = true;
+            var remoteRow = dialog.RunServerChoices.Single(choice => choice.Endpoint.Id == remote.Id);
+            var localRow = dialog.RunServerChoices.Single(choice => choice.Endpoint.Id == local.Id);
+            var coordinatorRow = dialog.RunServerChoices.Single(choice => choice.Endpoint.Id == coordinator.Id);
+            remoteRow.IsSelected = true;
+            remoteRow.ConcurrentRuns = 3;
+            localRow.IsSelected = true;
+            localRow.ConcurrentRuns = 2;
+            coordinatorRow.IsSelected = false;
+
+            Assert.IsTrue(remoteRow.IsSelected);
+            Assert.IsTrue(localRow.IsSelected);
+            Assert.AreEqual(3, remoteRow.ConcurrentRuns);
+            Assert.AreEqual(2, localRow.ConcurrentRuns);
+            Assert.AreEqual(3, dialog.ConcurrentRunsByEndpoint[remote.Id]);
+            Assert.AreEqual(2, dialog.ConcurrentRunsByEndpoint[local.Id]);
+            Assert.AreEqual(1, dialog.ConcurrentRunsByEndpoint[coordinator.Id]);
+            Assert.Contains(coordinator, dialog.RunServers);
+            Assert.IsFalse(dialog.SelectedRunServers.Any(endpoint => endpoint.Id == coordinator.Id));
+            Assert.IsTrue(coordinatorRow.CanConfigureRuns);
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
     }
 }

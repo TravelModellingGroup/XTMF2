@@ -5,12 +5,62 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using XTMF2.GUI.Properties;
 
 namespace XTMF2.GUI.Views;
+
+public sealed class RunServerChoice : INotifyPropertyChanged
+{
+    private bool _isSelected;
+    private bool _isCoordinator;
+    private int _concurrentRuns = 1;
+
+    public RunServerChoice(RunServerEndpoint endpoint, bool isSelected)
+    {
+        Endpoint = endpoint;
+        _isSelected = isSelected;
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    public RunServerEndpoint Endpoint { get; }
+    public string Name => Endpoint.Name;
+    public bool CanConfigureRuns => IsSelected || _isCoordinator;
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value) return;
+            _isSelected = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanConfigureRuns)));
+        }
+    }
+
+    public void SetIsCoordinator(bool value)
+    {
+        if (_isCoordinator == value) return;
+        _isCoordinator = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanConfigureRuns)));
+    }
+
+    public int ConcurrentRuns
+    {
+        get => _concurrentRuns;
+        set
+        {
+            var boundedValue = Math.Clamp(value, 1, 32);
+            if (_concurrentRuns == boundedValue) return;
+            _concurrentRuns = boundedValue;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ConcurrentRuns)));
+        }
+    }
+}
 
 public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
 {
@@ -21,7 +71,6 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
     private RunServerEndpoint? _selectedCoordinatorRunServer;
     private string? _selectedStartName;
     private bool _useMultipleRunServers;
-    private readonly List<RunServerEndpoint> _selectedRunServers = new();
     private readonly IReadOnlyList<PathParameter> _pathParameters;
     private readonly Dictionary<string, Dictionary<int, string>> _pathOverrides = new(StringComparer.Ordinal);
 
@@ -29,8 +78,16 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
 
     public IReadOnlyList<RunServerEndpoint> RunServers { get; }
     public IReadOnlyList<string> StartNames { get; }
+    public ObservableCollection<RunServerChoice> RunServerChoices { get; } = new();
     public bool AllowMultipleRunServers { get; }
-    public IReadOnlyList<RunServerEndpoint> SelectedRunServers => _selectedRunServers;
+    public IReadOnlyList<RunServerEndpoint> SelectedRunServers => RunServerChoices
+        .Where(choice => choice.IsSelected)
+        .Select(choice => choice.Endpoint)
+        .ToArray();
+    public IReadOnlyDictionary<string, int> ConcurrentRunsByEndpoint => RunServerChoices
+        .Where(choice => choice.IsSelected || choice.Endpoint.Id == SelectedCoordinatorRunServer?.Id)
+        .DistinctBy(choice => choice.Endpoint.Id, StringComparer.Ordinal)
+        .ToDictionary(choice => choice.Endpoint.Id, choice => choice.ConcurrentRuns, StringComparer.Ordinal);
     public RunServerEndpoint? SelectedCoordinatorRunServer
     {
         get => _selectedCoordinatorRunServer;
@@ -38,7 +95,10 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
         {
             if (_selectedCoordinatorRunServer == value) return;
             _selectedCoordinatorRunServer = value;
+            foreach (var choice in RunServerChoices)
+                choice.SetIsCoordinator(choice.Endpoint.Id == value?.Id);
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedCoordinatorRunServer)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ConcurrentRunsByEndpoint)));
         }
     }
     public IReadOnlyDictionary<string, IReadOnlyDictionary<int, string>> PathOverrides =>
@@ -48,7 +108,7 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
     public bool IsSingleRunServerSelectionVisible => IsRunServerSelectionVisible && !UseMultipleRunServers;
     public bool IsMultipleRunServerSelectionVisible => AllowMultipleRunServers && UseMultipleRunServers;
     public bool IsStartSelectionVisible => StartNames.Count > 1;
-    public bool IsPathOverridesVisible => IsMultipleRunServerSelectionVisible && _pathParameters.Count > 0 && _selectedRunServers.Count > 0;
+    public bool IsPathOverridesVisible => IsMultipleRunServerSelectionVisible && _pathParameters.Count > 0 && SelectedRunServers.Count > 0;
 
     public bool UseMultipleRunServers
     {
@@ -64,9 +124,9 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
             RebuildPathEditors();
         }
     }
-    public string SelectedRunServerSummary => _selectedRunServers.Count == 0
+    public string SelectedRunServerSummary => SelectedRunServers.Count == 0
         ? "No RunServers selected"
-        : $"Selected ({_selectedRunServers.Count}): {string.Join(", ", _selectedRunServers.Select(server => server.Name))}";
+        : $"Selected ({SelectedRunServers.Count}): {string.Join(", ", SelectedRunServers.Select(server => server.Name))}";
 
     public string? RunName
     {
@@ -129,11 +189,16 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
     {
         RunServers = runServers;
         StartNames = startNames;
+        for (var index = 0; index < runServers.Count; index++)
+        {
+            var choice = new RunServerChoice(runServers[index], index == 0);
+            choice.PropertyChanged += OnRunServerChoiceChanged;
+            RunServerChoices.Add(choice);
+        }
         AllowMultipleRunServers = allowMultipleRunServers;
         _pathParameters = pathParameters ?? [];
         RunName = defaultRunName;
         SelectedRunServer = runServers.Count > 0 ? runServers[0] : null;
-        _selectedRunServers.AddRange(runServers.Count > 0 ? [runServers[0]] : []);
         SelectedCoordinatorRunServer = runServers.Count > 0 ? runServers[0] : null;
         InitializePathOverrides();
         SelectedStartName = startNames.Count > 0 ? startNames[0] : null;
@@ -144,9 +209,6 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
         RegisterEscapeClose();
         Opened += (_, _) =>
         {
-            if (AllowMultipleRunServers && RunServers.Count > 0 &&
-                RunServerListBox.SelectedItems is { Count: 0 } selectedItems)
-                selectedItems.Add(RunServers[0]);
             RunNameTextBox.Focus();
             RunNameTextBox.SelectAll();
         };
@@ -163,7 +225,7 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
     private void OK_Click(object? sender, RoutedEventArgs e)
     {
         if (!IsRunNameValid || SelectedRunServer is null || SelectedStartName is null ||
-            (AllowMultipleRunServers && _selectedRunServers.Count == 0))
+            (AllowMultipleRunServers && SelectedRunServers.Count == 0))
             return;
 
         WasCancelled = false;
@@ -171,20 +233,20 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
         Close();
     }
 
-    private void RunServerSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    private void OnRunServerChoiceChanged(object? sender, PropertyChangedEventArgs e)
     {
-        _selectedRunServers.Clear();
-        if (RunServerListBox.SelectedItems is { } selectedItems)
+        if (e.PropertyName == nameof(RunServerChoice.IsSelected))
         {
-            foreach (var item in selectedItems.OfType<RunServerEndpoint>())
-                _selectedRunServers.Add(item);
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedRunServers)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ConcurrentRunsByEndpoint)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsPathOverridesVisible)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedRunServerSummary)));
+            RebuildPathEditors();
         }
-        SelectedRunServer = _selectedRunServers.FirstOrDefault();
-        if (SelectedCoordinatorRunServer is null || !RunServers.Contains(SelectedCoordinatorRunServer))
-            SelectedCoordinatorRunServer = RunServers.FirstOrDefault();
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsPathOverridesVisible)));
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedRunServerSummary)));
-        RebuildPathEditors();
+        else if (e.PropertyName == nameof(RunServerChoice.ConcurrentRuns))
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ConcurrentRunsByEndpoint)));
+        }
     }
 
     private void InitializePathOverrides()
@@ -203,7 +265,7 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
         if (_pathParameters.Count == 0)
             return;
 
-        foreach (var endpoint in _selectedRunServers)
+        foreach (var endpoint in SelectedRunServers)
         {
             endpoint.BasicParameterOverrides.Clear();
             foreach (var parameter in _pathParameters)
@@ -232,7 +294,7 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
             FontSize = 14,
             Margin = new Avalonia.Thickness(0, 0, 0, 4)
         });
-        foreach (var endpoint in _selectedRunServers)
+        foreach (var endpoint in SelectedRunServers)
         {
             var values = _pathOverrides[endpoint.Id];
             var editor = new StackPanel { Spacing = 4 };

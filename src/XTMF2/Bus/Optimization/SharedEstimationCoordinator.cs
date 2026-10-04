@@ -28,6 +28,17 @@ public sealed class SharedEstimationCoordinator : IDisposable
         }
     }
 
+    public IReadOnlyList<string> ReadyWorkerIds
+    {
+        get
+        {
+            lock (_gate)
+                return _workers.Where(pair => pair.Value.IsReady)
+                    .Select(pair => pair.Key)
+                    .ToArray();
+        }
+    }
+
     public bool AddWorker(ISharedEstimationWorker worker, out string? error, bool isReady = true)
     {
         ArgumentNullException.ThrowIfNull(worker);

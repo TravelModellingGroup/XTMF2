@@ -130,9 +130,10 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
     {
         private readonly RemoteSharedEstimationRegistry _registry;
         private readonly SharedEstimationCoordinatorRequest _request;
-        private readonly XTMFRuntime _observerRuntime;
+        private readonly IReadOnlyList<string> _extraDlls;
         private readonly object _sync = new();
         private readonly CancellationTokenSource _cancellation = new();
+        private readonly Dictionary<string, List<string>> _workerSlotsByEndpoint = new(StringComparer.Ordinal);
         private RunServerBus? _observer;
         private SharedEstimationWorkerPool? _pool;
         private Task? _task;
@@ -145,7 +146,7 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
         {
             _registry = registry;
             _observer = observer;
-            _observerRuntime = observer.Runtime;
+            _extraDlls = observer.ExtraDlls.ToArray();
             _request = request;
         }
 
@@ -175,15 +176,22 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
         {
             lock (_sync)
             {
+                var registeredWorkerIds = _pool?.WorkerIds.ToHashSet(StringComparer.Ordinal)
+                    ?? new HashSet<string>(StringComparer.Ordinal);
+                var readyWorkerIds = _pool?.Coordinator.ReadyWorkerIds
+                    .Where(registeredWorkerIds.Contains)
+                    .ToArray() ?? Array.Empty<string>();
                 return new SharedEstimationJobSnapshot(RunId,
                     _completed ? SharedEstimationJobState.Completed : SharedEstimationJobState.Running,
-                    _progress, _completion, _pool?.WorkerIds,
+                    _progress, _completion, readyWorkerIds,
                     Path.GetFileName(_request.Run.WorkingDirectory.TrimEnd(Path.DirectorySeparatorChar,
                         Path.AltDirectorySeparatorChar)),
                     _request.Run.WorkingDirectory,
                     Convert.ToHexString(SHA256.HashData(_request.Run.ModelSystem)),
                     _request.Parameters?.ToArray(), _request.Run.ProjectId, _request.Run.ModelSystemId,
-                    _request.Run.OwnerUserId);
+                    _request.Run.OwnerUserId,
+                    _request.Workers.ToDictionary(worker => worker.WorkerId,
+                        worker => worker.ConcurrentRuns, StringComparer.Ordinal));
             }
         }
 
@@ -194,17 +202,25 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
             {
                 if (_completed || _pool is null)
                     return new(RunId, worker.WorkerId, add, false, "The remote estimation job is no longer active.", 0);
-                if (add && _pool.WorkerIds.Contains(worker.WorkerId, StringComparer.Ordinal))
+                var activeWorkerIds = _pool.WorkerIds.ToHashSet(StringComparer.Ordinal);
+                var hasExistingSlots = _workerSlotsByEndpoint.TryGetValue(worker.WorkerId, out var existingSlots);
+                if (add && hasExistingSlots && existingSlots!.Any(activeWorkerIds.Contains))
                     return new(RunId, worker.WorkerId, true, false, "The worker is already active.", _pool.WorkerCount);
-                if (!add && !_pool.WorkerIds.Contains(worker.WorkerId, StringComparer.Ordinal))
+                if (!add && (!hasExistingSlots || !existingSlots!.Any(activeWorkerIds.Contains)))
                     return new(RunId, worker.WorkerId, false, false, "The worker is not active.", _pool.WorkerCount);
-                if (!add && _pool.WorkerCount <= 1)
+                if (!add && _pool.WorkerCount - existingSlots!.Count(activeWorkerIds.Contains) < 1)
                     return new(RunId, worker.WorkerId, false, false, "At least one worker must remain active.", _pool.WorkerCount);
 
-                var succeeded = add
-                    ? _pool.AddWorker(worker.WorkerId, worker.EndpointId, worker.Address, worker.Port,
-                        worker.Token, worker.CertificateFingerprint, out var error)
-                    : _pool.RemoveWorker(worker.WorkerId, out error);
+                bool succeeded;
+                string? error;
+                if (add)
+                {
+                    succeeded = AddWorkerSlots(_pool, worker, out error);
+                }
+                else
+                {
+                    succeeded = RemoveWorkerSlots(_pool, worker.WorkerId, out error);
+                }
                 return new(RunId, worker.WorkerId, add, succeeded,
                     succeeded ? null : error, _pool.WorkerCount);
             }
@@ -259,20 +275,26 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
                     _pool = pool;
                 if (_request.UseCoordinatorAsWorker)
                 {
-                    if (!SharedEstimationLocalWorker.TryCreate("coordinator", _observerRuntime,
-                            _request.Run, out var localWorker, out var localWorkerError))
-                        throw new InvalidOperationException(localWorkerError ?? "Unable to prepare the coordinator worker.");
-                    if (!pool.Coordinator.AddWorker(localWorker!, out var addLocalError))
+                    if (_request.CoordinatorConcurrentRuns < 1 ||
+                        _request.CoordinatorConcurrentRuns > SharedEstimationWorkerEndpoint.MaximumConcurrentRuns)
+                        throw new InvalidOperationException("The coordinator concurrent-run count is outside the supported range.");
+                    for (var slotIndex = 0; slotIndex < _request.CoordinatorConcurrentRuns; slotIndex++)
                     {
-                        localWorker!.Dispose();
-                        throw new InvalidOperationException(addLocalError ?? "Unable to add the coordinator worker.");
+                        var workerId = slotIndex == 0 ? "coordinator" : $"coordinator#run-{slotIndex + 1}";
+                        if (!SharedEstimationLocalWorker.TryCreate(workerId,
+                            _request.Run, _extraDlls, out var localWorker, out var localWorkerError))
+                            throw new InvalidOperationException(localWorkerError ?? "Unable to prepare the coordinator worker.");
+                        if (!pool.Coordinator.AddWorker(localWorker!, out var addLocalError))
+                        {
+                            localWorker!.Dispose();
+                            throw new InvalidOperationException(addLocalError ?? "Unable to add the coordinator worker.");
+                        }
                     }
-                    ReportStatus("Coordinator is participating as a worker.");
+                    ReportStatus($"Coordinator is participating with {_request.CoordinatorConcurrentRuns} worker run(s).");
                 }
                 foreach (var worker in _request.Workers)
                 {
-                    if (!pool.AddWorker(worker.WorkerId, worker.EndpointId, worker.Address, worker.Port,
-                            worker.Token, worker.CertificateFingerprint, out var workerError))
+                    if (!AddWorkerSlots(pool, worker, out var workerError))
                     {
                         ReportStatus($"Unable to connect to worker '{worker.EndpointId}': " +
                             (workerError ?? "connection failed; estimation will continue without it."));
@@ -282,6 +304,7 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
                 }
 
                 var overrides = _request.Workers
+                    .SelectMany(worker => worker.CreateWorkerSlots())
                     .Where(worker => worker.BasicParameterOverrides is { Count: > 0 })
                     .ToDictionary(worker => worker.WorkerId,
                         worker => worker.BasicParameterOverrides!, StringComparer.Ordinal);
@@ -366,6 +389,69 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
         {
             ReportStatus(reason);
             Cancel(reason);
+        }
+
+        private bool AddWorkerSlots(SharedEstimationWorkerPool pool,
+            SharedEstimationWorkerEndpoint worker, out string? error)
+        {
+            error = null;
+            if (worker.ConcurrentRuns < 1 ||
+                worker.ConcurrentRuns > SharedEstimationWorkerEndpoint.MaximumConcurrentRuns)
+            {
+                error = $"Concurrent runs must be between 1 and {SharedEstimationWorkerEndpoint.MaximumConcurrentRuns}.";
+                return false;
+            }
+
+            var addedWorkerIds = new List<string>(worker.ConcurrentRuns);
+            foreach (var slot in worker.CreateWorkerSlots())
+            {
+                if (!pool.AddWorker(slot.WorkerId, slot.EndpointId, slot.Address, slot.Port,
+                        slot.Token, slot.CertificateFingerprint, out error))
+                {
+                    foreach (var addedWorkerId in addedWorkerIds)
+                        pool.RemoveWorker(addedWorkerId, out _);
+                    return false;
+                }
+                addedWorkerIds.Add(slot.WorkerId);
+            }
+
+            lock (_sync)
+            {
+                if (_completed || !ReferenceEquals(_pool, pool))
+                {
+                    foreach (var addedWorkerId in addedWorkerIds)
+                        pool.RemoveWorker(addedWorkerId, out _);
+                    error = "The remote estimation job is no longer active.";
+                    return false;
+                }
+                _workerSlotsByEndpoint[worker.WorkerId] = addedWorkerIds;
+            }
+            return true;
+        }
+
+        private bool RemoveWorkerSlots(SharedEstimationWorkerPool pool, string workerId, out string? error)
+        {
+            error = null;
+            if (!_workerSlotsByEndpoint.TryGetValue(workerId, out var workerIds))
+            {
+                error = "The worker is not active.";
+                return false;
+            }
+
+            var succeeded = true;
+            foreach (var slotWorkerId in workerIds.ToArray())
+            {
+                if (pool.RemoveWorker(slotWorkerId, out var removeError))
+                    workerIds.Remove(slotWorkerId);
+                else
+                {
+                    error ??= removeError;
+                    succeeded = false;
+                }
+            }
+            if (workerIds.Count == 0)
+                _workerSlotsByEndpoint.Remove(workerId);
+            return succeeded;
         }
 
         private static void PersistCompletion(SharedEstimationRunRequest request,

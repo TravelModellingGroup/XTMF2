@@ -176,15 +176,15 @@ namespace XTMF2.Bus
         public SharedEstimationWorkerSession AttachSharedEstimationWorker()
             => new(this);
 
-        internal Scheduler.Reservation ReserveSharedEstimationWorker(SharedEstimationRunRequest request)
+        internal Scheduler.ReservationLease ReserveSharedEstimationWorker(SharedEstimationRunRequest request)
         {
             var reservationId = request.RunId;
             if (!RunContext.CreateRunContext(Runtime, reservationId, request.ModelSystem,
                     request.WorkingDirectory, request.StartToExecute, RunMode.Estimation, out var context))
                 throw new InvalidOperationException("Unable to create the shared-estimation worker queue entry.");
             return _remoteRunRegistry is not null
-                ? _remoteRunRegistry.ReserveWorkerSlot(context)
-                : _runScheduler!.Reserve(context);
+                ? _remoteRunRegistry.ReserveWorkerSlot(context, request.WorkerSlotCount)
+                : _runScheduler!.ReserveGroup(request.RunId, context, request.WorkerSlotCount);
         }
 
         public void SetSharedActivityProviders(

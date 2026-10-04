@@ -94,8 +94,8 @@ public sealed class RemoteRunRegistry : IDisposable
         return true;
     }
 
-    internal Scheduler.Reservation ReserveWorkerSlot(RunContext context)
-        => _scheduler.Reserve(context);
+    internal Scheduler.ReservationLease ReserveWorkerSlot(RunContext context, int expectedSlotCount)
+        => _scheduler.ReserveGroup(context.ID, context, expectedSlotCount);
 
     public void Attach(RunServerBus observer)
     {

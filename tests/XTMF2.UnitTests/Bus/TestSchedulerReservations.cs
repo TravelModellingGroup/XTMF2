@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
@@ -35,6 +36,43 @@ public class TestSchedulerReservations
         reservation.Dispose();
         Assert.AreEqual("ordinary-run",
             await sink.RunFailed.Task.WaitAsync(TimeSpan.FromSeconds(3)));
+    }
+
+    [TestMethod]
+    public async Task WorkerLeases_ShareOneScheduledTaskAndHoldOrdinaryRuns()
+    {
+        using var scheduler = new Scheduler(runLocal: true);
+        Assert.IsTrue(RunContext.CreateRunContext(null!, "worker-run-1", [], Path.GetTempPath(),
+            "Start", RunMode.Normal, out var firstWorkerContext));
+        Assert.IsTrue(RunContext.CreateRunContext(null!, "worker-run-2", [], Path.GetTempPath(),
+            "Start", RunMode.Normal, out var secondWorkerContext));
+        Assert.IsTrue(RunContext.CreateRunContext(null!, "ordinary-run-1", [], Path.GetTempPath(),
+            "Start", RunMode.Normal, out var firstOrdinaryContext));
+        Assert.IsTrue(RunContext.CreateRunContext(null!, "ordinary-run-2", [], Path.GetTempPath(),
+            "Start", RunMode.Normal, out var ordinaryContext));
+        var firstSink = new RecordingRunOutputSink();
+        var secondSink = new RecordingRunOutputSink();
+
+        using var firstLease = scheduler.ReserveGroup("estimation-run", firstWorkerContext, 2);
+        await firstLease.Started.WaitAsync(TimeSpan.FromSeconds(3));
+        scheduler.Run(firstOrdinaryContext, firstSink);
+
+        using var secondLease = scheduler.ReserveGroup("estimation-run", secondWorkerContext, 2);
+        await secondLease.Started.WaitAsync(TimeSpan.FromSeconds(3));
+        scheduler.Run(ordinaryContext, secondSink);
+
+        var inventory = scheduler.GetInventory();
+        Assert.AreEqual(1, inventory.Count(item => item.IsRunning && item.IsReservation));
+        Assert.IsFalse(firstSink.RunFailed.Task.IsCompleted);
+        Assert.IsFalse(secondSink.RunFailed.Task.IsCompleted);
+
+        firstLease.Dispose();
+        Assert.IsFalse(firstSink.RunFailed.Task.IsCompleted);
+        Assert.IsFalse(secondSink.RunFailed.Task.IsCompleted);
+        secondLease.Dispose();
+        var failedRuns = await Task.WhenAll(firstSink.RunFailed.Task, secondSink.RunFailed.Task)
+            .WaitAsync(TimeSpan.FromSeconds(3));
+        CollectionAssert.AreEquivalent(new[] { "ordinary-run-1", "ordinary-run-2" }, failedRuns);
     }
 
     private sealed class RecordingRunOutputSink : IRunOutputSink
