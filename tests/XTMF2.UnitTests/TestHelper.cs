@@ -37,11 +37,11 @@ namespace XTMF2.UnitTests
         /// <summary>
         /// Isolated user directory for the XTMF2.UnitTests assembly.
         /// Using a temp path that differs from both the production directory and the GUI-tests
-        /// directory ensures no cross-process file-handle collisions when <c>dotnet test</c>
-        /// runs both test assemblies concurrently.
+        /// directory prevents cross-assembly file-handle collisions.
         /// </summary>
         private static readonly string s_testUserDirectory =
             Path.Combine(Path.GetTempPath(), "XTMF2", "UnitTests", "Users");
+        private static readonly string s_testProcessId = Environment.ProcessId.ToString("X");
 
         private static readonly XTMFRuntime s_sharedRuntime = XTMFRuntime.CreateRuntime(s_testUserDirectory);
 
@@ -73,7 +73,7 @@ namespace XTMF2.UnitTests
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            string userName = name + "TempUser";
+            string userName = $"{name}_{s_testProcessId}TempUser";
             string projectName = "TestProject";
             // clear out the user if possible
             userController.Delete(userName);
@@ -104,7 +104,7 @@ namespace XTMF2.UnitTests
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            string userName = name + "TempUser";
+            string userName = $"{name}_{s_testProcessId}TempUser";
             string projectName = "TestProject";
             // clear out the user if possible
             userController.Delete(userName);
@@ -140,7 +140,7 @@ namespace XTMF2.UnitTests
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            string userName = name + "TempUser";
+            string userName = $"{name}_{s_testProcessId}TempUser";
             string projectName = "TestProject";
             // clear out the user if possible
             userController.Delete(userName);
@@ -170,7 +170,7 @@ namespace XTMF2.UnitTests
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            string userName = name + "TempUser";
+            string userName = $"{name}_{s_testProcessId}TempUser";
             string unauthorizedUserName = userName + "Hacker";
             string projectName = "TestProject";
             // clear out the user if possible
@@ -203,7 +203,7 @@ namespace XTMF2.UnitTests
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            string userName = name + "TempUser";
+            string userName = $"{name}_{s_testProcessId}TempUser";
             string projectName = "TestProject";
             string modelSystemName = "ModelSystem1";
             // clear out the user if possible
@@ -238,8 +238,8 @@ namespace XTMF2.UnitTests
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            string userName = name + "TempUser";
-            string unauthorizedUserName = name + "Hacker";
+            string userName = $"{name}_{s_testProcessId}TempUser";
+            string unauthorizedUserName = userName + "Hacker";
             string projectName = "TestProject";
             string modelSystemName = "ModelSystem1";
             // clear out the user if possible
@@ -343,7 +343,7 @@ namespace XTMF2.UnitTests
             var userController = runtime.UserController;
             var projectController = runtime.ProjectController;
             CommandError error = null;
-            string userName = name + "TempUser";
+            string userName = $"{name}_{s_testProcessId}TempUser";
             string projectName = "TestProject";
             string modelSystemName = "ModelSystem1";
             // clear out the user if possible
