@@ -1002,6 +1002,36 @@ public class RunController : IDisposable
         return response.Activities;
     }
 
+    public async Task<RunServerDrainStatus> BeginRunServerDeploymentDrainAsync(
+        string endpointId, CancellationToken cancellationToken = default)
+    {
+        if (!_connections.TryGet(endpointId, out var hostBus) || hostBus is null)
+            throw new IOException($"RunServer '{endpointId}' is not connected.");
+        return await hostBus.BeginDeploymentDrainAsync(cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<RunServerDrainStatus> StageLocalRunServerDeploymentAsync(
+        string endpointId, IReadOnlyList<string> selectedModules,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_connections.TryGet(endpointId, out var hostBus) || hostBus is null)
+            throw new IOException($"RunServer '{endpointId}' is not connected.");
+
+        var archive = RunServerDeploymentBuilder.CreateLocalArchive(selectedModules);
+        var status = await hostBus.BeginDeploymentDrainAsync(cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        if (status.State != RunServerDrainState.Idle)
+            return status;
+        var staged = await hostBus.SendDeploymentArchiveAsync(status.RequestId, archive.Content,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (staged.State != RunServerDrainState.Staged)
+            return staged;
+        if (!hostBus.ActivateDeployment(staged.RequestId, out var error))
+            throw new IOException(error?.Message ?? "Unable to activate the staged RunServer deployment.");
+        return staged;
+    }
+
     public bool KillRunServerActivity(string endpointId, RunServerActivity activity, out string? error)
     {
         ArgumentNullException.ThrowIfNull(activity);

@@ -59,6 +59,14 @@ public sealed class RemoteRunRegistry : IDisposable
     private readonly string _storageDirectory;
     private bool _disposed;
 
+    public bool IsIdle => _scheduler.IsIdle;
+
+    public void BeginDrain()
+        => _scheduler.BeginDrain();
+
+    public void EndDrain()
+        => _scheduler.EndDrain();
+
     public RemoteRunRegistry(string? storageDirectory = null)
     {
         _storageDirectory = storageDirectory ?? Path.Combine(
@@ -83,6 +91,8 @@ public sealed class RemoteRunRegistry : IDisposable
         lock (_sync)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            if (!_scheduler.IsAcceptingWork)
+                return false;
             if (_jobs.ContainsKey(context.ID))
                 return false;
             job = new RemoteRunJob(this, observer, context, initial);

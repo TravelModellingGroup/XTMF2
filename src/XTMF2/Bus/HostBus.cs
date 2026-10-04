@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -40,6 +41,7 @@ public sealed class HostBus : IDisposable
     private volatile bool _Exited = false;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<RunServerActivityResponse>> _pendingActivityRequests = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TaskCompletionSource<RemoteRunDeletionResponse>> _pendingRemoteRunDeletionRequests = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<RunServerDrainStatus>> _pendingDrainRequests = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Create a host on a given stream.
@@ -102,7 +104,8 @@ public sealed class HostBus : IDisposable
         ClientOptimizationResults = 9,
         ClientIterationProgress = 10,
         ClientRunArtifacts = 11,
-        SharedEstimationMessage = 12
+        SharedEstimationMessage = 12,
+        DeploymentMessage = 13
     }
 
     /// <summary>
@@ -215,6 +218,8 @@ public sealed class HostBus : IDisposable
     public event EventHandler<SharedEstimationStatus>? SharedEstimationStatusAvailable;
 
     public event EventHandler<SharedEstimationWorkerReady>? SharedEstimationWorkerReadyAvailable;
+
+    public event EventHandler<RunServerDrainStatus>? RunServerDrainStatusAvailable;
 
     private static void IgnoreWarnings(Action toRun)
     {
@@ -398,6 +403,37 @@ public sealed class HostBus : IDisposable
                                 }
                             }
                             break;
+                        case In.DeploymentMessage:
+                            {
+                                var (_, messageType) = DeploymentProtocol.ReadHeader(reader);
+                                switch (messageType)
+                                {
+                                    case DeploymentMessageType.DrainStatus:
+                                    case DeploymentMessageType.DrainCompleted:
+                                    case DeploymentMessageType.DeploymentStaged:
+                                        var status = DeploymentProtocol.ReadStatusPayload(reader);
+                                        if ((messageType == DeploymentMessageType.DrainCompleted ||
+                                            messageType == DeploymentMessageType.DeploymentStaged) &&
+                                            _pendingDrainRequests.TryGetValue(status.RequestId, out var pendingDrain))
+                                        {
+                                            pendingDrain.TrySetResult(status);
+                                            _pendingDrainRequests.TryRemove(status.RequestId, out _);
+                                        }
+                                        IgnoreWarnings(() => RunServerDrainStatusAvailable?.Invoke(this, status));
+                                        break;
+                                    case DeploymentMessageType.DeploymentFailed:
+                                        var requestId = DeploymentProtocol.ReadRequestId(reader);
+                                        var failure = new RunServerDrainStatus(requestId, RunServerDrainState.Failed, 0, 0,
+                                            DeploymentProtocol.ReadFailureMessage(reader));
+                                        if (_pendingDrainRequests.TryGetValue(requestId, out var failedDrain))
+                                            failedDrain.TrySetResult(failure);
+                                        IgnoreWarnings(() => RunServerDrainStatusAvailable?.Invoke(this, failure));
+                                        break;
+                                    default:
+                                        throw new InvalidDataException($"Unexpected deployment message from RunServer: {messageType}.");
+                                }
+                            }
+                            break;
                         default:
                             throw new InvalidDataException(
                                 $"Unsupported command value {commandValue}: {Enum.GetName<In>(command) ?? "unknown"}.");
@@ -417,6 +453,9 @@ public sealed class HostBus : IDisposable
                 foreach (var request in _pendingActivityRequests.ToArray())
                     if (_pendingActivityRequests.TryRemove(request.Key, out var pending))
                         pending.TrySetException(new IOException("The RunServer connection was closed before the activity response arrived."));
+                foreach (var request in _pendingDrainRequests.ToArray())
+                    if (_pendingDrainRequests.TryRemove(request.Key, out var pending))
+                        pending.TrySetException(new IOException("The RunServer connection was closed during deployment drain."));
                 IgnoreWarnings(() => Disconnected?.Invoke(this, EventArgs.Empty));
             }
         })
@@ -449,6 +488,7 @@ public sealed class HostBus : IDisposable
         KillModelRun = 3,
         RequestClientShutdown = 4,
         SharedEstimationMessage = 5,
+        DeploymentMessage = 6,
     }
 
     /// <summary>
@@ -601,6 +641,92 @@ public sealed class HostBus : IDisposable
         }
     }
 
+    public async Task<RunServerDrainStatus> BeginDeploymentDrainAsync(
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var requestId = Guid.NewGuid().ToString("N");
+        var completion = new TaskCompletionSource<RunServerDrainStatus>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_pendingDrainRequests.TryAdd(requestId, completion))
+            throw new InvalidOperationException("Unable to register the deployment drain request.");
+
+        try
+        {
+            if (!WriteDeployment(writer => DeploymentProtocol.WriteBeginDrain(writer, requestId), out var error))
+                throw new IOException(error?.Message ?? "Unable to begin RunServer deployment drain.");
+        }
+        catch
+        {
+            _pendingDrainRequests.TryRemove(requestId, out _);
+            throw;
+        }
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linkedCancellation.CancelAfter(timeout ?? TimeSpan.FromMinutes(30));
+        using var registration = linkedCancellation.Token.Register(() =>
+        {
+            if (_pendingDrainRequests.TryRemove(requestId, out var pending))
+                pending.TrySetCanceled(linkedCancellation.Token);
+            WriteDeployment(writer => DeploymentProtocol.WriteCancelDrain(writer, requestId), out _);
+        });
+
+        try
+        {
+            return await completion.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            _pendingDrainRequests.TryRemove(requestId, out _);
+        }
+    }
+
+    public bool SendDeploymentArchive(string requestId, byte[] archive,
+        [NotNullWhen(false)] out CommandError? error)
+    {
+        error = null;
+        try
+        {
+            var hash = Convert.ToHexString(SHA256.HashData(archive));
+            return WriteDeployment(writer => DeploymentProtocol.WriteDeployArchive(writer, requestId, archive, hash), out error);
+        }
+        catch (ArgumentException exception)
+        {
+            error = new CommandError(exception.Message);
+            return false;
+        }
+    }
+
+    public bool ActivateDeployment(string requestId,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteDeployment(writer => DeploymentProtocol.WriteActivateDeployment(writer, requestId), out error);
+
+    public async Task<RunServerDrainStatus> SendDeploymentArchiveAsync(string requestId, byte[] archive,
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    {
+        var completion = new TaskCompletionSource<RunServerDrainStatus>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_pendingDrainRequests.TryAdd(requestId, completion))
+            throw new InvalidOperationException("A deployment request with this ID is already pending.");
+
+        try
+        {
+            if (!SendDeploymentArchive(requestId, archive, out var error))
+                throw new IOException(error?.Message ?? "Unable to send the deployment archive.");
+
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            linkedCancellation.CancelAfter(timeout ?? TimeSpan.FromMinutes(30));
+            using var registration = linkedCancellation.Token.Register(() =>
+            {
+                if (_pendingDrainRequests.TryRemove(requestId, out var pending))
+                    pending.TrySetCanceled(linkedCancellation.Token);
+            });
+            return await completion.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            _pendingDrainRequests.TryRemove(requestId, out _);
+        }
+    }
+
     public bool StartSharedEstimation(SharedEstimationRunRequest request,
         [NotNullWhen(false)] out CommandError? error)
         => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRunRequest(writer, request), out error);
@@ -750,6 +876,28 @@ public sealed class HostBus : IDisposable
                 writer.Write((int)Out.SharedEstimationMessage);
                 payload.Position = 0;
                 payload.CopyTo(_HostStream);
+                writer.Flush();
+                return true;
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException or ArgumentException)
+            {
+                error = new CommandError(e.Message);
+                return false;
+            }
+        }
+    }
+
+    private bool WriteDeployment(Action<BinaryWriter> writePayload,
+        [NotNullWhen(false)] out CommandError? error)
+    {
+        error = null;
+        lock (_outLock)
+        {
+            try
+            {
+                using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
+                writer.Write((int)Out.DeploymentMessage);
+                writePayload(writer);
                 writer.Flush();
                 return true;
             }

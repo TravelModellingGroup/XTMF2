@@ -22,6 +22,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -43,8 +44,16 @@ namespace XTMF2.Bus
         private readonly RemoteRunRegistry? _remoteRunRegistry;
         private Func<IReadOnlyList<RunServerActivity>>? _coordinatorActivityProvider;
         private Func<IReadOnlyList<RunServerActivity>>? _workerActivityProvider;
+        private Action? _beginDeploymentDrain;
+        private Action? _cancelDeploymentDrain;
+        private Func<bool>? _isDeploymentIdle;
+        private Func<string, bool>? _activateDeployment;
+        private readonly object _deploymentSync = new();
+        private readonly HashSet<string> _deploymentRequests = new(StringComparer.Ordinal);
         private readonly List<string> _extraDlls;
         private readonly bool _usePrivateWorkspace;
+        private readonly bool _allowDeployment;
+        private string? _stagedDeploymentRoot;
 
         /// <summary>
         /// The link to the XTMFRuntime
@@ -92,7 +101,8 @@ namespace XTMF2.Bus
         /// <param name="extraDlls">Additional DLLs that the client should load.</param>
         /// <param name="runLocal">If true, the model system will be run within the same process as the GUI.  This is only intended for debugging purposes.</param>
         public RunServerBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string>? extraDlls = null,
-            bool runLocal = false, bool usePrivateWorkspace = false, RemoteRunRegistry? remoteRunRegistry = null)
+            bool runLocal = false, bool usePrivateWorkspace = false, RemoteRunRegistry? remoteRunRegistry = null,
+            bool allowDeployment = false)
         {
             Runtime = runtime;
             _remoteRunRegistry = remoteRunRegistry;
@@ -101,6 +111,7 @@ namespace XTMF2.Bus
             _owner = streamOwner;
             _extraDlls = extraDlls ?? new List<string>();
             _usePrivateWorkspace = usePrivateWorkspace;
+            _allowDeployment = allowDeployment;
         }
 
         private void Dispose(bool managed)
@@ -136,7 +147,8 @@ namespace XTMF2.Bus
             CancelModelRun = 2,
             KillModelRun = 3,
             KillClient = 4,
-            SharedEstimationMessage = 5
+            SharedEstimationMessage = 5,
+            DeploymentMessage = 6
         }
 
         private enum Out
@@ -153,7 +165,8 @@ namespace XTMF2.Bus
             ClientOptimizationResults = 9,
             ClientIterationProgress = 10,
             ClientRunArtifacts = 11,
-            SharedEstimationMessage = 12
+            SharedEstimationMessage = 12,
+            DeploymentMessage = 13
         }
 
         public event Action<object, SharedEstimationRunRequest>? SharedEstimationRunRequested;
@@ -193,6 +206,15 @@ namespace XTMF2.Bus
         {
             _coordinatorActivityProvider = coordinatorProvider ?? throw new ArgumentNullException(nameof(coordinatorProvider));
             _workerActivityProvider = workerProvider ?? throw new ArgumentNullException(nameof(workerProvider));
+        }
+
+        public void SetDeploymentGate(Action beginDrain, Action cancelDrain, Func<bool> isIdle,
+            Func<string, bool>? activateDeployment = null)
+        {
+            _beginDeploymentDrain = beginDrain ?? throw new ArgumentNullException(nameof(beginDrain));
+            _cancelDeploymentDrain = cancelDrain ?? throw new ArgumentNullException(nameof(cancelDrain));
+            _isDeploymentIdle = isIdle ?? throw new ArgumentNullException(nameof(isIdle));
+            _activateDeployment = activateDeployment;
         }
 
         /// <summary>
@@ -675,6 +697,28 @@ namespace XTMF2.Bus
                                 }
                             }
                             break;
+                        case In.DeploymentMessage:
+                            {
+                                var (_, messageType) = DeploymentProtocol.ReadHeader(reader);
+                                switch (messageType)
+                                {
+                                    case DeploymentMessageType.BeginDrain:
+                                        BeginDeploymentDrain(DeploymentProtocol.ReadRequestId(reader));
+                                        break;
+                                    case DeploymentMessageType.CancelDrain:
+                                        CancelDeploymentDrain(DeploymentProtocol.ReadRequestId(reader));
+                                        break;
+                                    case DeploymentMessageType.DeployArchive:
+                                        StageDeploymentArchive(DeploymentProtocol.ReadDeployArchive(reader));
+                                        break;
+                                    case DeploymentMessageType.ActivateDeployment:
+                                        ActivateDeployment(DeploymentProtocol.ReadRequestId(reader));
+                                        break;
+                                    default:
+                                        throw new InvalidDataException($"Unexpected deployment message from host: {messageType}.");
+                                }
+                            }
+                            break;
                         // failsafe
                         default:
                             return;
@@ -723,6 +767,160 @@ namespace XTMF2.Bus
                     .Where(activity => !queuedWorkerRunIds.Contains(activity.RunId)));
             }
             return activities;
+        }
+
+        private void BeginDeploymentDrain(string requestId)
+        {
+            Console.WriteLine($"Deployment queued: {requestId}. Waiting for active RunServer work to finish.");
+            Console.Out.Flush();
+            lock (_deploymentSync)
+            {
+                if (!_deploymentRequests.Add(requestId))
+                    return;
+            }
+
+            try
+            {
+                var beginDrain = _beginDeploymentDrain ??
+                    (_runScheduler is null ? null : new Action(_runScheduler.BeginDrain));
+                beginDrain?.Invoke();
+                SendDeploymentStatus(new RunServerDrainStatus(requestId, RunServerDrainState.Draining,
+                    0, 0, "RunServer is draining existing work."));
+                _ = Task.Run(() => CompleteDeploymentDrainAsync(requestId));
+            }
+            catch (Exception exception)
+            {
+                SendDeploymentFailure(requestId, exception.Message);
+            }
+        }
+
+        private void CancelDeploymentDrain(string requestId)
+        {
+            _cancelDeploymentDrain?.Invoke();
+            lock (_deploymentSync)
+                _deploymentRequests.Remove(requestId);
+            SendDeploymentStatus(new RunServerDrainStatus(requestId, RunServerDrainState.Cancelled,
+                0, 0, "RunServer deployment drain cancelled."));
+        }
+
+        private async Task CompleteDeploymentDrainAsync(string requestId)
+        {
+            while (true)
+            {
+                bool stillActive;
+                lock (_deploymentSync)
+                    stillActive = _deploymentRequests.Contains(requestId);
+                if (!stillActive)
+                    return;
+
+                var activities = GetServerActivity();
+                var activeCount = activities.Count(activity => activity.State == RunServerActivityState.Running);
+                var queuedCount = activities.Count(activity => activity.State == RunServerActivityState.Queued);
+                if ((_isDeploymentIdle?.Invoke() ?? _runScheduler?.IsIdle ?? true) && activities.Count == 0)
+                {
+                    SendDeploymentStatus(new RunServerDrainStatus(requestId, RunServerDrainState.Idle,
+                        0, 0, "RunServer is idle and ready for deployment."));
+                    lock (_deploymentSync)
+                        _deploymentRequests.Remove(requestId);
+                    SendDeploymentCompleted(new RunServerDrainStatus(requestId, RunServerDrainState.Idle,
+                        0, 0, "RunServer is idle and ready for deployment."));
+                    return;
+                }
+
+                SendDeploymentStatus(new RunServerDrainStatus(requestId, RunServerDrainState.Draining,
+                    activeCount, queuedCount, "Waiting for existing RunServer work to finish."));
+                await Task.Delay(250).ConfigureAwait(false);
+            }
+        }
+
+        private void SendDeploymentStatus(RunServerDrainStatus status)
+            => Write(writer =>
+            {
+                writer.Write((int)Out.DeploymentMessage);
+                DeploymentProtocol.WriteDrainStatus(writer, status);
+            });
+
+        private void SendDeploymentFailure(string requestId, string message)
+            => Write(writer =>
+            {
+                writer.Write((int)Out.DeploymentMessage);
+                DeploymentProtocol.WriteDeploymentFailed(writer, requestId, message);
+            });
+
+        private void SendDeploymentCompleted(RunServerDrainStatus status)
+            => Write(writer =>
+            {
+                writer.Write((int)Out.DeploymentMessage);
+                DeploymentProtocol.WriteDrainCompleted(writer, status);
+            });
+
+        private void StageDeploymentArchive((string RequestId, byte[] Archive, string Sha256) deployment)
+        {
+            if (!_allowDeployment)
+            {
+                SendDeploymentFailure(deployment.RequestId,
+                    "RunServer deployment is available only over an authenticated connection.");
+                return;
+            }
+
+            var actualHash = Convert.ToHexString(SHA256.HashData(deployment.Archive));
+            if (!string.Equals(actualHash, deployment.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                SendDeploymentFailure(deployment.RequestId, "Deployment archive hash verification failed.");
+                return;
+            }
+
+            try
+            {
+                using var archiveStream = new MemoryStream(deployment.Archive, writable: false);
+                using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read, leaveOpen: false);
+                foreach (var entry in archive.Entries)
+                {
+                    if (Path.IsPathRooted(entry.FullName) || entry.FullName.Contains("..", StringComparison.Ordinal))
+                        throw new InvalidDataException("Deployment archive contains an unsafe path.");
+                }
+
+                var stagingRoot = Path.Combine(Path.GetTempPath(), "XTMF2", "Deployments", deployment.RequestId);
+                Directory.CreateDirectory(stagingRoot);
+                var archivePath = Path.Combine(stagingRoot, "deployment.zip");
+                File.WriteAllBytes(archivePath, deployment.Archive);
+                _stagedDeploymentRoot = stagingRoot;
+                Console.WriteLine($"Deployment staged: {deployment.RequestId}. Archive hash verified.");
+                Console.Out.Flush();
+                SendDeploymentStaged(new RunServerDrainStatus(deployment.RequestId, RunServerDrainState.Staged,
+                    0, 0, "Deployment archive staged and hash verified."));
+            }
+            catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
+            {
+                SendDeploymentFailure(deployment.RequestId, exception.Message);
+            }
+        }
+
+        private void SendDeploymentStaged(RunServerDrainStatus status)
+            => Write(writer =>
+            {
+                writer.Write((int)Out.DeploymentMessage);
+                DeploymentProtocol.WriteDeploymentStaged(writer, status);
+            });
+
+        private void ActivateDeployment(string requestId)
+        {
+            if (!_allowDeployment)
+            {
+                SendDeploymentFailure(requestId,
+                    "RunServer deployment is available only over an authenticated connection.");
+                return;
+            }
+
+            var stagingRoot = _stagedDeploymentRoot;
+            if (stagingRoot is null || !Directory.Exists(stagingRoot))
+            {
+                SendDeploymentFailure(requestId, "No verified deployment archive is staged.");
+                return;
+            }
+
+            if (!(_activateDeployment?.Invoke(stagingRoot) ?? false))
+                SendDeploymentFailure(requestId, "The RunServer could not activate the staged deployment.");
         }
 
         private static string CreateRunDirectory(string runId)

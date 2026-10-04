@@ -19,6 +19,28 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
     private readonly object _sync = new();
     private readonly Dictionary<string, RemoteJob> _jobs = new(StringComparer.Ordinal);
     private bool _disposed;
+    private bool _acceptingWork = true;
+
+    public bool IsIdle
+    {
+        get
+        {
+            lock (_sync)
+                return _jobs.Values.All(job => job.GetSnapshot().State != SharedEstimationJobState.Running);
+        }
+    }
+
+    public void BeginDrain()
+    {
+        lock (_sync)
+            _acceptingWork = false;
+    }
+
+    public void EndDrain()
+    {
+        lock (_sync)
+            _acceptingWork = true;
+    }
 
     public void Start(RunServerBus observer, SharedEstimationCoordinatorRequest request)
     {
@@ -28,7 +50,7 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
         RemoteJob job;
         lock (_sync)
         {
-            if (_disposed || _jobs.ContainsKey(request.Run.RunId))
+            if (_disposed || !_acceptingWork || _jobs.ContainsKey(request.Run.RunId))
                 return;
 
             job = new RemoteJob(this, observer, request);

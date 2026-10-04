@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO.Compression;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,9 +35,13 @@ namespace XTMF2.Client
 {
     public class Program
     {
+        private static string[] _originalArguments = Array.Empty<string>();
+
         [MTAThread]
         static void Main(string[] args)
         {
+            _originalArguments = args;
+            LogDeploymentStartupSummary();
             if (args.Length == 0)
             {
                 Console.WriteLine("Usage: XTMF.Run [-setup-security DIRECTORY] [-loadDLL dllPath] [-tcp ADDRESS PORT -security DIRECTORY] [-namedPipe PIPE_NAME]");
@@ -235,6 +240,7 @@ namespace XTMF2.Client
                 try
                 {
                     RunClient(stream, extraDlls, usePrivateWorkspace: true,
+                        allowDeployment: false,
                         remoteEstimationRegistry: remoteEstimationRegistry,
                         remoteRunRegistry: remoteRunRegistry);
                 }
@@ -265,6 +271,7 @@ namespace XTMF2.Client
                     try
                     {
                         RunClient(stream, extraDlls, usePrivateWorkspace: true,
+                            allowDeployment: true,
                             remoteEstimationRegistry: remoteEstimationRegistry,
                             remoteRunRegistry: remoteRunRegistry);
                     }
@@ -281,7 +288,7 @@ namespace XTMF2.Client
 
         private static void RunClient(Stream serverStream, List<string> extraDlls, SystemConfiguration? config = null,
             bool usePrivateWorkspace = false, RemoteSharedEstimationRegistry? remoteEstimationRegistry = null,
-            RemoteRunRegistry? remoteRunRegistry = null)
+            RemoteRunRegistry? remoteRunRegistry = null, bool allowDeployment = false)
         {
             var runtime = XTMFRuntime.CreateRuntime(config);
             var loadedConfig = runtime.SystemConfiguration;
@@ -294,9 +301,23 @@ namespace XTMF2.Client
                 : null;
             var registry = remoteEstimationRegistry ?? ownedRemoteEstimationRegistry!;
             using var clientBus = new RunServerBus(serverStream, true, runtime, extraDlls,
-                System.Diagnostics.Debugger.IsAttached, usePrivateWorkspace, remoteRunRegistry);
+                System.Diagnostics.Debugger.IsAttached, usePrivateWorkspace, remoteRunRegistry, allowDeployment);
             using var sharedEstimationWorker = clientBus.AttachSharedEstimationWorker();
             using var remoteCoordinator = new RemoteSharedEstimationCoordinatorSession(clientBus, registry);
+            clientBus.SetDeploymentGate(
+                () =>
+                {
+                    remoteRunRegistry?.BeginDrain();
+                    registry.BeginDrain();
+                },
+                () =>
+                {
+                    remoteRunRegistry?.EndDrain();
+                    registry.EndDrain();
+                },
+                () =>
+                    (remoteRunRegistry?.IsIdle ?? true) && registry.IsIdle,
+                RestartWithOriginalArguments);
             clientBus.SetSharedActivityProviders(registry.GetActiveActivities,
                 sharedEstimationWorker.GetActiveActivities);
             try
@@ -306,6 +327,102 @@ namespace XTMF2.Client
             finally
             {
                 remoteRunRegistry?.Detach(clientBus);
+            }
+        }
+
+        private static bool RestartWithOriginalArguments(string stagingRoot)
+        {
+            if (!Directory.Exists(stagingRoot) || !File.Exists(Path.Combine(stagingRoot, "deployment.zip")))
+                return false;
+
+            var processPath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(processPath))
+                return false;
+
+            try
+            {
+                var processDirectory = Path.GetDirectoryName(processPath);
+                if (string.IsNullOrWhiteSpace(processDirectory))
+                    return false;
+
+                var deploymentDirectory = Path.Combine(processDirectory, ".deployments",
+                    DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" + Guid.NewGuid().ToString("N"));
+                CopyDirectory(processDirectory, deploymentDirectory);
+                var deployedModulesDirectory = Path.Combine(deploymentDirectory, "Modules");
+                if (Directory.Exists(deployedModulesDirectory))
+                    Directory.Delete(deployedModulesDirectory, recursive: true);
+                using (var archive = ZipFile.OpenRead(Path.Combine(stagingRoot, "deployment.zip")))
+                {
+                    foreach (var entry in archive.Entries)
+                    {
+                        var destination = Path.GetFullPath(Path.Combine(deploymentDirectory,
+                            entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
+                        var root = Path.GetFullPath(deploymentDirectory + Path.DirectorySeparatorChar);
+                        if (!destination.StartsWith(root, StringComparison.Ordinal))
+                            return false;
+                        if (string.IsNullOrEmpty(entry.Name))
+                        {
+                            Directory.CreateDirectory(destination);
+                            continue;
+                        }
+                        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                        entry.ExtractToFile(destination, overwrite: true);
+                    }
+                }
+
+                var deployedProcessPath = Path.Combine(deploymentDirectory, Path.GetFileName(processPath));
+                var startInfo = new ProcessStartInfo(deployedProcessPath)
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = deploymentDirectory
+                };
+                startInfo.Environment["XTMF2_DEPLOYMENT_MANIFEST"] =
+                    Path.Combine(deploymentDirectory, "deployment-manifest.txt");
+                foreach (var argument in _originalArguments)
+                    startInfo.ArgumentList.Add(argument);
+                Process.Start(startInfo);
+                Environment.Exit(0);
+                return true;
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                Console.Error.WriteLine($"Unable to restart RunServer: {exception.Message}");
+                return false;
+            }
+        }
+
+        private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
+        {
+            Directory.CreateDirectory(destinationDirectory);
+            foreach (var directory in Directory.EnumerateDirectories(sourceDirectory))
+            {
+                if (string.Equals(Path.GetFileName(directory), ".deployments", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                CopyDirectory(directory, Path.Combine(destinationDirectory, Path.GetFileName(directory)));
+            }
+            foreach (var file in Directory.EnumerateFiles(sourceDirectory))
+                File.Copy(file, Path.Combine(destinationDirectory, Path.GetFileName(file)), overwrite: true);
+        }
+
+        private static void LogDeploymentStartupSummary()
+        {
+            var manifestPath = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_MANIFEST");
+            if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
+                return;
+
+            try
+            {
+                var modules = File.ReadAllLines(manifestPath);
+                Console.WriteLine($"RunServer restarted with deployment containing {modules.Length} module file(s):");
+                foreach (var module in modules)
+                    Console.WriteLine($"  {module}");
+                Console.Out.Flush();
+                Environment.SetEnvironmentVariable("XTMF2_DEPLOYMENT_MANIFEST", null);
+            }
+            catch (IOException exception)
+            {
+                Console.WriteLine($"RunServer restarted, but deployment overview could not be read: {exception.Message}");
+                Console.Out.Flush();
             }
         }
     }

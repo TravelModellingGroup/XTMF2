@@ -224,6 +224,7 @@ namespace XTMF2.Bus
         private readonly SemaphoreSlim _RunsToGo = new SemaphoreSlim(0);
         private readonly Dictionary<string, ReservationGroup> _reservationGroups = new(StringComparer.Ordinal);
         private Reservation? _currentReservation;
+        private bool _acceptingWork = true;
 
         private readonly record struct ScheduledWork(RunContext Context, IRunOutputSink? Sink, Reservation? Reservation);
 
@@ -232,6 +233,36 @@ namespace XTMF2.Bus
         /// This property is null if there is nothing running.
         /// </summary>
         public RunContext? Current { get; private set; }
+
+        internal bool IsAcceptingWork
+        {
+            get
+            {
+                lock (_inventorySync)
+                    return _acceptingWork;
+            }
+        }
+
+        internal void BeginDrain()
+        {
+            lock (_inventorySync)
+                _acceptingWork = false;
+        }
+
+        internal void EndDrain()
+        {
+            lock (_inventorySync)
+                _acceptingWork = true;
+        }
+
+        internal bool IsIdle
+        {
+            get
+            {
+                lock (_inventorySync)
+                    return Current is null && !_ToRun.Any(work => work.Reservation?.IsReleased != true);
+            }
+        }
 
         internal IReadOnlyList<(RunContext Context, bool IsRunning, int QueuePosition, bool IsReservation)> GetInventory()
         {
@@ -409,6 +440,8 @@ namespace XTMF2.Bus
             ArgumentNullException.ThrowIfNull(sink);
             lock (_inventorySync)
             {
+                if (!_acceptingWork)
+                    throw new InvalidOperationException("The RunServer is draining for deployment and is not accepting new work.");
                 _ToRun.Enqueue(new ScheduledWork(context, sink, null));
                 _RunsToGo.Release();
             }
@@ -420,6 +453,8 @@ namespace XTMF2.Bus
             var reservation = new Reservation();
             lock (_inventorySync)
             {
+                if (!_acceptingWork)
+                    throw new InvalidOperationException("The RunServer is draining for deployment and is not accepting new work.");
                 _ToRun.Enqueue(new ScheduledWork(context, null, reservation));
                 _RunsToGo.Release();
             }
@@ -434,6 +469,8 @@ namespace XTMF2.Bus
 
             lock (_inventorySync)
             {
+                if (!_acceptingWork)
+                    throw new InvalidOperationException("The RunServer is draining for deployment and is not accepting new work.");
                 if (_reservationGroups.TryGetValue(groupId, out var existing))
                     return existing.Join(expectedSlotCount);
 
