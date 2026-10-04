@@ -349,7 +349,7 @@ namespace XTMF2.Client
             string? deploymentDirectory = null;
             try
             {
-                var processDirectory = Path.GetDirectoryName(processPath);
+                var processDirectory = GetInstallationDirectory(processPath);
                 if (string.IsNullOrWhiteSpace(processDirectory))
                     return false;
 
@@ -362,11 +362,7 @@ namespace XTMF2.Client
                 EnsureDeploymentPayload(deploymentDirectory);
 
                 var readyFile = Path.Combine(deploymentDirectory, ".deployment-ready");
-                var watchdogInfo = new ProcessStartInfo(processPath)
-                {
-                    UseShellExecute = false,
-                    WorkingDirectory = processDirectory
-                };
+                var watchdogInfo = CreateRunServerStartInfo(processPath, processDirectory, _originalArguments);
                 watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG"] = "1";
                 watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_OLD_PID"] =
                     Environment.ProcessId.ToString();
@@ -426,7 +422,7 @@ namespace XTMF2.Client
 
             var oldProcessIdText = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_OLD_PID");
             _ = int.TryParse(oldProcessIdText, out var oldProcessId);
-            var installationDirectory = Path.GetDirectoryName(processPath) ?? Environment.CurrentDirectory;
+            var installationDirectory = GetInstallationDirectory(processPath);
             var deadline = DateTime.UtcNow.AddSeconds(30);
             while (DateTime.UtcNow < deadline)
             {
@@ -466,11 +462,7 @@ namespace XTMF2.Client
                 ReplaceDeploymentDirectory(Path.Combine(installationDirectory, "Modules"),
                     Path.Combine(deploymentDirectory, "Modules"), Path.Combine(backupDirectory, "Modules"));
 
-                var startInfo = new ProcessStartInfo(processPath)
-                {
-                    UseShellExecute = false,
-                    WorkingDirectory = installationDirectory
-                };
+                var startInfo = CreateRunServerStartInfo(processPath, installationDirectory, arguments);
                 ClearDeploymentWatchdogEnvironment(startInfo);
                 startInfo.Environment["XTMF2_DEPLOYMENT_MANIFEST"] =
                     Path.Combine(deploymentDirectory, "deployment-manifest.txt");
@@ -506,14 +498,8 @@ namespace XTMF2.Client
                         Path.Combine(backupDirectory ?? string.Empty, "XTMF2.dll"));
                     RestoreDeploymentDirectory(Path.Combine(installationDirectory, "Modules"),
                         Path.Combine(backupDirectory ?? string.Empty, "Modules"));
-                    var rollbackInfo = new ProcessStartInfo(processPath)
-                    {
-                        UseShellExecute = false,
-                        WorkingDirectory = installationDirectory
-                    };
+                    var rollbackInfo = CreateRunServerStartInfo(processPath, installationDirectory, arguments);
                     ClearDeploymentWatchdogEnvironment(rollbackInfo);
-                    foreach (var argument in arguments)
-                        rollbackInfo.ArgumentList.Add(argument);
                     Process.Start(rollbackInfo);
                 }
                 catch (Exception rollbackException) when (rollbackException is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
@@ -530,6 +516,38 @@ namespace XTMF2.Client
             startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_READY_FILE");
             startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_PROCESS_PATH");
             startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_DEPLOYMENT_DIRECTORY");
+        }
+
+        private static ProcessStartInfo CreateRunServerStartInfo(string processPath, string workingDirectory,
+            IEnumerable<string> arguments)
+        {
+            var startInfo = new ProcessStartInfo(processPath)
+            {
+                UseShellExecute = false,
+                WorkingDirectory = workingDirectory,
+                RedirectStandardInput = false,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
+                CreateNoWindow = false
+            };
+            if (IsDotnetHost(processPath))
+                startInfo.ArgumentList.Add(typeof(Program).Assembly.Location);
+            foreach (var argument in arguments)
+                startInfo.ArgumentList.Add(argument);
+            return startInfo;
+        }
+
+        private static bool IsDotnetHost(string processPath)
+        {
+            var fileName = Path.GetFileNameWithoutExtension(processPath);
+            return string.Equals(fileName, "dotnet", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetInstallationDirectory(string processPath)
+        {
+            if (IsDotnetHost(processPath))
+                return Path.GetDirectoryName(typeof(Program).Assembly.Location) ?? Environment.CurrentDirectory;
+            return Path.GetDirectoryName(processPath) ?? Environment.CurrentDirectory;
         }
 
         private static void ReplaceDeploymentFile(string destination, string staged, string backup)
