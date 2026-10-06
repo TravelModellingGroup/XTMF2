@@ -4,9 +4,11 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using XTMF2.Bus;
 using XTMF2.GUI.Properties;
@@ -27,6 +29,7 @@ public partial class RunServersWindow : Window
         public required TextBox CertificateFingerprint { get; init; }
         public required TextBlock Status { get; init; }
         public required Button Reconnect { get; init; }
+        public required Button PrepareDeployment { get; init; }
         public required Button Remove { get; init; }
     }
 
@@ -89,6 +92,7 @@ public partial class RunServersWindow : Window
             MaxHeight = 48
         };
         var reconnect = new Button { Content = "Reconnect", Width = 130, IsEnabled = !endpoint.IsLocal && endpoint.Enabled };
+        var prepareDeployment = new Button { Content = "Upload Modules", IsEnabled = !endpoint.IsLocal && endpoint.Enabled };
         var remove = new Button { Content = "Remove", Width = 100, IsEnabled = !endpoint.IsLocal };
         var selectorName = new TextBlock
         {
@@ -122,11 +126,13 @@ public partial class RunServersWindow : Window
             CertificateFingerprint = certificateFingerprint,
             Status = status,
             Reconnect = reconnect,
+            PrepareDeployment = prepareDeployment,
             Remove = remove
         };
 
         name.TextChanged += (_, _) => selectorName.Text = string.IsNullOrWhiteSpace(name.Text) ? "RunServer" : name.Text;
         reconnect.Click += (_, _) => ReconnectRunServer(editor);
+        prepareDeployment.Click += async (_, _) => await PrepareDeploymentAsync(editor);
         remove.Click += (_, _) =>
         {
             var index = _editors.IndexOf(editor);
@@ -242,6 +248,7 @@ public partial class RunServersWindow : Window
             DetachFromParent(currentEditor.CertificateFingerprint);
             DetachFromParent(currentEditor.Status);
             DetachFromParent(currentEditor.Reconnect);
+            DetachFromParent(currentEditor.PrepareDeployment);
             DetachFromParent(currentEditor.Remove);
         }
         EndpointDetailsPanel.Children.Clear();
@@ -263,8 +270,67 @@ public partial class RunServersWindow : Window
         EndpointDetailsPanel.Children.Add(CreateField("Status", editor.Status));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 8, 0, 0) };
         actions.Children.Add(editor.Reconnect);
+        actions.Children.Add(editor.PrepareDeployment);
         actions.Children.Add(editor.Remove);
         EndpointDetailsPanel.Children.Add(actions);
+    }
+
+    private async System.Threading.Tasks.Task PrepareDeploymentAsync(RunServerEditor editor)
+    {
+        if (_runController is null)
+        {
+            SetConnectionError(editor, "RunServer connections are not available in this window.");
+            return;
+        }
+
+        IStorageFolder? suggestedStartLocation = null;
+        var modulesDirectory = Path.Combine(AppContext.BaseDirectory, "Modules");
+        if (Directory.Exists(modulesDirectory))
+            suggestedStartLocation = await StorageProvider.TryGetFolderFromPathAsync(modulesDirectory);
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select module DLLs to upload",
+            AllowMultiple = true,
+            SuggestedStartLocation = suggestedStartLocation,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Module DLLs") { Patterns = new[] { "*.dll" } }
+            }
+        });
+        var selectedModules = files
+            .Select(file => file.TryGetLocalPath())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Cast<string>()
+            .ToArray();
+        if (selectedModules.Length == 0)
+            return;
+
+        editor.PrepareDeployment.IsEnabled = false;
+        editor.Status.Text = $"Uploading {selectedModules.Length} module(s)...";
+        editor.Status.Foreground = Brushes.Cyan;
+        try
+        {
+            var status = await _runController!.StageLocalRunServerDeploymentAsync(editor.Endpoint.Id, selectedModules);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                editor.Status.Text = status.State == RunServerDrainState.Staged
+                    ? $"Upload complete: {selectedModules.Length} module(s) sent; RunServer restarting."
+                    : status.Message ?? status.State.ToString();
+                editor.Status.Foreground = status.State == RunServerDrainState.Staged
+                    ? Brushes.LimeGreen
+                    : status.State == RunServerDrainState.Failed ? Brushes.Red : Brushes.Cyan;
+                editor.PrepareDeployment.IsEnabled = true;
+            });
+        }
+        catch (Exception exception)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SetConnectionError(editor, exception.Message);
+                editor.PrepareDeployment.IsEnabled = true;
+            });
+        }
     }
 
     private static void DetachFromParent(Control control)

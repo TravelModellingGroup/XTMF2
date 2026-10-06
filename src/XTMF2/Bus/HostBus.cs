@@ -20,9 +20,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using XTMF2.Bus.Optimization;
 using XTMF2.Editing;
 
 namespace XTMF2.Bus;
@@ -36,6 +39,9 @@ public sealed class HostBus : IDisposable
     private readonly bool _Owner;
     private volatile bool _Exit = false;
     private volatile bool _Exited = false;
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<RunServerActivityResponse>> _pendingActivityRequests = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<RemoteRunDeletionResponse>> _pendingRemoteRunDeletionRequests = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<RunServerDrainStatus>> _pendingDrainRequests = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Create a host on a given stream.
@@ -61,6 +67,10 @@ public sealed class HostBus : IDisposable
             GC.SuppressFinalize(this);
         }
         _Exit = true;
+        if (_Owner)
+        {
+            _HostStream.Dispose();
+        }
         while (!_Exited)
         {
             Interlocked.MemoryBarrier();
@@ -69,10 +79,6 @@ public sealed class HostBus : IDisposable
                 Task.WaitAll(Task.Delay(50));
             }
             Interlocked.MemoryBarrier();
-        }
-        if (_Owner)
-        {
-            _HostStream.Dispose();
         }
     }
 
@@ -97,7 +103,9 @@ public sealed class HostBus : IDisposable
         ClientReportedStatus = 8,
         ClientOptimizationResults = 9,
         ClientIterationProgress = 10,
-        ClientRunArtifacts = 11
+        ClientRunArtifacts = 11,
+        SharedEstimationMessage = 12,
+        DeploymentMessage = 13
     }
 
     /// <summary>
@@ -182,15 +190,36 @@ public sealed class HostBus : IDisposable
     /// <param name="runID">The ID of the run sending the update.</param>
     /// <param name="iteration">The current iteration number (1-based).</param>
     /// <param name="fitness">The best fitness value seen so far.</param>
+    /// <param name="fitnessTestsThisIteration">Number of fitness tests completed since the previous progress update.</param>
     /// <param name="values">Ordered list of (node serialisation index, current value) pairs.</param>
     public delegate void IterationProgressUpdate(
-        object sender, string runID, int iteration, double fitness,
+        object sender, string runID, int iteration, double fitness, int fitnessTestsThisIteration,
         IReadOnlyList<(int nodeIndex, double value)> values);
 
     /// <summary>
     /// Fired after each optimisation iteration with the parameter values that were tested.
     /// </summary>
     public event IterationProgressUpdate? ClientIterationProgressAvailable;
+
+    public event EventHandler<SharedEstimationEvaluationResult>? SharedEstimationResultAvailable;
+
+    public event EventHandler<SharedEstimationProgress>? SharedEstimationProgressAvailable;
+
+    public event EventHandler<SharedEstimationCompletion>? SharedEstimationCompleted;
+
+    public event EventHandler<IReadOnlyList<SharedEstimationJobSnapshot>>? SharedEstimationJobSnapshotsAvailable;
+
+    public event EventHandler<IReadOnlyList<RemoteRunSnapshot>>? RemoteRunSnapshotsAvailable;
+
+    public event EventHandler<RemoteRunArtifactsResponse>? RemoteRunArtifactsAvailable;
+
+    public event EventHandler<SharedEstimationWorkerControlAcknowledgement>? SharedEstimationWorkerControlAcknowledged;
+
+    public event EventHandler<SharedEstimationStatus>? SharedEstimationStatusAvailable;
+
+    public event EventHandler<SharedEstimationWorkerReady>? SharedEstimationWorkerReadyAvailable;
+
+    public event EventHandler<RunServerDrainStatus>? RunServerDrainStatusAvailable;
 
     private static void IgnoreWarnings(Action toRun)
     {
@@ -221,7 +250,8 @@ public sealed class HostBus : IDisposable
                 using var reader = new BinaryReader(_HostStream, Encoding.UTF8, true);
                 while (!_Exit)
                 {
-                    var command = (In)reader.ReadInt32();
+                    var commandValue = reader.ReadInt32();
+                    var command = (In)commandValue;
                     switch (command)
                     {
                         case In.Heartbeat:
@@ -289,11 +319,13 @@ public sealed class HostBus : IDisposable
                                 var runId = reader.ReadString();
                                 int iteration = reader.ReadInt32();
                                 double fitness = reader.ReadDouble();
+                                int fitnessTestsThisIteration = reader.ReadInt32();
                                 int count = reader.ReadInt32();
                                 var values = new (int nodeIndex, double value)[count];
                                 for (int i = 0; i < count; i++)
                                     values[i] = (reader.ReadInt32(), reader.ReadDouble());
-                                IgnoreWarnings(() => ClientIterationProgressAvailable?.Invoke(this, runId, iteration, fitness, values));
+                                IgnoreWarnings(() => ClientIterationProgressAvailable?.Invoke(
+                                    this, runId, iteration, fitness, fitnessTestsThisIteration, values));
                             }
                             break;
                         case In.ClientRunArtifacts:
@@ -314,8 +346,97 @@ public sealed class HostBus : IDisposable
                                 }
                             }
                             break;
+                        case In.SharedEstimationMessage:
+                            {
+                                var (_, messageType) = SharedEstimationProtocol.ReadHeader(reader);
+                                switch (messageType)
+                                {
+                                    case SharedEstimationMessageType.EvaluationResult:
+                                        IgnoreWarnings(() => SharedEstimationResultAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadResultPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.Progress:
+                                        IgnoreWarnings(() => SharedEstimationProgressAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadProgressPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.Complete:
+                                        IgnoreWarnings(() => SharedEstimationCompleted?.Invoke(
+                                            this, SharedEstimationProtocol.ReadCompletionPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.JobSnapshots:
+                                        IgnoreWarnings(() => SharedEstimationJobSnapshotsAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadJobSnapshotsPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.WorkerControlAcknowledgement:
+                                        IgnoreWarnings(() => SharedEstimationWorkerControlAcknowledged?.Invoke(
+                                            this, SharedEstimationProtocol.ReadWorkerControlAcknowledgementPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.Status:
+                                        IgnoreWarnings(() => SharedEstimationStatusAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadStatusPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.WorkerReady:
+                                        var readiness = SharedEstimationProtocol.ReadWorkerReadyPayload(reader);
+                                        IgnoreWarnings(() => SharedEstimationWorkerReadyAvailable?.Invoke(this, readiness));
+                                        break;
+                                    case SharedEstimationMessageType.RemoteRunSnapshots:
+                                        IgnoreWarnings(() => RemoteRunSnapshotsAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadRemoteRunSnapshotsPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.RemoteRunArtifacts:
+                                        IgnoreWarnings(() => RemoteRunArtifactsAvailable?.Invoke(
+                                            this, SharedEstimationProtocol.ReadRemoteRunArtifactsPayload(reader)));
+                                        break;
+                                    case SharedEstimationMessageType.ServerActivitySnapshots:
+                                        var activityResponse = SharedEstimationProtocol.ReadServerActivitySnapshotsPayload(reader);
+                                        if (_pendingActivityRequests.TryRemove(activityResponse.RequestId, out var pendingActivity))
+                                            pendingActivity.TrySetResult(activityResponse);
+                                        break;
+                                    case SharedEstimationMessageType.RemoteRunDeleted:
+                                        var deletionResponse = SharedEstimationProtocol.ReadRemoteRunDeletedPayload(reader);
+                                        if (_pendingRemoteRunDeletionRequests.TryRemove(deletionResponse.RequestId, out var pendingDeletion))
+                                            pendingDeletion.TrySetResult(deletionResponse);
+                                        break;
+                                    default:
+                                        throw new InvalidDataException(
+                                            $"Unexpected shared estimation message from RunServer: {messageType}.");
+                                }
+                            }
+                            break;
+                        case In.DeploymentMessage:
+                            {
+                                var (_, messageType) = DeploymentProtocol.ReadHeader(reader);
+                                switch (messageType)
+                                {
+                                    case DeploymentMessageType.DrainStatus:
+                                    case DeploymentMessageType.DrainCompleted:
+                                    case DeploymentMessageType.DeploymentStaged:
+                                        var status = DeploymentProtocol.ReadStatusPayload(reader);
+                                        if ((messageType == DeploymentMessageType.DrainCompleted ||
+                                            messageType == DeploymentMessageType.DeploymentStaged) &&
+                                            _pendingDrainRequests.TryGetValue(status.RequestId, out var pendingDrain))
+                                        {
+                                            pendingDrain.TrySetResult(status);
+                                            _pendingDrainRequests.TryRemove(status.RequestId, out _);
+                                        }
+                                        IgnoreWarnings(() => RunServerDrainStatusAvailable?.Invoke(this, status));
+                                        break;
+                                    case DeploymentMessageType.DeploymentFailed:
+                                        var requestId = DeploymentProtocol.ReadRequestId(reader);
+                                        var failure = new RunServerDrainStatus(requestId, RunServerDrainState.Failed, 0, 0,
+                                            DeploymentProtocol.ReadFailureMessage(reader));
+                                        if (_pendingDrainRequests.TryGetValue(requestId, out var failedDrain))
+                                            failedDrain.TrySetResult(failure);
+                                        IgnoreWarnings(() => RunServerDrainStatusAvailable?.Invoke(this, failure));
+                                        break;
+                                    default:
+                                        throw new InvalidDataException($"Unexpected deployment message from RunServer: {messageType}.");
+                                }
+                            }
+                            break;
                         default:
-                            throw new Exception($"Unsupported command: {Enum.GetName<In>(command)}");
+                            throw new InvalidDataException(
+                                $"Unsupported command value {commandValue}: {Enum.GetName<In>(command) ?? "unknown"}.");
                     }
                     System.Threading.Interlocked.MemoryBarrier();
                 }
@@ -329,6 +450,12 @@ public sealed class HostBus : IDisposable
             finally
             {
                 _Exited = true;
+                foreach (var request in _pendingActivityRequests.ToArray())
+                    if (_pendingActivityRequests.TryRemove(request.Key, out var pending))
+                        pending.TrySetException(new IOException("The RunServer connection was closed before the activity response arrived."));
+                foreach (var request in _pendingDrainRequests.ToArray())
+                    if (_pendingDrainRequests.TryRemove(request.Key, out var pending))
+                        pending.TrySetException(new IOException("The RunServer connection was closed during deployment drain."));
                 IgnoreWarnings(() => Disconnected?.Invoke(this, EventArgs.Empty));
             }
         })
@@ -360,6 +487,8 @@ public sealed class HostBus : IDisposable
         CancelModelRun = 2,
         KillModelRun = 3,
         RequestClientShutdown = 4,
+        SharedEstimationMessage = 5,
+        DeploymentMessage = 6,
     }
 
     /// <summary>
@@ -402,7 +531,8 @@ public sealed class HostBus : IDisposable
     public bool RunModelSystem(ModelSystemSession modelSystem, string cwd, string startToExecute,
         RunMode runMode,
         Action<string>? onIdCreated,
-        [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error)
+        [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error,
+        string? runName = null, Guid? ownerUserId = null)
     {
         id = null;
         lock (_outLock)
@@ -424,6 +554,10 @@ public sealed class HostBus : IDisposable
                 writer.Write(cwd);
                 writer.Write(startToExecute);
                 writer.Write((int)runMode);
+                writer.Write(runName ?? Path.GetFileName(cwd.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
+                writer.Write(modelSystem.Project.Id.ToString("D"));
+                writer.Write(modelSystem.ModelSystemHeader.Id.ToString("D"));
+                writer.Write(ownerUserId?.ToString("D") ?? string.Empty);
                 writer.Write(memStream.Length);
                 memStream.WriteTo(_HostStream);
                 return true;
@@ -499,7 +633,275 @@ public sealed class HostBus : IDisposable
                 writer.Write((int)Out.RequestClientShutdown);
                 return true;
             }
-            catch (IOException e)
+            catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException or ArgumentException)
+            {
+                error = new CommandError(e.Message);
+                return false;
+            }
+        }
+    }
+
+    public async Task<RunServerDrainStatus> BeginDeploymentDrainAsync(
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var requestId = Guid.NewGuid().ToString("N");
+        var completion = new TaskCompletionSource<RunServerDrainStatus>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_pendingDrainRequests.TryAdd(requestId, completion))
+            throw new InvalidOperationException("Unable to register the deployment drain request.");
+
+        try
+        {
+            if (!WriteDeployment(writer => DeploymentProtocol.WriteBeginDrain(writer, requestId), out var error))
+                throw new IOException(error?.Message ?? "Unable to begin RunServer deployment drain.");
+        }
+        catch
+        {
+            _pendingDrainRequests.TryRemove(requestId, out _);
+            throw;
+        }
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linkedCancellation.CancelAfter(timeout ?? TimeSpan.FromMinutes(30));
+        using var registration = linkedCancellation.Token.Register(() =>
+        {
+            if (_pendingDrainRequests.TryRemove(requestId, out var pending))
+                pending.TrySetCanceled(linkedCancellation.Token);
+            WriteDeployment(writer => DeploymentProtocol.WriteCancelDrain(writer, requestId), out _);
+        });
+
+        try
+        {
+            return await completion.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            _pendingDrainRequests.TryRemove(requestId, out _);
+        }
+    }
+
+    public bool SendDeploymentArchive(string requestId, byte[] archive,
+        [NotNullWhen(false)] out CommandError? error)
+    {
+        error = null;
+        try
+        {
+            var hash = Convert.ToHexString(SHA256.HashData(archive));
+            return WriteDeployment(writer => DeploymentProtocol.WriteDeployArchive(writer, requestId, archive, hash), out error);
+        }
+        catch (ArgumentException exception)
+        {
+            error = new CommandError(exception.Message);
+            return false;
+        }
+    }
+
+    public bool ActivateDeployment(string requestId,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteDeployment(writer => DeploymentProtocol.WriteActivateDeployment(writer, requestId), out error);
+
+    public async Task<RunServerDrainStatus> SendDeploymentArchiveAsync(string requestId, byte[] archive,
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    {
+        var completion = new TaskCompletionSource<RunServerDrainStatus>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_pendingDrainRequests.TryAdd(requestId, completion))
+            throw new InvalidOperationException("A deployment request with this ID is already pending.");
+
+        try
+        {
+            if (!SendDeploymentArchive(requestId, archive, out var error))
+                throw new IOException(error?.Message ?? "Unable to send the deployment archive.");
+
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            linkedCancellation.CancelAfter(timeout ?? TimeSpan.FromMinutes(30));
+            using var registration = linkedCancellation.Token.Register(() =>
+            {
+                if (_pendingDrainRequests.TryRemove(requestId, out var pending))
+                    pending.TrySetCanceled(linkedCancellation.Token);
+            });
+            return await completion.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            _pendingDrainRequests.TryRemove(requestId, out _);
+        }
+    }
+
+    public bool StartSharedEstimation(SharedEstimationRunRequest request,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRunRequest(writer, request), out error);
+
+    public bool StartRemoteSharedEstimation(SharedEstimationCoordinatorRequest request,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCoordinatorRequest(writer, request), out error);
+
+    public bool AddSharedEstimationWorker(SharedEstimationWorkerRegistration registration,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteWorkerRegistration(writer, registration, remove: false), out error);
+
+    public bool RemoveSharedEstimationWorker(SharedEstimationWorkerRegistration registration,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteWorkerRegistration(writer, registration, remove: true), out error);
+
+    public bool SendSharedEstimationCandidate(SharedEstimationCandidate candidate,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCandidate(writer, candidate), out error);
+
+    public bool CancelSharedEstimation(string runId, string? reason,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteCancel(writer, runId, reason), out error);
+
+    public bool QuerySharedEstimationJobs([NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(SharedEstimationProtocol.WriteQueryJobs, out error);
+
+    public bool QueryRemoteRuns([NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(SharedEstimationProtocol.WriteQueryRemoteRuns, out error);
+
+    public async Task<RunServerActivityResponse> QueryServerActivityAsync(
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var requestId = Guid.NewGuid().ToString("N");
+        var completion = new TaskCompletionSource<RunServerActivityResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_pendingActivityRequests.TryAdd(requestId, completion))
+            throw new InvalidOperationException("Unable to register the RunServer activity request.");
+
+        try
+        {
+            if (!WriteSharedEstimation(writer =>
+                SharedEstimationProtocol.WriteQueryServerActivity(writer, requestId), out var error))
+                throw new IOException(error?.Message ?? "Unable to query RunServer activity.");
+        }
+        catch
+        {
+            _pendingActivityRequests.TryRemove(requestId, out _);
+            throw;
+        }
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linkedCancellation.CancelAfter(timeout ?? TimeSpan.FromSeconds(8));
+        using var registration = linkedCancellation.Token.Register(() =>
+        {
+            if (_pendingActivityRequests.TryRemove(requestId, out var pending))
+                pending.TrySetCanceled(linkedCancellation.Token);
+        });
+
+        try
+        {
+            return await completion.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            _pendingActivityRequests.TryRemove(requestId, out _);
+        }
+    }
+
+    public bool RequestRemoteRunArtifacts(string runId, [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteGetRemoteRunArtifacts(writer, runId), out error);
+
+    public bool AcknowledgeRemoteRun(string runId, [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteAcknowledgeRemoteRun(writer, runId), out error);
+
+    public async Task<RemoteRunDeletionResponse> DeleteRemoteRunAsync(string runId,
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var requestId = Guid.NewGuid().ToString("N");
+        var completion = new TaskCompletionSource<RemoteRunDeletionResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_pendingRemoteRunDeletionRequests.TryAdd(requestId, completion))
+            throw new InvalidOperationException("Unable to register the remote run deletion request.");
+
+        try
+        {
+            if (!WriteSharedEstimation(writer =>
+                SharedEstimationProtocol.WriteDeleteRemoteRun(writer, requestId, runId), out var error))
+                throw new IOException(error?.Message ?? "Unable to request remote run deletion.");
+        }
+        catch
+        {
+            _pendingRemoteRunDeletionRequests.TryRemove(requestId, out _);
+            throw;
+        }
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linkedCancellation.CancelAfter(timeout ?? TimeSpan.FromSeconds(15));
+        using var registration = linkedCancellation.Token.Register(() =>
+        {
+            if (_pendingRemoteRunDeletionRequests.TryRemove(requestId, out var pending))
+                pending.TrySetCanceled(linkedCancellation.Token);
+        });
+
+        try
+        {
+            return await completion.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            _pendingRemoteRunDeletionRequests.TryRemove(requestId, out _);
+        }
+    }
+
+    public bool AddRemoteEstimationWorker(string runId, SharedEstimationWorkerEndpoint worker,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer =>
+            SharedEstimationProtocol.WriteCoordinatorWorkerRequest(writer, runId, worker, remove: false), out error);
+
+    public bool RemoveRemoteEstimationWorker(string runId, SharedEstimationWorkerEndpoint worker,
+        [NotNullWhen(false)] out CommandError? error)
+        => WriteSharedEstimation(writer =>
+            SharedEstimationProtocol.WriteCoordinatorWorkerRequest(writer, runId, worker, remove: true), out error);
+
+    private bool WriteSharedEstimation(Action<BinaryWriter> writePayload,
+        [NotNullWhen(false)] out CommandError? error)
+    {
+        error = null;
+        using var payload = new MemoryStream();
+        try
+        {
+            using var payloadWriter = new BinaryWriter(payload, Encoding.UTF8, true);
+            writePayload(payloadWriter);
+            payloadWriter.Flush();
+        }
+        catch (ArgumentException e)
+        {
+            error = new CommandError(e.Message);
+            return false;
+        }
+
+        lock (_outLock)
+        {
+            try
+            {
+                using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
+                writer.Write((int)Out.SharedEstimationMessage);
+                payload.Position = 0;
+                payload.CopyTo(_HostStream);
+                writer.Flush();
+                return true;
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException or ArgumentException)
+            {
+                error = new CommandError(e.Message);
+                return false;
+            }
+        }
+    }
+
+    private bool WriteDeployment(Action<BinaryWriter> writePayload,
+        [NotNullWhen(false)] out CommandError? error)
+    {
+        error = null;
+        lock (_outLock)
+        {
+            try
+            {
+                using var writer = new BinaryWriter(_HostStream, Encoding.UTF8, true);
+                writer.Write((int)Out.DeploymentMessage);
+                writePayload(writer);
+                writer.Flush();
+                return true;
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException or ArgumentException)
             {
                 error = new CommandError(e.Message);
                 return false;

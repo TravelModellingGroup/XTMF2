@@ -109,6 +109,18 @@ namespace XTMF2
         }
         private Node? _estimationFitnessNode;
 
+        /// <summary>The single string parameter used as the distributed-estimation input directory.</summary>
+        public Node? EstimationInputDirectoryNode
+        {
+            get => _estimationInputDirectoryNode;
+            internal set
+            {
+                _estimationInputDirectoryNode = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EstimationInputDirectoryNode)));
+            }
+        }
+        private Node? _estimationInputDirectoryNode;
+
         /// <summary>Named groups of calibration parameters.</summary>
         public ObservableCollection<CalibrationGroup> CalibrationGroups { get; private set; } = new ObservableCollection<CalibrationGroup>();
 
@@ -157,6 +169,7 @@ namespace XTMF2
         private const string VariablesProperty = "Variables";
         private const string EstimationGroupsProperty      = "EstimationGroups";
         private const string EstimationFitnessNodeProperty = "EstimationFitnessNode";
+        private const string EstimationInputDirectoryNodeProperty = "EstimationInputDirectoryNode";
         private const string EstimationAlgorithmConfigProperty = "EstimationAlgorithmConfig";
         private const string EstimationObjectiveProperty   = "EstimationObjective";
         private const string CalibrationGroupsProperty     = "CalibrationGroups";
@@ -223,6 +236,7 @@ namespace XTMF2
                 WriteVariables(writer, nodeDictionary);
                 WriteEstimationGroups(writer, nodeDictionary);
                 WriteEstimationFitnessNode(writer, nodeDictionary);
+                WriteEstimationInputDirectoryNode(writer, nodeDictionary);
                 WriteEstimationAlgorithmConfig(writer);
                 WriteEstimationObjective(writer);
                 WriteCalibrationGroups(writer, nodeDictionary);
@@ -329,6 +343,13 @@ namespace XTMF2
             if (_estimationFitnessNode is not null
                 && nodeDictionary.TryGetValue(_estimationFitnessNode, out var idx))
                 writer.WriteNumber(EstimationFitnessNodeProperty, idx);
+        }
+
+        private void WriteEstimationInputDirectoryNode(Utf8JsonWriter writer, Dictionary<Node, int> nodeDictionary)
+        {
+            if (_estimationInputDirectoryNode is not null
+                && nodeDictionary.TryGetValue(_estimationInputDirectoryNode, out var idx))
+                writer.WriteNumber(EstimationInputDirectoryNodeProperty, idx);
         }
 
         private void WriteEstimationAlgorithmConfig(Utf8JsonWriter writer)
@@ -503,6 +524,12 @@ namespace XTMF2
                             reader.Read();
                             if (nodes.TryGetValue(reader.GetInt32(), out var fn))
                                 modelSystem.EstimationFitnessNode = fn;
+                        }
+                        else if (reader.ValueTextEquals(EstimationInputDirectoryNodeProperty))
+                        {
+                            reader.Read();
+                            if (nodes.TryGetValue(reader.GetInt32(), out var inputDirectory))
+                                modelSystem.EstimationInputDirectoryNode = inputDirectory;
                         }
                         else if (reader.ValueTextEquals(EstimationAlgorithmConfigProperty))
                         {

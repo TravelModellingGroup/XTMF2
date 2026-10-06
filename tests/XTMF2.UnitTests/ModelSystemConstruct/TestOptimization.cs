@@ -828,7 +828,12 @@ public class TestOptimization
             (user, pSession, msSession) =>
             {
                 CommandError error = null;
-                var cfg = new NelderMeadConfig { MaxIterations = 999, ConvergenceTolerance = 1e-9 };
+                var cfg = new NelderMeadConfig
+                {
+                    MaxIterations = 999,
+                    ConvergenceTolerance = 1e-9,
+                    RandomSeed = 202401
+                };
                 Assert.IsTrue(msSession.SetEstimationAlgorithmConfig(user, cfg, out error), error?.Message);
             },
             (user, pSession, msSession) =>
@@ -838,6 +843,7 @@ public class TestOptimization
                 var loaded = (NelderMeadConfig)ms.EstimationAlgorithmConfig;
                 Assert.AreEqual(999, loaded.MaxIterations);
                 Assert.AreEqual(1e-9, loaded.ConvergenceTolerance);
+                Assert.AreEqual(202401, loaded.RandomSeed);
             });
     }
 
@@ -855,7 +861,8 @@ public class TestOptimization
                     Inertia = 0.5,
                     CognitiveCoeff = 1.2,
                     SocialCoeff = 1.3,
-                    ConvergenceTolerance = 1e-8
+                    ConvergenceTolerance = 1e-8,
+                    RandomSeed = 202402
                 };
                 Assert.IsTrue(msSession.SetEstimationAlgorithmConfig(user, cfg, out error), error?.Message);
             },
@@ -870,6 +877,7 @@ public class TestOptimization
                 Assert.AreEqual(1.2,  loaded.CognitiveCoeff);
                 Assert.AreEqual(1.3,  loaded.SocialCoeff);
                 Assert.AreEqual(1e-8, loaded.ConvergenceTolerance);
+                Assert.AreEqual(202402, loaded.RandomSeed);
             });
     }
 
@@ -888,7 +896,8 @@ public class TestOptimization
                     MutationRate = 0.02,
                     ElitismCount = 4,
                     TournamentSize = 5,
-                    ConvergenceTolerance = 1e-7
+                    ConvergenceTolerance = 1e-7,
+                    RandomSeed = 202403
                 };
                 Assert.IsTrue(msSession.SetEstimationAlgorithmConfig(user, cfg, out error), error?.Message);
             },
@@ -904,6 +913,25 @@ public class TestOptimization
                 Assert.AreEqual(4,    loaded.ElitismCount);
                 Assert.AreEqual(5,    loaded.TournamentSize);
                 Assert.AreEqual(1e-7, loaded.ConvergenceTolerance);
+                Assert.AreEqual(202403, loaded.RandomSeed);
+            });
+    }
+
+    [TestMethod]
+    public void Estimation_AlgorithmConfig_StochasticGradientPersistence()
+    {
+        TestHelper.RunInModelSystemContext("Estimation_AlgorithmConfig_StochasticGradientPersistence",
+            (user, pSession, msSession) =>
+            {
+                CommandError error = null;
+                var config = new StochasticGradientConfig { RandomSeed = -202404 };
+                Assert.IsTrue(msSession.SetEstimationAlgorithmConfig(user, config, out error), error?.Message);
+            },
+            (user, pSession, msSession) =>
+            {
+                Assert.IsInstanceOfType<StochasticGradientConfig>(msSession.ModelSystem.EstimationAlgorithmConfig);
+                Assert.AreEqual(-202404,
+                    ((StochasticGradientConfig)msSession.ModelSystem.EstimationAlgorithmConfig).RandomSeed);
             });
     }
 
@@ -930,11 +958,14 @@ public class TestOptimization
             {
                 CommandError error = null;
                 var original = msSession.ModelSystem.EstimationAlgorithmConfig;
-                var pso = new ParticleSwarmConfig { SwarmSize = 10 };
+                var pso = new ParticleSwarmConfig { SwarmSize = 10, RandomSeed = 654321 };
                 Assert.IsTrue(msSession.SetEstimationAlgorithmConfig(user, pso, out error), error?.Message);
                 Assert.IsInstanceOfType<ParticleSwarmConfig>(msSession.ModelSystem.EstimationAlgorithmConfig);
+                Assert.AreEqual(654321,
+                    ((ParticleSwarmConfig)msSession.ModelSystem.EstimationAlgorithmConfig).RandomSeed);
                 Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
                 Assert.AreEqual(original.AlgorithmId, msSession.ModelSystem.EstimationAlgorithmConfig.AlgorithmId);
+                Assert.AreEqual(42, msSession.ModelSystem.EstimationAlgorithmConfig.RandomSeed);
             });
     }
 

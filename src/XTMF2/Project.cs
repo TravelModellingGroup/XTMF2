@@ -37,6 +37,7 @@ namespace XTMF2
     public sealed class Project : INotifyPropertyChanged
     {
         private const string ProjectFile = "Project.xpjt";
+        private const string IdProperty = "Id";
         private const string NameProperty = "Name";
         private const string DescriptionProperty = "Description";
         private const string ModelSystemHeadersProperty = "ModelSystemHeaders";
@@ -45,6 +46,7 @@ namespace XTMF2
         private const string CustomRunDirectoryProperty = "CustomRunDirectory";
         private const string AlternativeRunDirectories = "AlternativeRunDirectories";
 
+        public Guid Id { get; private set; }
         public string? Name { get; private set; }
         public string? Description { get; private set; }
         public string? ProjectFilePath { get; private set; }
@@ -72,6 +74,7 @@ namespace XTMF2
 
         private Project()
         {
+            Id = Guid.NewGuid();
         }
 
         internal static bool Load(UserController userController, string filePath, [NotNullWhen(true)] out Project? project, [NotNullWhen(false)] ref string? error)
@@ -80,6 +83,7 @@ namespace XTMF2
             {
                 ProjectFilePath = filePath
             };
+            bool hasProjectId = false;
             try
             {
                 byte[] buffer = File.ReadAllBytes(filePath);
@@ -89,7 +93,17 @@ namespace XTMF2
                     {
                         if (reader.TokenType == JsonTokenType.PropertyName)
                         {
-                            if (reader.ValueTextEquals(NameProperty))
+                            if (reader.ValueTextEquals(IdProperty))
+                            {
+                                reader.Read();
+                                if (reader.TokenType == JsonTokenType.String && Guid.TryParse(reader.GetString(), out var id) &&
+                                    id != Guid.Empty)
+                                {
+                                    project.Id = id;
+                                    hasProjectId = true;
+                                }
+                            }
+                            else if (reader.ValueTextEquals(NameProperty))
                             {
                                 reader.Read();
                                 project.Name = reader.GetString();
@@ -109,7 +123,8 @@ namespace XTMF2
                                 }
                                 while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                                 {
-                                    project._ModelSystems.Add(ModelSystemHeader.Load(project, ref reader));
+                                    var header = ModelSystemHeader.Load(project, ref reader);
+                                    project._ModelSystems.Add(header);
                                 }
                             }
                             else if (reader.ValueTextEquals(OwnerProperty))
@@ -180,6 +195,17 @@ namespace XTMF2
                 {
                     error = "Unable to load an owner for the given project.";
                     return false;
+                }
+                if (!hasProjectId || project._ModelSystems.Any(header => header.IdentityWasGeneratedDuringLoad))
+                {
+                    try
+                    {
+                        project.Save(ref error);
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                    }
+                    error = null;
                 }
                 return true;
             }
@@ -378,6 +404,7 @@ namespace XTMF2
                 {
                     using var writer = new Utf8JsonWriter(tempFile, Helper.RelaxedJsonWriterOptions);
                     writer.WriteStartObject();
+                    writer.WriteString(IdProperty, Id);
                     writer.WriteString(NameProperty, Name);
                     writer.WriteString(DescriptionProperty, Description);
                     writer.WriteString(OwnerProperty, Owner!.UserName);

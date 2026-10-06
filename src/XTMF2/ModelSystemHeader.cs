@@ -38,6 +38,8 @@ namespace XTMF2
 
         public string Name { get; private set; }
         public string Description { get; private set; }
+        public Guid Id { get; private set; }
+        internal bool IdentityWasGeneratedDuringLoad { get; private set; }
 
         private readonly Project? _project;
         internal string ModelSystemPath => Path.Combine(_project?.ProjectDirectory ?? 
@@ -48,6 +50,7 @@ namespace XTMF2
         internal ModelSystemHeader(Project? project, string name, string? description = null)
         {
             _project = project;
+            Id = Guid.NewGuid();
             Name = name;
             Description = description ?? string.Empty;
         }
@@ -84,6 +87,7 @@ namespace XTMF2
         internal void Save(Utf8JsonWriter writer)
         {
             writer.WriteStartObject();
+            writer.WriteString("Id", Id);
             writer.WriteString("Name", Name);
             writer.WriteString("Description", Description);
             writer.WriteEndObject();
@@ -101,11 +105,18 @@ namespace XTMF2
                 throw new ArgumentException(nameof(reader), "Is not processing a model system header!");
             }
             string? name = null, description = null;
+            Guid id = Guid.Empty;
             while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if(reader.TokenType == JsonTokenType.PropertyName)
                 {
-                    if(reader.ValueTextEquals("Name"))
+                    if(reader.ValueTextEquals("Id"))
+                    {
+                        reader.Read();
+                        if (reader.TokenType == JsonTokenType.String)
+                            Guid.TryParse(reader.GetString(), out id);
+                    }
+                    else if(reader.ValueTextEquals("Name"))
                     {
                         reader.Read();
                         name = reader.GetString();
@@ -117,7 +128,12 @@ namespace XTMF2
                     }
                 }
             }
-            return new ModelSystemHeader(project, name ?? "Unnamed", description);
+            var header = new ModelSystemHeader(project, name ?? "Unnamed", description);
+            if (id != Guid.Empty)
+                header.Id = id;
+            else
+                header.IdentityWasGeneratedDuringLoad = true;
+            return header;
         }
 
         internal static ModelSystemHeader CreateRunHeader(XTMFRuntime runtime)

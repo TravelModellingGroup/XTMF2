@@ -24,9 +24,12 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using XTMF2.Configuration;
+using XTMF2.GUI;
+using XTMF2.GUI.Properties;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XTMF2.Bus;
+using XTMF2.Bus.Optimization;
 using XTMF2.Editing;
 
 namespace XTMF2.GUI.ViewModels;
@@ -41,7 +44,9 @@ public enum RunStatus
     /// <summary>The run completed successfully.</summary>
     Finished,
     /// <summary>The run encountered an error.</summary>
-    Error
+    Error,
+    /// <summary>The RunServer restarted before the run completed.</summary>
+    Interrupted
 }
 
 /// <summary>
@@ -59,29 +64,86 @@ public sealed partial class RunViewModel : ObservableObject
     public string RunName { get; }
 
     /// <summary>The directory that the run executes in and writes its output to.</summary>
-    public string RunDirectory { get; }
+    public string RunDirectory { get; private set; }
 
     /// <summary>The configured RunServer that processed this run.</summary>
-    public string RunServer { get; }
+    public string RunServer { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    private bool _isRemoteRun;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    private bool _remoteOutputAvailable;
+
+    public bool CanTransferRemoteOutput
+        => IsRemoteRun && IsCompleted && !ArtifactsAvailable && !HasPendingRemoteReceipt;
+
+    public string OutputTransferStatus => !IsRemoteRun
+        ? ArtifactsAvailable ? "Output is on this computer." : "Output has not been transferred yet."
+        : Status == RunStatus.Running ? "Output will be transferred when the run completes."
+        : ArtifactsAvailable ? "Output is on this computer."
+        : HasPendingRemoteReceipt ? "Output transfer is pending."
+        : RemoteOutputAvailable ? "Output is available on the RunServer."
+        : "RunServer output availability has not been confirmed.";
 
     /// <summary>True when this run has a known output directory that can be opened.</summary>
     public bool HasRunDirectory => ArtifactsAvailable && !string.IsNullOrWhiteSpace(RunDirectory);
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
     private bool _artifactsAvailable;
 
     internal void MarkArtifactsAvailable()
     {
         ArtifactsAvailable = true;
+        RemoteOutputAvailable = false;
+        HasPendingRemoteReceipt = false;
+        OnPropertyChanged(nameof(OutputTransferStatus));
         OnPropertyChanged(nameof(HasRunDirectory));
         OpenRunDirectoryCommand.NotifyCanExecuteChanged();
     }
 
+    internal void SetRemoteRunTracking(bool isRemoteRun)
+        => IsRemoteRun = isRemoteRun;
+
+    internal void SetLocalOutputDirectory(string directory)
+    {
+        if (RunDirectory == directory)
+            return;
+        RunDirectory = directory;
+        ArtifactsAvailable = Directory.Exists(directory);
+        if (ArtifactsAvailable)
+            RemoteOutputAvailable = false;
+        OnPropertyChanged(nameof(RunDirectory));
+        OnPropertyChanged(nameof(HasRunDirectory));
+        OpenRunDirectoryCommand.NotifyCanExecuteChanged();
+    }
+
+    internal void SetRunServer(string runServer)
+    {
+        if (RunServer == runServer)
+            return;
+        RunServer = runServer;
+        OnPropertyChanged(nameof(RunServer));
+    }
+
     internal void MarkArtifactTransferFailed(string message)
-        => AppendStatus($"Output transfer failed: {message}");
+    {
+        HasPendingRemoteReceipt = false;
+        AppendStatus($"Output transfer failed: {message}");
+        OnPropertyChanged(nameof(OutputTransferStatus));
+        OnPropertyChanged(nameof(CanTransferRemoteOutput));
+    }
 
     /// <summary>Current execution status.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
     private RunStatus _status = RunStatus.Running;
 
     /// <summary>
@@ -101,11 +163,14 @@ public sealed partial class RunViewModel : ObservableObject
         RunStatus.Running  => "⏳",
         RunStatus.Finished => "✅",
         RunStatus.Error    => "❌",
+        RunStatus.Interrupted => "↻",
         _                  => "?"
     };
 
-    private readonly ModelSystemSession _session;
-    private readonly User _user;
+    private ModelSystemSession? _session;
+    private User? _user;
+    private RemoteRunSnapshot? _recoveredSnapshot;
+    private SharedEstimationJobSnapshot? _recoveredSharedEstimationSnapshot;
 
     public RunViewModel(string runId, string runName, string runDirectory, string runServer,
         ModelSystemSession session, User user)
@@ -116,6 +181,204 @@ public sealed partial class RunViewModel : ObservableObject
         RunServer = runServer;
         _session = session;
         _user = user;
+    }
+
+    public RunViewModel(RemoteRunSnapshot snapshot, string runServer, Action? cancelAction = null)
+        : this(snapshot.RunId, snapshot.RunName, RemoteRunOutputPaths.GetLocalDirectory(snapshot.RunId), runServer, null!, null!)
+    {
+        _recoveredSnapshot = snapshot;
+        IsRemoteRun = true;
+        ArtifactsAvailable = Directory.Exists(RunDirectory);
+        RemoteOutputAvailable = snapshot.ArtifactsAvailable && !ArtifactsAvailable;
+        IsRecoveredRunUnbound = true;
+        SetRunMode(snapshot.RunMode,
+            Array.Empty<(int nodeIndex, string name, double min, double max)>(), cancelAction ?? (() => { }));
+        var parameterValues = snapshot.ProgressParameters
+            .Concat(snapshot.OptimizationResults ?? Array.Empty<RemoteRunParameterValue>())
+            .GroupBy(value => value.NodeIndex)
+            .Select(group => group.Last())
+            .ToArray();
+        foreach (var value in parameterValues)
+        {
+            var parameter = new OptimizationParameterViewModel(value.NodeIndex,
+                $"Parameter {value.NodeIndex}", 0, 0);
+            OptimizationParameters.Add(parameter);
+            _paramByIndex[value.NodeIndex] = parameter;
+        }
+        if (snapshot.ProgressParameters.Count > 0)
+            UpdateIterationProgress(snapshot.Iteration, snapshot.Fitness, 0,
+                snapshot.ProgressParameters.Select(value => (value.NodeIndex, value.Value)).ToArray());
+        if (snapshot.OptimizationResults is { Count: > 0 } results)
+        {
+            _optimizationResults = results.Select(value => (value.NodeIndex, value.Value)).ToArray();
+            HasOptimizationResults = true;
+        }
+        switch (snapshot.State)
+        {
+            case RemoteRunState.Completed:
+                MarkFinished(snapshot.Status);
+                break;
+            case RemoteRunState.Failed:
+                MarkError(snapshot.ErrorMessage ?? snapshot.Status, snapshot.ErrorStack ?? string.Empty, null, null);
+                break;
+            case RemoteRunState.Interrupted:
+                MarkInterrupted(snapshot.Status);
+                break;
+            default:
+                AppendStatus(snapshot.Status);
+                break;
+        }
+        if (snapshot.ArtifactsAvailable)
+            AppendStatus("Run output is retained on the RunServer and can be retrieved after binding this run.");
+    }
+
+    public RunViewModel(SharedEstimationJobSnapshot snapshot, string runServer, Action cancelAction)
+        : this(snapshot.RunId,
+            string.IsNullOrWhiteSpace(snapshot.RunName) ? $"Estimation {snapshot.RunId}" : snapshot.RunName,
+            snapshot.WorkingDirectory, runServer, null!, null!)
+    {
+        IsRecoveredRunUnbound = true;
+        IsRemoteSharedEstimation = true;
+        SetRunMode(RunMode.Estimation,
+            (snapshot.Parameters ?? Array.Empty<SharedEstimationParameterMetadata>())
+                .Select(parameter => (parameter.NodeIndex, parameter.Name, parameter.Min, parameter.Max)).ToArray(),
+            cancelAction);
+        ApplyRecoveredSharedEstimationSnapshot(snapshot);
+    }
+
+    [ObservableProperty]
+    private bool _isRecoveredRunUnbound;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    private bool _hasPendingRemoteReceipt;
+
+    internal void BindRecoveredRun(ModelSystemSession session, User user,
+        IReadOnlyList<(int nodeIndex, string name, double min, double max)> metadata)
+    {
+        _session = session;
+        _user = user;
+        IsRecoveredRunUnbound = false;
+        SetRunMode(RunType, metadata, _cancelAction ?? (() => { }));
+        if (_recoveredSnapshot is { ProgressParameters.Count: > 0 } snapshot)
+            UpdateIterationProgress(snapshot.Iteration, snapshot.Fitness, 0,
+                snapshot.ProgressParameters.Select(value => (value.NodeIndex, value.Value)).ToArray());
+        if (_recoveredSharedEstimationSnapshot?.Progress is { } sharedProgress)
+            UpdateSharedEstimationProgress(sharedProgress);
+        if (_optimizationResults is not null)
+        {
+            _optimizationSession = session;
+            _optimizationUser = user;
+            HasOptimizationResults = true;
+        }
+    }
+
+    internal void ApplyRecoveredSnapshot(RemoteRunSnapshot snapshot)
+    {
+        _recoveredSnapshot = snapshot;
+        IsRemoteRun = true;
+        RemoteOutputAvailable = snapshot.ArtifactsAvailable && !ArtifactsAvailable;
+        if (snapshot.ProgressParameters.Count > 0)
+        {
+            foreach (var value in snapshot.ProgressParameters)
+            {
+                if (!_paramByIndex.ContainsKey(value.NodeIndex))
+                {
+                    var parameter = new OptimizationParameterViewModel(value.NodeIndex,
+                        $"Parameter {value.NodeIndex}", 0, 0);
+                    OptimizationParameters.Add(parameter);
+                    _paramByIndex[value.NodeIndex] = parameter;
+                }
+            }
+            UpdateIterationProgress(snapshot.Iteration, snapshot.Fitness, 0,
+                snapshot.ProgressParameters.Select(value => (value.NodeIndex, value.Value)).ToArray());
+        }
+        if (snapshot.OptimizationResults is { Count: > 0 } results)
+        {
+            _optimizationResults = results.Select(value => (value.NodeIndex, value.Value)).ToArray();
+            if (_session is not null && _user is not null)
+            {
+                _optimizationSession = _session;
+                _optimizationUser = _user;
+            }
+            HasOptimizationResults = true;
+        }
+        switch (snapshot.State)
+        {
+            case RemoteRunState.Completed when Status != RunStatus.Finished:
+                MarkFinished(snapshot.Status);
+                break;
+            case RemoteRunState.Failed when Status != RunStatus.Error:
+                MarkError(snapshot.ErrorMessage ?? snapshot.Status, snapshot.ErrorStack ?? string.Empty, null, null);
+                break;
+            case RemoteRunState.Interrupted when Status != RunStatus.Interrupted:
+                MarkInterrupted(snapshot.Status);
+                break;
+            case RemoteRunState.Running when Status != RunStatus.Running:
+                Status = RunStatus.Running;
+                StatusText = snapshot.Status;
+                OnPropertyChanged(nameof(StatusBadge));
+                OnPropertyChanged(nameof(IsCompleted));
+                break;
+        }
+    }
+
+    internal void ApplyRecoveredSharedEstimationSnapshot(SharedEstimationJobSnapshot snapshot)
+    {
+        _recoveredSharedEstimationSnapshot = snapshot;
+        IsRemoteSharedEstimation = true;
+        var parameters = snapshot.Parameters ?? Array.Empty<SharedEstimationParameterMetadata>();
+        if (OptimizationParameters.Count == 0 && parameters.Count > 0)
+            SetRunMode(RunMode.Estimation,
+                parameters.Select(parameter => (parameter.NodeIndex, parameter.Name, parameter.Min, parameter.Max)).ToArray(),
+                _cancelAction ?? (() => { }));
+        if (snapshot.Progress is { } progress)
+            UpdateSharedEstimationProgress(progress);
+        if (snapshot.Completion is { } completion)
+        {
+            if (!completion.Succeeded)
+            {
+                MarkError(completion.FailureReason ?? "Remote estimation failed.", string.Empty, null, null);
+                return;
+            }
+            _optimizationResults = completion.BestParameters
+                .Select((value, index) => (parameters.Count > index ? parameters[index].NodeIndex : index, value))
+                .ToArray();
+            HasOptimizationResults = _optimizationResults.Count > 0;
+            MarkFinished($"[Estimation] converged after {completion.TotalEvaluations} fitness test(s) " +
+                $"in {completion.Iterations} iteration(s). Best fitness = {completion.BestFitness:G6}.");
+            return;
+        }
+        if (snapshot.State == SharedEstimationJobState.Running)
+        {
+            if (Status != RunStatus.Running)
+            {
+                Status = RunStatus.Running;
+                OnPropertyChanged(nameof(StatusBadge));
+                OnPropertyChanged(nameof(IsCompleted));
+                CancelRunCommand.NotifyCanExecuteChanged();
+            }
+            StatusText = "Estimation running";
+        }
+    }
+
+    internal void ApplyRecoveredSharedEstimationCompletion(SharedEstimationCompletion completion)
+    {
+        if (!IsRecoveredRunUnbound || _recoveredSharedEstimationSnapshot is not { } snapshot)
+            return;
+        ApplyRecoveredSharedEstimationSnapshot(snapshot with
+        {
+            State = SharedEstimationJobState.Completed,
+            Completion = completion
+        });
+    }
+
+    internal void SetRemoteReceiptPending(bool pending)
+    {
+        HasPendingRemoteReceipt = pending;
+        OnPropertyChanged(nameof(OutputTransferStatus));
+        OnPropertyChanged(nameof(CanTransferRemoteOutput));
     }
 
     private bool CanOpenRunDirectory() => HasRunDirectory;
@@ -219,11 +482,20 @@ public sealed partial class RunViewModel : ObservableObject
     [ObservableProperty]
     private double _currentFitness;
 
+    /// <summary>Number of fitness tests completed during the current iteration.</summary>
+    [ObservableProperty]
+    private int _currentIterationFitnessTests;
+
     /// <summary>Live parameter values for each optimisation parameter.</summary>
     public ObservableCollection<OptimizationParameterViewModel> OptimizationParameters { get; } = new();
 
     /// <summary>Complete history of all completed iterations (oldest first).</summary>
     public ObservableCollection<OptimizationIterationViewModel> IterationHistory { get; } = new();
+
+    public ObservableCollection<RemoteEstimationWorkerViewModel> RemoteWorkers { get; } = new();
+
+    [ObservableProperty]
+    private bool _isRemoteSharedEstimation;
 
     /// <summary>The iteration currently shown in the detail panel; auto-advances with each new iteration.</summary>
     [ObservableProperty]
@@ -251,11 +523,126 @@ public sealed partial class RunViewModel : ObservableObject
         CancelRunCommand.NotifyCanExecuteChanged();
     }
 
+    internal void SetRemoteEstimationWorkers(
+        IReadOnlyList<RunServerEndpoint> endpoints,
+        IReadOnlyCollection<string> activeWorkerIds,
+        Func<string, string?> addWorker,
+        Func<string, string?> removeWorker,
+        IReadOnlyDictionary<string, int>? configuredWorkerCounts = null)
+    {
+        IsRemoteSharedEstimation = true;
+        _addRemoteWorkerAction = addWorker;
+        _removeRemoteWorkerAction = removeWorker;
+        RemoteWorkers.Clear();
+        foreach (var endpoint in endpoints)
+        {
+            var configuredCount = configuredWorkerCounts is not null &&
+                configuredWorkerCounts.TryGetValue(endpoint.Id, out var count) ? count : 1;
+            var worker = new RemoteEstimationWorkerViewModel(endpoint,
+                activeWorkerIds.Contains(endpoint.Id, StringComparer.Ordinal), configuredCount);
+            RemoteWorkers.Add(worker);
+        }
+    }
+
+    internal void ApplyRemoteWorkerSnapshot(IReadOnlyCollection<string> activeWorkerIds)
+    {
+        foreach (var worker in RemoteWorkers)
+        {
+            worker.SetActiveWorkerCount(CountWorkerSlots(activeWorkerIds, worker.WorkerId));
+            worker.IsActive = worker.IsCoordinator || worker.ActiveWorkerCount > 0;
+            worker.IsBusy = false;
+        }
+    }
+
+    internal void MarkRemoteWorkerDisconnected(string workerId)
+    {
+        var worker = RemoteWorkers.FirstOrDefault(candidate =>
+            string.Equals(candidate.WorkerId, workerId, StringComparison.Ordinal));
+        if (worker is null)
+            return;
+        worker.IsActive = false;
+        worker.SetActiveWorkerCount(0);
+        worker.IsBusy = false;
+    }
+
+    internal void ReconnectRemoteWorker(string workerId)
+    {
+        if (string.Equals(workerId, RemoteEstimationWorkerViewModel.CoordinatorWorkerId,
+            StringComparison.Ordinal))
+            return;
+        if (Status != RunStatus.Running || _addRemoteWorkerAction is null)
+            return;
+        var worker = RemoteWorkers.FirstOrDefault(candidate =>
+            string.Equals(candidate.WorkerId, workerId, StringComparison.Ordinal));
+        if (worker is null || worker.IsActive || worker.IsBusy)
+            return;
+
+        worker.IsBusy = true;
+        var error = _addRemoteWorkerAction(workerId);
+        if (error is not null)
+        {
+            worker.IsBusy = false;
+            AppendStatus($"[Remote estimation] Unable to re-add worker: {error}");
+        }
+    }
+
+    internal void ApplyRemoteWorkerAcknowledgement(SharedEstimationWorkerControlAcknowledgement acknowledgement)
+    {
+        var worker = RemoteWorkers.FirstOrDefault(candidate =>
+            string.Equals(candidate.WorkerId, acknowledgement.WorkerId, StringComparison.Ordinal));
+        if (worker is null || worker.IsCoordinator)
+            return;
+        worker.IsBusy = false;
+        if (acknowledgement.Succeeded)
+        {
+            if (acknowledgement.Add)
+                worker.IsActive = true;
+            else
+                worker.SetActiveWorkerCount(0);
+        }
+        else
+            AppendStatus($"[Remote estimation] Worker change failed: {acknowledgement.Error}");
+    }
+
+    private Func<string, string?>? _addRemoteWorkerAction;
+    private Func<string, string?>? _removeRemoteWorkerAction;
+
+    [RelayCommand]
+    private void AddRemoteWorker(RemoteEstimationWorkerViewModel worker)
+    {
+        if (worker.IsCoordinator || worker.IsActive || worker.IsBusy || _addRemoteWorkerAction is null)
+            return;
+        worker.IsBusy = true;
+        var error = _addRemoteWorkerAction(worker.WorkerId);
+        if (error is not null)
+        {
+            worker.IsBusy = false;
+            AppendStatus($"[Remote estimation] Unable to add worker: {error}");
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveRemoteWorker(RemoteEstimationWorkerViewModel worker)
+    {
+        if (worker.IsCoordinator || !worker.IsActive || worker.IsBusy || _removeRemoteWorkerAction is null)
+            return;
+        worker.IsBusy = true;
+        var error = _removeRemoteWorkerAction(worker.WorkerId);
+        if (error is not null)
+        {
+            worker.IsBusy = false;
+            AppendStatus($"[Remote estimation] Unable to remove worker: {error}");
+        }
+    }
+
     /// <summary>Called on the UI thread whenever the client sends per-iteration progress.</summary>
-    internal void UpdateIterationProgress(int iteration, double fitness, IReadOnlyList<(int nodeIndex, double value)> values)
+    internal void UpdateIterationProgress(int iteration, double fitness, int fitnessTestsThisIteration,
+        IReadOnlyList<(int nodeIndex, double value)> values)
     {
         CurrentIteration = iteration;
-        CurrentFitness   = fitness;
+        if (!double.IsNaN(fitness))
+            CurrentFitness = fitness;
+        CurrentIterationFitnessTests = fitnessTestsThisIteration;
         foreach (var (idx, val) in values)
         {
             if (_paramByIndex.TryGetValue(idx, out var vm))
@@ -268,8 +655,61 @@ public sealed partial class RunViewModel : ObservableObject
                 : new ParameterSnapshot("?", 0, 0, v.value))
             .ToList();
         var snap = new OptimizationIterationViewModel(iteration, fitness, snapshots);
-        IterationHistory.Add(snap);
+        var existing = IterationHistory.LastOrDefault(item => item.Iteration == iteration);
+        if (existing is not null)
+        {
+            var index = IterationHistory.IndexOf(existing);
+            IterationHistory[index] = snap;
+        }
+        else
+        {
+            IterationHistory.Add(snap);
+        }
         SelectedIteration = snap;
+    }
+
+    internal void UpdateSharedEstimationProgress(SharedEstimationProgress progress)
+    {
+        CurrentIteration = progress.Iteration;
+        if (!double.IsNaN(progress.BestFitness))
+            CurrentFitness = progress.BestFitness;
+        CurrentIterationFitnessTests = progress.FitnessTestsThisIteration;
+        var activeWorkers = progress.ActiveWorkerIds?.ToArray() ?? Array.Empty<string>();
+        foreach (var worker in RemoteWorkers)
+        {
+            worker.SetActiveWorkerCount(CountWorkerSlots(activeWorkers, worker.WorkerId));
+            worker.SetCompletedEvaluations(progress.EvaluationsByWorker is { } counts
+                ? CountWorkerEvaluations(counts, worker.WorkerId)
+                : 0);
+        }
+        if (progress.BestParameters is { Count: > 0 } bestParameters &&
+            bestParameters.Count == OptimizationParameters.Count)
+        {
+            var values = OptimizationParameters
+                .Select((parameter, index) => (parameter.NodeIndex, bestParameters[index]))
+                .ToArray();
+            UpdateIterationProgress(progress.Iteration, progress.BestFitness,
+                progress.FitnessTestsThisIteration, values);
+        }
+        AppendStatus($"[Estimation] iteration {progress.Iteration}: " +
+            $"{progress.FitnessTestsThisIteration} fitness test(s) completed; " +
+            $"best fitness {progress.BestFitness:G6}.");
+    }
+
+    private static int CountWorkerSlots(IReadOnlyCollection<string> workerIds, string endpointId)
+    {
+        var slotPrefix = endpointId + "#run-";
+        return workerIds.Count(workerId => workerId == endpointId ||
+            workerId.StartsWith(slotPrefix, StringComparison.Ordinal));
+    }
+
+    private static int CountWorkerEvaluations(IReadOnlyDictionary<string, int> evaluationsByWorker,
+        string endpointId)
+    {
+        var slotPrefix = endpointId + "#run-";
+        return evaluationsByWorker
+            .Where(pair => pair.Key == endpointId || pair.Key.StartsWith(slotPrefix, StringComparison.Ordinal))
+            .Sum(pair => pair.Value);
     }
 
     // ── Cancel command ────────────────────────────────────────────────────
@@ -316,7 +756,8 @@ public sealed partial class RunViewModel : ObservableObject
         AppendStatus($"[Optimization complete] {results.Count} parameter(s) ready to apply.");
     }
 
-    private bool CanApplyOptimizationResults() => HasOptimizationResults;
+    private bool CanApplyOptimizationResults()
+        => HasOptimizationResults && _optimizationSession is not null && _optimizationUser is not null;
 
     /// <summary>
     /// Applies the optimization results back into the model system session.
@@ -352,10 +793,16 @@ public sealed partial class RunViewModel : ObservableObject
     }
 
     /// <summary>Marks the run as finished successfully.</summary>
-    internal void MarkFinished()
+    internal void MarkFinished(string? completionMessage = null)
     {
         Status     = RunStatus.Finished;
-        StatusText = "Finished";
+        MarkSharedEstimationOutputAvailableIfPresent();
+        StatusText = completionMessage ??
+            (IsOptimizationRun && StatusText.StartsWith("[Estimation] converged", StringComparison.Ordinal)
+                ? StatusText
+                : "Finished");
+        if (completionMessage is not null)
+            AddMessage(completionMessage);
         OnPropertyChanged(nameof(StatusBadge));
         OnPropertyChanged(nameof(IsCompleted));
         CancelRunCommand.NotifyCanExecuteChanged();
@@ -365,6 +812,7 @@ public sealed partial class RunViewModel : ObservableObject
     internal void MarkError(string errorMessage, string stack, string? moduleName, Guid? elementId)
     {
         Status     = RunStatus.Error;
+        MarkSharedEstimationOutputAvailableIfPresent();
         StatusText = errorMessage;
         ErrorModuleName = moduleName;
         _errorElementId = elementId;
@@ -379,15 +827,35 @@ public sealed partial class RunViewModel : ObservableObject
         CancelRunCommand.NotifyCanExecuteChanged();
     }
 
+    private void MarkInterrupted(string message)
+    {
+        Status = RunStatus.Interrupted;
+        MarkSharedEstimationOutputAvailableIfPresent();
+        StatusText = message;
+        AddMessage(message);
+        OnPropertyChanged(nameof(StatusBadge));
+        OnPropertyChanged(nameof(IsCompleted));
+        CancelRunCommand.NotifyCanExecuteChanged();
+    }
+
+    internal void MarkConnectionLost()
+        => MarkInterrupted("RunServer connection was lost; the run status is unknown until it reconnects.");
+
+    private void MarkSharedEstimationOutputAvailableIfPresent()
+    {
+        if (IsRemoteSharedEstimation && Directory.Exists(RunDirectory))
+            MarkArtifactsAvailable();
+    }
+
     /// <summary>
     /// Returns navigation context for the current failing element, when available.
     /// </summary>
     internal bool TryGetErrorNavigationTarget(out ModelSystemSession session, out User user, out Guid elementId)
     {
-        session = _session;
-        user = _user;
+        session = _session!;
+        user = _user!;
         elementId = Guid.Empty;
-        if (!_errorElementId.HasValue)
+        if (!_errorElementId.HasValue || _session is null || _user is null)
             return false;
         elementId = _errorElementId.Value;
         return true;

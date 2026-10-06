@@ -44,6 +44,7 @@ public sealed class StochasticGradientAlgorithm : IEstimationAlgorithm
     private readonly double _bigA;       // stability constant A
     private readonly double _alpha;      // step-size decay exponent
     private readonly double _gamma;      // perturbation-size decay exponent
+    private readonly int _randomSeed;
 
     private int      _n;
     private double[] _lower   = [];
@@ -72,18 +73,21 @@ public sealed class StochasticGradientAlgorithm : IEstimationAlgorithm
     /// <param name="bigA">Stability constant — typically 10 % of max iterations (default 20).</param>
     /// <param name="alpha">Step-size decay exponent (default 0.602).</param>
     /// <param name="gamma">Perturbation decay exponent (default 0.101).</param>
+    /// <param name="randomSeed">Seed used for reproducible perturbations.</param>
     public StochasticGradientAlgorithm(
         double a      = 0.1,
         double c      = 0.1,
         double bigA   = 20.0,
         double alpha  = 0.602,
-        double gamma  = 0.101)
+        double gamma  = 0.101,
+        int randomSeed = 42)
     {
         _a     = a;
         _c     = c;
         _bigA  = Math.Max(0.0, bigA);
         _alpha = alpha;
         _gamma = gamma;
+        _randomSeed = randomSeed;
     }
 
     /// <inheritdoc/>
@@ -113,7 +117,7 @@ public sealed class StochasticGradientAlgorithm : IEstimationAlgorithm
             ? v => -fitnessEvaluator(v)
             : fitnessEvaluator;
 
-        var rng   = new Random(42);
+        var rng   = new Random(_randomSeed);
         var theta = Clamp((double[])BestParameters.Clone());
 
         // Evaluate starting point.

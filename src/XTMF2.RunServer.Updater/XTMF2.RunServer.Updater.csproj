@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<OutputType>Exe</OutputType>
+	<TargetFramework>net10.0</TargetFramework>
+	<RootNamespace>XTMF2.RunServer.Updater</RootNamespace>
+	<AssemblyName>XTMF2.RunServer.Updater</AssemblyName>
+	<Nullable>enable</Nullable>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+	<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+	<OutputPath>..\..\..\XTMF2-Dev\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+	  <_Parameter1>XTMF2.UnitTests</_Parameter1>
+	</AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

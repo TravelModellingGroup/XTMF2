@@ -22,6 +22,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using XTMF2.Bus.Optimization;
 
 namespace XTMF2.Bus
 {
@@ -244,6 +245,69 @@ namespace XTMF2.Bus
                         throw new InvalidOperationException($"Received an invalid command from the host! #{(int)commandNumber}");
                 }
                 Interlocked.MemoryBarrier();
+            }
+        }
+
+        public void ProcessSharedEstimationWorkerRequests()
+        {
+            using var reader = new BinaryReader(_toClient, Encoding.UTF8, true);
+            using var writer = new BinaryWriter(_toClient, Encoding.UTF8, true);
+            var request = SharedEstimationProtocol.ReadRunRequest(reader);
+            if (!SharedEstimationWorkerParticipant.TryCreate(_runtime, request,
+                    out var participant, out var error))
+            {
+                SharedEstimationProtocol.WriteWorkerReady(writer,
+                    new SharedEstimationWorkerReady(request.RunId, false, error?.Message));
+                writer.Flush();
+                return;
+            }
+
+            SharedEstimationProtocol.WriteWorkerReady(writer,
+                new SharedEstimationWorkerReady(request.RunId, true, null));
+            writer.Flush();
+
+            while (!_Exit)
+            {
+                SharedEstimationMessageType messageType;
+                try
+                {
+                    (_, messageType) = SharedEstimationProtocol.ReadHeader(reader);
+                }
+                catch (EndOfStreamException)
+                {
+                    _Exit = true;
+                    break;
+                }
+                switch (messageType)
+                {
+                    case SharedEstimationMessageType.EvaluateCandidate:
+                    {
+                        var candidate = SharedEstimationProtocol.ReadCandidatePayload(reader);
+                        SharedEstimationEvaluationResult result;
+                        try
+                        {
+                            result = participant!.Evaluate(candidate);
+                        }
+                        catch (Exception exception)
+                        {
+                            result = new SharedEstimationEvaluationResult(candidate.RunId,
+                                candidate.BatchId, candidate.CandidateId, double.NaN,
+                                exception.Message, null, null);
+                        }
+                        SharedEstimationProtocol.WriteResult(writer, result);
+                        writer.Flush();
+                        break;
+                    }
+                    case SharedEstimationMessageType.Cancel:
+                    {
+                        var (runId, _) = SharedEstimationProtocol.ReadCancelPayload(reader);
+                        if (runId == request.RunId)
+                            _Exit = true;
+                        break;
+                    }
+                    default:
+                        throw new InvalidDataException($"Unexpected shared-estimation worker message: {messageType}.");
+                }
             }
         }
 

@@ -228,6 +228,7 @@ namespace XTMF2.Bus
 
             var client = new TcpClient();
             var certificateValidationFailed = false;
+            var authenticationStage = "TLS handshake";
             try
             {
                 var connectTask = client.ConnectAsync(address, port);
@@ -251,6 +252,7 @@ namespace XTMF2.Bus
                     return !certificateValidationFailed;
                 });
                 tls.AuthenticateAsClient(address, null, SslProtocols.Tls12 | SslProtocols.Tls13, false);
+                authenticationStage = "token authentication";
                 AuthenticateClient(tls, token, timeoutMilliseconds);
                 client.ReceiveTimeout = 0;
                 client.SendTimeout = 0;
@@ -260,10 +262,10 @@ namespace XTMF2.Bus
             catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException or AuthenticationException or CryptographicException or AggregateException)
             {
                 error = certificateValidationFailed
-                    ? "The RunServer certificate fingerprint does not match the configured fingerprint."
-                    : ex is AggregateException aggregate
+                    ? "TLS handshake failed: the RunServer certificate fingerprint does not match the configured fingerprint."
+                    : $"{authenticationStage} failed: {(ex is AggregateException aggregate
                     ? aggregate.GetBaseException().Message
-                    : ex.Message;
+                    : ex.Message)}";
                 return false;
             }
             finally
@@ -286,12 +288,14 @@ namespace XTMF2.Bus
         {
             stream = null;
             error = null;
+            var authenticationStage = "TLS handshake";
             try
             {
                 client.ReceiveTimeout = timeoutMilliseconds;
                 client.SendTimeout = timeoutMilliseconds;
                 var tls = new SslStream(client.GetStream(), false);
                 tls.AuthenticateAsServer(certificate, false, SslProtocols.Tls12 | SslProtocols.Tls13, false);
+                authenticationStage = "token authentication";
                 AuthenticateServer(tls, token, timeoutMilliseconds);
                 client.ReceiveTimeout = 0;
                 client.SendTimeout = 0;
@@ -300,7 +304,7 @@ namespace XTMF2.Bus
             }
             catch (Exception ex) when (ex is IOException or InvalidOperationException or AuthenticationException or CryptographicException)
             {
-                error = ex.Message;
+                error = $"{authenticationStage} failed: {ex.Message}";
                 return false;
             }
         }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace XTMF2.GUI.Properties;
 
@@ -15,6 +16,7 @@ public sealed class RunServerEndpoint
     public bool IsLocal { get; set; }
     public string Token { get; set; } = string.Empty;
     public string CertificateFingerprint { get; set; } = string.Empty;
+    public Dictionary<string, string> BasicParameterOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static RunServerEndpoint CreateLocal()
         => new()
@@ -26,7 +28,8 @@ public sealed class RunServerEndpoint
             Port = 0,
             IsLocal = true,
             Token = string.Empty,
-            CertificateFingerprint = string.Empty
+            CertificateFingerprint = string.Empty,
+            BasicParameterOverrides = new(StringComparer.OrdinalIgnoreCase)
         };
 
     public RunServerEndpoint Clone()
@@ -39,6 +42,8 @@ public sealed class RunServerEndpoint
             Port = Port,
             IsLocal = IsLocal,
             Token = Token,
-            CertificateFingerprint = CertificateFingerprint
+            CertificateFingerprint = CertificateFingerprint,
+            BasicParameterOverrides = new Dictionary<string, string>(BasicParameterOverrides ?? new Dictionary<string, string>(),
+                StringComparer.OrdinalIgnoreCase)
         };
 }

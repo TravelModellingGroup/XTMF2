@@ -18,6 +18,7 @@
 */
 
 using System;
+using System.Collections.Generic;
 
 namespace XTMF2.Bus.Optimization;
 
@@ -81,6 +82,16 @@ public sealed class NelderMeadAlgorithm : IEstimationAlgorithm
                     Action<int, double>? progressCallback = null,
                     Func<bool>? shouldCancel = null)
     {
+        RunBatch(fitnessEvaluator, candidates => EvaluateSequentially(fitnessEvaluator, candidates),
+            progressCallback, shouldCancel);
+    }
+
+    /// <inheritdoc/>
+    public void RunBatch(Func<double[], double> fitnessEvaluator,
+                         Func<IReadOnlyList<double[]>, IReadOnlyList<double>> batchFitnessEvaluator,
+                         Action<int, double>? progressCallback = null,
+                         Func<bool>? shouldCancel = null)
+    {
         if (_n == 0) return;
 
         // Negate fitness internally when maximising so the algorithm always minimises.
@@ -103,10 +114,13 @@ public sealed class NelderMeadAlgorithm : IEstimationAlgorithm
             simplex[i] = Clamp(v);
         }
 
-        // Evaluate all initial vertices
+        // The initial simplex is independent and can be evaluated concurrently.
+        var initialFitness = batchFitnessEvaluator(simplex);
+        if (initialFitness.Count != simplex.Length)
+            throw new InvalidOperationException("The batch fitness evaluator must return one value per candidate.");
         for (int i = 0; i <= _n; i++)
         {
-            fitness[i] = eval(simplex[i]);
+            fitness[i] = _isMaximize ? -initialFitness[i] : initialFitness[i];
             TrackBest(simplex[i], fitness[i]);
         }
 
@@ -206,10 +220,16 @@ public sealed class NelderMeadAlgorithm : IEstimationAlgorithm
                 {
                     // Shrink all vertices toward the best
                     var xBest = simplex[idx[0]];
+                    var shrinkCandidates = new double[_n][];
+                    for (int s = 1; s <= _n; s++)
+                        shrinkCandidates[s - 1] = simplex[idx[s]] =
+                            Clamp(AddScaled(xBest, Sigma, Sub(simplex[idx[s]], xBest)));
+                    var shrinkFitness = batchFitnessEvaluator(shrinkCandidates);
+                    if (shrinkFitness.Count != shrinkCandidates.Length)
+                        throw new InvalidOperationException("The batch fitness evaluator must return one value per candidate.");
                     for (int s = 1; s <= _n; s++)
                     {
-                        simplex[idx[s]] = Clamp(AddScaled(xBest, Sigma, Sub(simplex[idx[s]], xBest)));
-                        fitness[idx[s]] = eval(simplex[idx[s]]);
+                        fitness[idx[s]] = _isMaximize ? -shrinkFitness[s - 1] : shrinkFitness[s - 1];
                         TrackBest(simplex[idx[s]], fitness[idx[s]]);
                     }
                 }
@@ -217,6 +237,15 @@ public sealed class NelderMeadAlgorithm : IEstimationAlgorithm
 
             progressCallback?.Invoke(iter + 1, BestFitness);
         }
+    }
+
+    private static IReadOnlyList<double> EvaluateSequentially(
+        Func<double[], double> fitnessEvaluator, IReadOnlyList<double[]> candidates)
+    {
+        var results = new double[candidates.Count];
+        for (int i = 0; i < candidates.Count; i++)
+            results[i] = fitnessEvaluator(candidates[i]);
+        return results;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

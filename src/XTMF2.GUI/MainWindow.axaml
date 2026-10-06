@@ -39,6 +39,7 @@
                           InputGesture="Ctrl+B"/>
             </MenuItem>
             <MenuItem Header="{res:Localize MainWindow_MenuTools}">
+                <MenuItem Header="RunServer Activity" Click="RunServerActivity_Click"/>
                 <MenuItem Header="{res:Localize MainWindow_MenuSettings}" Click="Settings_Click"/>
             </MenuItem>
             <MenuItem Header="{res:Localize MainWindow_MenuHelp}">

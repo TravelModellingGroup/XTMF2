@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
 
 namespace XTMF2.Bus.Optimization;
 
@@ -38,6 +39,7 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
     private readonly double _c1;   // cognitive coefficient
     private readonly double _c2;   // social coefficient
     private readonly int    _noImprovementLimit;
+    private readonly int    _randomSeed;
 
     private int      _n;
     private double[] _lower   = [];
@@ -67,16 +69,18 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
     /// <param name="socialCoeff">Global-best attraction c2 (default 1.49).</param>
     /// <param name="noImprovementLimit">Stop after this many consecutive iterations
     /// without improvement in the global best (default 5). Set to 0 to disable.</param>
+    /// <param name="randomSeed">Seed used for reproducible swarm initialization and updates.</param>
     public ParticleSwarmAlgorithm(
         int swarmSize = 29, double inertia = -0.4438,
         double cognitiveCoeff = -0.2699, double socialCoeff = 3.3950,
-        int noImprovementLimit = 5)
+        int noImprovementLimit = 5, int randomSeed = 42)
     {
         _swarmSize          = Math.Max(2, swarmSize);
         _inertia            = inertia;
         _c1                 = cognitiveCoeff;
         _c2                 = socialCoeff;
         _noImprovementLimit = Math.Max(0, noImprovementLimit);
+        _randomSeed         = randomSeed;
     }
 
     /// <inheritdoc/>
@@ -99,9 +103,19 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
                     Action<int, double>? progressCallback = null,
                     Func<bool>? shouldCancel = null)
     {
+        RunBatch(fitnessEvaluator, candidates => EvaluateSequentially(fitnessEvaluator, candidates),
+            progressCallback, shouldCancel);
+    }
+
+    /// <inheritdoc/>
+    public void RunBatch(Func<double[], double> fitnessEvaluator,
+                         Func<IReadOnlyList<double[]>, IReadOnlyList<double>> batchFitnessEvaluator,
+                         Action<int, double>? progressCallback = null,
+                         Func<bool>? shouldCancel = null)
+    {
         if (_n == 0) return;
 
-        var rng = new Random(42);
+        var rng = new Random(_randomSeed);
 
         // Negate fitness internally when maximising so the algorithm always minimises.
         Func<double[], double> eval = _isMaximize
@@ -133,10 +147,13 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
             }
         }
 
-        // Evaluate initial fitness.
+        // Evaluate initial fitness as one independent population.
+        var initialFitness = batchFitnessEvaluator(positions);
+        if (initialFitness.Count != positions.Length)
+            throw new InvalidOperationException("The batch fitness evaluator must return one value per candidate.");
         for (int i = 0; i < _swarmSize; i++)
         {
-            double f = eval(positions[i]);
+            double f = _isMaximize ? -initialFitness[i] : initialFitness[i];
             pBest[i]    = (double[])positions[i].Clone();
             pBestFit[i] = f;
             if (f < _bestInternalFitness)
@@ -171,7 +188,14 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
                         positions[i][d] + velocities[i][d]));
                 }
 
-                double fitness = eval(positions[i]);
+            }
+
+            var populationFitness = batchFitnessEvaluator(positions);
+            if (populationFitness.Count != positions.Length)
+                throw new InvalidOperationException("The batch fitness evaluator must return one value per candidate.");
+            for (int i = 0; i < _swarmSize; i++)
+            {
+                double fitness = _isMaximize ? -populationFitness[i] : populationFitness[i];
                 if (fitness < pBestFit[i])
                 {
                     pBestFit[i] = fitness;
@@ -200,6 +224,15 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
             }
             prevBestFitness = _bestInternalFitness;
         }
+    }
+
+    private static IReadOnlyList<double> EvaluateSequentially(
+        Func<double[], double> fitnessEvaluator, IReadOnlyList<double[]> candidates)
+    {
+        var results = new double[candidates.Count];
+        for (int i = 0; i < candidates.Count; i++)
+            results[i] = fitnessEvaluator(candidates[i]);
+        return results;
     }
 
     private double[] Clamp(double[] v)

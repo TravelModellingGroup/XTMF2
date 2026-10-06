@@ -2747,6 +2747,31 @@ namespace XTMF2.Editing
         }
 
         /// <summary>
+        /// Returns serialized metadata for BasicParameter&lt;string&gt; nodes that can be
+        /// overridden independently on shared-estimation workers.
+        /// </summary>
+        public IReadOnlyList<(int nodeIndex, Guid nodeId, string name, string value)> GetStringBasicParameterMeta()
+        {
+            var result = new System.Collections.Generic.List<(int, Guid, string, string)>();
+            lock (_sessionLock)
+            {
+                if (ModelSystem.NodesByLoadIndex is null)
+                    return result;
+
+                foreach (var (nodeIndex, node) in ModelSystem.NodesByLoadIndex)
+                {
+                    if (node.Type != typeof(RuntimeModules.BasicParameter<string>) || node.ParameterValue is null)
+                        continue;
+                    string? error = null;
+                    var value = node.ParameterValue.GetValue(null!, typeof(string), ref error) as string;
+                    if (error is null && value is not null)
+                        result.Add((nodeIndex, node.Id, node.Name ?? string.Empty, value));
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
         /// Set the value of a parameter to an expression
         /// </summary>
         /// <param name="user">The user issuing the command</param>
@@ -6477,6 +6502,26 @@ namespace XTMF2.Editing
                 Buffer.AddUndo(new Command(
                     () => { ModelSystem.EstimationFitnessNode = oldNode; return (true, null); },
                     () => { ModelSystem.EstimationFitnessNode = fitnessNode; return (true, null); }));
+                error = null;
+                return true;
+            }
+        }
+
+        public bool SetEstimationInputDirectoryNode(User user, Node? inputDirectoryNode,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out CommandError? error)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            if (!_session.HasAccess(user))
+            { error = new CommandError("The user does not have access to this project.", true); return false; }
+            if (inputDirectoryNode is not null && inputDirectoryNode.Type != typeof(RuntimeModules.BasicParameter<string>))
+            { error = new CommandError("The estimation input directory must be a BasicParameter<string>."); return false; }
+            lock (_sessionLock)
+            {
+                var oldNode = ModelSystem.EstimationInputDirectoryNode;
+                ModelSystem.EstimationInputDirectoryNode = inputDirectoryNode;
+                Buffer.AddUndo(new Command(
+                    () => { ModelSystem.EstimationInputDirectoryNode = oldNode; return (true, null); },
+                    () => { ModelSystem.EstimationInputDirectoryNode = inputDirectoryNode; return (true, null); }));
                 error = null;
                 return true;
             }
