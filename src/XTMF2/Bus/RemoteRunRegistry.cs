@@ -59,14 +59,27 @@ public sealed class RemoteRunRegistry : IDisposable
     private readonly string _storageDirectory;
     private bool _disposed;
 
+    /// <summary>
+    /// Gets whether the RunServer scheduler has no active or queued work.
+    /// </summary>
     public bool IsIdle => _scheduler.IsIdle;
 
+    /// <summary>
+    /// Stops the registry from accepting new work while existing work drains.
+    /// </summary>
     public void BeginDrain()
         => _scheduler.BeginDrain();
 
+    /// <summary>
+    /// Allows the registry to accept work after a drain has been cancelled.
+    /// </summary>
     public void EndDrain()
         => _scheduler.EndDrain();
 
+    /// <summary>
+    /// Creates a registry that owns remote run state and the process-wide RunServer scheduler.
+    /// </summary>
+    /// <param name="storageDirectory">The directory for persisted run manifests and artifacts; when <see langword="null"/>, the default per-user XTMF2 directory is used.</param>
     public RemoteRunRegistry(string? storageDirectory = null)
     {
         _storageDirectory = storageDirectory ?? Path.Combine(
@@ -76,6 +89,20 @@ public sealed class RemoteRunRegistry : IDisposable
         LoadPersistedJobs();
     }
 
+    /// <summary>
+    /// Registers a remote run and queues it on this registry's scheduler.
+    /// </summary>
+    /// <param name="observer">The connected RunServer bus that receives run output and completion notifications.</param>
+    /// <param name="context">The prepared run context to execute.</param>
+    /// <param name="runName">The display name of the run.</param>
+    /// <param name="runMode">The execution mode of the run.</param>
+    /// <param name="workingDirectory">The run's private working directory.</param>
+    /// <param name="startToExecute">The model-system start point to execute.</param>
+    /// <param name="modelSystem">The serialized model system, used to identify the submitted run.</param>
+    /// <param name="projectId">The identifier of the owning project, if known.</param>
+    /// <param name="modelSystemId">The identifier of the model system, if known.</param>
+    /// <param name="ownerUserId">The identifier of the owning user, if known.</param>
+    /// <returns><see langword="true"/> if the run was registered and queued; otherwise, <see langword="false"/> if the registry is draining or the run ID is already registered.</returns>
     public bool Submit(RunServerBus observer, RunContext context, string runName,
         RunMode runMode, string workingDirectory, string startToExecute, byte[] modelSystem,
         Guid? projectId = null, Guid? modelSystemId = null, Guid? ownerUserId = null)
@@ -107,6 +134,10 @@ public sealed class RemoteRunRegistry : IDisposable
     internal Scheduler.ReservationLease ReserveWorkerSlot(RunContext context, int expectedSlotCount)
         => _scheduler.ReserveGroup(context.ID, context, expectedSlotCount);
 
+    /// <summary>
+    /// Attaches a connected bus to retained remote runs so it can receive their subsequent updates.
+    /// </summary>
+    /// <param name="observer">The bus to attach as a run observer.</param>
     public void Attach(RunServerBus observer)
     {
         lock (_sync)
@@ -116,6 +147,10 @@ public sealed class RemoteRunRegistry : IDisposable
         }
     }
 
+    /// <summary>
+    /// Detaches a bus from retained remote runs without cancelling the runs.
+    /// </summary>
+    /// <param name="observer">The bus to detach from run notifications.</param>
     public void Detach(RunServerBus observer)
     {
         lock (_sync)
@@ -125,12 +160,20 @@ public sealed class RemoteRunRegistry : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets snapshots of all retained remote runs.
+    /// </summary>
+    /// <returns>A snapshot of each run currently retained by the registry.</returns>
     public IReadOnlyList<RemoteRunSnapshot> GetSnapshots()
     {
         lock (_sync)
             return _jobs.Values.Select(job => job.GetSnapshot()).ToArray();
     }
 
+    /// <summary>
+    /// Gets the active and queued run and worker-reservation activities in the shared scheduler.
+    /// </summary>
+    /// <returns>The scheduler's current activity inventory.</returns>
     public IReadOnlyList<RunServerActivity> GetActiveActivities()
     {
         lock (_sync)
@@ -154,6 +197,12 @@ public sealed class RemoteRunRegistry : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reads a run's retained artifact archive, rebuilding it from the private run directory when necessary.
+    /// </summary>
+    /// <param name="runId">The identifier of the run whose artifacts are requested.</param>
+    /// <param name="archive">Receives the archive bytes when available; otherwise, <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> if the artifact archive was read successfully; otherwise, <see langword="false"/>.</returns>
     public bool TryReadArtifacts(string runId, out byte[]? archive)
     {
         RemoteRunJob? job;
@@ -197,6 +246,11 @@ public sealed class RemoteRunRegistry : IDisposable
         }
     }
 
+    /// <summary>
+    /// Acknowledges receipt of a completed run's artifacts and removes the retained archive.
+    /// </summary>
+    /// <param name="runId">The identifier of the run whose artifact receipt is acknowledged.</param>
+    /// <returns><see langword="true"/> if the run exists and is no longer running; otherwise, <see langword="false"/>.</returns>
     public bool AcknowledgeReceived(string runId)
     {
         RemoteRunJob? job;
@@ -237,6 +291,12 @@ public sealed class RemoteRunRegistry : IDisposable
         }
     }
 
+    /// <summary>
+    /// Deletes a completed or interrupted run and its files from the registry's private workspace.
+    /// </summary>
+    /// <param name="runId">The identifier of the run to delete.</param>
+    /// <param name="error">Receives an explanation if deletion fails; otherwise, <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> if the run and its files were deleted; otherwise, <see langword="false"/>.</returns>
     public bool DeleteRun(string runId, out string? error)
     {
         error = null;
@@ -288,6 +348,10 @@ public sealed class RemoteRunRegistry : IDisposable
         }
     }
 
+    /// <summary>
+    /// Requests cancellation of a queued or running remote run.
+    /// </summary>
+    /// <param name="runId">The identifier of the run to cancel.</param>
     public void Cancel(string runId)
     {
         lock (_sync)
@@ -297,9 +361,17 @@ public sealed class RemoteRunRegistry : IDisposable
         }
     }
 
+    /// <summary>
+    /// Kills a queued or running remote run, removing queued work or terminating the active run as applicable.
+    /// </summary>
+    /// <param name="runId">The identifier of the run to kill.</param>
+    /// <returns><see langword="true"/> if a matching run was found and handled; otherwise, <see langword="false"/>.</returns>
     public bool Kill(string runId)
         => _scheduler.Kill(runId);
 
+    /// <summary>
+    /// Stops the scheduler and releases resources owned by this registry.
+    /// </summary>
     public void Dispose()
     {
         lock (_sync)

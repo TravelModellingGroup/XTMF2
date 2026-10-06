@@ -122,7 +122,12 @@ namespace XTMF2.Client
                                 Console.WriteLine("Unable to create a connection to the host!");
                                 return;
                             }
-                            RunClient(serverStream, dllsToLoad);
+                            using (var remoteRunRegistry = new RemoteRunRegistry())
+                            {
+                                RunClient(serverStream, dllsToLoad, config: null,
+                                    usePrivateWorkspace: false, remoteEstimationRegistry: null,
+                                    remoteRunRegistry: remoteRunRegistry, allowDeployment: false);
+                            }
                         }
                         finally
                         {
@@ -250,10 +255,9 @@ namespace XTMF2.Client
             {
                 try
                 {
-                    RunClient(stream, extraDlls, usePrivateWorkspace: true,
-                        allowDeployment: false,
+                    RunClient(stream, extraDlls, config: null, usePrivateWorkspace: true,
                         remoteEstimationRegistry: remoteEstimationRegistry,
-                        remoteRunRegistry: remoteRunRegistry);
+                        remoteRunRegistry: remoteRunRegistry, allowDeployment: false);
                 }
                 catch (Exception ex)
                 {
@@ -282,10 +286,9 @@ namespace XTMF2.Client
                 {
                     try
                     {
-                        RunClient(stream, extraDlls, usePrivateWorkspace: true,
-                            allowDeployment: true,
+                        RunClient(stream, extraDlls, config: null, usePrivateWorkspace: true,
                             remoteEstimationRegistry: remoteEstimationRegistry,
-                            remoteRunRegistry: remoteRunRegistry);
+                            remoteRunRegistry: remoteRunRegistry, allowDeployment: true);
                     }
                     catch (Exception ex)
                     {
@@ -298,9 +301,9 @@ namespace XTMF2.Client
             }
         }
 
-        private static void RunClient(Stream serverStream, List<string> extraDlls, SystemConfiguration? config = null,
-            bool usePrivateWorkspace = false, RemoteSharedEstimationRegistry? remoteEstimationRegistry = null,
-            RemoteRunRegistry? remoteRunRegistry = null, bool allowDeployment = false)
+        private static void RunClient(Stream serverStream, List<string> extraDlls, SystemConfiguration? config,
+            bool usePrivateWorkspace, RemoteSharedEstimationRegistry? remoteEstimationRegistry,
+            RemoteRunRegistry remoteRunRegistry, bool allowDeployment)
         {
             var runtimeStopwatch = Stopwatch.StartNew();
             LogStartup("Initializing the XTMF runtime for a client connection.");
@@ -325,16 +328,16 @@ namespace XTMF2.Client
             clientBus.SetDeploymentGate(
                 () =>
                 {
-                    remoteRunRegistry?.BeginDrain();
+                    remoteRunRegistry.BeginDrain();
                     registry.BeginDrain();
                 },
                 () =>
                 {
-                    remoteRunRegistry?.EndDrain();
+                    remoteRunRegistry.EndDrain();
                     registry.EndDrain();
                 },
                 () =>
-                    (remoteRunRegistry?.IsIdle ?? true) && registry.IsIdle,
+                    remoteRunRegistry.IsIdle && registry.IsIdle,
                 RestartWithOriginalArguments);
             clientBus.SetSharedActivityProviders(registry.GetActiveActivities,
                 sharedEstimationWorker.GetActiveActivities);
@@ -344,7 +347,7 @@ namespace XTMF2.Client
             }
             finally
             {
-                remoteRunRegistry?.Detach(clientBus);
+                remoteRunRegistry.Detach(clientBus);
             }
         }
 

@@ -108,6 +108,8 @@ namespace XTMF2.Bus
             bool allowDeployment = false)
         {
             Runtime = runtime;
+            // Standalone debug/test buses own their scheduler. Production RunClient sessions
+            // receive a process-owned registry so independent host connections share one queue.
             _remoteRunRegistry = remoteRunRegistry;
             _runScheduler = remoteRunRegistry is null ? new Scheduler(this, runLocal) : null;
             _clientHost = serverStream;
