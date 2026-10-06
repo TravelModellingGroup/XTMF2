@@ -3,6 +3,10 @@
     "XTMF.Run": {
       "commandName": "Project",
       "commandLineArgs": "-loadDLL \"../../../../../tests/XTMF2.UnitTests/bin/Debug/netcoreapp3.1/XTMF2.UnitTests.dll\" -namedPipe 123"
+    },
+    "XTMF.RunServer": {
+      "commandName": "Project",
+      "commandLineArgs": "-tcp 0.0.0.0 1447 -security .\\runserver-security\\"
     }
   }
 }

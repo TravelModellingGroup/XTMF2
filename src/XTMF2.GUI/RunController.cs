@@ -171,7 +171,13 @@ public class RunController : IDisposable
                 RedirectStandardError = true
             };
             client = new() { StartInfo = startInfo, EnableRaisingEvents = true };
+            client.ErrorDataReceived += (_, eventArgs) =>
+            {
+                if (eventArgs.Data is not null)
+                    Debug.WriteLine($"[Local RunServer] {eventArgs.Data}");
+            };
             client.Start();
+            client.BeginErrorReadLine();
             var listenLine = client.StandardOutput.ReadLine();
             if (!TryParseListeningPort(listenLine, out var hostPort))
             {

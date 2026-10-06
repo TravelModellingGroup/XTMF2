@@ -19,7 +19,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO.Compression;
 using System.Linq;
 using System.IO;
 using System.Threading;
@@ -37,16 +36,13 @@ namespace XTMF2.Client
     public class Program
     {
         private static string[] _originalArguments = Array.Empty<string>();
+        private static readonly Stopwatch StartupStopwatch = Stopwatch.StartNew();
 
         [MTAThread]
         static void Main(string[] args)
         {
             _originalArguments = args;
-            if (string.Equals(Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG"), "1", StringComparison.Ordinal))
-            {
-                RunDeploymentWatchdog(args);
-                return;
-            }
+            LogStartup("Process started; parsing command-line arguments.");
             LogDeploymentStartupSummary();
             if (args.Length == 0)
             {
@@ -162,14 +158,18 @@ namespace XTMF2.Client
 
         private static void RunTcpServer(string address, int port, string? securityDirectory, List<string> extraDlls)
         {
+            LogStartup($"Initializing TCP server on {address}:{port}.");
             X509Certificate2? certificate = null;
             string? token = null;
             if (securityDirectory is not null)
             {
+                var securityStopwatch = Stopwatch.StartNew();
+                LogStartup("Loading TCP server security credentials.");
                 try
                 {
                     certificate = RunServerSecurity.LoadCertificate(securityDirectory);
                     token = RunServerSecurity.LoadToken(securityDirectory);
+                    LogStartup($"TCP server security credentials loaded in {securityStopwatch.ElapsedMilliseconds} ms.");
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException)
                 {
@@ -178,6 +178,8 @@ namespace XTMF2.Client
                 }
             }
 
+            var listenerStopwatch = Stopwatch.StartNew();
+            LogStartup("Binding the TCP listener.");
             if (!CreateStreams.CreateTcpListener(address, port, out var listener, out var boundPort, out var error))
             {
                 Console.WriteLine("Error creating TCP RunServer listener\r\n" + error);
@@ -189,6 +191,7 @@ namespace XTMF2.Client
             if (certificate is not null)
                 Console.WriteLine($"Certificate fingerprint: {RunServerSecurity.GetFingerprint(certificate)}");
             Console.Out.Flush();
+            LogStartup($"TCP listener bound in {listenerStopwatch.ElapsedMilliseconds} ms on {address}:{boundPort}.");
             SignalDeploymentReady();
             using (tcpListener)
             using (var shutdown = new CancellationTokenSource())
@@ -202,6 +205,7 @@ namespace XTMF2.Client
                     tcpListener.Stop();
                 };
 
+                LogStartup($"READY: accepting TCP connections on {address}:{boundPort}.");
                 while (!shutdown.IsCancellationRequested)
                 {
                     TcpClient? client = null;
@@ -263,11 +267,12 @@ namespace XTMF2.Client
             RemoteSharedEstimationRegistry remoteEstimationRegistry, RemoteRunRegistry remoteRunRegistry)
         {
             var remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown endpoint";
+            var authenticationStopwatch = Stopwatch.StartNew();
             using (client)
             {
                 if (!CreateStreams.AuthenticateSecureTcpClient(client, certificate, token, out var stream, out var error))
                 {
-                    Console.WriteLine($"RunServer security validation failed for {remoteEndpoint}: {error}");
+                    Console.WriteLine($"RunServer TLS/token authentication failed for {remoteEndpoint} after {authenticationStopwatch.ElapsedMilliseconds} ms: {error}");
                     Console.Out.Flush();
                     return;
                 }
@@ -297,11 +302,17 @@ namespace XTMF2.Client
             bool usePrivateWorkspace = false, RemoteSharedEstimationRegistry? remoteEstimationRegistry = null,
             RemoteRunRegistry? remoteRunRegistry = null, bool allowDeployment = false)
         {
+            var runtimeStopwatch = Stopwatch.StartNew();
+            LogStartup("Initializing the XTMF runtime for a client connection.");
             var runtime = XTMFRuntime.CreateRuntime(config);
+            LogStartup($"XTMF runtime initialized in {runtimeStopwatch.ElapsedMilliseconds} ms.");
             var loadedConfig = runtime.SystemConfiguration;
             foreach (var dll in extraDlls)
             {
+                var assemblyStopwatch = Stopwatch.StartNew();
+                LogStartup($"Loading additional assembly '{Path.GetFileName(dll)}'.");
                 loadedConfig.LoadAssembly(dll);
+                LogStartup($"Additional assembly loaded in {assemblyStopwatch.ElapsedMilliseconds} ms.");
             }
             using var ownedRemoteEstimationRegistry = remoteEstimationRegistry is null
                 ? new RemoteSharedEstimationRegistry()
@@ -337,6 +348,12 @@ namespace XTMF2.Client
             }
         }
 
+        private static void LogStartup(string message)
+        {
+            Console.Error.WriteLine($"[RunServer +{StartupStopwatch.ElapsedMilliseconds} ms] {message}");
+            Console.Error.Flush();
+        }
+
         private static bool RestartWithOriginalArguments(string stagingRoot)
         {
             if (!Directory.Exists(stagingRoot) || !File.Exists(Path.Combine(stagingRoot, "deployment.zip")))
@@ -358,26 +375,41 @@ namespace XTMF2.Client
                 Directory.CreateDirectory(deploymentDirectory);
                 var archivePath = Path.Combine(deploymentDirectory, "deployment.zip");
                 File.Copy(Path.Combine(stagingRoot, "deployment.zip"), archivePath);
-                ExtractDeploymentArchive(archivePath, deploymentDirectory);
-                EnsureDeploymentPayload(deploymentDirectory);
 
-                var readyFile = Path.Combine(deploymentDirectory, ".deployment-ready");
-                var watchdogInfo = CreateRunServerStartInfo(processPath, processDirectory, _originalArguments);
-                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG"] = "1";
-                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_OLD_PID"] =
-                    Environment.ProcessId.ToString();
-                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_READY_FILE"] = readyFile;
-                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_PROCESS_PATH"] = processPath;
-                watchdogInfo.Environment["XTMF2_DEPLOYMENT_WATCHDOG_DEPLOYMENT_DIRECTORY"] = deploymentDirectory;
+                var updaterPath = Path.Combine(processDirectory,
+                    OperatingSystem.IsWindows() ? "XTMF2.RunServer.Updater.exe" : "XTMF2.RunServer.Updater");
+                if (!File.Exists(updaterPath))
+                    throw new FileNotFoundException("The RunServer updater executable is missing.", updaterPath);
+
+                var updaterInfo = new ProcessStartInfo(updaterPath)
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = processDirectory
+                };
+                updaterInfo.ArgumentList.Add("--old-pid");
+                updaterInfo.ArgumentList.Add(Environment.ProcessId.ToString());
+                updaterInfo.ArgumentList.Add("--install-dir");
+                updaterInfo.ArgumentList.Add(processDirectory);
+                updaterInfo.ArgumentList.Add("--server-path");
+                updaterInfo.ArgumentList.Add(processPath);
+                updaterInfo.ArgumentList.Add("--server-assembly");
+                updaterInfo.ArgumentList.Add(typeof(Program).Assembly.Location);
+                updaterInfo.ArgumentList.Add("--deployment-dir");
+                updaterInfo.ArgumentList.Add(deploymentDirectory);
+                updaterInfo.ArgumentList.Add("--staging-root");
+                updaterInfo.ArgumentList.Add(stagingRoot);
                 foreach (var argument in _originalArguments)
-                    watchdogInfo.ArgumentList.Add(argument);
-                if (Process.Start(watchdogInfo) is null)
-                    throw new InvalidOperationException("Unable to start the deployment watchdog.");
+                {
+                    updaterInfo.ArgumentList.Add("--server-arg");
+                    updaterInfo.ArgumentList.Add(argument);
+                }
+                if (System.Diagnostics.Process.Start(updaterInfo) is null)
+                    throw new InvalidOperationException("Unable to start the RunServer updater.");
                 Environment.Exit(0);
                 return true;
             }
             catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException or
-                InvalidOperationException or System.ComponentModel.Win32Exception)
+                InvalidOperationException or System.ComponentModel.Win32Exception or ArgumentException)
             {
                 Console.Error.WriteLine($"Unable to restart RunServer: {exception.Message}");
                 if (deploymentDirectory is not null)
@@ -386,7 +418,7 @@ namespace XTMF2.Client
                     {
                         Directory.Delete(deploymentDirectory, recursive: true);
                     }
-                    catch (IOException cleanupException)
+                    catch (Exception cleanupException) when (cleanupException is IOException or UnauthorizedAccessException)
                     {
                         Console.Error.WriteLine($"Unable to clean up failed deployment: {cleanupException.Message}");
                     }
@@ -398,143 +430,18 @@ namespace XTMF2.Client
         private static void SignalDeploymentReady()
         {
             var readyFile = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_READY_FILE");
-            if (string.IsNullOrWhiteSpace(readyFile))
-                return;
-
-            try
-            {
-                File.WriteAllText(readyFile, "ready");
-            }
-            catch (IOException exception)
-            {
-                Console.Error.WriteLine($"Unable to signal RunServer readiness: {exception.Message}");
-            }
-        }
-
-        private static void RunDeploymentWatchdog(string[] arguments)
-        {
-            var readyFile = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_READY_FILE");
-            var processPath = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_PROCESS_PATH");
-            var deploymentDirectory = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_DEPLOYMENT_DIRECTORY");
-            if (string.IsNullOrWhiteSpace(readyFile) || string.IsNullOrWhiteSpace(processPath) ||
-                string.IsNullOrWhiteSpace(deploymentDirectory))
-                return;
-
-            var oldProcessIdText = Environment.GetEnvironmentVariable("XTMF2_DEPLOYMENT_WATCHDOG_OLD_PID");
-            _ = int.TryParse(oldProcessIdText, out var oldProcessId);
-            var installationDirectory = GetInstallationDirectory(processPath);
-            var deadline = DateTime.UtcNow.AddSeconds(30);
-            while (DateTime.UtcNow < deadline)
+            if (!string.IsNullOrWhiteSpace(readyFile))
             {
                 try
                 {
-                    if (oldProcessId <= 0 || Process.GetProcessById(oldProcessId).HasExited)
-                        break;
+                    File.WriteAllText(readyFile, "ready");
                 }
-                catch (ArgumentException)
+                catch (IOException exception)
                 {
-                    break;
-                }
-                Thread.Sleep(250);
-            }
-
-            string? backupDirectory = null;
-            Process? deployedProcess = null;
-            try
-            {
-                if (oldProcessId > 0)
-                {
-                    try
-                    {
-                        if (!Process.GetProcessById(oldProcessId).HasExited)
-                            throw new InvalidOperationException("The previous RunServer process did not exit before activation.");
-                    }
-                    catch (ArgumentException)
-                    {
-                    }
-                }
-
-                backupDirectory = Path.Combine(deploymentDirectory, ".backup");
-                Directory.CreateDirectory(backupDirectory);
-                EnsureDeploymentPayload(deploymentDirectory);
-                ReplaceDeploymentFile(Path.Combine(installationDirectory, "XTMF2.dll"),
-                    Path.Combine(deploymentDirectory, "XTMF2.dll"), Path.Combine(backupDirectory, "XTMF2.dll"));
-                ReplaceDeploymentDirectory(Path.Combine(installationDirectory, "Modules"),
-                    Path.Combine(deploymentDirectory, "Modules"), Path.Combine(backupDirectory, "Modules"));
-
-                var startInfo = CreateRunServerStartInfo(processPath, installationDirectory, arguments);
-                ClearDeploymentWatchdogEnvironment(startInfo);
-                startInfo.Environment["XTMF2_DEPLOYMENT_MANIFEST"] =
-                    Path.Combine(deploymentDirectory, "deployment-manifest.txt");
-                startInfo.Environment["XTMF2_DEPLOYMENT_READY_FILE"] = readyFile;
-                foreach (var argument in arguments)
-                    startInfo.ArgumentList.Add(argument);
-                deployedProcess = Process.Start(startInfo)
-                    ?? throw new InvalidOperationException("Unable to start the deployed RunServer.");
-
-                var readyDeadline = DateTime.UtcNow.AddSeconds(30);
-                while (!File.Exists(readyFile) && DateTime.UtcNow < readyDeadline)
-                {
-                    if (deployedProcess.HasExited)
-                        throw new InvalidOperationException("The deployed RunServer exited before becoming ready.");
-                    Thread.Sleep(250);
-                }
-                if (!File.Exists(readyFile))
-                    throw new InvalidOperationException("The deployed RunServer did not become ready.");
-
-                Directory.Delete(backupDirectory, recursive: true);
-                Directory.Delete(deploymentDirectory, recursive: true);
-            }
-            catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
-            {
-                Console.Error.WriteLine($"Unable to activate the deployed RunServer: {exception.Message}");
-                if (backupDirectory is null)
-                    return;
-                try
-                {
-                    if (deployedProcess is not null && !deployedProcess.HasExited)
-                        deployedProcess.Kill(entireProcessTree: true);
-                    RestoreDeploymentFile(Path.Combine(installationDirectory, "XTMF2.dll"),
-                        Path.Combine(backupDirectory ?? string.Empty, "XTMF2.dll"));
-                    RestoreDeploymentDirectory(Path.Combine(installationDirectory, "Modules"),
-                        Path.Combine(backupDirectory ?? string.Empty, "Modules"));
-                    var rollbackInfo = CreateRunServerStartInfo(processPath, installationDirectory, arguments);
-                    ClearDeploymentWatchdogEnvironment(rollbackInfo);
-                    Process.Start(rollbackInfo);
-                }
-                catch (Exception rollbackException) when (rollbackException is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
-                {
-                    Console.Error.WriteLine($"Unable to restore the previous RunServer version: {rollbackException.Message}");
+                    Console.Error.WriteLine($"Unable to signal RunServer readiness: {exception.Message}");
                 }
             }
-        }
-
-        private static void ClearDeploymentWatchdogEnvironment(ProcessStartInfo startInfo)
-        {
-            startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG");
-            startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_OLD_PID");
-            startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_READY_FILE");
-            startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_PROCESS_PATH");
-            startInfo.Environment.Remove("XTMF2_DEPLOYMENT_WATCHDOG_DEPLOYMENT_DIRECTORY");
-        }
-
-        private static ProcessStartInfo CreateRunServerStartInfo(string processPath, string workingDirectory,
-            IEnumerable<string> arguments)
-        {
-            var startInfo = new ProcessStartInfo(processPath)
-            {
-                UseShellExecute = false,
-                WorkingDirectory = workingDirectory,
-                RedirectStandardInput = false,
-                RedirectStandardOutput = false,
-                RedirectStandardError = false,
-                CreateNoWindow = false
-            };
-            if (IsDotnetHost(processPath))
-                startInfo.ArgumentList.Add(typeof(Program).Assembly.Location);
-            foreach (var argument in arguments)
-                startInfo.ArgumentList.Add(argument);
-            return startInfo;
+            Environment.SetEnvironmentVariable("XTMF2_DEPLOYMENT_READY_FILE", null);
         }
 
         private static bool IsDotnetHost(string processPath)
@@ -548,77 +455,6 @@ namespace XTMF2.Client
             if (IsDotnetHost(processPath))
                 return Path.GetDirectoryName(typeof(Program).Assembly.Location) ?? Environment.CurrentDirectory;
             return Path.GetDirectoryName(processPath) ?? Environment.CurrentDirectory;
-        }
-
-        private static void ReplaceDeploymentFile(string destination, string staged, string backup)
-        {
-            if (!File.Exists(staged))
-                throw new InvalidDataException($"Deployment is missing required file '{Path.GetFileName(staged)}'.");
-            if (File.Exists(destination))
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
-                File.Move(destination, backup, overwrite: true);
-            }
-            File.Move(staged, destination, overwrite: true);
-        }
-
-        private static void ExtractDeploymentArchive(string archivePath, string destinationRoot)
-        {
-            using var archive = ZipFile.OpenRead(archivePath);
-            foreach (var entry in archive.Entries)
-            {
-                var destination = Path.GetFullPath(Path.Combine(destinationRoot,
-                    entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
-                var root = Path.GetFullPath(destinationRoot + Path.DirectorySeparatorChar);
-                if (!destination.StartsWith(root, StringComparison.Ordinal))
-                    throw new InvalidDataException("Deployment archive contains an unsafe path.");
-                if (string.IsNullOrEmpty(entry.Name))
-                {
-                    Directory.CreateDirectory(destination);
-                    continue;
-                }
-                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                entry.ExtractToFile(destination, overwrite: true);
-            }
-        }
-
-        private static void EnsureDeploymentPayload(string deploymentDirectory)
-        {
-            var runtimePath = Path.Combine(deploymentDirectory, "XTMF2.dll");
-            var modulesPath = Path.Combine(deploymentDirectory, "Modules");
-            if (File.Exists(runtimePath) && Directory.Exists(modulesPath))
-                return;
-
-            var archivePath = Path.Combine(deploymentDirectory, "deployment.zip");
-            if (!File.Exists(archivePath))
-                throw new InvalidDataException("Deployment staging data is incomplete.");
-            ExtractDeploymentArchive(archivePath, deploymentDirectory);
-            if (!File.Exists(runtimePath) || !Directory.Exists(modulesPath))
-                throw new InvalidDataException("Deployment archive is missing XTMF2.dll or Modules.");
-        }
-
-        private static void RestoreDeploymentFile(string destination, string backup)
-        {
-            if (File.Exists(backup))
-                File.Move(backup, destination, overwrite: true);
-        }
-
-        private static void ReplaceDeploymentDirectory(string destination, string staged, string backup)
-        {
-            if (!Directory.Exists(staged))
-                throw new InvalidDataException("Deployment is missing the required Modules directory.");
-            if (Directory.Exists(destination))
-                Directory.Move(destination, backup);
-            Directory.Move(staged, destination);
-        }
-
-        private static void RestoreDeploymentDirectory(string destination, string backup)
-        {
-            if (!Directory.Exists(backup))
-                return;
-            if (Directory.Exists(destination))
-                Directory.Delete(destination, recursive: true);
-            Directory.Move(backup, destination);
         }
 
         private static void LogDeploymentStartupSummary()
