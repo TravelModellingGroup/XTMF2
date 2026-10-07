@@ -204,6 +204,9 @@ public sealed class RemoteRunRegistry : IDisposable
     /// <param name="archive">Receives the archive bytes when available; otherwise, <see langword="null"/>.</param>
     /// <returns><see langword="true"/> if the artifact archive was read successfully; otherwise, <see langword="false"/>.</returns>
     public bool TryReadArtifacts(string runId, out byte[]? archive)
+        => TryReadArtifacts(runId, out archive, null);
+
+    public bool TryReadArtifacts(string runId, out byte[]? archive, Action<long, long>? progress)
     {
         RemoteRunJob? job;
         string path;
@@ -232,7 +235,7 @@ public sealed class RemoteRunRegistry : IDisposable
                 var temporary = path + ".tmp";
                 if (File.Exists(temporary))
                     File.Delete(temporary);
-                ZipFile.CreateFromDirectory(snapshot.WorkingDirectory, temporary, CompressionLevel.Fastest, false);
+                RunArtifactArchive.CreateFromDirectory(snapshot.WorkingDirectory, temporary, progress);
                 File.Move(temporary, path, true);
                 job.SetArtifactsAvailable();
             }
@@ -246,7 +249,7 @@ public sealed class RemoteRunRegistry : IDisposable
         }
     }
 
-    internal bool TryOpenArtifacts(string runId, out FileStream? archive)
+    internal bool TryOpenArtifacts(string runId, out FileStream? archive, Action<long, long>? progress = null)
     {
         archive = null;
         RemoteRunJob? job;
@@ -270,7 +273,7 @@ public sealed class RemoteRunRegistry : IDisposable
                 var temporary = path + ".tmp";
                 if (File.Exists(temporary))
                     File.Delete(temporary);
-                ZipFile.CreateFromDirectory(snapshot.WorkingDirectory, temporary, CompressionLevel.Fastest, false);
+                RunArtifactArchive.CreateFromDirectory(snapshot.WorkingDirectory, temporary, progress);
                 File.Move(temporary, path, true);
                 job.SetArtifactsAvailable();
             }
@@ -599,6 +602,7 @@ public sealed class RemoteRunRegistry : IDisposable
         public void SendRunArtifacts(string runId, string runDirectory)
         {
             var artifactPath = _registry.GetArtifactPath(runId);
+            var archiveCreated = false;
             try
             {
                 if (Directory.Exists(runDirectory))
@@ -606,16 +610,22 @@ public sealed class RemoteRunRegistry : IDisposable
                     var temporary = artifactPath + ".tmp";
                     if (File.Exists(temporary))
                         File.Delete(temporary);
-                    ZipFile.CreateFromDirectory(runDirectory, temporary, CompressionLevel.Fastest, false);
+                    RunArtifactArchive.CreateFromDirectory(runDirectory, temporary,
+                        (processed, total) => Forward(observer =>
+                            observer.SendArtifactCompressionProgress(runId, processed, total)));
                     File.Move(temporary, artifactPath, true);
                     Update(snapshot => snapshot with { ArtifactsAvailable = true, UpdatedAt = DateTimeOffset.UtcNow });
+                    archiveCreated = true;
                 }
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
                 SendStatusMessage(runId, $"Run output archive could not be retained: {exception.Message}");
             }
-            Forward(observer => observer.SendRunArtifacts(runId, runDirectory));
+            if (archiveCreated)
+                Forward(observer => observer.SendRunArtifactsArchive(runId, artifactPath));
+            else
+                Forward(observer => observer.SendRunArtifacts(runId, runDirectory));
         }
 
         private void Update(Func<RemoteRunSnapshot, RemoteRunSnapshot> update)

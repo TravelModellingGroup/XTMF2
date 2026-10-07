@@ -178,13 +178,16 @@ public sealed partial class RunsViewModel : ObservableObject
     /// <summary>
     /// Marks the run with <paramref name="runId"/> as finished.  Safe to call from any thread.
     /// </summary>
-    internal void NotifyFinished(string runId, string? completionMessage = null)
+    internal void NotifyFinished(string runId, string? completionMessage = null,
+        bool isRemoteRunPreparingOutput = false)
     {
         var vm = FindRun(runId);
         if (vm is null) return;
         Dispatcher.UIThread.Post(() =>
         {
             vm.MarkFinished(completionMessage);
+            if (isRemoteRunPreparingOutput)
+                vm.MarkRemoteOutputPreparing();
             SystemAlert.ShowRunFinished(vm.RunName);
         });
     }
@@ -236,11 +239,32 @@ public sealed partial class RunsViewModel : ObservableObject
         });
     }
 
+    internal void NotifyArtifactTransferProgress(string runId, long bytesTransferred, long totalBytes)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.UpdateArtifactTransferProgress(bytesTransferred, totalBytes));
+    }
+
+    internal void NotifyArtifactCompressionProgress(string runId, long processedBytes, long totalBytes)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.UpdateArtifactCompressionProgress(processedBytes, totalBytes));
+    }
+
+    internal void NotifyArtifactTransferFinalizing(string runId, string phase)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() => vm.MarkArtifactTransferFinalizing(phase));
+    }
+
     internal void NotifyRemoteOutputAvailability(string runId, bool available)
     {
         var vm = FindRun(runId);
         if (vm is null) return;
-        Dispatcher.UIThread.Post(() => vm.RemoteOutputAvailable = available && !vm.ArtifactsAvailable);
+        Dispatcher.UIThread.Post(() => vm.SetRemoteOutputAvailability(available));
     }
 
     internal void NotifyArtifactTransferFailed(string runId, string error)

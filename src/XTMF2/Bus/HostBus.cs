@@ -116,6 +116,38 @@ public sealed class HostBus : IDisposable
 
     public event EventHandler<RunArtifactsReceivedEventArgs>? ClientRunArtifactsReceived;
 
+    public event EventHandler<ArtifactTransferProgressEventArgs>? ArtifactTransferProgress;
+
+    public event EventHandler<ArtifactCompressionProgressEventArgs>? ArtifactCompressionProgress;
+
+    public sealed class ArtifactTransferProgressEventArgs : EventArgs
+    {
+        public string RunId { get; }
+        public long BytesTransferred { get; }
+        public long TotalBytes { get; }
+
+        internal ArtifactTransferProgressEventArgs(string runId, long bytesTransferred, long totalBytes)
+        {
+            RunId = runId;
+            BytesTransferred = bytesTransferred;
+            TotalBytes = totalBytes;
+        }
+    }
+
+    public sealed class ArtifactCompressionProgressEventArgs : EventArgs
+    {
+        public string RunId { get; }
+        public long BytesProcessed { get; }
+        public long TotalBytes { get; }
+
+        internal ArtifactCompressionProgressEventArgs(string runId, long bytesProcessed, long totalBytes)
+        {
+            RunId = runId;
+            BytesProcessed = bytesProcessed;
+            TotalBytes = totalBytes;
+        }
+    }
+
     public sealed class RunArtifactsReceivedEventArgs : EventArgs
     {
         public string RunId { get; }
@@ -336,7 +368,8 @@ public sealed class HostBus : IDisposable
                                 try
                                 {
                                     using (var archive = File.Create(archivePath))
-                                        CopyExactly(reader.BaseStream, archive, length);
+                                        CopyExactly(reader.BaseStream, archive, length,
+                                            (transferred, total) => ReportArtifactTransferProgress(runId, transferred, total));
                                     IgnoreWarnings(() => ClientRunArtifactsReceived?.Invoke(
                                         this, new RunArtifactsReceivedEventArgs(runId, archivePath)));
                                 }
@@ -372,8 +405,14 @@ public sealed class HostBus : IDisposable
                                             this, SharedEstimationProtocol.ReadWorkerControlAcknowledgementPayload(reader)));
                                         break;
                                     case SharedEstimationMessageType.Status:
-                                        IgnoreWarnings(() => SharedEstimationStatusAvailable?.Invoke(
-                                            this, SharedEstimationProtocol.ReadStatusPayload(reader)));
+                                        var status = SharedEstimationProtocol.ReadStatusPayload(reader);
+                                        IgnoreWarnings(() => SharedEstimationStatusAvailable?.Invoke(this, status));
+                                        break;
+                                    case SharedEstimationMessageType.ArtifactCompressionProgress:
+                                        var compressionProgress =
+                                            SharedEstimationProtocol.ReadArtifactCompressionProgressPayload(reader);
+                                        ReportArtifactCompressionProgress(compressionProgress.RunId,
+                                            compressionProgress.BytesProcessed, compressionProgress.TotalBytes);
                                         break;
                                     case SharedEstimationMessageType.WorkerReady:
                                         var readiness = SharedEstimationProtocol.ReadWorkerReadyPayload(reader);
@@ -394,7 +433,9 @@ public sealed class HostBus : IDisposable
                                                     FileAccess.Write, FileShare.Read))
                                                 {
                                                     response = SharedEstimationProtocol.ReadRemoteRunArtifactsPayload(
-                                                        reader, archive, archivePath);
+                                                        reader, archive, archivePath,
+                                                        (runId, transferred, total) => ReportArtifactTransferProgress(
+                                                            runId, transferred, total));
                                                 }
                                                 IgnoreWarnings(() => RemoteRunArtifactsAvailable?.Invoke(this, response));
                                             }
@@ -484,9 +525,21 @@ public sealed class HostBus : IDisposable
         return listenerThread;
     }
 
-    private static void CopyExactly(Stream source, Stream destination, long length)
+    private void ReportArtifactTransferProgress(string runId, long transferred, long total)
+        => IgnoreWarnings(() => ArtifactTransferProgress?.Invoke(this,
+            new ArtifactTransferProgressEventArgs(runId, transferred, total)));
+
+    private void ReportArtifactCompressionProgress(string runId, long processed, long total)
+        => IgnoreWarnings(() => ArtifactCompressionProgress?.Invoke(this,
+            new ArtifactCompressionProgressEventArgs(runId, processed, total)));
+
+    private static void CopyExactly(Stream source, Stream destination, long length,
+        Action<long, long>? progress = null)
     {
         var buffer = new byte[81920];
+        long transferred = 0;
+        long lastReported = 0;
+        progress?.Invoke(0, length);
         while (length > 0)
         {
             var read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, length));
@@ -494,6 +547,12 @@ public sealed class HostBus : IDisposable
                 throw new EndOfStreamException("The RunServer artifact archive was truncated.");
             destination.Write(buffer, 0, read);
             length -= read;
+            transferred += read;
+            if (transferred - lastReported >= 1024 * 1024 || length == 0)
+            {
+                progress?.Invoke(transferred, transferred + length);
+                lastReported = transferred;
+            }
         }
     }
 

@@ -148,6 +148,13 @@
                             <TextBlock Text="{Binding SelectedRun.OutputTransferStatus}"
                                    IsVisible="{Binding SelectedRun.IsRemoteRun}"
                                    FontSize="11" Opacity="0.7" Margin="0,4,0,0"/>
+                            <ProgressBar Minimum="0" Maximum="100"
+                                      Value="{Binding SelectedRun.ArtifactTransferProgress}"
+                                      IsVisible="{Binding SelectedRun.IsArtifactTransferActive}"
+                                      Height="8" Margin="0,3,0,0"/>
+                            <TextBlock Text="{Binding SelectedRun.ArtifactTransferProgressText}"
+                                    IsVisible="{Binding SelectedRun.IsArtifactTransferActive}"
+                                    FontSize="10" Opacity="0.65"/>
                             <Button Content="Transfer Output to This Computer"
                                 IsVisible="{Binding SelectedRun.CanTransferRemoteOutput}"
                                 Classes="dlg-primary"

@@ -215,7 +215,9 @@ public class RunController : IDisposable
     {
         Console.WriteLine($"GUI received RunServer completion: {runID}");
         Console.Out.Flush();
-        RunsViewModel.NotifyFinished(runID);
+        var isRemoteRun = sender is HostBus hostBus &&
+            _connections.TryGetEndpoint(hostBus, out var endpoint) && endpoint is { IsLocal: false };
+        RunsViewModel.NotifyFinished(runID, isRemoteRunPreparingOutput: isRemoteRun);
     }
 
     private void OnClientRunArtifactsReceived(object? sender, HostBus.RunArtifactsReceivedEventArgs args)
@@ -247,6 +249,7 @@ public class RunController : IDisposable
 
         try
         {
+            RunsViewModel.NotifyArtifactTransferFinalizing(args.RunId, "Extracting output archive...");
             ExtractRunArtifacts(args.ArchivePath, targetDirectory);
             RunsViewModel.NotifyArtifactsTransferred(args.RunId);
         }
@@ -282,6 +285,10 @@ public class RunController : IDisposable
     {
         RunsViewModel.NotifyStatus(runID, status);
     }
+
+    private void OnArtifactCompressionProgress(object? sender,
+        HostBus.ArtifactCompressionProgressEventArgs args)
+        => RunsViewModel.NotifyArtifactCompressionProgress(args.RunId, args.BytesProcessed, args.TotalBytes);
 
     private void OnClientIterationProgressAvailable(
         object sender, string runID, int iteration, double fitness, int fitnessTestsThisIteration,
@@ -1079,6 +1086,8 @@ public class RunController : IDisposable
         hostBus.SharedEstimationJobSnapshotsAvailable += OnSharedEstimationJobSnapshotsAvailable;
         hostBus.RemoteRunSnapshotsAvailable += OnRemoteRunSnapshotsAvailable;
         hostBus.RemoteRunArtifactsAvailable += OnRemoteRunArtifactsAvailable;
+        hostBus.ArtifactTransferProgress += OnArtifactTransferProgress;
+        hostBus.ArtifactCompressionProgress += OnArtifactCompressionProgress;
         hostBus.ClientRunArtifactsReceived += OnClientRunArtifactsReceived;
         hostBus.Disconnected += OnHostBusDisconnected;
         hostBus.QuerySharedEstimationJobs(out _);
@@ -1132,6 +1141,9 @@ public class RunController : IDisposable
             TryAutomaticallyBindRecoveredRun(snapshot.RunId);
         }
     }
+
+    private void OnArtifactTransferProgress(object? sender, HostBus.ArtifactTransferProgressEventArgs args)
+        => RunsViewModel.NotifyArtifactTransferProgress(args.RunId, args.BytesTransferred, args.TotalBytes);
 
     private void OnRemoteRunSnapshotsAvailable(object? sender, IReadOnlyList<RemoteRunSnapshot> snapshots)
     {
@@ -1425,8 +1437,10 @@ public class RunController : IDisposable
                 return false;
             }
         }
+        RunsViewModel.NotifyRemoteReceiptPending(runId, true);
         if (!receipt.HostBus.RequestRemoteRunArtifacts(runId, out var requestError))
         {
+            RunsViewModel.NotifyRemoteReceiptPending(runId, false);
             error = requestError?.Message ?? "Unable to request remote run artifacts.";
             return false;
         }
@@ -1525,6 +1539,7 @@ public class RunController : IDisposable
             _recoveredRemoteRuns.TryGetValue(response.RunId, out snapshot);
         }
         if (response.ArchivePath is null)
+        if (response.ArchivePath is null)
         {
             RunsViewModel.NotifyArtifactTransferFailed(response.RunId,
                 response.Error ?? "The RunServer returned no artifact archive.");
@@ -1533,9 +1548,10 @@ public class RunController : IDisposable
 
         try
         {
+            RunsViewModel.NotifyArtifactTransferFinalizing(response.RunId, "Extracting output archive...");
             using var archiveStream = File.OpenRead(response.ArchivePath);
             ExtractRunArtifacts(archiveStream, receipt.TargetDirectory);
-            RunsViewModel.NotifyArtifactsTransferred(response.RunId);
+            RunsViewModel.NotifyArtifactTransferFinalizing(response.RunId, "Finalizing remote receipt...");
             if (snapshot is not null)
                 PersistRemoteRunSnapshot(snapshot with { ArtifactsAvailable = false });
             if (!receipt.HostBus.AcknowledgeRemoteRun(response.RunId, out var error))
@@ -1546,8 +1562,8 @@ public class RunController : IDisposable
                 if (snapshot is not null)
                     _recoveredRemoteRuns[response.RunId] = snapshot with { ArtifactsAvailable = false };
             }
-            RunsViewModel.NotifyRemoteReceiptCompleted(response.RunId);
             RunsViewModel.NotifyArtifactsTransferred(response.RunId);
+            RunsViewModel.NotifyRemoteReceiptCompleted(response.RunId);
         }
         catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -1613,6 +1629,8 @@ public class RunController : IDisposable
         hostBus.SharedEstimationJobSnapshotsAvailable -= OnSharedEstimationJobSnapshotsAvailable;
         hostBus.RemoteRunSnapshotsAvailable -= OnRemoteRunSnapshotsAvailable;
         hostBus.RemoteRunArtifactsAvailable -= OnRemoteRunArtifactsAvailable;
+        hostBus.ArtifactTransferProgress -= OnArtifactTransferProgress;
+        hostBus.ArtifactCompressionProgress -= OnArtifactCompressionProgress;
         hostBus.ClientRunArtifactsReceived -= OnClientRunArtifactsReceived;
         hostBus.Disconnected -= OnHostBusDisconnected;
     }

@@ -79,16 +79,54 @@ public sealed partial class RunViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
     private bool _remoteOutputAvailable;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    private bool _isPreparingRemoteOutput;
+
     public bool CanTransferRemoteOutput
-        => IsRemoteRun && IsCompleted && !ArtifactsAvailable && !HasPendingRemoteReceipt;
+        => IsRemoteRun && IsCompleted && !ArtifactsAvailable && !HasPendingRemoteReceipt
+            && !IsPreparingRemoteOutput && !IsArtifactTransferActive;
 
     public string OutputTransferStatus => !IsRemoteRun
         ? ArtifactsAvailable ? "Output is on this computer." : "Output has not been transferred yet."
+        : IsPreparingRemoteOutput ? "Preparing run output on the RunServer..."
+        : IsArtifactTransferActive ? _artifactTransferPhase
+        : _artifactTransferFailed ? "Output transfer failed. See run log."
         : Status == RunStatus.Running ? "Output will be transferred when the run completes."
         : ArtifactsAvailable ? "Output is on this computer."
         : HasPendingRemoteReceipt ? "Output transfer is pending."
         : RemoteOutputAvailable ? "Output is available on the RunServer."
         : "RunServer output availability has not been confirmed.";
+
+    public double ArtifactTransferProgress => ArtifactTransferTotalBytes <= 0
+        ? 0
+        : Math.Clamp(100d * ArtifactTransferBytesReceived / ArtifactTransferTotalBytes, 0, 100);
+
+    public string ArtifactTransferProgressText => _isArtifactCompressionProgress
+        ? $"Compressing {FormatByteCount(ArtifactTransferBytesReceived)} of {FormatByteCount(ArtifactTransferTotalBytes)}"
+        : ArtifactTransferTotalBytes <= 0
+            ? "Waiting for archive size..."
+            : $"{FormatByteCount(ArtifactTransferBytesReceived)} of {FormatByteCount(ArtifactTransferTotalBytes)}";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    private bool _isArtifactTransferActive;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ArtifactTransferProgress))]
+    [NotifyPropertyChangedFor(nameof(ArtifactTransferProgressText))]
+    private long _artifactTransferBytesReceived;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ArtifactTransferProgress))]
+    [NotifyPropertyChangedFor(nameof(ArtifactTransferProgressText))]
+    private long _artifactTransferTotalBytes;
+
+    private string _artifactTransferPhase = "Waiting for RunServer...";
+    private bool _artifactTransferFailed;
+    private bool _isArtifactCompressionProgress;
 
     /// <summary>True when this run has a known output directory that can be opened.</summary>
     public bool HasRunDirectory => ArtifactsAvailable && !string.IsNullOrWhiteSpace(RunDirectory);
@@ -103,6 +141,11 @@ public sealed partial class RunViewModel : ObservableObject
         ArtifactsAvailable = true;
         RemoteOutputAvailable = false;
         HasPendingRemoteReceipt = false;
+        IsPreparingRemoteOutput = false;
+        IsArtifactTransferActive = false;
+        _isArtifactCompressionProgress = false;
+        _artifactTransferFailed = false;
+        OnPropertyChanged(nameof(ArtifactTransferProgressText));
         OnPropertyChanged(nameof(OutputTransferStatus));
         OnPropertyChanged(nameof(HasRunDirectory));
         OpenRunDirectoryCommand.NotifyCanExecuteChanged();
@@ -135,6 +178,10 @@ public sealed partial class RunViewModel : ObservableObject
     internal void MarkArtifactTransferFailed(string message)
     {
         HasPendingRemoteReceipt = false;
+        IsPreparingRemoteOutput = false;
+        IsArtifactTransferActive = false;
+        _isArtifactCompressionProgress = false;
+        _artifactTransferFailed = true;
         AppendStatus($"Output transfer failed: {message}");
         OnPropertyChanged(nameof(OutputTransferStatus));
         OnPropertyChanged(nameof(CanTransferRemoteOutput));
@@ -377,8 +424,90 @@ public sealed partial class RunViewModel : ObservableObject
     internal void SetRemoteReceiptPending(bool pending)
     {
         HasPendingRemoteReceipt = pending;
+        if (pending)
+        {
+            IsPreparingRemoteOutput = false;
+            BeginArtifactTransfer();
+        }
+        else if (ArtifactTransferBytesReceived == 0)
+            IsArtifactTransferActive = false;
         OnPropertyChanged(nameof(OutputTransferStatus));
         OnPropertyChanged(nameof(CanTransferRemoteOutput));
+    }
+
+    internal void UpdateArtifactTransferProgress(long bytesTransferred, long totalBytes)
+    {
+        IsPreparingRemoteOutput = false;
+        IsArtifactTransferActive = true;
+        _isArtifactCompressionProgress = false;
+        _artifactTransferFailed = false;
+        _artifactTransferPhase = "Receiving output archive...";
+        ArtifactTransferTotalBytes = Math.Max(0, totalBytes);
+        ArtifactTransferBytesReceived = Math.Clamp(bytesTransferred, 0, ArtifactTransferTotalBytes);
+        OnPropertyChanged(nameof(OutputTransferStatus));
+        OnPropertyChanged(nameof(ArtifactTransferProgressText));
+    }
+
+    internal void UpdateArtifactCompressionProgress(long processedBytes, long totalBytes)
+    {
+        IsPreparingRemoteOutput = false;
+        IsArtifactTransferActive = true;
+        _isArtifactCompressionProgress = true;
+        _artifactTransferFailed = false;
+        _artifactTransferPhase = "Compressing run output on the RunServer...";
+        ArtifactTransferTotalBytes = Math.Max(0, totalBytes);
+        ArtifactTransferBytesReceived = Math.Clamp(processedBytes, 0, ArtifactTransferTotalBytes);
+        OnPropertyChanged(nameof(OutputTransferStatus));
+        OnPropertyChanged(nameof(ArtifactTransferProgressText));
+    }
+
+    internal void MarkArtifactTransferFinalizing(string phase)
+    {
+        IsArtifactTransferActive = true;
+        _artifactTransferPhase = phase;
+        OnPropertyChanged(nameof(OutputTransferStatus));
+    }
+
+    internal void MarkRemoteOutputPreparing()
+    {
+        if (!IsRemoteRun || ArtifactsAvailable)
+            return;
+        IsPreparingRemoteOutput = true;
+        IsArtifactTransferActive = false;
+        RemoteOutputAvailable = false;
+        OnPropertyChanged(nameof(OutputTransferStatus));
+        OnPropertyChanged(nameof(CanTransferRemoteOutput));
+    }
+
+    internal void SetRemoteOutputAvailability(bool available)
+    {
+        RemoteOutputAvailable = available && !ArtifactsAvailable;
+        if (RemoteOutputAvailable)
+            IsPreparingRemoteOutput = false;
+    }
+
+    private void BeginArtifactTransfer()
+    {
+        _artifactTransferFailed = false;
+        _isArtifactCompressionProgress = false;
+        _artifactTransferPhase = "Waiting for RunServer...";
+        ArtifactTransferBytesReceived = 0;
+        ArtifactTransferTotalBytes = 0;
+        IsArtifactTransferActive = true;
+        OnPropertyChanged(nameof(OutputTransferStatus));
+    }
+
+    private static string FormatByteCount(long byteCount)
+    {
+        string[] units = ["B", "KiB", "MiB", "GiB", "TiB"];
+        double value = byteCount;
+        int unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+        return unit == 0 ? $"{value:N0} {units[unit]}" : $"{value:0.0} {units[unit]}";
     }
 
     private bool CanOpenRunDirectory() => HasRunDirectory;

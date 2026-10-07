@@ -503,17 +503,9 @@ namespace XTMF2.Bus
                     return;
 
                 archivePath = Path.Combine(Path.GetTempPath(), $"XTMF2-{Guid.NewGuid():N}.zip");
-                ZipFile.CreateFromDirectory(runDirectory, archivePath, CompressionLevel.Fastest, false);
-                var archiveInfo = new FileInfo(archivePath);
-                Write(writer =>
-                {
-                    writer.Write((int)Out.ClientRunArtifacts);
-                    writer.Write(runId);
-                    writer.Write(archiveInfo.Length);
-                    using var archive = File.OpenRead(archivePath);
-                    archive.CopyTo(writer.BaseStream);
-                    writer.BaseStream.Flush();
-                });
+                RunArtifactArchive.CreateFromDirectory(runDirectory, archivePath,
+                    (processed, total) => SendArtifactCompressionProgress(runId, processed, total));
+                SendRunArtifactsArchive(runId, archivePath);
             }
             finally
             {
@@ -522,6 +514,24 @@ namespace XTMF2.Bus
                     try { File.Delete(archivePath); } catch { }
                 }
             }
+        }
+
+        internal void SendArtifactCompressionProgress(string runId, long processedBytes, long totalBytes)
+            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteArtifactCompressionProgress(writer,
+                new ArtifactCompressionProgress(runId, processedBytes, totalBytes)));
+
+        internal void SendRunArtifactsArchive(string runId, string archivePath)
+        {
+            var archiveInfo = new FileInfo(archivePath);
+            Write(writer =>
+            {
+                writer.Write((int)Out.ClientRunArtifacts);
+                writer.Write(runId);
+                writer.Write(archiveInfo.Length);
+                using var archive = File.OpenRead(archivePath);
+                archive.CopyTo(writer.BaseStream);
+                writer.BaseStream.Flush();
+            });
         }
 
         private static MemoryStream CreateMemoryStreamLoadingFrom(Stream source, int bytes)
@@ -665,7 +675,9 @@ namespace XTMF2.Bus
                                             var runId = SharedEstimationProtocol.ReadGetRemoteRunArtifactsPayload(reader);
                                             FileStream? archive = null;
                                             var found = _remoteRunRegistry is not null &&
-                                                _remoteRunRegistry.TryOpenArtifacts(runId, out archive);
+                                                _remoteRunRegistry.TryOpenArtifacts(runId, out archive,
+                                                    (processed, total) => SendArtifactCompressionProgress(
+                                                        runId, processed, total));
                                             using (archive)
                                             {
                                                 SendRemoteRunArtifacts(runId, archive, archive?.Length ?? 0,

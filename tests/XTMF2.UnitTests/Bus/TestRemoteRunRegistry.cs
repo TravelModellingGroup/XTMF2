@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -202,9 +204,19 @@ public class TestRemoteRunRegistry
             Assert.IsTrue(registry.AcknowledgeReceived(runId));
             Assert.IsFalse(File.Exists(archivePath));
             Assert.IsTrue(registry.GetSnapshots()[0].ArtifactsAvailable);
-            Assert.IsTrue(registry.TryReadArtifacts(runId, out var archive));
+            var progress = new List<(long processed, long total)>();
+            Assert.IsTrue(registry.TryReadArtifacts(runId, out var archive,
+                (processed, total) => progress.Add((processed, total))));
             Assert.IsNotNull(archive);
             Assert.IsTrue(File.Exists(archivePath));
+            Assert.IsGreaterThanOrEqualTo(2, progress.Count);
+            Assert.AreEqual(0L, progress[0].processed);
+            Assert.AreEqual(new FileInfo(Path.Combine(workingDirectory, "output.txt")).Length,
+                progress[^1].processed);
+            Assert.AreEqual(progress[^1].processed, progress[^1].total);
+            using var archiveStream = new MemoryStream(archive!);
+            using var zip = new ZipArchive(archiveStream, ZipArchiveMode.Read);
+            Assert.AreEqual("output.txt", zip.Entries.Single().FullName);
         }
         finally
         {
