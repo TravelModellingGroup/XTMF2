@@ -418,8 +418,9 @@ namespace XTMF2.Bus
         public void SendRemoteRunSnapshots(IReadOnlyList<RemoteRunSnapshot> snapshots)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRemoteRunSnapshots(writer, snapshots));
 
-        public void SendRemoteRunArtifacts(string runId, byte[]? archive, string? error)
-            => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, runId, archive, error));
+        public void SendRemoteRunArtifacts(string runId, Stream? archive, long archiveLength, string? error)
+            => WriteSharedEstimation(writer =>
+                SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, runId, archive, archiveLength, error));
 
         public void SendRemoteRunDeletionResponse(RemoteRunDeletionResponse response)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRemoteRunDeleted(writer, response));
@@ -662,11 +663,14 @@ namespace XTMF2.Bus
                                     case SharedEstimationMessageType.GetRemoteRunArtifacts:
                                         {
                                             var runId = SharedEstimationProtocol.ReadGetRemoteRunArtifactsPayload(reader);
-                                            byte[]? archive = null;
+                                            FileStream? archive = null;
                                             var found = _remoteRunRegistry is not null &&
-                                                _remoteRunRegistry.TryReadArtifacts(runId, out archive);
-                                            SendRemoteRunArtifacts(runId, found ? archive : null,
-                                                found ? null : "No unacknowledged artifact archive is available for this run.");
+                                                _remoteRunRegistry.TryOpenArtifacts(runId, out archive);
+                                            using (archive)
+                                            {
+                                                SendRemoteRunArtifacts(runId, archive, archive?.Length ?? 0,
+                                                    found ? null : "No unacknowledged artifact archive is available for this run.");
+                                            }
                                         }
                                         break;
                                     case SharedEstimationMessageType.AcknowledgeRemoteRun:

@@ -100,7 +100,7 @@ public class TestNotOperator
     [TestMethod]
     public void TestNotVariable()
     {
-        TestHelper.RunInModelSystemContext("TestBadVariableNames", (User user, ProjectSession project, ModelSystemSession session) =>
+        TestHelper.RunInModelSystemContext("TestNotVariable", (User user, ProjectSession project, ModelSystemSession session) =>
         {
             var nodes = new List<Node>()
             {

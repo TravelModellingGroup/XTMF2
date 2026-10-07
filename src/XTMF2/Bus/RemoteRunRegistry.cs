@@ -20,7 +20,7 @@ public enum RemoteRunState
 
 public sealed record RemoteRunParameterValue(int NodeIndex, double Value);
 
-public sealed record RemoteRunArtifactsResponse(string RunId, byte[]? Archive, string? Error);
+public sealed record RemoteRunArtifactsResponse(string RunId, string? ArchivePath, string? Error);
 
 public sealed record RemoteRunSnapshot(
     string RunId,
@@ -241,6 +241,46 @@ public sealed class RemoteRunRegistry : IDisposable
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+            archive = null;
+            return false;
+        }
+    }
+
+    internal bool TryOpenArtifacts(string runId, out FileStream? archive)
+    {
+        archive = null;
+        RemoteRunJob? job;
+        string path;
+        lock (_sync)
+        {
+            if (!_jobs.TryGetValue(runId, out job))
+                return false;
+            path = GetArtifactPath(runId);
+        }
+
+        try
+        {
+            if (!File.Exists(path))
+            {
+                var snapshot = job.GetSnapshot();
+                if (snapshot.State == RemoteRunState.Running || !IsPrivateRunDirectory(runId, snapshot.WorkingDirectory) ||
+                    !Directory.Exists(snapshot.WorkingDirectory))
+                    return false;
+
+                var temporary = path + ".tmp";
+                if (File.Exists(temporary))
+                    File.Delete(temporary);
+                ZipFile.CreateFromDirectory(snapshot.WorkingDirectory, temporary, CompressionLevel.Fastest, false);
+                File.Move(temporary, path, true);
+                job.SetArtifactsAvailable();
+            }
+
+            archive = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            archive?.Dispose();
             archive = null;
             return false;
         }

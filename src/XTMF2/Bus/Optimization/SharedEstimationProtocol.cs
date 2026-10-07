@@ -894,27 +894,43 @@ public static class SharedEstimationProtocol
     internal static string ReadGetRemoteRunArtifactsPayload(BinaryReader reader)
         => ReadRequiredString(reader);
 
-    public static void WriteRemoteRunArtifacts(BinaryWriter writer, string runId, byte[]? archive, string? error = null)
+    public static void WriteRemoteRunArtifacts(BinaryWriter writer, string runId, Stream? archive,
+        long archiveLength, string? error = null)
     {
         WriteHeader(writer, SharedEstimationMessageType.RemoteRunArtifacts);
         WriteRequiredString(writer, runId);
         writer.Write(archive is not null);
         if (archive is not null)
-            WriteBytes(writer, archive);
+        {
+            if (archiveLength < 0)
+                throw new ArgumentOutOfRangeException(nameof(archiveLength));
+            writer.Write(archiveLength);
+            CopyExactly(archive, writer.BaseStream, archiveLength);
+        }
         WriteOptionalString(writer, error);
     }
 
-    public static RemoteRunArtifactsResponse ReadRemoteRunArtifacts(BinaryReader reader)
+    public static RemoteRunArtifactsResponse ReadRemoteRunArtifacts(BinaryReader reader,
+        Stream archiveDestination, string archivePath)
     {
         ReadExpectedHeader(reader, SharedEstimationMessageType.RemoteRunArtifacts);
-        return ReadRemoteRunArtifactsPayload(reader);
+        return ReadRemoteRunArtifactsPayload(reader, archiveDestination, archivePath);
     }
 
-    internal static RemoteRunArtifactsResponse ReadRemoteRunArtifactsPayload(BinaryReader reader)
+    internal static RemoteRunArtifactsResponse ReadRemoteRunArtifactsPayload(BinaryReader reader,
+        Stream archiveDestination, string archivePath)
     {
         var runId = ReadRequiredString(reader);
-        var archive = reader.ReadBoolean() ? ReadBytes(reader) : null;
-        return new RemoteRunArtifactsResponse(runId, archive, ReadOptionalString(reader));
+        var hasArchive = reader.ReadBoolean();
+        if (hasArchive)
+        {
+            var archiveLength = reader.ReadInt64();
+            if (archiveLength < 0)
+                throw new InvalidDataException($"Invalid remote run artifact length: {archiveLength}.");
+            CopyExactly(reader.BaseStream, archiveDestination, archiveLength);
+        }
+        return new RemoteRunArtifactsResponse(runId, hasArchive ? archivePath : null,
+            ReadOptionalString(reader));
     }
 
     public static void WriteAcknowledgeRemoteRun(BinaryWriter writer, string runId)
@@ -1131,6 +1147,19 @@ public static class SharedEstimationProtocol
         return reader.ReadBytes(count) is { Length: var actual } bytes && actual == count
             ? bytes
             : throw new EndOfStreamException("The shared estimation payload was truncated.");
+    }
+
+    private static void CopyExactly(Stream source, Stream destination, long length)
+    {
+        var buffer = new byte[81920];
+        while (length > 0)
+        {
+            int read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, length));
+            if (read == 0)
+                throw new EndOfStreamException("The remote run artifact archive was truncated.");
+            destination.Write(buffer, 0, read);
+            length -= read;
+        }
     }
 
     private static void WriteDoubles(BinaryWriter writer, IReadOnlyList<double> values)

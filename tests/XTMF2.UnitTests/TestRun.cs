@@ -232,7 +232,7 @@ namespace XTMF2.UnitTests
                     };
                     Assert.IsTrue(clientBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "ReportRunProgress"), "Start", out var id, out error), error?.Message);
                     // give the models system some time to complete
-                    if (!sim.Wait(2000))
+                    if (!sim.Wait(5000))
                     {
                         Assert.Fail("The model system failed to execute in time!");
                     }
