@@ -384,8 +384,25 @@ public sealed class HostBus : IDisposable
                                             this, SharedEstimationProtocol.ReadRemoteRunSnapshotsPayload(reader)));
                                         break;
                                     case SharedEstimationMessageType.RemoteRunArtifacts:
-                                        IgnoreWarnings(() => RemoteRunArtifactsAvailable?.Invoke(
-                                            this, SharedEstimationProtocol.ReadRemoteRunArtifactsPayload(reader)));
+                                        {
+                                            var archivePath = Path.Combine(Path.GetTempPath(),
+                                                $"XTMF2-{Guid.NewGuid():N}.zip");
+                                            try
+                                            {
+                                                RemoteRunArtifactsResponse response;
+                                                using (var archive = new FileStream(archivePath, FileMode.CreateNew,
+                                                    FileAccess.Write, FileShare.Read))
+                                                {
+                                                    response = SharedEstimationProtocol.ReadRemoteRunArtifactsPayload(
+                                                        reader, archive, archivePath);
+                                                }
+                                                IgnoreWarnings(() => RemoteRunArtifactsAvailable?.Invoke(this, response));
+                                            }
+                                            finally
+                                            {
+                                                try { File.Delete(archivePath); } catch { }
+                                            }
+                                        }
                                         break;
                                     case SharedEstimationMessageType.ServerActivitySnapshots:
                                         var activityResponse = SharedEstimationProtocol.ReadServerActivitySnapshotsPayload(reader);

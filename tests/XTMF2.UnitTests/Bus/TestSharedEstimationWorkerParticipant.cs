@@ -17,7 +17,7 @@ public class TestSharedEstimationWorkerParticipant
     [TestMethod]
     public void Evaluate_UsesPreparedModelSystemAndReturnsFitness()
     {
-        RunInModelSystemContext("SharedEstimationWorkerParticipant", (user, projectSession, session) =>
+        RunInModelSystemContext("Evaluate_UsesPreparedModelSystemAndReturnsFitness", (user, projectSession, session) =>
         {
             XTMF2.Editing.CommandError error = null;
             var modelSystem = session.ModelSystem;

@@ -285,7 +285,8 @@ public class TestSharedEstimationProtocol
                 "model-hash-2", RemoteRunState.Completed, "Complete", 8, 0.01,
                 [], [new RemoteRunParameterValue(5, 1.1)], null, null, true, timestamp)
         };
-        var archive = new byte[] { 4, 5, 6, 7 };
+        var archive = Enumerable.Range(0, 1_000_001).Select(value => (byte)value).ToArray();
+        using var archiveSource = new MemoryStream(archive, writable: false);
 
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
@@ -293,12 +294,14 @@ public class TestSharedEstimationProtocol
             SharedEstimationProtocol.WriteQueryRemoteRuns(writer);
             SharedEstimationProtocol.WriteRemoteRunSnapshots(writer, snapshots);
             SharedEstimationProtocol.WriteGetRemoteRunArtifacts(writer, "run-2");
-            SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, "run-2", archive);
+            SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, "run-2", archiveSource,
+                archiveSource.Length);
             SharedEstimationProtocol.WriteAcknowledgeRemoteRun(writer, "run-2");
         }
 
         stream.Position = 0;
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, true);
+        using var receivedArchive = new MemoryStream();
         SharedEstimationProtocol.ReadQueryRemoteRuns(reader);
         var readSnapshots = SharedEstimationProtocol.ReadRemoteRunSnapshots(reader);
         Assert.HasCount(2, readSnapshots);
@@ -313,9 +316,10 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual(modelSystemId, readSnapshots[0].ModelSystemId);
         Assert.AreEqual(ownerUserId, readSnapshots[0].OwnerUserId);
         Assert.AreEqual("run-2", SharedEstimationProtocol.ReadGetRemoteRunArtifacts(reader));
-        var response = SharedEstimationProtocol.ReadRemoteRunArtifacts(reader);
+        var response = SharedEstimationProtocol.ReadRemoteRunArtifacts(reader, receivedArchive, "archive.zip");
         Assert.AreEqual("run-2", response.RunId);
-        CollectionAssert.AreEqual(archive, response.Archive);
+        Assert.AreEqual("archive.zip", response.ArchivePath);
+        CollectionAssert.AreEqual(archive, receivedArchive.ToArray());
         Assert.IsNull(response.Error);
         Assert.AreEqual("run-2", SharedEstimationProtocol.ReadAcknowledgeRemoteRun(reader));
     }

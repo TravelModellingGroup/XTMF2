@@ -1524,7 +1524,7 @@ public class RunController : IDisposable
                 return;
             _recoveredRemoteRuns.TryGetValue(response.RunId, out snapshot);
         }
-        if (response.Archive is null)
+        if (response.ArchivePath is null)
         {
             RunsViewModel.NotifyArtifactTransferFailed(response.RunId,
                 response.Error ?? "The RunServer returned no artifact archive.");
@@ -1533,7 +1533,7 @@ public class RunController : IDisposable
 
         try
         {
-            using var archiveStream = new MemoryStream(response.Archive, writable: false);
+            using var archiveStream = File.OpenRead(response.ArchivePath);
             ExtractRunArtifacts(archiveStream, receipt.TargetDirectory);
             RunsViewModel.NotifyArtifactsTransferred(response.RunId);
             if (snapshot is not null)
