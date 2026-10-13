@@ -193,7 +193,7 @@ public sealed record SharedEstimationCompletion(
 
 public static class SharedEstimationProtocol
 {
-    public const int Version = 2;
+    public const int Version = 3;
     private const int MaxCollectionLength = 1_000_000;
     private const int MaxServerActivities = 10_000;
 
@@ -923,43 +923,33 @@ public static class SharedEstimationProtocol
     internal static string ReadGetRemoteRunArtifactsPayload(BinaryReader reader)
         => ReadRequiredString(reader);
 
-    public static void WriteRemoteRunArtifacts(BinaryWriter writer, string runId, Stream? archive,
-        long archiveLength, string? error = null)
+    public static void WriteRemoteRunArtifacts(BinaryWriter writer, string runId, string? mirrorDirectory,
+        string? error = null)
     {
         WriteHeader(writer, SharedEstimationMessageType.RemoteRunArtifacts);
         WriteRequiredString(writer, runId);
-        writer.Write(archive is not null);
-        if (archive is not null)
-        {
-            if (archiveLength < 0)
-                throw new ArgumentOutOfRangeException(nameof(archiveLength));
-            writer.Write(archiveLength);
-            CopyExactly(archive, writer.BaseStream, archiveLength);
-        }
+        writer.Write(mirrorDirectory is not null);
+        if (mirrorDirectory is not null)
+            RunArtifactMirror.WriteTransfer(writer, mirrorDirectory);
         WriteOptionalString(writer, error);
     }
 
     public static RemoteRunArtifactsResponse ReadRemoteRunArtifacts(BinaryReader reader,
-        Stream archiveDestination, string archivePath, Action<string, long, long> progress)
+        string mirrorPath, Action<string, long, long> progress)
     {
         ReadExpectedHeader(reader, SharedEstimationMessageType.RemoteRunArtifacts);
-        return ReadRemoteRunArtifactsPayload(reader, archiveDestination, archivePath, progress);
+        return ReadRemoteRunArtifactsPayload(reader, mirrorPath, progress);
     }
 
     internal static RemoteRunArtifactsResponse ReadRemoteRunArtifactsPayload(BinaryReader reader,
-        Stream archiveDestination, string archivePath, Action<string, long, long> progress)
+        string mirrorPath, Action<string, long, long> progress)
     {
         var runId = ReadRequiredString(reader);
         var hasArchive = reader.ReadBoolean();
         if (hasArchive)
-        {
-            var archiveLength = reader.ReadInt64();
-            if (archiveLength < 0)
-                throw new InvalidDataException($"Invalid remote run artifact length: {archiveLength}.");
-            CopyExactly(reader.BaseStream, archiveDestination, archiveLength,
+            RunArtifactMirror.ReadTransfer(reader, mirrorPath,
                 (transferred, total) => progress(runId, transferred, total));
-        }
-        return new RemoteRunArtifactsResponse(runId, hasArchive ? archivePath : null,
+        return new RemoteRunArtifactsResponse(runId, hasArchive ? mirrorPath : null,
             ReadOptionalString(reader));
     }
 
@@ -1177,29 +1167,6 @@ public static class SharedEstimationProtocol
         return reader.ReadBytes(count) is { Length: var actual } bytes && actual == count
             ? bytes
             : throw new EndOfStreamException("The shared estimation payload was truncated.");
-    }
-
-    private static void CopyExactly(Stream source, Stream destination, long length,
-        Action<long, long>? progress = null)
-    {
-        var buffer = new byte[81920];
-        long transferred = 0;
-        long lastReported = 0;
-        progress?.Invoke(0, length);
-        while (length > 0)
-        {
-            int read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, length));
-            if (read == 0)
-                throw new EndOfStreamException("The remote run artifact archive was truncated.");
-            destination.Write(buffer, 0, read);
-            length -= read;
-            transferred += read;
-            if (transferred - lastReported >= 1024 * 1024 || length == 0)
-            {
-                progress?.Invoke(transferred, transferred + length);
-                lastReported = transferred;
-            }
-        }
     }
 
     private static void WriteDoubles(BinaryWriter writer, IReadOnlyList<double> values)

@@ -141,7 +141,7 @@ public class RunControllerCompletionTests
         run.UpdateArtifactTransferProgress(512, 1024);
         Assert.AreEqual(50d, run.ArtifactTransferProgress);
         Assert.AreEqual("512 B of 1.0 KiB", run.ArtifactTransferProgressText);
-        Assert.AreEqual("Receiving output archive...", run.OutputTransferStatus);
+        Assert.AreEqual("Receiving output files...", run.OutputTransferStatus);
 
         run.MarkArtifactTransferFinalizing("Extracting output archive...");
         Assert.IsTrue(run.IsArtifactTransferActive);
@@ -190,7 +190,7 @@ public class RunControllerCompletionTests
         Assert.IsFalse(run.IsPreparingRemoteOutput);
         Assert.IsTrue(run.IsArtifactTransferActive);
         Assert.IsFalse(run.CanTransferRemoteOutput);
-        Assert.AreEqual("Receiving output archive...", run.OutputTransferStatus);
+        Assert.AreEqual("Receiving output files...", run.OutputTransferStatus);
 
         run.MarkArtifactTransferFailed("connection lost");
         Assert.IsTrue(run.CanTransferRemoteOutput);

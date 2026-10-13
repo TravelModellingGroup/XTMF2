@@ -418,9 +418,9 @@ namespace XTMF2.Bus
         public void SendRemoteRunSnapshots(IReadOnlyList<RemoteRunSnapshot> snapshots)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRemoteRunSnapshots(writer, snapshots));
 
-        public void SendRemoteRunArtifacts(string runId, Stream? archive, long archiveLength, string? error)
+        public void SendRemoteRunArtifacts(string runId, string? mirrorDirectory, string? error)
             => WriteSharedEstimation(writer =>
-                SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, runId, archive, archiveLength, error));
+                SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, runId, mirrorDirectory, error));
 
         public void SendRemoteRunDeletionResponse(RemoteRunDeletionResponse response)
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteRemoteRunDeleted(writer, response));
@@ -496,22 +496,22 @@ namespace XTMF2.Bus
 
         internal void SendRunArtifacts(string runId, string runDirectory)
         {
-            string? archivePath = null;
+            string? mirrorPath = null;
             try
             {
                 if (!Directory.Exists(runDirectory))
                     return;
 
-                archivePath = Path.Combine(Path.GetTempPath(), $"XTMF2-{Guid.NewGuid():N}.zip");
-                RunArtifactArchive.CreateFromDirectory(runDirectory, archivePath,
+                mirrorPath = Path.Combine(Path.GetTempPath(), $"XTMF2-{Guid.NewGuid():N}.mirror");
+                RunArtifactMirror.CreateFromDirectory(runDirectory, mirrorPath,
                     (processed, total) => SendArtifactCompressionProgress(runId, processed, total));
-                SendRunArtifactsArchive(runId, archivePath);
+                SendRunArtifactsMirror(runId, mirrorPath);
             }
             finally
             {
-                if (archivePath is not null)
+                if (mirrorPath is not null && Directory.Exists(mirrorPath))
                 {
-                    try { File.Delete(archivePath); } catch { }
+                    try { Directory.Delete(mirrorPath, recursive: true); } catch { }
                 }
             }
         }
@@ -520,16 +520,13 @@ namespace XTMF2.Bus
             => WriteSharedEstimation(writer => SharedEstimationProtocol.WriteArtifactCompressionProgress(writer,
                 new ArtifactCompressionProgress(runId, processedBytes, totalBytes)));
 
-        internal void SendRunArtifactsArchive(string runId, string archivePath)
+        internal void SendRunArtifactsMirror(string runId, string mirrorPath)
         {
-            var archiveInfo = new FileInfo(archivePath);
             Write(writer =>
             {
                 writer.Write((int)Out.ClientRunArtifacts);
                 writer.Write(runId);
-                writer.Write(archiveInfo.Length);
-                using var archive = File.OpenRead(archivePath);
-                archive.CopyTo(writer.BaseStream);
+                RunArtifactMirror.WriteTransfer(writer, mirrorPath);
                 writer.BaseStream.Flush();
             });
         }
@@ -673,16 +670,13 @@ namespace XTMF2.Bus
                                     case SharedEstimationMessageType.GetRemoteRunArtifacts:
                                         {
                                             var runId = SharedEstimationProtocol.ReadGetRemoteRunArtifactsPayload(reader);
-                                            FileStream? archive = null;
+                                            string? mirrorPath = null;
                                             var found = _remoteRunRegistry is not null &&
-                                                _remoteRunRegistry.TryOpenArtifacts(runId, out archive,
+                                                _remoteRunRegistry.TryGetArtifactMirror(runId, out mirrorPath,
                                                     (processed, total) => SendArtifactCompressionProgress(
                                                         runId, processed, total));
-                                            using (archive)
-                                            {
-                                                SendRemoteRunArtifacts(runId, archive, archive?.Length ?? 0,
-                                                    found ? null : "No unacknowledged artifact archive is available for this run.");
-                                            }
+                                            SendRemoteRunArtifacts(runId, found ? mirrorPath : null,
+                                                found ? null : "No retained artifact mirror is available for this run.");
                                         }
                                         break;
                                     case SharedEstimationMessageType.AcknowledgeRemoteRun:

@@ -18,6 +18,109 @@ namespace XTMF2.UnitTests.Bus;
 public class TestRemoteRunRegistry
 {
     [TestMethod]
+    public void ArtifactMirror_RoundTripsFilesAndEmptyDirectories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-ArtifactMirror-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "source");
+        var mirror = Path.Combine(root, "mirror");
+        var receivedMirror = Path.Combine(root, "received-mirror");
+        var destination = Path.Combine(root, "destination");
+        Directory.CreateDirectory(Path.Combine(source, "nested", "empty"));
+        var expectedBytes = Enumerable.Range(0, 100_000).Select(value => (byte)(value % 251)).ToArray();
+        File.WriteAllBytes(Path.Combine(source, "nested", "payload.bin"), expectedBytes);
+        File.WriteAllText(Path.Combine(source, "empty.txt"), string.Empty);
+        try
+        {
+            var progress = new List<(long processed, long total)>();
+            RunArtifactMirror.CreateFromDirectory(source, mirror,
+                (processed, total) => progress.Add((processed, total)), maxDegreeOfParallelism: 2);
+            using var transfer = new MemoryStream();
+            using (var writer = new BinaryWriter(transfer, Encoding.UTF8, leaveOpen: true))
+                RunArtifactMirror.WriteTransfer(writer, mirror);
+            transfer.Position = 0;
+            using (var reader = new BinaryReader(transfer, Encoding.UTF8, leaveOpen: true))
+                RunArtifactMirror.ReadTransfer(reader, receivedMirror);
+            RunArtifactMirror.ExtractToDirectory(receivedMirror, destination);
+
+            CollectionAssert.AreEqual(expectedBytes,
+                File.ReadAllBytes(Path.Combine(destination, "nested", "payload.bin")));
+            Assert.AreEqual(0L, new FileInfo(Path.Combine(destination, "empty.txt")).Length);
+            Assert.IsTrue(Directory.Exists(Path.Combine(destination, "nested", "empty")));
+            Assert.IsGreaterThanOrEqualTo(2, progress.Count);
+            Assert.AreEqual(progress[^1].total, progress[^1].processed);
+            Assert.IsTrue(Directory.Exists(Path.Combine(mirror, "files")));
+            Assert.IsTrue(File.Exists(Path.Combine(mirror, "manifest.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void ArtifactMirror_ReadTransferRejectsPathTraversal()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-ArtifactMirror-" + Guid.NewGuid().ToString("N"));
+        var destination = Path.Combine(root, "received");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var stream = new MemoryStream();
+            using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+            {
+                writer.Write(1);
+                writer.Write(1);
+                writer.Write(false);
+                writer.Write("../outside.txt");
+                writer.Write(0L);
+                writer.Write(0L);
+                writer.Write(new byte[32]);
+            }
+            stream.Position = 0;
+            using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
+            Assert.ThrowsExactly<InvalidDataException>(() => RunArtifactMirror.ReadTransfer(reader, destination));
+            Assert.IsFalse(Directory.Exists(destination));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void ArtifactMirror_ReadTransferRemovesStagingAfterTruncatedPayload()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-ArtifactMirror-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "source");
+        var mirror = Path.Combine(root, "mirror");
+        var destination = Path.Combine(root, "received");
+        Directory.CreateDirectory(source);
+        File.WriteAllBytes(Path.Combine(source, "payload.bin"), Enumerable.Range(0, 1024)
+            .Select(value => (byte)value).ToArray());
+        try
+        {
+            RunArtifactMirror.CreateFromDirectory(source, mirror);
+            using var stream = new MemoryStream();
+            using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+                RunArtifactMirror.WriteTransfer(writer, mirror);
+            stream.SetLength(stream.Length - 1);
+            stream.Position = 0;
+            using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
+
+            Assert.ThrowsExactly<EndOfStreamException>(() => RunArtifactMirror.ReadTransfer(reader, destination));
+            Assert.IsFalse(Directory.Exists(destination));
+            Assert.IsEmpty(Directory.EnumerateDirectories(root, "received.tmp-*"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public async Task SharedWorkerReservation_BlocksOrdinaryRunsFromIndependentObservers()
     {
         var directory = Path.Combine(Path.GetTempPath(), "XTMF2-RemoteRunRegistry-" + Guid.NewGuid().ToString("N"));
@@ -128,7 +231,7 @@ public class TestRemoteRunRegistry
             allowDeployment: false);
 
     [TestMethod]
-    public void DeleteRun_RemovesWorkspaceArchiveAndManifest()
+    public void DeleteRun_RemovesWorkspaceMirrorAndManifest()
     {
         var storageDirectory = Path.Combine(Path.GetTempPath(), "XTMF2-RemoteRunRegistry-" + Guid.NewGuid().ToString("N"));
         var runId = Guid.NewGuid().ToString("N");
@@ -139,16 +242,17 @@ public class TestRemoteRunRegistry
         try
         {
             var manifestPath = GetManifestPath(storageDirectory, runId);
-            var archivePath = GetArtifactPath(storageDirectory, runId);
+            var mirrorPath = GetArtifactMirrorPath(storageDirectory, runId);
             File.WriteAllBytes(manifestPath, CreateSnapshot(runId, workingDirectory));
-            File.WriteAllBytes(archivePath, [1, 2, 3]);
+            Directory.CreateDirectory(mirrorPath);
+            File.WriteAllText(Path.Combine(mirrorPath, "manifest.json"), "{}");
 
             using var registry = new RemoteRunRegistry(storageDirectory);
 
             Assert.IsTrue(registry.DeleteRun(runId, out var error), error);
             Assert.IsFalse(Directory.Exists(workingDirectory));
             Assert.IsFalse(File.Exists(manifestPath));
-            Assert.IsFalse(File.Exists(archivePath));
+            Assert.IsFalse(Directory.Exists(mirrorPath));
             Assert.IsEmpty(registry.GetSnapshots());
         }
         finally
@@ -185,7 +289,7 @@ public class TestRemoteRunRegistry
     }
 
     [TestMethod]
-    public void TryReadArtifacts_RebuildsArchiveAfterReceiptAcknowledgement()
+    public void TryGetArtifactMirror_PersistsAfterAcknowledgementAndRemovesOriginals()
     {
         var storageDirectory = Path.Combine(Path.GetTempPath(), "XTMF2-RemoteRunRegistry-" + Guid.NewGuid().ToString("N"));
         var runId = Guid.NewGuid().ToString("N");
@@ -196,27 +300,62 @@ public class TestRemoteRunRegistry
         try
         {
             var manifestPath = GetManifestPath(storageDirectory, runId);
-            var archivePath = GetArtifactPath(storageDirectory, runId);
+            var mirrorPath = GetArtifactMirrorPath(storageDirectory, runId);
             File.WriteAllBytes(manifestPath, CreateSnapshot(runId, workingDirectory));
-            File.WriteAllBytes(archivePath, [1, 2, 3]);
             using var registry = new RemoteRunRegistry(storageDirectory);
 
             Assert.IsTrue(registry.AcknowledgeReceived(runId));
-            Assert.IsFalse(File.Exists(archivePath));
             Assert.IsTrue(registry.GetSnapshots()[0].ArtifactsAvailable);
             var progress = new List<(long processed, long total)>();
-            Assert.IsTrue(registry.TryReadArtifacts(runId, out var archive,
+            Assert.IsTrue(registry.TryGetArtifactMirror(runId, out var retainedMirror,
                 (processed, total) => progress.Add((processed, total))));
-            Assert.IsNotNull(archive);
-            Assert.IsTrue(File.Exists(archivePath));
+            Assert.AreEqual(mirrorPath, retainedMirror);
+            Assert.IsTrue(Directory.Exists(mirrorPath));
+            Assert.IsFalse(Directory.Exists(workingDirectory));
             Assert.IsGreaterThanOrEqualTo(2, progress.Count);
             Assert.AreEqual(0L, progress[0].processed);
-            Assert.AreEqual(new FileInfo(Path.Combine(workingDirectory, "output.txt")).Length,
-                progress[^1].processed);
+            Assert.AreEqual(Encoding.UTF8.GetByteCount("retained run output"), progress[^1].processed);
             Assert.AreEqual(progress[^1].processed, progress[^1].total);
-            using var archiveStream = new MemoryStream(archive!);
-            using var zip = new ZipArchive(archiveStream, ZipArchiveMode.Read);
-            Assert.AreEqual("output.txt", zip.Entries.Single().FullName);
+            Assert.IsTrue(registry.TryGetArtifactMirror(runId, out var retrievedMirror));
+            Assert.AreEqual(mirrorPath, retrievedMirror);
+            var restoredDirectory = Path.Combine(storageDirectory, "restored");
+            RunArtifactMirror.ExtractToDirectory(retainedMirror!, restoredDirectory);
+            Assert.AreEqual("retained run output", File.ReadAllText(Path.Combine(restoredDirectory, "output.txt")));
+        }
+        finally
+        {
+            if (Directory.Exists(workingDirectory))
+                Directory.Delete(workingDirectory, recursive: true);
+            if (Directory.Exists(storageDirectory))
+                Directory.Delete(storageDirectory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void TryGetArtifactMirror_PreservesOriginalsWhenPublishedMirrorIsCorrupt()
+    {
+        var storageDirectory = Path.Combine(Path.GetTempPath(), "XTMF2-RemoteRunRegistry-" + Guid.NewGuid().ToString("N"));
+        var runId = Guid.NewGuid().ToString("N");
+        var workingDirectory = Path.Combine(Path.GetTempPath(), "XTMF2", "Runs", runId);
+        Directory.CreateDirectory(workingDirectory);
+        Directory.CreateDirectory(storageDirectory);
+        var sourcePath = Path.Combine(workingDirectory, "output.txt");
+        File.WriteAllText(sourcePath, "original output");
+        var mirrorPath = GetArtifactMirrorPath(storageDirectory, runId);
+        try
+        {
+            RunArtifactMirror.CreateFromDirectory(workingDirectory, mirrorPath);
+            var payloadPath = RunArtifactMirror.GetPayloadPath(mirrorPath,
+                RunArtifactMirror.ReadManifest(mirrorPath).Single(entry => !entry.IsDirectory));
+            using (var payload = new FileStream(payloadPath, FileMode.Open, FileAccess.Write, FileShare.None))
+                payload.WriteByte(0);
+            File.WriteAllBytes(GetManifestPath(storageDirectory, runId),
+                CreateSnapshot(runId, workingDirectory));
+            using var registry = new RemoteRunRegistry(storageDirectory);
+
+            Assert.IsFalse(registry.TryGetArtifactMirror(runId, out _));
+            Assert.IsTrue(Directory.Exists(workingDirectory));
+            Assert.AreEqual("original output", File.ReadAllText(sourcePath));
         }
         finally
         {
@@ -244,7 +383,7 @@ public class TestRemoteRunRegistry
         => Path.Combine(storageDirectory,
             $"{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(runId)))}.json");
 
-    private static string GetArtifactPath(string storageDirectory, string runId)
+    private static string GetArtifactMirrorPath(string storageDirectory, string runId)
         => Path.Combine(storageDirectory,
-            $"{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(runId)))}.zip");
+            $"{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(runId)))}.mirror");
 }

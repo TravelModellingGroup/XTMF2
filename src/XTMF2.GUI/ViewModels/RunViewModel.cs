@@ -441,7 +441,7 @@ public sealed partial class RunViewModel : ObservableObject
         IsArtifactTransferActive = true;
         _isArtifactCompressionProgress = false;
         _artifactTransferFailed = false;
-        _artifactTransferPhase = "Receiving output archive...";
+        _artifactTransferPhase = "Receiving output files...";
         ArtifactTransferTotalBytes = Math.Max(0, totalBytes);
         ArtifactTransferBytesReceived = Math.Clamp(bytesTransferred, 0, ArtifactTransferTotalBytes);
         OnPropertyChanged(nameof(OutputTransferStatus));
