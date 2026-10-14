@@ -116,15 +116,47 @@ public sealed class HostBus : IDisposable
 
     public event EventHandler<RunArtifactsReceivedEventArgs>? ClientRunArtifactsReceived;
 
+    public event EventHandler<ArtifactTransferProgressEventArgs>? ArtifactTransferProgress;
+
+    public event EventHandler<ArtifactCompressionProgressEventArgs>? ArtifactCompressionProgress;
+
+    public sealed class ArtifactTransferProgressEventArgs : EventArgs
+    {
+        public string RunId { get; }
+        public long BytesTransferred { get; }
+        public long TotalBytes { get; }
+
+        internal ArtifactTransferProgressEventArgs(string runId, long bytesTransferred, long totalBytes)
+        {
+            RunId = runId;
+            BytesTransferred = bytesTransferred;
+            TotalBytes = totalBytes;
+        }
+    }
+
+    public sealed class ArtifactCompressionProgressEventArgs : EventArgs
+    {
+        public string RunId { get; }
+        public long BytesProcessed { get; }
+        public long TotalBytes { get; }
+
+        internal ArtifactCompressionProgressEventArgs(string runId, long bytesProcessed, long totalBytes)
+        {
+            RunId = runId;
+            BytesProcessed = bytesProcessed;
+            TotalBytes = totalBytes;
+        }
+    }
+
     public sealed class RunArtifactsReceivedEventArgs : EventArgs
     {
         public string RunId { get; }
-        public string ArchivePath { get; }
+        public string MirrorPath { get; }
 
-        internal RunArtifactsReceivedEventArgs(string runId, string archivePath)
+        internal RunArtifactsReceivedEventArgs(string runId, string mirrorPath)
         {
             RunId = runId;
-            ArchivePath = archivePath;
+            MirrorPath = mirrorPath;
         }
     }
 
@@ -331,18 +363,20 @@ public sealed class HostBus : IDisposable
                         case In.ClientRunArtifacts:
                             {
                                 var runId = reader.ReadString();
-                                var length = reader.ReadInt64();
-                                var archivePath = Path.Combine(Path.GetTempPath(), $"XTMF2-{Guid.NewGuid():N}.zip");
+                                var mirrorPath = Path.Combine(Path.GetTempPath(), $"XTMF2-{Guid.NewGuid():N}.mirror");
                                 try
                                 {
-                                    using (var archive = File.Create(archivePath))
-                                        CopyExactly(reader.BaseStream, archive, length);
+                                    RunArtifactMirror.ReadTransfer(reader, mirrorPath,
+                                        (transferred, total) => ReportArtifactTransferProgress(runId, transferred, total));
                                     IgnoreWarnings(() => ClientRunArtifactsReceived?.Invoke(
-                                        this, new RunArtifactsReceivedEventArgs(runId, archivePath)));
+                                        this, new RunArtifactsReceivedEventArgs(runId, mirrorPath)));
                                 }
                                 finally
                                 {
-                                    try { File.Delete(archivePath); } catch { }
+                                    if (Directory.Exists(mirrorPath))
+                                    {
+                                        try { Directory.Delete(mirrorPath, recursive: true); } catch { }
+                                    }
                                 }
                             }
                             break;
@@ -372,8 +406,14 @@ public sealed class HostBus : IDisposable
                                             this, SharedEstimationProtocol.ReadWorkerControlAcknowledgementPayload(reader)));
                                         break;
                                     case SharedEstimationMessageType.Status:
-                                        IgnoreWarnings(() => SharedEstimationStatusAvailable?.Invoke(
-                                            this, SharedEstimationProtocol.ReadStatusPayload(reader)));
+                                        var status = SharedEstimationProtocol.ReadStatusPayload(reader);
+                                        IgnoreWarnings(() => SharedEstimationStatusAvailable?.Invoke(this, status));
+                                        break;
+                                    case SharedEstimationMessageType.ArtifactCompressionProgress:
+                                        var compressionProgress =
+                                            SharedEstimationProtocol.ReadArtifactCompressionProgressPayload(reader);
+                                        ReportArtifactCompressionProgress(compressionProgress.RunId,
+                                            compressionProgress.BytesProcessed, compressionProgress.TotalBytes);
                                         break;
                                     case SharedEstimationMessageType.WorkerReady:
                                         var readiness = SharedEstimationProtocol.ReadWorkerReadyPayload(reader);
@@ -385,22 +425,23 @@ public sealed class HostBus : IDisposable
                                         break;
                                     case SharedEstimationMessageType.RemoteRunArtifacts:
                                         {
-                                            var archivePath = Path.Combine(Path.GetTempPath(),
-                                                $"XTMF2-{Guid.NewGuid():N}.zip");
+                                            var mirrorPath = Path.Combine(Path.GetTempPath(),
+                                                $"XTMF2-{Guid.NewGuid():N}.mirror");
                                             try
                                             {
                                                 RemoteRunArtifactsResponse response;
-                                                using (var archive = new FileStream(archivePath, FileMode.CreateNew,
-                                                    FileAccess.Write, FileShare.Read))
-                                                {
-                                                    response = SharedEstimationProtocol.ReadRemoteRunArtifactsPayload(
-                                                        reader, archive, archivePath);
-                                                }
+                                                response = SharedEstimationProtocol.ReadRemoteRunArtifactsPayload(
+                                                    reader, mirrorPath,
+                                                    (runId, transferred, total) => ReportArtifactTransferProgress(
+                                                        runId, transferred, total));
                                                 IgnoreWarnings(() => RemoteRunArtifactsAvailable?.Invoke(this, response));
                                             }
                                             finally
                                             {
-                                                try { File.Delete(archivePath); } catch { }
+                                                if (Directory.Exists(mirrorPath))
+                                                {
+                                                    try { Directory.Delete(mirrorPath, recursive: true); } catch { }
+                                                }
                                             }
                                         }
                                         break;
@@ -484,18 +525,13 @@ public sealed class HostBus : IDisposable
         return listenerThread;
     }
 
-    private static void CopyExactly(Stream source, Stream destination, long length)
-    {
-        var buffer = new byte[81920];
-        while (length > 0)
-        {
-            var read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, length));
-            if (read == 0)
-                throw new EndOfStreamException("The RunServer artifact archive was truncated.");
-            destination.Write(buffer, 0, read);
-            length -= read;
-        }
-    }
+    private void ReportArtifactTransferProgress(string runId, long transferred, long total)
+        => IgnoreWarnings(() => ArtifactTransferProgress?.Invoke(this,
+            new ArtifactTransferProgressEventArgs(runId, transferred, total)));
+
+    private void ReportArtifactCompressionProgress(string runId, long processed, long total)
+        => IgnoreWarnings(() => ArtifactCompressionProgress?.Invoke(this,
+            new ArtifactCompressionProgressEventArgs(runId, processed, total)));
 
     private enum Out
     {

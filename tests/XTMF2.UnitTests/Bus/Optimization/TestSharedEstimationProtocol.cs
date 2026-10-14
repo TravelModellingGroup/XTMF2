@@ -156,6 +156,7 @@ public class TestSharedEstimationProtocol
             new Dictionary<string, int> { ["coordinator"] = 1, ["worker-1"] = 2 },
             new[] { 1.0, 2.0 }, ["worker-1", "worker-1#run-2"]);
         var status = new SharedEstimationStatus("run-1", "Estimation started with 2 workers.");
+        var compression = new ArtifactCompressionProgress("run-1", 512, 1024);
         var completion = new SharedEstimationCompletion("run-1", true, 0.25,
             new[] { 1.0, 2.0 }, 3, 2, null);
 
@@ -166,6 +167,7 @@ public class TestSharedEstimationProtocol
             SharedEstimationProtocol.WriteResult(writer, result);
             SharedEstimationProtocol.WriteProgress(writer, progress);
             SharedEstimationProtocol.WriteStatus(writer, status);
+            SharedEstimationProtocol.WriteArtifactCompressionProgress(writer, compression);
             SharedEstimationProtocol.WriteCompletion(writer, completion);
             SharedEstimationProtocol.WriteCancel(writer, "run-1", "user requested cancellation");
         }
@@ -192,6 +194,7 @@ public class TestSharedEstimationProtocol
         CollectionAssert.AreEqual(progress.BestParameters.ToArray(), readProgress.BestParameters.ToArray());
         CollectionAssert.AreEquivalent(progress.ActiveWorkerIds.ToArray(), readProgress.ActiveWorkerIds.ToArray());
         Assert.AreEqual(status, SharedEstimationProtocol.ReadStatus(reader));
+        Assert.AreEqual(compression, SharedEstimationProtocol.ReadArtifactCompressionProgress(reader));
         var readCompletion = SharedEstimationProtocol.ReadCompletion(reader);
         Assert.AreEqual(completion.RunId, readCompletion.RunId);
         Assert.AreEqual(completion.Succeeded, readCompletion.Succeeded);
@@ -244,12 +247,12 @@ public class TestSharedEstimationProtocol
     }
 
     [TestMethod]
-    public void Header_RejectsUnsupportedVersionAndUnknownMessage()
+    public void Header_RejectsVersionOneAndUnknownMessage()
     {
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
         {
-            writer.Write(SharedEstimationProtocol.Version + 1);
+            writer.Write(SharedEstimationProtocol.Version - 1);
             writer.Write((int)SharedEstimationMessageType.StartRun);
         }
 
@@ -285,43 +288,69 @@ public class TestSharedEstimationProtocol
                 "model-hash-2", RemoteRunState.Completed, "Complete", 8, 0.01,
                 [], [new RemoteRunParameterValue(5, 1.1)], null, null, true, timestamp)
         };
-        var archive = Enumerable.Range(0, 1_000_001).Select(value => (byte)value).ToArray();
-        using var archiveSource = new MemoryStream(archive, writable: false);
-
-        using var stream = new MemoryStream();
-        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-SharedArtifactProtocol-" + Guid.NewGuid().ToString("N"));
+        var sourceDirectory = Path.Combine(root, "source");
+        var mirrorDirectory = Path.Combine(root, "mirror");
+        var receivedMirror = Path.Combine(root, "received");
+        var restoredDirectory = Path.Combine(root, "restored");
+        var artifact = Enumerable.Range(0, 1_000_001).Select(value => (byte)value).ToArray();
+        Directory.CreateDirectory(sourceDirectory);
+        File.WriteAllBytes(Path.Combine(sourceDirectory, "output.bin"), artifact);
+        try
         {
-            SharedEstimationProtocol.WriteQueryRemoteRuns(writer);
-            SharedEstimationProtocol.WriteRemoteRunSnapshots(writer, snapshots);
-            SharedEstimationProtocol.WriteGetRemoteRunArtifacts(writer, "run-2");
-            SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, "run-2", archiveSource,
-                archiveSource.Length);
-            SharedEstimationProtocol.WriteAcknowledgeRemoteRun(writer, "run-2");
-        }
+            RunArtifactMirror.CreateFromDirectory(sourceDirectory, mirrorDirectory);
+            var compressedLength = RunArtifactMirror.ReadManifest(mirrorDirectory)
+                .Where(entry => !entry.IsDirectory).Sum(entry => entry.CompressedLength);
+            using var stream = new MemoryStream();
+            using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
+            {
+                SharedEstimationProtocol.WriteQueryRemoteRuns(writer);
+                SharedEstimationProtocol.WriteRemoteRunSnapshots(writer, snapshots);
+                SharedEstimationProtocol.WriteGetRemoteRunArtifacts(writer, "run-2");
+                SharedEstimationProtocol.WriteRemoteRunArtifacts(writer, "run-2", mirrorDirectory);
+                SharedEstimationProtocol.WriteAcknowledgeRemoteRun(writer, "run-2");
+            }
 
-        stream.Position = 0;
-        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, true);
-        using var receivedArchive = new MemoryStream();
-        SharedEstimationProtocol.ReadQueryRemoteRuns(reader);
-        var readSnapshots = SharedEstimationProtocol.ReadRemoteRunSnapshots(reader);
-        Assert.HasCount(2, readSnapshots);
-        Assert.AreEqual(snapshots[0].RunId, readSnapshots[0].RunId);
-        Assert.AreEqual(snapshots[0].RunMode, readSnapshots[0].RunMode);
-        Assert.AreEqual(snapshots[0].ModelSystemHash, readSnapshots[0].ModelSystemHash);
-        Assert.AreEqual(snapshots[0].ProgressParameters[0], readSnapshots[0].ProgressParameters[0]);
-        Assert.AreEqual(snapshots[1].State, readSnapshots[1].State);
-        Assert.AreEqual(snapshots[1].OptimizationResults![0], readSnapshots[1].OptimizationResults![0]);
-        Assert.AreEqual(snapshots[1].UpdatedAt, readSnapshots[1].UpdatedAt);
-        Assert.AreEqual(projectId, readSnapshots[0].ProjectId);
-        Assert.AreEqual(modelSystemId, readSnapshots[0].ModelSystemId);
-        Assert.AreEqual(ownerUserId, readSnapshots[0].OwnerUserId);
-        Assert.AreEqual("run-2", SharedEstimationProtocol.ReadGetRemoteRunArtifacts(reader));
-        var response = SharedEstimationProtocol.ReadRemoteRunArtifacts(reader, receivedArchive, "archive.zip");
-        Assert.AreEqual("run-2", response.RunId);
-        Assert.AreEqual("archive.zip", response.ArchivePath);
-        CollectionAssert.AreEqual(archive, receivedArchive.ToArray());
-        Assert.IsNull(response.Error);
-        Assert.AreEqual("run-2", SharedEstimationProtocol.ReadAcknowledgeRemoteRun(reader));
+            stream.Position = 0;
+            using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, true);
+            var transferProgress = new List<(string runId, long transferred, long total)>();
+            SharedEstimationProtocol.ReadQueryRemoteRuns(reader);
+            var readSnapshots = SharedEstimationProtocol.ReadRemoteRunSnapshots(reader);
+            Assert.HasCount(2, readSnapshots);
+            Assert.AreEqual(snapshots[0].RunId, readSnapshots[0].RunId);
+            Assert.AreEqual(snapshots[0].RunMode, readSnapshots[0].RunMode);
+            Assert.AreEqual(snapshots[0].ModelSystemHash, readSnapshots[0].ModelSystemHash);
+            Assert.AreEqual(snapshots[0].ProgressParameters[0], readSnapshots[0].ProgressParameters[0]);
+            Assert.AreEqual(snapshots[1].State, readSnapshots[1].State);
+            Assert.AreEqual(snapshots[1].OptimizationResults![0], readSnapshots[1].OptimizationResults![0]);
+            Assert.AreEqual(snapshots[1].UpdatedAt, readSnapshots[1].UpdatedAt);
+            Assert.AreEqual(projectId, readSnapshots[0].ProjectId);
+            Assert.AreEqual(modelSystemId, readSnapshots[0].ModelSystemId);
+            Assert.AreEqual(ownerUserId, readSnapshots[0].OwnerUserId);
+            Assert.AreEqual("run-2", SharedEstimationProtocol.ReadGetRemoteRunArtifacts(reader));
+            var response = SharedEstimationProtocol.ReadRemoteRunArtifacts(reader, receivedMirror,
+                (runId, transferred, total) => transferProgress.Add((runId, transferred, total)));
+            Assert.AreEqual("run-2", response.RunId);
+            Assert.AreEqual(receivedMirror, response.MirrorPath);
+            Assert.AreEqual(compressedLength, transferProgress[^1].transferred);
+            Assert.AreEqual(compressedLength, transferProgress[^1].total);
+            Assert.IsGreaterThanOrEqualTo(2, transferProgress.Count);
+            Assert.AreEqual("run-2", transferProgress[0].runId);
+            Assert.AreEqual(0L, transferProgress[0].transferred);
+            Assert.AreEqual(compressedLength, transferProgress[0].total);
+            for (int i = 1; i < transferProgress.Count; i++)
+                Assert.IsGreaterThanOrEqualTo(transferProgress[i - 1].transferred,
+                    transferProgress[i].transferred);
+            Assert.IsNull(response.Error);
+            RunArtifactMirror.ExtractToDirectory(receivedMirror, restoredDirectory);
+            CollectionAssert.AreEqual(artifact, File.ReadAllBytes(Path.Combine(restoredDirectory, "output.bin")));
+            Assert.AreEqual("run-2", SharedEstimationProtocol.ReadAcknowledgeRemoteRun(reader));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
     }
 
     [TestMethod]

@@ -20,7 +20,7 @@ public enum RemoteRunState
 
 public sealed record RemoteRunParameterValue(int NodeIndex, double Value);
 
-public sealed record RemoteRunArtifactsResponse(string RunId, string? ArchivePath, string? Error);
+public sealed record RemoteRunArtifactsResponse(string RunId, string? MirrorPath, string? Error);
 
 public sealed record RemoteRunSnapshot(
     string RunId,
@@ -198,12 +198,13 @@ public sealed class RemoteRunRegistry : IDisposable
     }
 
     /// <summary>
-    /// Reads a run's retained artifact archive, rebuilding it from the private run directory when necessary.
+    /// Gets a run's retained compressed artifact mirror, building it from the private run directory when necessary.
     /// </summary>
     /// <param name="runId">The identifier of the run whose artifacts are requested.</param>
-    /// <param name="archive">Receives the archive bytes when available; otherwise, <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> if the artifact archive was read successfully; otherwise, <see langword="false"/>.</returns>
-    public bool TryReadArtifacts(string runId, out byte[]? archive)
+    /// <param name="mirrorDirectory">Receives the mirror directory when available; otherwise, <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> if the artifact mirror is available; otherwise, <see langword="false"/>.</returns>
+    public bool TryGetArtifactMirror(string runId, out string? mirrorDirectory,
+        Action<long, long>? progress = null)
     {
         RemoteRunJob? job;
         string path;
@@ -211,83 +212,53 @@ public sealed class RemoteRunRegistry : IDisposable
         {
             if (!_jobs.TryGetValue(runId, out job))
             {
-                archive = null;
+                mirrorDirectory = null;
                 return false;
             }
-            path = GetArtifactPath(runId);
+            path = GetArtifactMirrorPath(runId);
         }
 
         try
         {
-            if (!File.Exists(path))
+            var snapshot = job.GetSnapshot();
+            if (!Directory.Exists(path))
             {
-                var snapshot = job.GetSnapshot();
                 if (snapshot.State == RemoteRunState.Running || !IsPrivateRunDirectory(runId, snapshot.WorkingDirectory) ||
                     !Directory.Exists(snapshot.WorkingDirectory))
                 {
-                    archive = null;
+                    mirrorDirectory = null;
                     return false;
                 }
 
-                var temporary = path + ".tmp";
-                if (File.Exists(temporary))
-                    File.Delete(temporary);
-                ZipFile.CreateFromDirectory(snapshot.WorkingDirectory, temporary, CompressionLevel.Fastest, false);
-                File.Move(temporary, path, true);
-                job.SetArtifactsAvailable();
+                RunArtifactMirror.CreateFromDirectory(snapshot.WorkingDirectory, path, progress);
             }
-            archive = File.ReadAllBytes(path);
-            return true;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            archive = null;
-            return false;
-        }
-    }
-
-    internal bool TryOpenArtifacts(string runId, out FileStream? archive)
-    {
-        archive = null;
-        RemoteRunJob? job;
-        string path;
-        lock (_sync)
-        {
-            if (!_jobs.TryGetValue(runId, out job))
-                return false;
-            path = GetArtifactPath(runId);
-        }
-
-        try
-        {
-            if (!File.Exists(path))
+            else if (Directory.Exists(snapshot.WorkingDirectory))
             {
-                var snapshot = job.GetSnapshot();
-                if (snapshot.State == RemoteRunState.Running || !IsPrivateRunDirectory(runId, snapshot.WorkingDirectory) ||
-                    !Directory.Exists(snapshot.WorkingDirectory))
-                    return false;
-
-                var temporary = path + ".tmp";
-                if (File.Exists(temporary))
-                    File.Delete(temporary);
-                ZipFile.CreateFromDirectory(snapshot.WorkingDirectory, temporary, CompressionLevel.Fastest, false);
-                File.Move(temporary, path, true);
-                job.SetArtifactsAvailable();
+                RunArtifactMirror.Verify(path);
             }
-
-            archive = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            else
+            {
+                RunArtifactMirror.ReadManifest(path);
+            }
+            if (Directory.Exists(snapshot.WorkingDirectory) &&
+                IsPrivateRunDirectory(runId, snapshot.WorkingDirectory))
+            {
+                try { Directory.Delete(snapshot.WorkingDirectory, recursive: true); }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+            }
+            job.SetArtifactsAvailable();
+            mirrorDirectory = path;
             return true;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            archive?.Dispose();
-            archive = null;
+            mirrorDirectory = null;
             return false;
         }
     }
 
     /// <summary>
-    /// Acknowledges receipt of a completed run's artifacts and removes the retained archive.
+    /// Acknowledges receipt of a completed run's artifacts without removing its retained mirror.
     /// </summary>
     /// <param name="runId">The identifier of the run whose artifact receipt is acknowledged.</param>
     /// <returns><see langword="true"/> if the run exists and is no longer running; otherwise, <see langword="false"/>.</returns>
@@ -301,7 +272,6 @@ public sealed class RemoteRunRegistry : IDisposable
         }
 
         job.AcknowledgeReceived();
-        try { File.Delete(GetArtifactPath(runId)); } catch (IOException) { }
         return true;
     }
 
@@ -374,8 +344,12 @@ public sealed class RemoteRunRegistry : IDisposable
                 if (Directory.Exists(snapshot.WorkingDirectory))
                     Directory.Delete(snapshot.WorkingDirectory, recursive: true);
 
-                File.Delete(GetArtifactPath(runId));
-                File.Delete(GetArtifactPath(runId) + ".tmp");
+                var mirrorPath = GetArtifactMirrorPath(runId);
+                if (Directory.Exists(mirrorPath))
+                    Directory.Delete(mirrorPath, recursive: true);
+                foreach (var temporaryMirror in Directory.EnumerateDirectories(
+                    _storageDirectory, Path.GetFileName(mirrorPath) + ".tmp-*"))
+                    Directory.Delete(temporaryMirror, recursive: true);
                 File.Delete(GetManifestPath(runId));
                 _jobs.Remove(runId);
                 return true;
@@ -426,8 +400,8 @@ public sealed class RemoteRunRegistry : IDisposable
     private string GetManifestPath(string runId)
         => Path.Combine(_storageDirectory, $"{Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(runId)))}.json");
 
-    private string GetArtifactPath(string runId)
-        => Path.Combine(_storageDirectory, $"{Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(runId)))}.zip");
+    private string GetArtifactMirrorPath(string runId)
+        => Path.Combine(_storageDirectory, $"{Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(runId)))}.mirror");
 
     private void LoadPersistedJobs()
     {
@@ -598,24 +572,32 @@ public sealed class RemoteRunRegistry : IDisposable
 
         public void SendRunArtifacts(string runId, string runDirectory)
         {
-            var artifactPath = _registry.GetArtifactPath(runId);
+            var mirrorPath = _registry.GetArtifactMirrorPath(runId);
+            var mirrorAvailable = false;
             try
             {
                 if (Directory.Exists(runDirectory))
                 {
-                    var temporary = artifactPath + ".tmp";
-                    if (File.Exists(temporary))
-                        File.Delete(temporary);
-                    ZipFile.CreateFromDirectory(runDirectory, temporary, CompressionLevel.Fastest, false);
-                    File.Move(temporary, artifactPath, true);
+                    if (!Directory.Exists(mirrorPath))
+                        RunArtifactMirror.CreateFromDirectory(runDirectory, mirrorPath,
+                            (processed, total) => Forward(observer =>
+                                observer.SendArtifactCompressionProgress(runId, processed, total)));
+                    else
+                        RunArtifactMirror.Verify(mirrorPath);
                     Update(snapshot => snapshot with { ArtifactsAvailable = true, UpdatedAt = DateTimeOffset.UtcNow });
+                    mirrorAvailable = true;
+                    Directory.Delete(runDirectory, recursive: true);
                 }
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
             {
-                SendStatusMessage(runId, $"Run output archive could not be retained: {exception.Message}");
+                SendStatusMessage(runId, $"Compressed run output could not be retained: {exception.Message}");
+                mirrorAvailable = Directory.Exists(mirrorPath);
             }
-            Forward(observer => observer.SendRunArtifacts(runId, runDirectory));
+            if (mirrorAvailable)
+                Forward(observer => observer.SendRunArtifactsMirror(runId, mirrorPath));
+            else
+                Forward(observer => observer.SendRunArtifacts(runId, runDirectory));
         }
 
         private void Update(Func<RemoteRunSnapshot, RemoteRunSnapshot> update)

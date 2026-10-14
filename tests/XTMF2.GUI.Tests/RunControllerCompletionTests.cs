@@ -121,6 +121,82 @@ public class RunControllerCompletionTests
     }
 
     [TestMethod]
+    public void RemoteOutputTransfer_ReportsProgressUntilReceiptCompletes()
+    {
+        var snapshot = new RemoteRunSnapshot("run-progress", "forecast", RunMode.Normal,
+            "/remote/private/run-progress", "Start", "model-hash", RemoteRunState.Completed,
+            "Run completed.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
+            null, null, true, DateTimeOffset.UtcNow);
+        var run = new RunViewModel(snapshot, "Remote Server");
+
+        run.SetRemoteReceiptPending(true);
+        Assert.IsTrue(run.IsArtifactTransferActive);
+        Assert.AreEqual("Waiting for RunServer...", run.OutputTransferStatus);
+
+        run.UpdateArtifactCompressionProgress(512, 1024);
+        Assert.AreEqual("Compressing run output on the RunServer...", run.OutputTransferStatus);
+        Assert.AreEqual(50d, run.ArtifactTransferProgress);
+        Assert.AreEqual("Compressing 512 B of 1.0 KiB", run.ArtifactTransferProgressText);
+
+        run.UpdateArtifactTransferProgress(512, 1024);
+        Assert.AreEqual(50d, run.ArtifactTransferProgress);
+        Assert.AreEqual("512 B of 1.0 KiB", run.ArtifactTransferProgressText);
+        Assert.AreEqual("Receiving output files...", run.OutputTransferStatus);
+
+        run.MarkArtifactTransferFinalizing("Extracting output archive...");
+        Assert.IsTrue(run.IsArtifactTransferActive);
+        Assert.AreEqual("Extracting output archive...", run.OutputTransferStatus);
+
+        run.MarkArtifactsAvailable();
+        Assert.IsFalse(run.IsArtifactTransferActive);
+        Assert.AreEqual("Output is on this computer.", run.OutputTransferStatus);
+    }
+
+    [TestMethod]
+    public void RemoteOutputTransferFailure_ClearsProgressAndOffersRetry()
+    {
+        var snapshot = new RemoteRunSnapshot("run-progress-failed", "forecast", RunMode.Normal,
+            "/remote/private/run-progress-failed", "Start", "model-hash", RemoteRunState.Completed,
+            "Run completed.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
+            null, null, true, DateTimeOffset.UtcNow);
+        var run = new RunViewModel(snapshot, "Remote Server");
+
+        run.SetRemoteReceiptPending(true);
+        run.UpdateArtifactTransferProgress(512, 1024);
+        run.MarkArtifactTransferFailed("connection lost");
+
+        Assert.IsFalse(run.IsArtifactTransferActive);
+        Assert.IsTrue(run.CanTransferRemoteOutput);
+        Assert.AreEqual("Output transfer failed. See run log.", run.OutputTransferStatus);
+    }
+
+    [TestMethod]
+    public void LiveRemoteCompletion_ShowsPreparingUntilArtifactProgressBegins()
+    {
+        var run = new RunViewModel("run-preparing", "forecast", string.Empty,
+            "Remote Server", null!, null!);
+        run.SetRemoteRunTracking(true);
+        run.MarkFinished();
+
+        Assert.IsTrue(run.CanTransferRemoteOutput);
+        run.MarkRemoteOutputPreparing();
+
+        Assert.IsTrue(run.IsPreparingRemoteOutput);
+        Assert.IsFalse(run.CanTransferRemoteOutput);
+        Assert.AreEqual("Preparing run output on the RunServer...", run.OutputTransferStatus);
+
+        run.UpdateArtifactTransferProgress(256, 1024);
+
+        Assert.IsFalse(run.IsPreparingRemoteOutput);
+        Assert.IsTrue(run.IsArtifactTransferActive);
+        Assert.IsFalse(run.CanTransferRemoteOutput);
+        Assert.AreEqual("Receiving output files...", run.OutputTransferStatus);
+
+        run.MarkArtifactTransferFailed("connection lost");
+        Assert.IsTrue(run.CanTransferRemoteOutput);
+    }
+
+    [TestMethod]
     public void RecoveredRemoteRun_UsesLocalReceiptDirectoryForOpenOutput()
     {
         var snapshot = new RemoteRunSnapshot("run-local-output", "forecast", RunMode.Normal,

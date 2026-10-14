@@ -32,7 +32,8 @@ public enum SharedEstimationMessageType
     ServerActivitySnapshots = 21,
     DeleteRemoteRun = 22,
     RemoteRunDeleted = 23,
-    WorkerReady = 24
+    WorkerReady = 24,
+    ArtifactCompressionProgress = 25
 }
 
 public enum SharedEstimationJobState
@@ -94,6 +95,8 @@ public sealed record SharedEstimationWorkerControlAcknowledgement(
     int ActiveWorkerCount);
 
 public sealed record SharedEstimationStatus(string RunId, string Message);
+
+public sealed record ArtifactCompressionProgress(string RunId, long BytesProcessed, long TotalBytes);
 
 public sealed record SharedEstimationWorkerReady(string RunId, bool Succeeded, string? Error);
 
@@ -190,7 +193,7 @@ public sealed record SharedEstimationCompletion(
 
 public static class SharedEstimationProtocol
 {
-    public const int Version = 1;
+    public const int Version = 3;
     private const int MaxCollectionLength = 1_000_000;
     private const int MaxServerActivities = 10_000;
 
@@ -492,6 +495,32 @@ public static class SharedEstimationProtocol
 
     internal static SharedEstimationStatus ReadStatusPayload(BinaryReader reader)
         => new(ReadRequiredString(reader), ReadRequiredString(reader));
+
+    public static void WriteArtifactCompressionProgress(BinaryWriter writer,
+        ArtifactCompressionProgress progress)
+    {
+        if (progress.BytesProcessed < 0 || progress.TotalBytes < progress.BytesProcessed)
+            throw new ArgumentOutOfRangeException(nameof(progress));
+        WriteHeader(writer, SharedEstimationMessageType.ArtifactCompressionProgress);
+        WriteRequiredString(writer, progress.RunId);
+        writer.Write(progress.BytesProcessed);
+        writer.Write(progress.TotalBytes);
+    }
+
+    public static ArtifactCompressionProgress ReadArtifactCompressionProgress(BinaryReader reader)
+    {
+        ReadExpectedHeader(reader, SharedEstimationMessageType.ArtifactCompressionProgress);
+        return ReadArtifactCompressionProgressPayload(reader);
+    }
+
+    internal static ArtifactCompressionProgress ReadArtifactCompressionProgressPayload(BinaryReader reader)
+    {
+        var progress = new ArtifactCompressionProgress(ReadRequiredString(reader), reader.ReadInt64(),
+            reader.ReadInt64());
+        if (progress.BytesProcessed < 0 || progress.TotalBytes < progress.BytesProcessed)
+            throw new InvalidDataException("Invalid artifact compression progress.");
+        return progress;
+    }
 
     public static void WriteWorkerReady(BinaryWriter writer, SharedEstimationWorkerReady readiness)
     {
@@ -894,42 +923,33 @@ public static class SharedEstimationProtocol
     internal static string ReadGetRemoteRunArtifactsPayload(BinaryReader reader)
         => ReadRequiredString(reader);
 
-    public static void WriteRemoteRunArtifacts(BinaryWriter writer, string runId, Stream? archive,
-        long archiveLength, string? error = null)
+    public static void WriteRemoteRunArtifacts(BinaryWriter writer, string runId, string? mirrorDirectory,
+        string? error = null)
     {
         WriteHeader(writer, SharedEstimationMessageType.RemoteRunArtifacts);
         WriteRequiredString(writer, runId);
-        writer.Write(archive is not null);
-        if (archive is not null)
-        {
-            if (archiveLength < 0)
-                throw new ArgumentOutOfRangeException(nameof(archiveLength));
-            writer.Write(archiveLength);
-            CopyExactly(archive, writer.BaseStream, archiveLength);
-        }
+        writer.Write(mirrorDirectory is not null);
+        if (mirrorDirectory is not null)
+            RunArtifactMirror.WriteTransfer(writer, mirrorDirectory);
         WriteOptionalString(writer, error);
     }
 
     public static RemoteRunArtifactsResponse ReadRemoteRunArtifacts(BinaryReader reader,
-        Stream archiveDestination, string archivePath)
+        string mirrorPath, Action<string, long, long> progress)
     {
         ReadExpectedHeader(reader, SharedEstimationMessageType.RemoteRunArtifacts);
-        return ReadRemoteRunArtifactsPayload(reader, archiveDestination, archivePath);
+        return ReadRemoteRunArtifactsPayload(reader, mirrorPath, progress);
     }
 
     internal static RemoteRunArtifactsResponse ReadRemoteRunArtifactsPayload(BinaryReader reader,
-        Stream archiveDestination, string archivePath)
+        string mirrorPath, Action<string, long, long> progress)
     {
         var runId = ReadRequiredString(reader);
         var hasArchive = reader.ReadBoolean();
         if (hasArchive)
-        {
-            var archiveLength = reader.ReadInt64();
-            if (archiveLength < 0)
-                throw new InvalidDataException($"Invalid remote run artifact length: {archiveLength}.");
-            CopyExactly(reader.BaseStream, archiveDestination, archiveLength);
-        }
-        return new RemoteRunArtifactsResponse(runId, hasArchive ? archivePath : null,
+            RunArtifactMirror.ReadTransfer(reader, mirrorPath,
+                (transferred, total) => progress(runId, transferred, total));
+        return new RemoteRunArtifactsResponse(runId, hasArchive ? mirrorPath : null,
             ReadOptionalString(reader));
     }
 
@@ -1147,19 +1167,6 @@ public static class SharedEstimationProtocol
         return reader.ReadBytes(count) is { Length: var actual } bytes && actual == count
             ? bytes
             : throw new EndOfStreamException("The shared estimation payload was truncated.");
-    }
-
-    private static void CopyExactly(Stream source, Stream destination, long length)
-    {
-        var buffer = new byte[81920];
-        while (length > 0)
-        {
-            int read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, length));
-            if (read == 0)
-                throw new EndOfStreamException("The remote run artifact archive was truncated.");
-            destination.Write(buffer, 0, read);
-            length -= read;
-        }
     }
 
     private static void WriteDoubles(BinaryWriter writer, IReadOnlyList<double> values)
