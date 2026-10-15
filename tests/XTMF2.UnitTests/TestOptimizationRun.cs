@@ -77,10 +77,35 @@ public class TestOptimizationRun
 
             // ── run ────────────────────────────────────────────────────────────
             var runDirectory = Path.Combine(pSession.RunsDirectory, "EstimationRun");
+            string[] reportLines = null;
             CreateRunClient(true, (runBus) =>
             {
                 bool success = false;
                 using SemaphoreSlim sim = new SemaphoreSlim(0);
+                using SemaphoreSlim artifactsReady = new SemaphoreSlim(0);
+                string runId = null;
+                Exception artifactError = null;
+
+                EventHandler<HostBus.RunArtifactsReceivedEventArgs> onArtifactsReceived = (sender, e) =>
+                {
+                    if (e.RunId != runId)
+                        return;
+
+                    try
+                    {
+                        RunArtifactMirror.ExtractToDirectory(e.MirrorPath, runDirectory);
+                        reportLines = File.ReadAllLines(Path.Combine(runDirectory, "estimation_report.csv"));
+                    }
+                    catch (Exception exception)
+                    {
+                        artifactError = exception;
+                    }
+                    finally
+                    {
+                        artifactsReady.Release();
+                    }
+                };
+                runBus.ClientRunArtifactsReceived += onArtifactsReceived;
 
                 runBus.ClientFinishedModelSystem += (sender, e) =>
                 {
@@ -95,15 +120,19 @@ public class TestOptimizationRun
 
                 Assert.IsTrue(runBus.RunModelSystem(msSession,
                     runDirectory,
-                    "Start", RunMode.Estimation, out _, out error), error?.Message);
+                    "Start", RunMode.Estimation, id => runId = id, out _, out error), error?.Message);
 
                 if (!sim.Wait(30000))
                     Assert.Fail("Estimation run timed out after 30 seconds.");
 
                 Assert.IsTrue(success, "Estimation run did not complete successfully: " + error?.ToString());
+
+                if (!artifactsReady.Wait(30000))
+                    Assert.Fail("Estimation run artifacts were not received after completion.");
+                runBus.ClientRunArtifactsReceived -= onArtifactsReceived;
+                Assert.IsNull(artifactError, artifactError?.ToString());
             });
 
-            var reportLines = File.ReadAllLines(Path.Combine(runDirectory, "estimation_report.csv"));
             Assert.AreEqual("Iteration,Fitness,Param", reportLines[0]);
             Assert.IsGreaterThan(1, reportLines.Length, "The estimation report should contain evaluation rows.");
         });
