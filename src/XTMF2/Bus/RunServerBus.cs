@@ -28,6 +28,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using XTMF2.Bus.Optimization;
+using XTMF2.Configuration;
 
 namespace XTMF2.Bus
 {
@@ -52,6 +53,7 @@ namespace XTMF2.Bus
         private readonly object _deploymentSync = new();
         private readonly HashSet<string> _deploymentRequests = new(StringComparer.Ordinal);
         private readonly List<string> _extraDlls;
+        private readonly XTMFStoragePaths _storagePaths;
         private readonly bool _usePrivateWorkspace;
         private readonly bool _allowDeployment;
         private string? _stagedDeploymentRoot;
@@ -105,7 +107,7 @@ namespace XTMF2.Bus
         /// <param name="runLocal">If true, the model system will be run within the same process as the GUI.  This is only intended for debugging purposes.</param>
         public RunServerBus(Stream serverStream, bool streamOwner, XTMFRuntime runtime, List<string>? extraDlls = null,
             bool runLocal = false, bool usePrivateWorkspace = false, RemoteRunRegistry? remoteRunRegistry = null,
-            bool allowDeployment = false)
+            bool allowDeployment = false, XTMFStoragePaths? storagePaths = null)
         {
             Runtime = runtime;
             // Standalone debug/test buses own their scheduler. Production RunClient sessions
@@ -115,6 +117,7 @@ namespace XTMF2.Bus
             _clientHost = serverStream;
             _owner = streamOwner;
             _extraDlls = extraDlls ?? new List<string>();
+            _storagePaths = storagePaths ?? new XTMFStoragePaths(Path.Combine(Path.GetTempPath(), "XTMF2"));
             _usePrivateWorkspace = usePrivateWorkspace;
             _allowDeployment = allowDeployment;
         }
@@ -671,12 +674,13 @@ namespace XTMF2.Bus
                                         {
                                             var runId = SharedEstimationProtocol.ReadGetRemoteRunArtifactsPayload(reader);
                                             string? mirrorPath = null;
+                                            string? error = null;
                                             var found = _remoteRunRegistry is not null &&
-                                                _remoteRunRegistry.TryGetArtifactMirror(runId, out mirrorPath,
+                                                _remoteRunRegistry.TryGetArtifactMirror(runId, out mirrorPath, out error,
                                                     (processed, total) => SendArtifactCompressionProgress(
                                                         runId, processed, total));
                                             SendRemoteRunArtifacts(runId, found ? mirrorPath : null,
-                                                found ? null : "No retained artifact mirror is available for this run.");
+                                                found ? null : error ?? "No retained artifact mirror is available for this run.");
                                         }
                                         break;
                                     case SharedEstimationMessageType.AcknowledgeRemoteRun:
@@ -934,7 +938,7 @@ namespace XTMF2.Bus
                         throw new InvalidDataException("Deployment archive expands beyond the allowed limit.");
                 }
 
-                var stagingRoot = Path.Combine(Path.GetTempPath(), "XTMF2", "Deployments", deployment.RequestId);
+                var stagingRoot = Path.Combine(_storagePaths.DeploymentDirectory, deployment.RequestId);
                 Directory.CreateDirectory(stagingRoot);
                 var archivePath = Path.Combine(stagingRoot, "deployment.zip");
                 File.WriteAllBytes(archivePath, deployment.Archive);
@@ -986,9 +990,9 @@ namespace XTMF2.Bus
                 SendDeploymentFailure(requestId, "The RunServer could not activate the staged deployment.");
         }
 
-        private static string CreateRunDirectory(string runId)
+        private string CreateRunDirectory(string runId)
         {
-            var directory = Path.Combine(Path.GetTempPath(), "XTMF2", "Runs", runId);
+            var directory = Path.Combine(_storagePaths.RunWorkspaceBaseDirectory, runId);
             Directory.CreateDirectory(directory);
             return directory;
         }

@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using XTMF2;
+using XTMF2.Configuration;
 using XTMF2.GUI.Resources;
 using XTMF2.GUI.Views;
 
@@ -53,7 +54,7 @@ public partial class App : Application
                 try
                 {
                     // Create the XTMF Runtime
-                    Runtime = XTMFRuntime.CreateRuntime();
+                    Runtime = XTMFRuntime.CreateRuntime(new XTMFStoragePaths(Properties.Settings.Default.DataRoot));
                 }
                 catch (XTMFCodeStyleError codeError)
                 {

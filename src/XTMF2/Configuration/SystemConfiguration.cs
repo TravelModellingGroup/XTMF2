@@ -49,15 +49,27 @@ public class SystemConfiguration
     /// </summary>
     public string DefaultUserDirectory { get; private set; }
 
+    public XTMFStoragePaths StoragePaths { get; }
+
     /// <summary>
     /// Create a new system configuration for the given XTMF Runtime.
     /// </summary>
     /// <param name="runtime">The runtime to bind to.</param>
     /// <param name="fullPath">Optional, the path to the system configuration.</param>
     public SystemConfiguration(XTMFRuntime runtime, string? fullPath = null)
+        : this(runtime, fullPath is null
+            ? new XTMFStoragePaths(XTMFStoragePaths.GetDefaultDesktopDataRoot())
+            : XTMFStoragePaths.FromUserDirectory(fullPath))
     {
-        CreateDirectory(DefaultUserDirectory = fullPath
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "XTMF2", "Users"));
+    }
+
+    internal static SystemConfiguration Create(XTMFRuntime runtime, XTMFStoragePaths storagePaths)
+        => new(runtime, storagePaths);
+
+    private SystemConfiguration(XTMFRuntime runtime, XTMFStoragePaths storagePaths)
+    {
+        StoragePaths = storagePaths ?? throw new ArgumentNullException(nameof(storagePaths));
+        CreateDirectory(DefaultUserDirectory = StoragePaths.UserDirectory);
         Modules = new ModuleRepository();
         Types = new TypeRepository();
         // Seed the type repository with common BCL types so that the GUI type-picker

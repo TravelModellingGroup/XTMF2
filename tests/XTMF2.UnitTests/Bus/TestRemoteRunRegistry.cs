@@ -265,26 +265,98 @@ public class TestRemoteRunRegistry
     }
 
     [TestMethod]
-    public void DeleteRun_RefusesDirectoryOutsidePrivateWorkspace()
+    public void DeleteRun_RemovesManifestButPreservesDirectoryOutsidePrivateWorkspace()
     {
-        var storageDirectory = Path.Combine(Path.GetTempPath(), "XTMF2-RemoteRunRegistry-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-RemoteRunRegistry-" + Guid.NewGuid().ToString("N"));
+        var storageDirectory = Path.Combine(root, "state");
+        var workspaceRoot = Path.Combine(root, "workspaces");
+        var outsideDirectory = Path.Combine(root, "outside");
         var runId = Guid.NewGuid().ToString("N");
         Directory.CreateDirectory(storageDirectory);
+        Directory.CreateDirectory(outsideDirectory);
+        var outsideFile = Path.Combine(outsideDirectory, "keep.txt");
+        File.WriteAllText(outsideFile, "keep external data");
         try
         {
             var manifestPath = GetManifestPath(storageDirectory, runId);
-            File.WriteAllBytes(manifestPath, CreateSnapshot(runId, Path.GetTempPath()));
-            using var registry = new RemoteRunRegistry(storageDirectory);
+            var mirrorPath = GetArtifactMirrorPath(storageDirectory, runId);
+            File.WriteAllBytes(manifestPath, CreateSnapshot(runId, outsideDirectory));
+            Directory.CreateDirectory(mirrorPath);
+            using var registry = new RemoteRunRegistry(storageDirectory, workspaceRoot);
 
-            Assert.IsFalse(registry.DeleteRun(runId, out var error));
-            Assert.Contains("outside the RunServer's private run workspace", error);
-            Assert.IsTrue(File.Exists(manifestPath));
-            Assert.HasCount(1, registry.GetSnapshots());
+            Assert.IsTrue(registry.DeleteRun(runId, out var error), error);
+            Assert.IsNull(error);
+            Assert.IsFalse(File.Exists(manifestPath));
+            Assert.IsFalse(Directory.Exists(mirrorPath));
+            Assert.IsEmpty(registry.GetSnapshots());
+            Assert.AreEqual("keep external data", File.ReadAllText(outsideFile));
+            Assert.IsTrue(new RemoteRunDeletionResponse("request", runId, false,
+                $"The remote run directory '{outsideDirectory}' is outside the RunServer's private run workspace. Cleanup failed.")
+                .IsDeletedOrNotFound);
         }
         finally
         {
-            if (Directory.Exists(storageDirectory))
-                Directory.Delete(storageDirectory, recursive: true);
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void TryGetArtifactMirror_RemovesManifestWhenWorkingDirectoryIsOutsidePrivateWorkspace()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-RemoteRunRegistry-" + Guid.NewGuid().ToString("N"));
+        var storageDirectory = Path.Combine(root, "state");
+        var workspaceRoot = Path.Combine(root, "workspaces");
+        var outsideDirectory = Path.Combine(root, "outside");
+        var runId = Guid.NewGuid().ToString("N");
+        Directory.CreateDirectory(storageDirectory);
+        Directory.CreateDirectory(outsideDirectory);
+        var externalFile = Path.Combine(outsideDirectory, "keep.txt");
+        File.WriteAllText(externalFile, "do not delete");
+        var manifestPath = GetManifestPath(storageDirectory, runId);
+        File.WriteAllBytes(manifestPath, CreateSnapshot(runId, outsideDirectory));
+        try
+        {
+            using var registry = new RemoteRunRegistry(storageDirectory, workspaceRoot);
+
+            Assert.IsFalse(registry.TryGetArtifactMirror(runId, out _, out var error));
+            Assert.Contains(outsideDirectory, error);
+            Assert.IsFalse(File.Exists(manifestPath));
+            Assert.IsEmpty(registry.GetSnapshots());
+            Assert.AreEqual("do not delete", File.ReadAllText(externalFile));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void DeleteRun_UsesConfiguredPrivateWorkspace()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-RemoteRunRegistry-" + Guid.NewGuid().ToString("N"));
+        var storageDirectory = Path.Combine(root, "state");
+        var workspaceRoot = Path.Combine(root, "workspaces");
+        var runId = Guid.NewGuid().ToString("N");
+        var workingDirectory = Path.Combine(workspaceRoot, runId);
+        Directory.CreateDirectory(storageDirectory);
+        Directory.CreateDirectory(workingDirectory);
+        File.WriteAllText(Path.Combine(workingDirectory, "output.txt"), "run output");
+        try
+        {
+            var manifestPath = GetManifestPath(storageDirectory, runId);
+            File.WriteAllBytes(manifestPath, CreateSnapshot(runId, workingDirectory));
+            using var registry = new RemoteRunRegistry(storageDirectory, workspaceRoot);
+
+            Assert.IsTrue(registry.DeleteRun(runId, out var error), error);
+            Assert.IsFalse(Directory.Exists(workingDirectory));
+            Assert.IsFalse(File.Exists(manifestPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
         }
     }
 

@@ -71,6 +71,56 @@
                         </StackPanel>
                     </StackPanel>
                 </Border>
+
+                <Border BorderBrush="{DynamicResource DlgListBorder}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="15">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Storage"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource DlgAccent}"/>
+                        <TextBlock Text="XTMF data directory. Restart XTMF2 after changing this location."
+                                   TextWrapping="Wrap"
+                                   Opacity="0.7"/>
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBox x:Name="DataRootTextBox"
+                                     VerticalContentAlignment="Center"/>
+                                <Button x:Name="BrowseDataRootButton"
+                                    Grid.Column="1"
+                                    Content="Browse..."
+                                    Click="BrowseDataRoot_Click"
+                                    Height="34"/>
+                        </Grid>
+                        <TextBlock Text="When changing locations"
+                                   FontWeight="SemiBold"/>
+                        <ComboBox x:Name="StorageMigrationModeComboBox"
+                                  SelectedIndex="2">
+                            <ComboBoxItem Content="Copy existing data" Tag="Copy"/>
+                            <ComboBoxItem Content="Move existing data" Tag="Move"/>
+                            <ComboBoxItem Content="Use new location without migrating" Tag="Set"/>
+                        </ComboBox>
+                        <TextBlock Text="Copy and Move preserve the folder structure. Finish active runs and close project editors first. Move removes source data only after copying succeeds."
+                                   TextWrapping="Wrap"
+                                   Opacity="0.7"/>
+                        <TextBlock x:Name="StorageMigrationStatusTextBlock"
+                                   TextWrapping="Wrap"
+                                   IsVisible="False"/>
+                        <TextBlock x:Name="StorageMigrationPercentTextBlock"
+                                   IsVisible="False"/>
+                        <ProgressBar x:Name="StorageMigrationProgressBar"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Value="0"
+                                     Height="8"
+                                     IsVisible="False"/>
+                        <TextBlock x:Name="DataRootErrorTextBlock"
+                                   Foreground="Red"
+                                   TextWrapping="Wrap"
+                                   IsVisible="False"/>
+                    </StackPanel>
+                </Border>
                 
                 <!-- Runtime Section -->
                 <Border BorderBrush="{DynamicResource DlgListBorder}"
@@ -165,10 +215,12 @@
                 HorizontalAlignment="Right"
                 Spacing="10">
             <Button Classes="dlg-primary"
+                x:Name="SaveButton"
                 Content="{res:Localize Dialog_OK}"
                 Click="Save_Click"
                 Width="100"/>
-            <Button Content="{res:Localize Dialog_Cancel}"
+            <Button x:Name="CancelButton"
+                Content="{res:Localize Dialog_Cancel}"
                 Click="Cancel_Click"
                 Width="100"/>
             </StackPanel>
