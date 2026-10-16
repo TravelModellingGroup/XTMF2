@@ -28,6 +28,7 @@ using System.Threading.Tasks;
 using XTMF2.Bus;
 using XTMF2.Bus.Optimization;
 using XTMF2.Controllers;
+using XTMF2.Configuration;
 using XTMF2.Editing;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Properties;
@@ -157,36 +158,44 @@ public class RunController : IDisposable
     {
         var xtmfGUIFilePath = typeof(XTMF2.GUI.Program).Assembly.Location;
         var xtmfClientFileName = Path.Combine(Path.GetDirectoryName(xtmfGUIFilePath)!, "XTMF2.RunServer.dll");
+        var pipeName = $"XTMF2-RunServer-{Environment.ProcessId}-{Guid.NewGuid():N}";
         Process? client = null;
         try
         {
             var startInfo = new ProcessStartInfo()
             {
                 FileName = "dotnet",
-                Arguments = $"\"{xtmfClientFileName}\" -tcp 127.0.0.1 0",
                 UseShellExecute = false,
                 CreateNoWindow = OperatingSystem.IsWindows(),
                 WorkingDirectory = Environment.CurrentDirectory,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            startInfo.ArgumentList.Add(xtmfClientFileName);
+            startInfo.ArgumentList.Add("-serverStorageDirectory");
+            startInfo.ArgumentList.Add(runtime.SystemConfiguration.StoragePaths.DataRoot);
+            startInfo.ArgumentList.Add("-namedPipe");
+            startInfo.ArgumentList.Add(pipeName);
             client = new() { StartInfo = startInfo, EnableRaisingEvents = true };
+            client.OutputDataReceived += (_, eventArgs) =>
+            {
+                if (eventArgs.Data is not null)
+                    Debug.WriteLine($"[Local RunServer] {eventArgs.Data}");
+            };
             client.ErrorDataReceived += (_, eventArgs) =>
             {
                 if (eventArgs.Data is not null)
                     Debug.WriteLine($"[Local RunServer] {eventArgs.Data}");
             };
-            client.Start();
-            client.BeginErrorReadLine();
-            var listenLine = client.StandardOutput.ReadLine();
-            if (!TryParseListeningPort(listenLine, out var hostPort))
+            if (!XTMF2.Bus.CreateStreams.CreateNewNamedPipeHost(pipeName, out var hostStream, out error, () =>
+                {
+                    client.Start();
+                    client.BeginOutputReadLine();
+                    client.BeginErrorReadLine();
+                }) || hostStream is null)
             {
-                error = "The local RunServer did not report a listening TCP port.";
-                controller = null;
-                return false;
-            }
-            if (!XTMF2.Bus.CreateStreams.CreateTcpClient("127.0.0.1", hostPort, out var hostStream, out error))
-            {
+                if (client is { HasExited: false })
+                    client.Kill(entireProcessTree: true);
                 controller = null;
                 return false;
             }
@@ -818,18 +827,6 @@ public class RunController : IDisposable
             runViewModel?.SetRunMode(runMode, meta, () => hostBus.CancelModelRun(runId, out _));
         }
         return true;
-    }
-
-    private static bool TryParseListeningPort(string? line, out int port)
-    {
-        port = 0;
-        const string prefix = "RunServer listening on ";
-        if (line is null || !line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        var endpoint = line[prefix.Length..];
-        var separator = endpoint.LastIndexOf(':');
-        return separator >= 0 && int.TryParse(endpoint[(separator + 1)..], out port) && port is > 0 and <= 65535;
     }
 
     private RunController(XTMFRuntime runtime, HostBus hostBus, Process? runServerProcess = null)

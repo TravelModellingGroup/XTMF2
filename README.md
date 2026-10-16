@@ -54,11 +54,28 @@ This creates:
 * `runserver-key.pem`: the certificate private key. Keep this file private.
 * `runserver-token.txt`: the authentication token. Keep this file private.
 
-The setup command prints the certificate's SHA-256 fingerprint. The server also prints the same fingerprint each time it starts; this is safe to share with GUI users and is not the authentication token. Start the remote server with the security directory:
+The setup command prints the certificate's SHA-256 fingerprint. The server also prints the same fingerprint each time it starts; this is safe to share with GUI users and is not the authentication token. Create a `XTMF2.RunServer.json` file in the server's configuration directory (or pass its path with `-config`):
+
+```json
+{
+	"version": 1,
+	"serverStorageDirectory": "./xtmf-data",
+	"listenAddress": "0.0.0.0",
+	"port": 5000,
+	"securityDirectory": "./runserver-security",
+	"additionalAssemblies": [],
+	"allowDeployment": true,
+	"runWorkspaceBaseDirectory": "./run-workspaces"
+}
+```
+
+This is RunServer configuration version 1. Paths in the JSON file are resolved relative to the file. The server derives its `RemoteRuns` and `Deployments` directories from `serverStorageDirectory`; each run gets its own subdirectory under `runWorkspaceBaseDirectory`, which defaults to `serverStorageDirectory/Runs`. Listening outside loopback and enabling deployment both require TLS/token security. Keep the security files private. Start the server with:
 
 ```bash
-dotnet run -c Release --project src/XTMF2.Client/XTMF2.RunServer.csproj -- -tcp 0.0.0.0 5000 -security ./runserver-security
+dotnet run -c Release --project src/XTMF2.Client/XTMF2.RunServer.csproj -- -config ./XTMF2.RunServer.json
 ```
+
+If no arguments are supplied, RunServer looks for `XTMF2.RunServer.config` beside its executable. The GUI-launched local RunServer receives the GUI's configured storage directory directly and binds to loopback on an ephemeral port. Each remote RunServer operator manages the JSON file on that server; GUI endpoint settings only describe how clients connect.
 
 In XTMF2, open **Settings**, open **RunServers**, and add a remote endpoint. Enter:
 

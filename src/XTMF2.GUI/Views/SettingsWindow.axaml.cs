@@ -24,11 +24,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Layout;
 using Avalonia.Threading;
 using XTMF2.GUI;
 using XTMF2.GUI.Resources;
+using XTMF2.GUI.ViewModels;
 using XTMF2.AI;
 using XTMF2.GUI.Properties;
 
@@ -43,6 +46,9 @@ public partial class SettingsWindow : Window
     private string _currentOllamaEndpoint = "http://localhost:11434";
     private readonly HttpClient _aiHttpClient = new();
     private readonly RunController? _runController;
+    private bool _migrationInProgress;
+    private CancellationTokenSource? _migrationCancellation;
+    private object? _defaultCancelButtonContent;
     private RunServersWindow? _runServersWindow;
     public event Action? SettingsSaved;
 
@@ -55,6 +61,7 @@ public partial class SettingsWindow : Window
     {
         _runController = runController;
         InitializeComponent();
+        _defaultCancelButtonContent = CancelButton.Content;
         LoadSettings();
     }
 
@@ -88,6 +95,7 @@ public partial class SettingsWindow : Window
 
         // Load system sounds preference
         PlaySystemSoundsCheckBox.IsChecked = Properties.Settings.Default.PlaySystemSounds;
+        DataRootTextBox.Text = Properties.Settings.Default.DataRoot;
             _currentAiProvider = Properties.Settings.Default.AiProvider;
             _currentAiModel = Properties.Settings.Default.AiModel;
             _currentOllamaEndpoint = Properties.Settings.Default.OllamaEndpoint;
@@ -154,22 +162,131 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private void Save_Click(object? sender, RoutedEventArgs e)
+    private async void Save_Click(object? sender, RoutedEventArgs e)
     {
+        DataRootErrorTextBlock.IsVisible = false;
         try
         {
-            SaveSettings();
+            var newDataRoot = ValidateDataRoot(DataRootTextBox.Text);
+            var currentDataRoot = Properties.Settings.Default.DataRoot;
+            var migrationMode = GetStorageMigrationMode();
+            if (!AreSamePath(currentDataRoot, newDataRoot) && migrationMode is not null)
+            {
+                if (_runController?.RunsViewModel.Runs.Any(run => run.Status == RunStatus.Running) == true)
+                    throw new InvalidOperationException("Finish or stop active runs before migrating the data directory.");
+
+                if (Directory.EnumerateFileSystemEntries(newDataRoot).Any())
+                {
+                    var confirm = new ConfirmDialog("Destination Not Empty",
+                        "The selected directory already contains data. Migration will merge the folder structures and replace files with matching paths; other destination files will be kept. Continue?");
+                    await confirm.ShowDialog(this);
+                    if (!confirm.Result)
+                        return;
+                }
+
+                if (!await MigrateStorageRootAsync(currentDataRoot, newDataRoot, migrationMode.Value))
+                    return;
+            }
+
+            SaveSettings(newDataRoot);
             SettingsSaved?.Invoke();
             Close();
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException
+            or ArgumentException or NotSupportedException)
         {
-            System.Diagnostics.Debug.WriteLine($"Unable to save settings: {ex.Message}");
+            DataRootErrorTextBlock.Text = ex.Message;
+            DataRootErrorTextBlock.IsVisible = true;
         }
+    }
+
+    private async Task<bool> MigrateStorageRootAsync(string sourceRoot, string destinationRoot,
+        StorageRootMigrationMode mode)
+    {
+        _migrationInProgress = true;
+        _migrationCancellation = new CancellationTokenSource();
+        SaveButton.IsEnabled = false;
+        CancelButton.Content = "Cancel";
+        CancelButton.IsEnabled = mode == StorageRootMigrationMode.Copy;
+        DataRootTextBox.IsEnabled = false;
+        BrowseDataRootButton.IsEnabled = false;
+        StorageMigrationModeComboBox.IsEnabled = false;
+        StorageMigrationStatusTextBlock.IsVisible = true;
+        StorageMigrationPercentTextBlock.IsVisible = true;
+        StorageMigrationProgressBar.IsVisible = true;
+        StorageMigrationProgressBar.IsIndeterminate = true;
+        StorageMigrationStatusTextBlock.Text = "Starting migration...";
+
+        var cancellationToken = _migrationCancellation.Token;
+        var progress = new Progress<StorageRootMigrationProgress>(UpdateStorageMigrationProgress);
+        try
+        {
+            await Task.Run(() => StorageRootMigration.Migrate(sourceRoot, destinationRoot, mode,
+                progress, cancellationToken), cancellationToken);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            StorageMigrationStatusTextBlock.Text = "Migration cancelled. Source data was not removed.";
+            return false;
+        }
+        finally
+        {
+            _migrationCancellation.Dispose();
+            _migrationCancellation = null;
+            _migrationInProgress = false;
+            SaveButton.IsEnabled = true;
+            CancelButton.Content = _defaultCancelButtonContent;
+            CancelButton.IsEnabled = true;
+            DataRootTextBox.IsEnabled = true;
+            BrowseDataRootButton.IsEnabled = true;
+            StorageMigrationModeComboBox.IsEnabled = true;
+        }
+    }
+
+    private void UpdateStorageMigrationProgress(StorageRootMigrationProgress progress)
+    {
+        StorageMigrationStatusTextBlock.Text = progress.Status;
+        StorageMigrationProgressBar.IsIndeterminate = progress.Percentage is null;
+        if (progress.Percentage is double percentage)
+        {
+            StorageMigrationProgressBar.Value = percentage;
+            StorageMigrationPercentTextBlock.Text = $"{percentage:0}%";
+        }
+    }
+
+    private StorageRootMigrationMode? GetStorageMigrationMode()
+    {
+        if (StorageMigrationModeComboBox.SelectedItem is not ComboBoxItem item)
+            return null;
+
+        return item.Tag?.ToString() switch
+        {
+            "Copy" => StorageRootMigrationMode.Copy,
+            "Move" => StorageRootMigrationMode.Move,
+            _ => null,
+        };
+    }
+
+    private static bool AreSamePath(string first, string second)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(first)),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(second)), comparison);
     }
 
     private void Cancel_Click(object? sender, RoutedEventArgs e)
     {
+        if (_migrationInProgress)
+        {
+            CancelButton.IsEnabled = false;
+            StorageMigrationStatusTextBlock.Text = "Cancelling migration...";
+            _migrationCancellation?.Cancel();
+            return;
+        }
+
         // Restore the original theme if user cancels
         if (Application.Current is App app)
         {
@@ -191,8 +308,20 @@ public partial class SettingsWindow : Window
         Close();
     }
 
-    private void SaveSettings()
+    protected override void OnClosing(WindowClosingEventArgs e)
     {
+        if (_migrationInProgress)
+        {
+            e.Cancel = true;
+            return;
+        }
+        base.OnClosing(e);
+    }
+
+    private void SaveSettings(string dataRoot)
+    {
+        Properties.Settings.Default.DataRoot = dataRoot;
+
         // Save language preference
         if (_currentLanguage != null)
         {
@@ -222,6 +351,50 @@ public partial class SettingsWindow : Window
 
         // Theme is already saved via ChangeTheme method
         // which calls SaveThemePreference internally
+    }
+
+    private static string ValidateDataRoot(string? dataRoot)
+    {
+        if (string.IsNullOrWhiteSpace(dataRoot))
+            throw new InvalidOperationException("Choose a data directory.");
+
+        var fullPath = Path.GetFullPath(dataRoot.Trim());
+        var probePath = Path.Combine(fullPath, $".xtmf2-write-test-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(fullPath);
+            File.WriteAllText(probePath, string.Empty);
+            File.Delete(probePath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or ArgumentException or NotSupportedException or System.Security.SecurityException)
+        {
+            try
+            {
+                File.Delete(probePath);
+            }
+            catch (Exception cleanupException) when (cleanupException is IOException or UnauthorizedAccessException)
+            {
+            }
+            throw new InvalidOperationException($"The data directory cannot be written: {exception.Message}", exception);
+        }
+
+        return fullPath;
+    }
+
+    private async void BrowseDataRoot_Click(object? sender, RoutedEventArgs e)
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel?.StorageProvider is null)
+            return;
+
+        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
+        {
+            Title = "Choose XTMF data directory",
+            AllowMultiple = false,
+        });
+        if (folders.Count > 0)
+            DataRootTextBox.Text = folders[0].Path.LocalPath;
     }
 
     private async void RefreshModels_Click(object? sender, RoutedEventArgs e)

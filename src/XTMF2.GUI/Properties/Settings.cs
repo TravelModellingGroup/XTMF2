@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using XTMF2.Configuration;
 
 namespace XTMF2.GUI.Properties;
 
@@ -80,6 +81,7 @@ public class Settings
     public string AiModel { get; set; } = "llama3.2";
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
     public int AiMaxCompactionCycles { get; set; } = 100;
+    public string DataRoot { get; set; } = XTMFStoragePaths.GetDefaultDesktopDataRoot();
     public List<RunServerEndpoint> RunServers { get; set; } = new() { RunServerEndpoint.CreateLocal() };
 
     public void Save()
@@ -127,6 +129,9 @@ public class Settings
                     settings.AiMaxCompactionCycles = loaded.AiMaxCompactionCycles is < 1 or > 100
                         ? 100
                         : loaded.AiMaxCompactionCycles;
+                    settings.DataRoot = string.IsNullOrWhiteSpace(loaded.DataRoot)
+                        ? XTMFStoragePaths.GetDefaultDesktopDataRoot()
+                        : loaded.DataRoot;
                     settings.RunServers = NormalizeRunServers(loaded.RunServers);
                 }
             }

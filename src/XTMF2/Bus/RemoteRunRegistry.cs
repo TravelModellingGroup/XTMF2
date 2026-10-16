@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 using XTMF2.Bus.Optimization;
+using XTMF2.Configuration;
 
 namespace XTMF2.Bus;
 
@@ -57,6 +58,7 @@ public sealed class RemoteRunRegistry : IDisposable
     private readonly Dictionary<string, RemoteRunJob> _jobs = new(StringComparer.Ordinal);
     private readonly Scheduler _scheduler;
     private readonly string _storageDirectory;
+    private readonly string _runWorkspaceDirectory;
     private bool _disposed;
 
     /// <summary>
@@ -80,10 +82,13 @@ public sealed class RemoteRunRegistry : IDisposable
     /// Creates a registry that owns remote run state and the process-wide RunServer scheduler.
     /// </summary>
     /// <param name="storageDirectory">The directory for persisted run manifests and artifacts; when <see langword="null"/>, the default per-user XTMF2 directory is used.</param>
-    public RemoteRunRegistry(string? storageDirectory = null)
+    /// <param name="runWorkspaceDirectory">The root directory for private run workspaces; when <see langword="null"/>, the OS temporary directory is used.</param>
+    public RemoteRunRegistry(string? storageDirectory = null, string? runWorkspaceDirectory = null)
     {
         _storageDirectory = storageDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "XTMF2", "RemoteRuns");
+        _runWorkspaceDirectory = Path.GetFullPath(runWorkspaceDirectory
+            ?? Path.Combine(Path.GetTempPath(), "XTMF2", "Runs"));
         Directory.CreateDirectory(_storageDirectory);
         _scheduler = new Scheduler(runLocal: false);
         LoadPersistedJobs();
@@ -205,6 +210,18 @@ public sealed class RemoteRunRegistry : IDisposable
     /// <returns><see langword="true"/> if the artifact mirror is available; otherwise, <see langword="false"/>.</returns>
     public bool TryGetArtifactMirror(string runId, out string? mirrorDirectory,
         Action<long, long>? progress = null)
+        => TryGetArtifactMirror(runId, out mirrorDirectory, out _, progress);
+
+    /// <summary>
+    /// Gets a run's retained artifact mirror and reports why it is unavailable.
+    /// </summary>
+    /// <param name="runId">The identifier of the run whose artifacts are requested.</param>
+    /// <param name="mirrorDirectory">Receives the mirror directory when available; otherwise, <see langword="null"/>.</param>
+    /// <param name="error">Receives the reason the mirror could not be returned; otherwise, <see langword="null"/>.</param>
+    /// <param name="progress">Reports artifact compression progress.</param>
+    /// <returns><see langword="true"/> if the artifact mirror is available; otherwise, <see langword="false"/>.</returns>
+    public bool TryGetArtifactMirror(string runId, out string? mirrorDirectory, out string? error,
+        Action<long, long>? progress = null)
     {
         RemoteRunJob? job;
         string path;
@@ -213,20 +230,40 @@ public sealed class RemoteRunRegistry : IDisposable
             if (!_jobs.TryGetValue(runId, out job))
             {
                 mirrorDirectory = null;
+                error = "The remote run was not found.";
                 return false;
             }
             path = GetArtifactMirrorPath(runId);
         }
 
+        error = null;
         try
         {
             var snapshot = job.GetSnapshot();
             if (!Directory.Exists(path))
             {
-                if (snapshot.State == RemoteRunState.Running || !IsPrivateRunDirectory(runId, snapshot.WorkingDirectory) ||
-                    !Directory.Exists(snapshot.WorkingDirectory))
+                if (snapshot.State == RemoteRunState.Running)
                 {
                     mirrorDirectory = null;
+                    error = "Run artifacts are not available while the run is running.";
+                    return false;
+                }
+                if (!IsPrivateRunDirectory(runId, snapshot.WorkingDirectory))
+                {
+                    error = $"The remote run directory '{snapshot.WorkingDirectory}' is outside the RunServer's private run workspace.";
+                    Console.Error.WriteLine($"RunServer could not transmit run '{runId}': {error} Requested directory: '{snapshot.WorkingDirectory}'.");
+                    if (!RemoveInvalidRunRecord(runId, job, out var removalError))
+                    {
+                        error += $" The run manifest could not be removed: {removalError}";
+                        Console.Error.WriteLine($"RunServer could not remove the manifest for run '{runId}': {removalError}");
+                    }
+                    mirrorDirectory = null;
+                    return false;
+                }
+                if (!Directory.Exists(snapshot.WorkingDirectory))
+                {
+                    mirrorDirectory = null;
+                    error = $"The remote run working directory was not found: '{snapshot.WorkingDirectory}'.";
                     return false;
                 }
 
@@ -253,7 +290,36 @@ public sealed class RemoteRunRegistry : IDisposable
         catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
         {
             mirrorDirectory = null;
+            error = exception.Message;
             return false;
+        }
+    }
+
+    private bool RemoveInvalidRunRecord(string runId, RemoteRunJob job, out string? error)
+    {
+        error = null;
+        lock (_sync)
+        {
+            if (!_jobs.TryGetValue(runId, out var currentJob) || !ReferenceEquals(currentJob, job))
+                return true;
+
+            _jobs.Remove(runId);
+            try
+            {
+                var mirrorPath = GetArtifactMirrorPath(runId);
+                if (Directory.Exists(mirrorPath))
+                    Directory.Delete(mirrorPath, recursive: true);
+                foreach (var temporaryMirror in Directory.EnumerateDirectories(
+                    _storageDirectory, Path.GetFileName(mirrorPath) + ".tmp-*"))
+                    Directory.Delete(temporaryMirror, recursive: true);
+                File.Delete(GetManifestPath(runId));
+                return true;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                error = exception.Message;
+                return false;
+            }
         }
     }
 
@@ -275,7 +341,7 @@ public sealed class RemoteRunRegistry : IDisposable
         return true;
     }
 
-    private static bool IsPrivateRunDirectory(string runId, string workingDirectory)
+    private bool IsPrivateRunDirectory(string runId, string workingDirectory)
     {
         if (string.IsNullOrWhiteSpace(runId) || runId is "." or ".." ||
             runId.Contains(Path.DirectorySeparatorChar) || runId.Contains(Path.AltDirectorySeparatorChar) ||
@@ -284,7 +350,7 @@ public sealed class RemoteRunRegistry : IDisposable
         try
         {
             var actual = Path.GetFullPath(workingDirectory);
-            var expected = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "XTMF2", "Runs", runId));
+            var expected = Path.GetFullPath(Path.Combine(_runWorkspaceDirectory, runId));
             var comparison = OperatingSystem.IsWindows()
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
@@ -335,7 +401,16 @@ public sealed class RemoteRunRegistry : IDisposable
 
             if (!IsPrivateRunDirectory(runId, snapshot.WorkingDirectory))
             {
-                error = "The remote run directory is outside the RunServer's private run workspace.";
+                error = $"The remote run directory '{snapshot.WorkingDirectory}' is outside the RunServer's private run workspace.";
+                Console.Error.WriteLine($"RunServer could not delete run '{runId}': {error} The directory was left untouched; removing the retained run record.");
+                if (RemoveInvalidRunRecord(runId, job, out var removalError))
+                {
+                    error = null;
+                    return true;
+                }
+
+                error += $" The run manifest could not be removed: {removalError}";
+                Console.Error.WriteLine($"RunServer could not remove the manifest for run '{runId}': {removalError}");
                 return false;
             }
 

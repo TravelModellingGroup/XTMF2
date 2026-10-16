@@ -85,6 +85,11 @@ namespace XTMF2
             return new XTMFRuntime(userDirectory);
         }
 
+        public static XTMFRuntime CreateRuntime(XTMFStoragePaths storagePaths)
+        {
+            return new XTMFRuntime(storagePaths);
+        }
+
         /// <summary>
         /// Create a new instance of XTMF
         /// </summary>
@@ -105,6 +110,13 @@ namespace XTMF2
         private XTMFRuntime(string userDirectory)
         {
             SystemConfiguration = new SystemConfiguration(this, userDirectory);
+            UserController = new UserController(this);
+            ProjectController = new ProjectController(this);
+        }
+
+        private XTMFRuntime(XTMFStoragePaths storagePaths)
+        {
+            SystemConfiguration = SystemConfiguration.Create(this, storagePaths);
             UserController = new UserController(this);
             ProjectController = new ProjectController(this);
         }
