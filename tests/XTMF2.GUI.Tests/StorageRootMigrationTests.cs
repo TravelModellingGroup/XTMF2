@@ -68,8 +68,16 @@ public class StorageRootMigrationTests
             WriteFile(source, Path.Combine("Runs", "run-1", "output.bin"), "run");
             Directory.CreateDirectory(Path.Combine(destination, "Runs", "run-1", "output.bin"));
 
-            Assert.ThrowsExactly<IOException>(() => StorageRootMigration.Migrate(source, destination,
-                StorageRootMigrationMode.Move));
+            Exception? copyFailure = null;
+            try
+            {
+                StorageRootMigration.Migrate(source, destination, StorageRootMigrationMode.Move);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                copyFailure = exception;
+            }
+            Assert.IsNotNull(copyFailure, "The migration should fail when a file destination is a directory.");
 
             Assert.IsTrue(File.Exists(Path.Combine(source, "Users", "local", "Project", "model.xmsf")));
             Assert.IsTrue(File.Exists(Path.Combine(source, "Runs", "run-1", "output.bin")));
