@@ -155,7 +155,6 @@ public static class Strings
     public static string ModelSystemEditor_SaveTooltip => Get(nameof(ModelSystemEditor_SaveTooltip));
     public static string ModelSystemEditor_ExportTooltip => Get(nameof(ModelSystemEditor_ExportTooltip));
     public static string ModelSystemEditor_RevertTooltip => Get(nameof(ModelSystemEditor_RevertTooltip));
-    public static string ModelSystemEditor_ToastSaving => Get(nameof(ModelSystemEditor_ToastSaving));
     public static string ModelSystemEditor_ToastSaved => Get(nameof(ModelSystemEditor_ToastSaved));
     public static string ModelSystemEditor_ToastSaveFailed => Get(nameof(ModelSystemEditor_ToastSaveFailed));
 

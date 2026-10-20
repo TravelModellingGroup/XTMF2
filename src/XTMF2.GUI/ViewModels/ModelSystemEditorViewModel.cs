@@ -81,6 +81,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 {
     private bool _disposed;
     private bool _suppressSearchRebuild;
+    private int _saveInProgress;
 
     // ── Session / model ────────────────────────────────────────────────────
     /// <summary>The active editing session for the model system.</summary>
@@ -618,6 +619,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// <summary>True when the model system changed since its last successful save.</summary>
     public bool IsDirty => Session.IsDirty;
 
+    /// <summary>True while the model system is being saved.</summary>
+    public bool IsSaving => Volatile.Read(ref _saveInProgress) != 0;
+
     // Unsubscribe from the outgoing element before the field changes.
     partial void OnSelectedElementChanging(ICanvasElement? value)
     {
@@ -885,6 +889,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     private void OnSessionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => OnSessionPropertyChanged(sender, e));
+            return;
+        }
+
         if (e.PropertyName == nameof(Session.CanUndo))
             OnPropertyChanged(nameof(CanUndo));
         else if (e.PropertyName == nameof(Session.CanRedo))
@@ -3658,25 +3668,52 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>Save the model system to its project file.</summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSaveModelSystem))]
     private Task SaveModelSystem() => SaveModelSystemAsync();
+
+    private bool CanSaveModelSystem() => !IsSaving;
 
     public async Task<bool> SaveModelSystemAsync()
     {
-        ShowToast(Strings.ModelSystemEditor_ToastSaving);
-        // Yield to let the UI render the "saving" toast before the synchronous save runs.
-        await Task.Yield();
-        if (Session.Save(out var error))
-        {
-            ShowToast(Strings.ModelSystemEditor_ToastSaved);
-            return true;
-        }
-        else
-        {
-            var msg = string.Format(Strings.ModelSystemEditor_ToastSaveFailed,
-                                    error?.Message ?? Strings.ModelSystems_UnknownError);
-            ShowToast(msg, isError: true, durationMs: 6000);
+        if (Interlocked.CompareExchange(ref _saveInProgress, 1, 0) != 0)
             return false;
+
+        try
+        {
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                OnPropertyChanged(nameof(IsSaving));
+                SaveModelSystemCommand.NotifyCanExecuteChanged();
+            });
+
+            var (saved, error) = await Task.Run(async () =>
+            {
+                var saveSucceeded = Session.Save(out var saveError);
+                return (saveSucceeded, saveError);
+            }).ConfigureAwait(false);
+
+            return await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (saved)
+                {
+                    ShowToast(Strings.ModelSystemEditor_ToastSaved);
+                    return true;
+                }
+
+                var msg = string.Format(Strings.ModelSystemEditor_ToastSaveFailed,
+                                        error?.Message ?? Strings.ModelSystems_UnknownError);
+                ShowToast(msg, isError: true, durationMs: 6000);
+                return false;
+            });
+        }
+        finally
+        {
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Volatile.Write(ref _saveInProgress, 0);
+                OnPropertyChanged(nameof(IsSaving));
+                SaveModelSystemCommand.NotifyCanExecuteChanged();
+            });
         }
     }
 
