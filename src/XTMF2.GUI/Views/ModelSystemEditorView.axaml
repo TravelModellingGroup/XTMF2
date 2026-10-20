@@ -59,6 +59,22 @@
         <Style Selector="Border.neon-pill">
             <Setter Property="BoxShadow" Value="0 0 14 3 #8000D4FF, 0 0 40 10 #4000A0FF, 0 6 24 0 #80000000"/>
         </Style>
+        <Style Selector="Canvas.save-spinner">
+            <Setter Property="RenderTransformOrigin" Value="50%,50%"/>
+            <Setter Property="RenderTransform">
+                <RotateTransform Angle="0"/>
+            </Setter>
+            <Style.Animations>
+                <Animation Duration="0:0:0.9" IterationCount="Infinite">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="RotateTransform.Angle" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="RotateTransform.Angle" Value="360"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
     </UserControl.Styles>
 
     <UserControl.KeyBindings>
@@ -274,29 +290,47 @@
                     <!-- Save -->
                     <Button Command="{Binding SaveModelSystemCommand}"
                             ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}">
-                        <Viewbox Width="18" Height="18">
-                            <Canvas Width="20" Height="20">
-                                <!-- Floppy disk: outline body so details are visible in both themes -->
-                                <!-- Outer shell (stroke only) -->
-                                <Path Data="M 2,2 H 14 L 18,6 V 18 H 2 Z"
+                        <Grid Width="24" Height="24">
+                            <Viewbox Width="18" Height="18">
+                                <Canvas Width="20" Height="20">
+                                    <!-- Floppy disk: outline body so details are visible in both themes -->
+                                    <!-- Outer shell (stroke only) -->
+                                    <Path Data="M 2,2 H 14 L 18,6 V 18 H 2 Z"
+                                          Stroke="{DynamicResource NeonIconPrimary}"
+                                          StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round"
+                                          Fill="Transparent"/>
+                                    <!-- Corner fold crease -->
+                                    <Path Data="M 14,2 L 14,6 H 18"
+                                          Stroke="{DynamicResource NeonIconPrimary}"
+                                          StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round"
+                                          Fill="Transparent"/>
+                                    <!-- Shutter strip (filled) -->
+                                    <Path Data="M 5,2.5 H 13 V 7 H 5 Z"
+                                          Fill="{DynamicResource NeonIconSecondary}" StrokeThickness="0"/>
+                                    <!-- Label sticker (outlined) -->
+                                    <Path Data="M 4,10.5 H 16 V 16.5 H 4 Z"
+                                          Stroke="{DynamicResource NeonIconSecondary}"
+                                          StrokeThickness="1.2" StrokeLineCap="Round" StrokeJoin="Round"
+                                          Fill="Transparent"/>
+                                </Canvas>
+                            </Viewbox>
+                            <Canvas Width="36" Height="36"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Classes="save-spinner"
+                                    IsVisible="{Binding IsSaving}">
+                                <Path Data="M 18,2 A 16,16 0 0 1 31.9,26"
                                       Stroke="{DynamicResource NeonIconPrimary}"
-                                      StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round"
+                                      StrokeThickness="2.4"
+                                      StrokeLineCap="Round"
                                       Fill="Transparent"/>
-                                <!-- Corner fold crease -->
-                                <Path Data="M 14,2 L 14,6 H 18"
-                                      Stroke="{DynamicResource NeonIconPrimary}"
-                                      StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round"
-                                      Fill="Transparent"/>
-                                <!-- Shutter strip (filled) -->
-                                <Path Data="M 5,2.5 H 13 V 7 H 5 Z"
-                                      Fill="{DynamicResource NeonIconSecondary}" StrokeThickness="0"/>
-                                <!-- Label sticker (outlined) -->
-                                <Path Data="M 4,10.5 H 16 V 16.5 H 4 Z"
+                                <Path Data="M 18,34 A 16,16 0 0 1 4.1,10"
                                       Stroke="{DynamicResource NeonIconSecondary}"
-                                      StrokeThickness="1.2" StrokeLineCap="Round" StrokeJoin="Round"
+                                      StrokeThickness="2.4"
+                                      StrokeLineCap="Round"
                                       Fill="Transparent"/>
                             </Canvas>
-                        </Viewbox>
+                        </Grid>
                     </Button>
 
                     <!-- Export -->
