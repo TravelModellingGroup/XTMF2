@@ -37,13 +37,13 @@ public partial class ModelSystemsContentView : UserControl
     public ModelSystemsContentView()
     {
         InitializeComponent();
-        
+
         // Subscribe to language changes
         LocalizationManager.LanguageChanged += OnLanguageChanged;
-        
+
         // Subscribe to DataContext changes for automatic initialization
         DataContextChanged += OnDataContextChanged;
-        
+
         // Subscribe to visual tree attachment to find MainWindow
         AttachedToVisualTree += OnAttachedToVisualTree;
 
@@ -81,7 +81,7 @@ public partial class ModelSystemsContentView : UserControl
     {
         _viewModel = viewModel;
         DataContext = viewModel;
-        
+
         UpdateLocalizedText();
     }
 

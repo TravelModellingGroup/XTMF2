@@ -2,7 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
              xmlns:views="clr-namespace:XTMF2.GUI.Views"
-             xmlns:res="clr-namespace:XTMF2.GUI.Resources"
              x:Class="XTMF2.GUI.Views.ModelSystemEditorView"
              x:DataType="vm:ModelSystemEditorViewModel"
              x:CompileBindings="True">

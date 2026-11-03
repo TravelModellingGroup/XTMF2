@@ -12,9 +12,9 @@
              x:DataType="vm:ModelSystemsViewModel"
              Background="{DynamicResource DlgBg}"
              Classes="neon-view">
-    
+
     <Grid RowDefinitions="Auto,*" Margin="10">
-        
+
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
             <TextBlock x:Name="TitleTextBlock"
@@ -25,15 +25,15 @@
                        FontSize="14"
                        Opacity="0.7"/>
         </StackPanel>
-        
+
         <!-- Model Systems List -->
         <Border Grid.Row="1"
             Classes="dlg-list"
             Background="Transparent"
             Padding="0">
-            
+
             <Grid RowDefinitions="Auto,*">
-                
+
                 <!-- Toolbar -->
                 <Border Grid.Row="0"
                         Background="{DynamicResource DlgInputBg}"
@@ -130,7 +130,7 @@
                                             Margin="10,0,0,0"/>
                     </Grid>
                 </Border>
-                
+
                 <!-- Model Systems List -->
                 <ScrollViewer Grid.Row="1" Background="Transparent">
                     <ListBox x:Name="ModelSystemListBox"
@@ -236,11 +236,11 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </ScrollViewer>
-                
+
             </Grid>
-            
+
         </Border>
-        
+
     </Grid>
-    
+
 </UserControl>

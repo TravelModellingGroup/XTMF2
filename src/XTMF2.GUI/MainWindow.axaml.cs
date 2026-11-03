@@ -136,8 +136,7 @@ public partial class MainWindow : Window
 
     private void OnDocumentsSourceChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (e.Action is not (NotifyCollectionChangedAction.Remove or NotifyCollectionChangedAction.Replace)
-            || e.OldItems is null)
+        if (e.Action != NotifyCollectionChangedAction.Remove || e.OldItems is null)
         {
             return;
         }
@@ -148,25 +147,9 @@ public partial class MainWindow : Window
             if (e.OldItems[index] is not object oldItem)
                 continue;
 
-            var replacement = e.Action == NotifyCollectionChangedAction.Replace
-                && e.NewItems is not null
-                && index < e.NewItems.Count
-                    ? e.NewItems[index]
-                    : null;
-            var historyIndex = _documentActivationHistory.IndexOf(oldItem);
-            if (replacement is object newItem)
-            {
-                if (historyIndex >= 0)
-                    _documentActivationHistory[historyIndex] = newItem;
-                if (ReferenceEquals(oldItem, _lastActiveDocumentContext))
-                    _lastActiveDocumentContext = newItem;
-            }
-            else
-            {
-                if (ReferenceEquals(oldItem, _lastActiveDocumentContext))
-                    removedActiveDocument = true;
-                _documentActivationHistory.Remove(oldItem);
-            }
+            if (ReferenceEquals(oldItem, _lastActiveDocumentContext))
+                removedActiveDocument = true;
+            _documentActivationHistory.Remove(oldItem);
 
             (oldItem as IDisposable)?.Dispose();
         }
@@ -648,16 +631,12 @@ public partial class MainWindow : Window
         if (_runtime is null)
             return Task.FromResult<ModelSystemEditorViewModel?>(null);
 
-        var runtime = _runtime;
-        var project = session.Project;
         var loadingDocument = CreateEditorLoadingViewModel(header, user);
         return StartEditorLoad(
             loadingDocument,
             header,
             user,
-            cancellationToken => Task.Run(
-                () => LoadModelSystemSession(runtime, project, user, header),
-                cancellationToken));
+            _ => Task.FromResult(new ModelSystemSessionLoadResult(session, null, null)));
     }
 
     private ModelSystemEditorViewModel? FindOpenEditor(ModelSystemHeader header)

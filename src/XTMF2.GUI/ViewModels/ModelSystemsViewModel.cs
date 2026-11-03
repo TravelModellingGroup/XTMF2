@@ -141,16 +141,14 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(LoadedViewModel));
         OnPropertyChanged(nameof(DisplayViewModel));
         LoadErrorMessage = null;
-        CompleteLoading();
     }
 
     public void ShowLoadError(string message)
     {
         if (!_isLoadingHost)
             throw new InvalidOperationException("Only a loading model-systems view model can report a load error.");
-
         LoadErrorMessage = message;
-        CompleteLoading();
+        LoadErrorMessage = message;
     }
 
     public void CompleteLoading()

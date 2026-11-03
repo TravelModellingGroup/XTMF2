@@ -939,16 +939,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         OnPropertyChanged(nameof(DisplayViewModel));
         OnPropertyChanged(nameof(Title));
         LoadErrorMessage = null;
-        CompleteLoading();
     }
 
     public void ShowLoadError(string message)
     {
         if (!_isLoadingHost)
             throw new InvalidOperationException("Only a loading editor view model can report a load error.");
-
         LoadErrorMessage = message;
-        CompleteLoading();
+        LoadErrorMessage = message;
     }
 
     public void CompleteLoading()
