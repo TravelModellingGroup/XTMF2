@@ -103,7 +103,7 @@ public partial class RunsView : UserControl
             window.Show();
     }
 
-    private void OpenErrorTargetButton_Click(object? sender, RoutedEventArgs e)
+    private async void OpenErrorTargetButton_Click(object? sender, RoutedEventArgs e)
     {
         if (_vm?.SelectedRun is not { } run) return;
         if (!run.TryGetErrorNavigationTarget(out var session, out var user, out var elementId))
@@ -112,7 +112,10 @@ public partial class RunsView : UserControl
         if (TopLevel.GetTopLevel(this) is not MainWindow mainWindow)
             return;
 
-        var editor = mainWindow.OpenModelSystemTabAndGet(session, user);
+        var editor = await mainWindow.OpenModelSystemTabAndGetAsync(session, user);
+        if (editor is null)
+            return;
+
         mainWindow.FocusEditorTab(editor);
         editor.NavigateToElementById(elementId);
     }

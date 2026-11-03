@@ -148,7 +148,8 @@ public partial class ProjectsView : UserControl
 
         if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.Enter)
         {
-            _parentWindow?.OpenProjectTab(project);
+            if (_parentWindow is { } parentWindow)
+                await parentWindow.OpenProjectTab(project);
             e.Handled = true;
         }
         else if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.F2)
@@ -346,16 +347,22 @@ public partial class ProjectsView : UserControl
         }
     }
 
-    private void Border_DoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e)
+    private async void Border_DoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e)
     {
         if (sender is Border border && border.DataContext is Project project)
-            _parentWindow?.OpenProjectTab(project);
+        {
+            if (_parentWindow is { } parentWindow)
+                await parentWindow.OpenProjectTab(project);
+        }
     }
 
-    private void OpenProject_Click(object? sender, RoutedEventArgs e)
+    private async void OpenProject_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is MenuItem menuItem && menuItem.DataContext is Project project)
-            _parentWindow?.OpenProjectTab(project);
+        {
+            if (_parentWindow is { } parentWindow)
+                await parentWindow.OpenProjectTab(project);
+        }
     }
 
     private async void RenameProject_Click(object? sender, RoutedEventArgs e)
@@ -394,12 +401,13 @@ public partial class ProjectsView : UserControl
         }
     }
 
-    private void SearchBox_EnterPressed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void SearchBox_EnterPressed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var project = _viewModel?.SelectedProject ?? _viewModel?.FilteredProjects.FirstOrDefault();
         if (project is not null)
         {
-            _parentWindow?.OpenProjectTab(project);
+            if (_parentWindow is { } parentWindow)
+                await parentWindow.OpenProjectTab(project);
         }
     }
 

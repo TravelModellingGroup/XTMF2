@@ -108,6 +108,12 @@ public static class Strings
     public static string ModelSystems_DeleteFailedTitle => Get(nameof(ModelSystems_DeleteFailedTitle));
     public static string ModelSystems_UnknownError => Get(nameof(ModelSystems_UnknownError));
 
+    // Loading Documents
+    public static string DocumentLoad_ModelSystemsStatus => Get(nameof(DocumentLoad_ModelSystemsStatus));
+    public static string DocumentLoad_ModelSystemStatus => Get(nameof(DocumentLoad_ModelSystemStatus));
+    public static string DocumentLoad_CheckingStatus => Get(nameof(DocumentLoad_CheckingStatus));
+    public static string DocumentLoad_PreparingEditorStatus => Get(nameof(DocumentLoad_PreparingEditorStatus));
+
     // Settings Window
     public static string Settings_Title => Get(nameof(Settings_Title));
     public static string Settings_Subtitle => Get(nameof(Settings_Subtitle));

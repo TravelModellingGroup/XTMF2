@@ -265,6 +265,18 @@ This action cannot be undone.</value>
   <data name="ModelSystems_UnknownError" xml:space="preserve">
     <value>Unknown error</value>
   </data>
+  <data name="DocumentLoad_ModelSystemsStatus" xml:space="preserve">
+    <value>Loading model systems...</value>
+  </data>
+  <data name="DocumentLoad_ModelSystemStatus" xml:space="preserve">
+    <value>Loading model system...</value>
+  </data>
+  <data name="DocumentLoad_CheckingStatus" xml:space="preserve">
+    <value>Checking model system...</value>
+  </data>
+  <data name="DocumentLoad_PreparingEditorStatus" xml:space="preserve">
+    <value>Preparing model system editor...</value>
+  </data>
   
   <!-- Settings Window -->
   <data name="Settings_Title" xml:space="preserve">

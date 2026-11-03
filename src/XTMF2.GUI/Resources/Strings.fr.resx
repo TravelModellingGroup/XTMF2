@@ -253,6 +253,18 @@ Cette action ne peut pas être annulée.</value>
   <data name="ModelSystems_UnknownError" xml:space="preserve">
     <value>Erreur inconnue</value>
   </data>
+  <data name="DocumentLoad_ModelSystemsStatus" xml:space="preserve">
+    <value>Chargement des systèmes de modèles...</value>
+  </data>
+  <data name="DocumentLoad_ModelSystemStatus" xml:space="preserve">
+    <value>Chargement du système de modèles...</value>
+  </data>
+  <data name="DocumentLoad_CheckingStatus" xml:space="preserve">
+    <value>Vérification du système de modèles...</value>
+  </data>
+  <data name="DocumentLoad_PreparingEditorStatus" xml:space="preserve">
+    <value>Préparation de l'éditeur du système de modèles...</value>
+  </data>
   
   <!-- Settings Window -->
   <data name="Settings_Title" xml:space="preserve">

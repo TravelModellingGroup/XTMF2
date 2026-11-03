@@ -23,6 +23,7 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
@@ -42,12 +43,26 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
     private readonly XTMFRuntime _runtime;
     private readonly User _user;
     private readonly Project _project;
-    private readonly ProjectSession _session;
+    private ProjectSession? _session;
+    private readonly bool _isLoadingHost;
+    private CancellationTokenSource? _loadCancellation;
+    private ModelSystemsViewModel? _loadedViewModel;
     private Window? _parentWindow;
 
     // Used by Dock ItemsSource for the tab title and close behaviour
     public string Title => $"⊟  {_project.Name ?? "Untitled Project"}";
     public bool CanClose => true;
+    public bool IsLoadingHost => _isLoadingHost;
+    public ModelSystemsViewModel? LoadedViewModel => _loadedViewModel;
+    public object? DisplayViewModel => _isLoadingHost ? _loadedViewModel : this;
+    public bool HasLoadError => LoadErrorMessage is not null;
+    public CancellationToken LoadCancellationToken => _loadCancellation?.Token ?? CancellationToken.None;
+
+    [ObservableProperty]
+    private bool _isLoading;
+
+    [ObservableProperty]
+    private string? _loadErrorMessage;
 
     /// <summary>Gets the project this view model is for.</summary>
     public Project Project => _project;
@@ -70,25 +85,86 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
     public ObservableCollection<ModelSystemHeader> FilteredModelSystems { get; } = new();
 
     public ModelSystemsViewModel(XTMFRuntime runtime, User user, Project project, Window? parentWindow = null)
+        : this(runtime, user, project, parentWindow, isLoadingHost: false)
+    {
+    }
+
+    private ModelSystemsViewModel(
+        XTMFRuntime runtime,
+        User user,
+        Project project,
+        Window? parentWindow,
+        bool isLoadingHost)
     {
         _runtime = runtime;
         _user = user;
         _project = project;
         _parentWindow = parentWindow;
-        
+
+        _isLoadingHost = isLoadingHost;
+        if (isLoadingHost)
+        {
+            _isLoading = true;
+            _loadCancellation = new CancellationTokenSource();
+            return;
+        }
+
         // Get the project session
         if (!runtime.ProjectController.GetProjectSession(user, project, out var session, out var error))
         {
             throw new InvalidOperationException($"Failed to get project session: {error?.Message}");
         }
-        _session = session;
+        InitializeProjectSession(session);
+    }
 
+    public static ModelSystemsViewModel CreateLoading(
+        XTMFRuntime runtime,
+        User user,
+        Project project,
+        Window? parentWindow = null)
+        => new(runtime, user, project, parentWindow, isLoadingHost: true);
+
+    private void InitializeProjectSession(ProjectSession session)
+    {
+        _session = session;
         // Keep FilteredModelSystems in sync with the underlying collection
         ((INotifyCollectionChanged)_project.ModelSystems).CollectionChanged += (_, _) => RebuildFilteredModelSystems();
         RebuildFilteredModelSystems();
     }
 
+    public void SetLoadedViewModel(ModelSystemsViewModel viewModel)
+    {
+        if (!_isLoadingHost)
+            throw new InvalidOperationException("Only a loading model-systems view model can host a loaded view model.");
+
+        _loadedViewModel = viewModel;
+        OnPropertyChanged(nameof(LoadedViewModel));
+        OnPropertyChanged(nameof(DisplayViewModel));
+        LoadErrorMessage = null;
+        CompleteLoading();
+    }
+
+    public void ShowLoadError(string message)
+    {
+        if (!_isLoadingHost)
+            throw new InvalidOperationException("Only a loading model-systems view model can report a load error.");
+
+        LoadErrorMessage = message;
+        CompleteLoading();
+    }
+
+    public void CompleteLoading()
+    {
+        IsLoading = false;
+        _loadCancellation?.Dispose();
+        _loadCancellation = null;
+    }
+
+    private ProjectSession Session
+        => _session ?? throw new InvalidOperationException("The project session has not loaded.");
+
     partial void OnSearchTextChanged(string value) => RebuildFilteredModelSystems();
+    partial void OnLoadErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasLoadError));
 
     private void RebuildFilteredModelSystems()
     {
@@ -128,7 +204,7 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (_session.CreateNewModelSystem(_user, modelSystemName, out var modelSystem, out var error))
+        if (Session.CreateNewModelSystem(_user, modelSystemName, out var modelSystem, out var error))
         {
             // Success - the observable collection will automatically update
             SelectedModelSystem = modelSystem;
@@ -165,7 +241,7 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
         var name = await PromptForModelSystemName(Strings.ModelSystems_ImportTitle, suggestedName);
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        if (_session.ImportModelSystem(_user, filePath, name, out _, out var error))
+        if (Session.ImportModelSystem(_user, filePath, name, out _, out var error))
         {
             // Success - the observable collection will automatically update
         }
@@ -269,12 +345,12 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
             return false;
         }
 
-        if (!_session.RenameModelSystem(_user, SelectedModelSystem, newName, out error))
+        if (!Session.RenameModelSystem(_user, SelectedModelSystem, newName, out error))
         {
             return false;
         }
 
-        return _session.Save(out error);
+        return Session.Save(out error);
     }
 
     private bool CanRenameModelSystem() => SelectedModelSystem != null;
@@ -293,7 +369,7 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (_session.RemoveModelSystem(_user, SelectedModelSystem, out var error))
+        if (Session.RemoveModelSystem(_user, SelectedModelSystem, out var error))
         {
             // Success - the observable collection will automatically update
             SelectedModelSystem = null;
@@ -329,7 +405,7 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
         var exportPath = file.TryGetLocalPath();
         if (string.IsNullOrEmpty(exportPath)) return;
 
-        if (!_session.ExportModelSystem(_user, SelectedModelSystem, exportPath, out var error))
+        if (!Session.ExportModelSystem(_user, SelectedModelSystem, exportPath, out var error))
         {
             await ShowError(Strings.ModelSystems_ExportError, error?.Message ?? Strings.ModelSystems_UnknownError);
         }
@@ -349,7 +425,7 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
         out ModelSystemSession? session,
         out CommandError? error,
         out List<string>? warnings)
-        => _session.EditModelSystem(_user, header, out session, out error, out warnings);
+        => Session.EditModelSystem(_user, header, out session, out error, out warnings);
 
     /// <summary>
     /// Loads a read-only snapshot of a model system for diff comparison.
@@ -357,7 +433,7 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
     public bool TryLoadModelSystemSnapshot(ModelSystemHeader header,
         out ModelSystem? ms,
         out CommandError? error)
-        => _session.LoadModelSystemForDiff(_user, header, out ms, out error);
+        => Session.LoadModelSystemForDiff(_user, header, out ms, out error);
 
     /// <summary>
     /// Loads a read-only snapshot of an exported model system file for diff comparison.
@@ -366,7 +442,7 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
         out ModelSystem? ms,
         out CommandError? error)
         {
-            return _session.LoadModelSystemFromExportedFile(_user, filePath, out ms, out error);
+            return Session.LoadModelSystemFromExportedFile(_user, filePath, out ms, out error);
         }
 
     /// <summary>
@@ -436,6 +512,16 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _session.Dispose();
+        if (_isLoadingHost)
+        {
+            if (IsLoading)
+                _loadCancellation?.Cancel();
+
+            _loadedViewModel?.Dispose();
+            _loadCancellation?.Dispose();
+            _loadCancellation = null;
+        }
+
+        _session?.Dispose();
     }
 }
