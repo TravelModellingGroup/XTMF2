@@ -102,6 +102,11 @@ public partial class ModelSystemsViewModel : ObservableObject, IDisposable
                 FilteredModelSystems.Add(ms);
             }
         }
+
+        if (SelectedModelSystem is not null && !FilteredModelSystems.Contains(SelectedModelSystem))
+        {
+            SelectedModelSystem = null;
+        }
     }
 
     /// <summary>

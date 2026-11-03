@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using System;
@@ -46,7 +47,9 @@ public partial class ModelSystemsView : UserControl
         // Subscribe to visual tree attachment to find MainWindow
         AttachedToVisualTree += OnAttachedToVisualTree;
 
+        KeyDown += OnViewKeyDown;
         ModelSystemListBox.KeyDown += OnModelSystemListBoxKeyDown;
+        ModelSystemSearchBox.KeyDown += OnModelSystemSearchBoxKeyDown;
         ModelSystemSearchBox.EnterPressed += OnModelSystemSearchBoxEnterPressed;
     }
 
@@ -90,19 +93,109 @@ public partial class ModelSystemsView : UserControl
 
     private void OnModelSystemListBoxKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
     {
-        if (e.Key != Avalonia.Input.Key.Enter) return;
-        if (_viewModel?.SelectedModelSystem is { } header)
+        if (_viewModel?.SelectedModelSystem is not { } header)
+        {
+            return;
+        }
+
+        if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.Enter)
         {
             OpenModelSystem(header);
             e.Handled = true;
+        }
+        else if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.F2)
+        {
+            _viewModel.RenameModelSystemCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.Delete)
+        {
+            _viewModel.DeleteModelSystemCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.E)
+        {
+            _viewModel.ExportModelSystemCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.C)
+        {
+            CompareModelSystem_ContextMenu_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+        }
+    }
+
+    private void OnModelSystemSearchBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_viewModel is null || e.KeyModifiers != KeyModifiers.None ||
+            e.Key is not (Key.Up or Key.Down))
+        {
+            return;
+        }
+
+        var modelSystems = _viewModel.FilteredModelSystems;
+        if (modelSystems.Count == 0)
+        {
+            return;
+        }
+
+        var selectedIndex = ModelSystemListBox.SelectedIndex;
+        if (selectedIndex < 0)
+        {
+            selectedIndex = 0;
+        }
+        else
+        {
+            var offset = e.Key == Key.Down ? 1 : -1;
+            selectedIndex = System.Math.Clamp(selectedIndex + offset, 0, modelSystems.Count - 1);
+        }
+
+        var modelSystem = modelSystems[selectedIndex];
+        _viewModel.SelectedModelSystem = modelSystem;
+        ModelSystemListBox.ScrollIntoView(modelSystem);
+        e.Handled = true;
+    }
+
+    private void OnViewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_viewModel is null)
+        {
+            return;
+        }
+
+        if (e.KeyModifiers == KeyModifiers.Control)
+        {
+            if (e.Key == Key.N)
+            {
+                _viewModel.CreateNewModelSystemCommand.Execute(null);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.E)
+            {
+                ModelSystemSearchBox.FocusSearchBox();
+                e.Handled = true;
+            }
+        }
+        else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift))
+        {
+            if (e.Key == Key.O)
+            {
+                _viewModel.ImportModelSystemCommand.Execute(null);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.D)
+            {
+                _viewModel.OpenProjectDirectoryCommand.Execute(null);
+                e.Handled = true;
+            }
         }
     }
 
     private void OnModelSystemSearchBoxEnterPressed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var first = _viewModel?.FilteredModelSystems.FirstOrDefault();
-        if (first is not null)
-            OpenModelSystem(first);
+        var modelSystem = _viewModel?.SelectedModelSystem ?? _viewModel?.FilteredModelSystems.FirstOrDefault();
+        if (modelSystem is not null)
+            OpenModelSystem(modelSystem);
     }
 
     private void OpenModelSystem_ContextMenu_Click(object? sender, RoutedEventArgs e)
@@ -283,5 +376,10 @@ public partial class ModelSystemsView : UserControl
             TitleTextBlock.Text = Strings.Format(Strings.ModelSystems_TitleFormat, _viewModel.ProjectName);
             UserTextBlock.Text = Strings.Format(Strings.ModelSystems_UserFormat, _viewModel.CurrentUser.UserName);
         }
+
+        ToolTip.SetTip(CreateModelSystemButton, $"{Strings.ModelSystems_NewModelSystem} (Ctrl+N)");
+        ToolTip.SetTip(ImportModelSystemButton, $"{Strings.ModelSystems_Import} (Ctrl+Shift+O)");
+        ToolTip.SetTip(OpenProjectDirectoryButton, $"{Strings.ModelSystems_OpenProjectDirectory} (Ctrl+Shift+D)");
+        ToolTip.SetTip(ModelSystemSearchBox, "Search (Ctrl+E)");
     }
 }

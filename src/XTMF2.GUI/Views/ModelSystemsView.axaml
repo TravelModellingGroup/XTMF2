@@ -59,7 +59,8 @@
                                     <Setter Property="Background" Value="{DynamicResource DlgAccentMid}"/>
                                 </Style>
                             </StackPanel.Styles>
-                            <Button Command="{Binding CreateNewModelSystemCommand}"
+                            <Button x:Name="CreateModelSystemButton"
+                                    Command="{Binding CreateNewModelSystemCommand}"
                                     Classes="toolbar-icon"
                                     ToolTip.Tip="{res:Localize ModelSystems_NewModelSystem}">
                                 <Viewbox Width="18" Height="18">
@@ -77,7 +78,8 @@
                                     </Canvas>
                                 </Viewbox>
                             </Button>
-                            <Button Command="{Binding ImportModelSystemCommand}"
+                            <Button x:Name="ImportModelSystemButton"
+                                    Command="{Binding ImportModelSystemCommand}"
                                     Classes="toolbar-icon"
                                     ToolTip.Tip="{res:Localize ModelSystems_Import}">
                                 <Viewbox Width="18" Height="18">
@@ -97,7 +99,8 @@
                                     </Canvas>
                                 </Viewbox>
                             </Button>
-                            <Button Command="{Binding OpenProjectDirectoryCommand}"
+                            <Button x:Name="OpenProjectDirectoryButton"
+                                    Command="{Binding OpenProjectDirectoryCommand}"
                                     Classes="toolbar-icon"
                                     ToolTip.Tip="{res:Localize ModelSystems_OpenProjectDirectory}">
                                 <Viewbox Width="18" Height="18">
@@ -182,31 +185,36 @@
                                     <Border.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="{res:Localize ModelSystems_Open}"
-                                                      Click="OpenModelSystem_ContextMenu_Click">
+                                                      Click="OpenModelSystem_ContextMenu_Click"
+                                                      InputGesture="Enter">
                                                 <MenuItem.Icon>
                                                     <TextBlock Text="→" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>
                                             </MenuItem>
                                             <MenuItem Header="{res:Localize ModelSystems_Rename}"
-                                                      Click="RenameModelSystem_ContextMenu_Click">
+                                                      Click="RenameModelSystem_ContextMenu_Click"
+                                                      InputGesture="F2">
                                                 <MenuItem.Icon>
                                                     <TextBlock Text="✏" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>
                                             </MenuItem>
                                             <MenuItem Header="{res:Localize ModelSystems_Export}"
-                                                      Click="ExportModelSystem_ContextMenu_Click">
+                                                      Click="ExportModelSystem_ContextMenu_Click"
+                                                      InputGesture="Ctrl+Shift+E">
                                                 <MenuItem.Icon>
                                                     <TextBlock Text="↓" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>
                                             </MenuItem>
                                             <MenuItem Header="{res:Localize ModelSystems_Compare}"
-                                                      Click="CompareModelSystem_ContextMenu_Click">
+                                                      Click="CompareModelSystem_ContextMenu_Click"
+                                                      InputGesture="Ctrl+Shift+C">
                                                 <MenuItem.Icon>
                                                     <TextBlock Text="⟷" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>
                                             </MenuItem>
                                             <MenuItem Header="{res:Localize ModelSystems_Delete}"
-                                                      Click="DeleteModelSystem_ContextMenu_Click">
+                                                      Click="DeleteModelSystem_ContextMenu_Click"
+                                                      InputGesture="Delete">
                                                 <MenuItem.Icon>
                                                     <TextBlock Text="✕" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>
