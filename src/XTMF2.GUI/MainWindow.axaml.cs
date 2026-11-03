@@ -103,6 +103,11 @@ public partial class MainWindow : Window
 
     private Factory? _factory;
     private IDockable? _activeDockable;
+    private readonly List<object> _documentActivationHistory = new();
+    private object? _lastActiveDocumentContext;
+    private bool _suppressDocumentActivationHistory;
+    private bool _documentFocusRestoreScheduled;
+    private int _documentFocusRestoreGeneration;
     /// <summary>The <see cref="ModelSystemEditorViewModel"/> in the currently active dock tab, or null.</summary>
     private ModelSystemEditorViewModel? _activeEditorVm;
 
@@ -131,8 +136,24 @@ public partial class MainWindow : Window
     {
         if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems is not null)
         {
+            var removedActiveDocument = false;
             foreach (var item in e.OldItems)
+            {
+                if (item is null)
+                    continue;
+
+                if (ReferenceEquals(item, _lastActiveDocumentContext))
+                    removedActiveDocument = true;
+
+                _documentActivationHistory.Remove(item);
                 (item as IDisposable)?.Dispose();
+            }
+
+            if (removedActiveDocument)
+            {
+                _lastActiveDocumentContext = null;
+                ScheduleDocumentFocusRestore();
+            }
         }
     }
 
@@ -160,9 +181,83 @@ public partial class MainWindow : Window
     {
         if (Documents.Contains(context))
         {
-            Documents.Remove(context);
+            RemoveDocumentFromCollection(context);
             CloseEmptyFloatingWindows();
         }
+    }
+
+    private void RemoveDocumentFromCollection(object context)
+    {
+        if (!Documents.Contains(context))
+            return;
+
+        if (ReferenceEquals(context, _lastActiveDocumentContext))
+            _suppressDocumentActivationHistory = true;
+
+        Documents.Remove(context);
+    }
+
+    private void ScheduleDocumentFocusRestore()
+    {
+        _suppressDocumentActivationHistory = true;
+        _documentFocusRestoreScheduled = true;
+        var generation = ++_documentFocusRestoreGeneration;
+        Dispatcher.UIThread.Post(
+            () => RestoreMostRecentDocument(generation),
+            DispatcherPriority.Background);
+    }
+
+    private void RestoreMostRecentDocument(int generation)
+    {
+        if (generation != _documentFocusRestoreGeneration)
+            return;
+
+        _documentFocusRestoreScheduled = false;
+        object? restoredContext = null;
+        foreach (var context in _documentActivationHistory.ToArray())
+        {
+            if (Documents.Contains(context) && ActivateDocument(context, isFocusRestore: true))
+            {
+                restoredContext = context;
+                break;
+            }
+        }
+
+        if (restoredContext is not null)
+        {
+            RecordActiveDocument(restoredContext);
+        }
+        else if (_activeDockable is IDocument { Context: object activeContext }
+            && Documents.Contains(activeContext))
+        {
+            RecordActiveDocument(activeContext);
+        }
+        else
+        {
+            _lastActiveDocumentContext = null;
+        }
+
+        _suppressDocumentActivationHistory = false;
+    }
+
+    private void CancelPendingDocumentFocusRestore()
+    {
+        if (!_documentFocusRestoreScheduled)
+            return;
+
+        _documentFocusRestoreScheduled = false;
+        _documentFocusRestoreGeneration++;
+        _suppressDocumentActivationHistory = false;
+    }
+
+    private void RecordActiveDocument(object context)
+    {
+        if (!Documents.Contains(context))
+            return;
+
+        _documentActivationHistory.Remove(context);
+        _documentActivationHistory.Insert(0, context);
+        _lastActiveDocumentContext = context;
     }
 
     private bool IsDocumentInLayout(IDocument document)
@@ -349,7 +444,7 @@ public partial class MainWindow : Window
             if (ActivateDocument(existing))
                 return;
 
-            Documents.Remove(existing);
+            RemoveDocumentFromCollection(existing);
         }
         // No existing tab, create a new one
         var modelSystems = new ModelSystemsViewModel(_runtime, _currentUser!, project, this);
@@ -358,15 +453,22 @@ public partial class MainWindow : Window
     }
 
     private bool ActivateDocument(object viewModel)
-    {
-        if (_factory?.GetContainerFromItem(viewModel) is IDocument document
-            && document.Owner is IDock dock)
-        {
-            dock.ActiveDockable = document;
-            return true;
-        }
+        => ActivateDocument(viewModel, isFocusRestore: false);
 
-        return false;
+    private bool ActivateDocument(object viewModel, bool isFocusRestore)
+    {
+        if (_factory?.GetContainerFromItem(viewModel) is not IDocument document
+            || document.Owner is not IDock dock)
+            return false;
+
+        if (!isFocusRestore)
+            CancelPendingDocumentFocusRestore();
+
+        dock.ActiveDockable = document;
+        if (!isFocusRestore)
+            RecordActiveDocument(viewModel);
+
+        return true;
     }
 
 
@@ -505,7 +607,7 @@ public partial class MainWindow : Window
             .FirstOrDefault(vm => vm.Project == project);
 
         if (vm is not null)
-            Documents.Remove(vm);
+            RemoveDocumentFromCollection(vm);
     }
 
     private void Settings_Click(object? sender, RoutedEventArgs e)
@@ -561,6 +663,12 @@ public partial class MainWindow : Window
     private void OnActiveDockableChanged(object? sender, ActiveDockableChangedEventArgs e)
     {
         _activeDockable = e.Dockable;
+        if (!_suppressDocumentActivationHistory
+            && e.Dockable is IDocument { Context: object documentContext })
+        {
+            RecordActiveDocument(documentContext);
+        }
+
         var newVm = (e.Dockable as IDocument)?.Context as ModelSystemEditorViewModel;
         if (ReferenceEquals(_activeEditorVm, newVm)) return;
 
@@ -619,7 +727,7 @@ public partial class MainWindow : Window
                 _allowDocumentClose = true;
                 try
                 {
-                    Documents.Remove(context);
+                    RemoveDocumentFromCollection(context);
                 }
                 finally
                 {
@@ -658,7 +766,7 @@ public partial class MainWindow : Window
                 return;
 
             _allowDocumentClose = true;
-            Documents.Remove(editor);
+            RemoveDocumentFromCollection(editor);
         }
         finally
         {
@@ -816,7 +924,7 @@ public partial class MainWindow : Window
             }
 
             // Now that we tried to move back, we can remove the active document.
-            Documents.Remove(context);
+            RemoveDocumentFromCollection(context);
         }
     }
 }
