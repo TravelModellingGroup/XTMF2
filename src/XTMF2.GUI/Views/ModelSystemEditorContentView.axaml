@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
              xmlns:ctrl="clr-namespace:XTMF2.GUI.Controls"
+             xmlns:views="clr-namespace:XTMF2.GUI.Views"
              xmlns:res="clr-namespace:XTMF2.GUI.Resources"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
              x:Class="XTMF2.GUI.Views.ModelSystemEditorContentView"
@@ -87,7 +88,10 @@
     <Grid RowDefinitions="Auto,*" Margin="10">
 
         <!-- ── Header ──────────────────────────────────────────────── -->
-        <Grid Grid.Row="0" Margin="0,0,0,8" ColumnDefinitions="*,Auto,Auto,Auto">
+        <Grid x:Name="EditorHeader"
+              Grid.Row="0"
+              Margin="0,0,0,8"
+              ColumnDefinitions="*,Auto,Auto,Auto">
             <StackPanel Grid.Column="0">
                 <TextBlock Text="{Binding Title}"
                            FontSize="22"
@@ -141,13 +145,14 @@
                           StrokeLineCap="Round"/>
                 </Canvas>
             </Grid>
-                <Button Grid.Column="3"
-                    Content="AI Assistant"
-                        Click="OpenAiAssistant_Click"
-                    Margin="12,0,0,0"
-                    VerticalAlignment="Center"
-                    ToolTip.Tip="Open the AI assistant in a separate window"/>
         </Grid>
+
+        <views:CommandPaletteDropdown x:Name="CommandPalette"
+                                      Grid.Row="0"
+                                      Width="0"
+                                      Height="0"
+                                      HorizontalAlignment="Left"
+                                      VerticalAlignment="Top"/>
 
         <!-- ── Main content: full-width canvas with floating overlays ─────── -->
         <Grid Grid.Row="1">
@@ -210,6 +215,7 @@
 
                     <!-- Back: return to the previous boundary and canvas position -->
                         <Button Click="OnNavigateBackClick"
+                            AutomationProperties.Name="Return to previous boundary"
                             IsEnabled="{Binding #TheCanvas.CanNavigateBack}"
                             ToolTip.Tip="Return to the previous boundary and restore its canvas position (Alt+Left or Mouse Back)">
                         <Viewbox Width="18" Height="18">
@@ -224,6 +230,7 @@
 
                     <!-- Step Out: exit function template or ascend to parent boundary -->
                     <Button Command="{Binding NavigateUpCommand}"
+                            AutomationProperties.Name="Step out to parent scope"
                             ToolTip.Tip="Step out to parent scope  (Alt+↑ / Mouse Back)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
@@ -245,6 +252,7 @@
 
                     <!-- Undo -->
                     <Button Command="{Binding UndoCommand}"
+                            AutomationProperties.Name="Undo"
                             IsEnabled="{Binding CanUndo}"
                             ToolTip.Tip="Undo (Ctrl+Z)">
                         <Viewbox Width="18" Height="18">
@@ -266,6 +274,7 @@
 
                     <!-- Redo -->
                     <Button Command="{Binding RedoCommand}"
+                            AutomationProperties.Name="Redo"
                             IsEnabled="{Binding CanRedo}"
                             ToolTip.Tip="Redo (Ctrl+Y)">
                         <Viewbox Width="18" Height="18">
@@ -289,7 +298,8 @@
 
                     <!-- Save -->
                     <Button Command="{Binding SaveModelSystemCommand}"
-                            ToolTip.Tip="{res:Localize ModelSystemEditor_SaveTooltip}">
+                            AutomationProperties.Name="Save model system"
+                            ToolTip.Tip="Save model system (Ctrl+S)">
                         <Grid Width="24" Height="24">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="20" Height="20">
@@ -335,6 +345,7 @@
 
                     <!-- Export -->
                     <Button Command="{Binding ExportModelSystemCommand}"
+                            AutomationProperties.Name="Export model system"
                             ToolTip.Tip="{res:Localize ModelSystemEditor_ExportTooltip}">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
@@ -354,6 +365,7 @@
 
                     <!-- Revert -->
                     <Button Command="{Binding RevertModelSystemCommand}"
+                            AutomationProperties.Name="Revert model system"
                             ToolTip.Tip="{res:Localize ModelSystemEditor_RevertTooltip}">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
@@ -374,8 +386,9 @@
 
                     <!-- Run -->
                     <Button Command="{Binding RunModelSystemCommand}"
+                            AutomationProperties.Name="Run model system"
                             IsEnabled="{Binding CanRun}"
-                            ToolTip.Tip="Run this model system (save first to apply changes)">
+                            ToolTip.Tip="Run this model system (save first to apply changes) (F5)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Filled play triangle -->
@@ -393,9 +406,10 @@
 
                     <!-- Estimation Run — only visible when estimation targets are configured -->
                     <Button Command="{Binding RunEstimationCommand}"
+                            AutomationProperties.Name="Run estimation"
                             IsEnabled="{Binding CanRun}"
                             IsVisible="{Binding HasEstimationTargets}"
-                            ToolTip.Tip="Run in estimation mode">
+                            ToolTip.Tip="Run in estimation mode (Ctrl+F5)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Play triangle (shifted left) -->
@@ -413,9 +427,10 @@
 
                     <!-- Calibration Run — only visible when calibration targets are configured -->
                     <Button Command="{Binding RunCalibrationCommand}"
+                            AutomationProperties.Name="Run calibration"
                             IsEnabled="{Binding CanRun}"
                             IsVisible="{Binding HasCalibrationTargets}"
-                            ToolTip.Tip="Run in calibration mode">
+                            ToolTip.Tip="Run in calibration mode (Shift+F5)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Play triangle (shifted left) -->
@@ -438,7 +453,8 @@
 
                     <!-- Variables -->
                     <Button Click="OnShowVariablesClick"
-                            ToolTip.Tip="View / manage Model System Variables">
+                            AutomationProperties.Name="View or manage model system variables"
+                            ToolTip.Tip="View / manage Model System Variables (Ctrl+Shift+V)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Three slider tracks -->
@@ -464,7 +480,8 @@
 
                     <!-- Estimation parameters -->
                     <Button Click="OnShowEstimationClick"
-                            ToolTip.Tip="View / manage Estimation Parameters">
+                            AutomationProperties.Name="View or manage estimation parameters"
+                            ToolTip.Tip="View / manage Estimation Parameters (Ctrl+Shift+E)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Upward-trending line (search/optimize icon) -->
@@ -483,7 +500,8 @@
 
                     <!-- Calibration parameters -->
                     <Button Click="OnShowCalibrationClick"
-                            ToolTip.Tip="View / manage Calibration Parameters">
+                            AutomationProperties.Name="View or manage calibration parameters"
+                            ToolTip.Tip="View / manage Calibration Parameters (Ctrl+Shift+C)">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="20" Height="20">
                                 <!-- Target/crosshair icon -->
@@ -529,6 +547,7 @@
                                TextWrapping="Wrap"/>
 
                     <Button Command="{Binding OpenSelectedDocumentationCommand}"
+                            AutomationProperties.Name="Open documentation for selected module"
                             IsVisible="{Binding SelectedSidePanelHasDocumentationLink}"
                             Background="Transparent"
                             BorderThickness="0"
@@ -551,6 +570,7 @@
                                IsVisible="{Binding SelectedSidePanelHasDocumentationLink, Converter={x:Static BoolConverters.Not}}"/>
 
                     <Button Command="{Binding OpenSelectedFunctionTemplateCommand}"
+                        AutomationProperties.Name="{Binding SelectedFunctionInstanceTemplateActionText}"
                         IsVisible="{Binding SelectedSidePanelHasTemplateLink}"
                         Background="Transparent"
                         BorderThickness="0"

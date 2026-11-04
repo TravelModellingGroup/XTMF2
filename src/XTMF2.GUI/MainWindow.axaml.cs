@@ -951,6 +951,8 @@ public partial class MainWindow : Window
 
     private void SetActiveEditorViewModel(ModelSystemEditorViewModel? newVm)
     {
+        ModelSystemMenu.IsEnabled = newVm is not null;
+        AiAssistantMenuItem.IsEnabled = newVm?.AiAssistant is not null;
         if (ReferenceEquals(_activeEditorVm, newVm)) return;
 
         if (_activeEditorVm is INotifyPropertyChanged oldNpc)
@@ -988,6 +990,42 @@ public partial class MainWindow : Window
     [RelayCommand(CanExecute = nameof(CanExecuteNavigateBoundary))]
     private void NavigateBoundary() => _activeEditorVm?.BrowseBoundariesCommand.Execute(null);
     private bool CanExecuteNavigateBoundary() => _activeEditorVm is not null;
+
+    private void OpenCommandPalette_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_activeEditorVm is not { } editorVm)
+            return;
+
+        FindActiveEditorView(DockControl, editorVm)?.OpenCommandPalette();
+    }
+
+    private void OpenAiAssistant_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_activeEditorVm is not { } editorVm)
+            return;
+
+        FindActiveEditorView(DockControl, editorVm)?.OpenAiAssistant();
+    }
+
+    private static ModelSystemEditorContentView? FindActiveEditorView(
+        Avalonia.Visual root,
+        ModelSystemEditorViewModel editorVm)
+    {
+        if (root is ModelSystemEditorContentView editorView
+            && ReferenceEquals(editorView.DataContext, editorVm))
+        {
+            return editorView;
+        }
+
+        foreach (var child in root.GetVisualChildren())
+        {
+            var found = FindActiveEditorView(child, editorVm);
+            if (found is not null)
+                return found;
+        }
+
+        return null;
+    }
 
     private void Exit_Click(object? sender, RoutedEventArgs e) => Close();
 

@@ -95,6 +95,14 @@ partial class ModelSystemCanvas
             ClearMultiSelection();
             e.Handled = true;
         }
+        else if (TryShowKeyboardContextMenu(e))
+        {
+            e.Handled = true;
+        }
+        else if (TryHandleNudgeShortcut(e))
+        {
+            e.Handled = true;
+        }
         else if (TryHandleAddShortcut(e))
         {
             e.Handled = true;
@@ -283,6 +291,76 @@ partial class ModelSystemCanvas
             }
         }
         base.OnKeyDown(e);
+    }
+
+    private bool TryShowKeyboardContextMenu(KeyEventArgs e)
+    {
+        var modifiers = e.KeyModifiers;
+        bool noControlOrAlt = (modifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0;
+        bool isMenuKey = e.Key == Key.Apps && noControlOrAlt;
+        bool isShiftF10 = e.Key == Key.F10
+            && (modifiers & KeyModifiers.Shift) != 0
+            && noControlOrAlt;
+        if (!isMenuKey && !isShiftF10)
+            return false;
+
+        ICanvasElement? element = _vm?.SelectedElement;
+        LinkViewModel? link = _vm?.SelectedLink;
+        _rightClickHookHit = null;
+        _rightClickFiHookHit = null;
+
+        if (_editingParamNode is not null)
+        {
+            element = _editingParamParentElement ?? element ?? _editingParamNode;
+            if (element is NodeViewModel node && _editingParamHook is NodeHook nodeHook)
+                _rightClickHookHit = (node, nodeHook);
+            else if (element is FunctionInstanceViewModel functionInstance
+                     && _editingParamHook is FunctionParameterHook fiHook)
+                _rightClickFiHookHit = (functionInstance, fiHook);
+        }
+        else if (_editingDescriptionParameter is not null)
+        {
+            element = _editingDescriptionParameter;
+        }
+
+        if (element is null && link is null)
+            return false;
+
+        _rightClickElement = element;
+        _rightClickLink = link;
+        var viewportCenter = GetKeyboardSpawnPoint();
+        _rightClickPressPos = element is not null
+            ? new Point(element.CenterX * _scale, element.CenterY * _scale)
+            : new Point(viewportCenter.X * _scale, viewportCenter.Y * _scale);
+
+        ShowContextMenu(element, link);
+        return true;
+    }
+
+    private bool TryHandleNudgeShortcut(KeyEventArgs e)
+    {
+        if (IsParameterOrCommentEditing
+            || (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Alt))
+                != (KeyModifiers.Control | KeyModifiers.Shift))
+            return false;
+
+        int dx = e.Key switch
+        {
+            Key.Left => -10,
+            Key.Right => 10,
+            _ => 0
+        };
+        int dy = e.Key switch
+        {
+            Key.Up => -10,
+            Key.Down => 10,
+            _ => 0
+        };
+        if (dx == 0 && dy == 0)
+            return false;
+
+        NudgeSelectedElements(dx, dy);
+        return true;
     }
 
     private bool IsParameterOrCommentEditing =>
