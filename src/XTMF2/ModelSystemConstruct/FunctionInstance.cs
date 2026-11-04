@@ -386,6 +386,11 @@ namespace XTMF2.ModelSystemConstruct
                 _runtimeModules[node] = m!;
                 WrapScriptedExpression(node, m!);
             }
+            if (Template.EntryNode is { } entryNode
+                && _runtimeModules.TryGetValue(entryNode, out var entryModule))
+            {
+                entryModule.Name = Name;
+            }
             error = null;
             return true;
         }

@@ -77,6 +77,35 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void TestConstructFunctionInstances_EntryModuleUsesInstanceName()
+        {
+            TestHelper.RunInModelSystemContext(
+                nameof(TestConstructFunctionInstances_EntryModuleUsesInstanceName),
+                (user, _, mSession) =>
+                {
+                    var template = AddTemplate(user, mSession);
+                    Assert.IsTrue(mSession.AddNode(user, template.InternalModules, "TemplateEntry",
+                        typeof(SimpleTestModule), Rectangle.Hidden, out var entryNode, out var error),
+                        error?.Message);
+                    Assert.IsTrue(mSession.SetFunctionTemplateEntryNode(user, template, entryNode,
+                        out error), error?.Message);
+
+                    var firstInstance = AddInstance(user, mSession, template, "FirstInstance");
+                    var secondInstance = AddInstance(user, mSession, template, "SecondInstance");
+
+                    string constructionError = null;
+                    Guid? elementId = null;
+                    Assert.IsTrue(mSession.ModelSystem.Construct(
+                        TestHelper.CreateRuntime(), ref constructionError, ref elementId),
+                        constructionError);
+
+                    Assert.AreEqual("FirstInstance", firstInstance.GetRuntimeModule(entryNode!)?.Name);
+                    Assert.AreEqual("SecondInstance", secondInstance.GetRuntimeModule(entryNode!)?.Name);
+                    Assert.AreEqual("TemplateEntry", entryNode!.Name);
+                });
+        }
+
+        [TestMethod]
         public void TestAddFunctionInstanceUndoRedo()
         {
             TestHelper.RunInModelSystemContext("TestAddFunctionInstanceUndoRedo", (user, pSession, mSession) =>
