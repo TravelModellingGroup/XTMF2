@@ -445,7 +445,7 @@ namespace XTMF2.Bus
                 return false;
             }
             hostBus = new HostBus(hostStream!, true);
-            runServerBus = new RunServerBus(clientStream!, true, runtime, null, true, true,
+            runServerBus = new RunServerBus(clientStream!, true, runtime, null, true, false,
                 storagePaths: runtime.SystemConfiguration.StoragePaths);
             return true;
         }
