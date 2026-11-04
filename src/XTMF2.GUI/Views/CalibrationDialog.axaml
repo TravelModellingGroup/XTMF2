@@ -49,7 +49,7 @@
             </Grid>
 
             <!-- ── Left: group list ───────────────────────────────────────── -->
-            <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,Auto,*,Auto">
+            <Grid x:Name="GroupPane" Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,Auto,*,Auto">
                 <TextBlock Grid.Row="0"
                            Text="Groups" FontSize="11" FontWeight="SemiBold"
                            Opacity="0.5" LetterSpacing="0.8" Margin="0,0,0,4"/>
@@ -58,6 +58,7 @@
                                     Text="{Binding GroupSearchText, Mode=TwoWay}"
                                     Watermark="Search groups..."
                                     Margin="0,0,0,6"
+                                    EnterPressed="GroupSearchBox_EnterPressed"
                                     KeyDown="GroupSearchBox_KeyDown"/>
                 <Border Grid.Row="2" Classes="dlg-list" ClipToBounds="True">
                     <ListBox x:Name="GroupListBox"
@@ -107,7 +108,7 @@
             </Grid>
 
             <!-- ── Right: group details ───────────────────────────────────── -->
-            <Grid Grid.Row="1" Grid.Column="2" RowDefinitions="Auto,Auto,Auto,*" IsEnabled="{Binding HasSelectedGroup}">
+            <Grid x:Name="TargetPane" Grid.Row="1" Grid.Column="2" RowDefinitions="Auto,Auto,Auto,*" IsEnabled="{Binding HasSelectedGroup}">
 
                 <TextBlock Grid.Row="0"
                            Text="Targets" FontSize="11" FontWeight="SemiBold"
@@ -118,6 +119,7 @@
                                     Text="{Binding TargetSearchText, Mode=TwoWay}"
                                     Watermark="Search targets..."
                                     Margin="0,0,0,8"
+                                    EnterPressed="TargetSearchBox_EnterPressed"
                                     KeyDown="TargetSearchBox_KeyDown"/>
 
                 <ScrollViewer Grid.Row="2"
@@ -143,7 +145,8 @@
                             <ListBox x:Name="TargetListBox"
                                      ItemsSource="{Binding FilteredGroupEntries}"
                                      SelectedItem="{Binding SelectedEntry, Mode=TwoWay}"
-                                     Background="Transparent">
+                                     Background="Transparent"
+                                     KeyDown="TargetListBox_KeyDown">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:CalibrationEntryViewModel">
                                         <Grid ColumnDefinitions="24,*,200,110,110,80,80,70,80,36" Margin="2,3">
