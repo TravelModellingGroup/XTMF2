@@ -105,6 +105,7 @@ public partial class EstimationDialog : Window, INotifyPropertyChanged
         set
         {
             _selectedGroup = value;
+            SelectedEntry = null;
             RebindSelectedGroupEntries();
             Raise(nameof(SelectedGroup));
             Raise(nameof(HasSelectedGroup));
@@ -203,6 +204,18 @@ public partial class EstimationDialog : Window, INotifyPropertyChanged
 
     public ObservableCollection<EstimationEntryViewModel> FilteredGroupEntries => _filteredEntryVms;
 
+    private EstimationEntryViewModel? _selectedEntry;
+    public EstimationEntryViewModel? SelectedEntry
+    {
+        get => _selectedEntry;
+        set
+        {
+            if (ReferenceEquals(_selectedEntry, value)) return;
+            _selectedEntry = value;
+            Raise(nameof(SelectedEntry));
+        }
+    }
+
 
 
     // ── Edit fields ───────────────────────────────────────────────────────
@@ -250,6 +263,16 @@ public partial class EstimationDialog : Window, INotifyPropertyChanged
 
         e.Handled = true;
         Close();
+    }
+
+    private void GroupSearchBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        FilterBoxSelectionNavigation.MoveSelection(GroupListBox, e);
+    }
+
+    private void TargetSearchBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        FilterBoxSelectionNavigation.MoveSelection(TargetListBox, e);
     }
 
     protected override void OnOpened(EventArgs e)
@@ -346,6 +369,8 @@ public partial class EstimationDialog : Window, INotifyPropertyChanged
             if (f.Length == 0 || e.NodeName.Contains(f, StringComparison.OrdinalIgnoreCase))
                 _filteredEntryVms.Add(e);
         }
+        if (_selectedEntry is not null && !_filteredEntryVms.Contains(_selectedEntry))
+            SelectedEntry = null;
         Raise(nameof(FilteredGroupEntries));
     }
 

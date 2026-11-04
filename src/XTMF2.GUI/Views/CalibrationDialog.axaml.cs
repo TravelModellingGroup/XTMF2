@@ -263,6 +263,16 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
         Close();
     }
 
+    private void GroupSearchBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        FilterBoxSelectionNavigation.MoveSelection(GroupListBox, e);
+    }
+
+    private void TargetSearchBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        FilterBoxSelectionNavigation.MoveSelection(TargetListBox, e);
+    }
+
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);

@@ -107,7 +107,8 @@
                                     Grid.Row="1"
                                     Text="{Binding GroupSearchText, Mode=TwoWay}"
                                     Watermark="Search groups..."
-                                    Margin="0,0,0,6"/>
+                                    Margin="0,0,0,6"
+                                    KeyDown="GroupSearchBox_KeyDown"/>
                 <Border Grid.Row="2" Classes="dlg-list" ClipToBounds="True">
                     <ListBox x:Name="GroupListBox"
                              ItemsSource="{Binding FilteredGroupVms}"
@@ -163,9 +164,11 @@
                            Opacity="0.5" LetterSpacing="0.8" Margin="0,0,0,4"/>
 
                 <controls:SearchBox Grid.Row="1"
+                                    x:Name="TargetSearchBox"
                                     Text="{Binding TargetSearchText, Mode=TwoWay}"
                                     Watermark="Search targets..."
-                                    Margin="0,0,0,8"/>
+                                    Margin="0,0,0,8"
+                                    KeyDown="TargetSearchBox_KeyDown"/>
 
                 <!-- Parameters list -->
                 <Grid Grid.Row="2" ColumnDefinitions="24,*,90,90,90,36"
@@ -177,7 +180,9 @@
                 </Grid>
 
                 <Border Grid.Row="3" Classes="dlg-list" ClipToBounds="True">
-                    <ListBox ItemsSource="{Binding FilteredGroupEntries}"
+                    <ListBox x:Name="TargetListBox"
+                             ItemsSource="{Binding FilteredGroupEntries}"
+                             SelectedItem="{Binding SelectedEntry, Mode=TwoWay}"
                              Background="Transparent">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:EstimationEntryViewModel">

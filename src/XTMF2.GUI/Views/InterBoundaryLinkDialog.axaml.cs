@@ -262,37 +262,30 @@ public partial class InterBoundaryLinkDialog : Window, INotifyPropertyChanged
 
     private void OnBoundarySearchEnterPressed(object? sender, RoutedEventArgs e)
     {
-        SelectedBoundaryItem = FilteredBoundaryItems.FirstOrDefault();
+        SelectedBoundaryItem = BoundaryListBox.SelectedItem as BoundaryBrowseItem
+                               ?? FilteredBoundaryItems.FirstOrDefault();
         if (SelectedBoundaryItem is not null)
         {
-            BoundaryListBox.SelectedIndex = 0;
             Next_Click(sender, e);
         }
     }
 
     private void OnBoundarySearchKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Down)
-        {
-            BoundaryListBox.Focus();
-            e.Handled = true;
-        }
+        FilterBoxSelectionNavigation.MoveSelection(BoundaryListBox, e);
     }
 
     private void OnNodeSearchEnterPressed(object? sender, RoutedEventArgs e)
     {
-        SelectedNode = FilteredNodes.FirstOrDefault();
+        SelectedNode = NodeListBox.SelectedItem as NodePickEntry
+                       ?? FilteredNodes.FirstOrDefault();
         if (SelectedNode is not null)
             Link_Click(sender, e);
     }
 
     private void OnNodeSearchKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Down)
-        {
-            NodeListBox.Focus();
-            e.Handled = true;
-        }
+        FilterBoxSelectionNavigation.MoveSelection(NodeListBox, e);
     }
 
     // ── Button handlers ───────────────────────────────────────────────────

@@ -16,6 +16,9 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -42,6 +45,7 @@ public partial class ModelSystemDiffView : UserControl
         // Tunnel fires before any focused child sees the event, so F5 works
         // whether the TreeView, a toolbar button, or nothing in particular is focused.
         AddHandler(KeyDownEvent, OnKeyDownTunnel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        FilterTextBox.KeyDown += OnFilterBoxKeyDown;
     }
 
     private void OnAttachedToVisualTree(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
@@ -63,6 +67,55 @@ public partial class ModelSystemDiffView : UserControl
             vm.FilterText = null;
             e.Handled = true;
         }
+    }
+
+    private void OnFilterBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers != KeyModifiers.None ||
+            e.Key is not (Key.Up or Key.Down) ||
+            DataContext is not ModelSystemDiffViewModel vm)
+        {
+            return;
+        }
+
+        var items = new List<object>();
+        foreach (var root in vm.RootItems)
+            AddTreeItems(root, items);
+        if (items.Count == 0)
+            return;
+
+        var selectedIndex = items.FindIndex(item => ReferenceEquals(item, DiffTree.SelectedItem));
+        if (selectedIndex < 0)
+        {
+            selectedIndex = 0;
+        }
+        else
+        {
+            var offset = e.Key == Key.Down ? 1 : -1;
+            selectedIndex = Math.Clamp(selectedIndex + offset, 0, items.Count - 1);
+        }
+
+        var selectedItem = items[selectedIndex];
+        DiffTree.SelectedItem = selectedItem;
+        DiffTree.GetVisualDescendants()
+            .OfType<TreeViewItem>()
+            .FirstOrDefault(item => ReferenceEquals(item.DataContext, selectedItem))
+            ?.BringIntoView();
+        e.Handled = true;
+    }
+
+    private static void AddTreeItems(object item, List<object> items)
+    {
+        items.Add(item);
+        IReadOnlyList<object> children = item switch
+        {
+            DiffBoundaryItem boundary => boundary.Children,
+            DiffFunctionTemplateItem functionTemplate => functionTemplate.Children,
+            DiffElementItem element => element.Children,
+            _ => Array.Empty<object>()
+        };
+        foreach (var child in children)
+            AddTreeItems(child, items);
     }
 
     /// <summary>

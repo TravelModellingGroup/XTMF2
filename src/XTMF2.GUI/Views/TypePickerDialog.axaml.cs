@@ -264,6 +264,7 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
             Cancel_Click(null, new RoutedEventArgs());
             ke.Handled = true;
         }, RoutingStrategies.Tunnel);
+        FilterBox.KeyDown += OnFilterBoxKeyDown;
         UpdateFilter();
 
         // Focus the filter box and honour an initial selection once the list is loaded.
@@ -387,12 +388,12 @@ public partial class TypePickerDialog : Window, INotifyPropertyChanged
 
     private void FilterBox_EnterPressed(object? sender, RoutedEventArgs e)
     {
-        if (FilteredTypes.Count > 0)
-        {
-            TypeListBox.SelectedIndex = 0;
-        }
-
         OK_Click(null, e);
+    }
+
+    private void OnFilterBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        FilterBoxSelectionNavigation.MoveSelection(TypeListBox, e);
     }
 
     private void OK_Click(object? sender, RoutedEventArgs e)

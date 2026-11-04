@@ -163,9 +163,13 @@ public partial class BoundaryPickerDialog : Window, INotifyPropertyChanged
 
     private void SearchBox_KeyDown(object? sender, KeyEventArgs e)
     {
+        if (FilterBoxSelectionNavigation.MoveSelection(BoundaryListBox, e))
+            return;
+
         if (e.Key == Key.Enter && BrowseItems.Count > 0)
         {
-            SelectedBrowseItem = BrowseItems[0];
+            SelectedBrowseItem = BoundaryListBox.SelectedItem as BoundaryBrowseItem
+                                 ?? BrowseItems[0];
             Result             = BoundaryPickerResult.Navigate;
             SelectedBoundary   = SelectedBrowseItem.Boundary;
             Close();
