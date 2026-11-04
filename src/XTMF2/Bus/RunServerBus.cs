@@ -563,7 +563,7 @@ namespace XTMF2.Bus
                             {
                                 var id = reader.ReadString();
                                 var requestedDirectory = reader.ReadString();
-                                var cwd = _usePrivateWorkspace ? CreateRunDirectory(id) : requestedDirectory;
+                                var cwd = ResolveRunWorkingDirectory(id, requestedDirectory);
                                 var start = reader.ReadString();
                                 var runMode = (RunMode)reader.ReadInt32();
                                 var runName = reader.ReadString();
@@ -996,5 +996,8 @@ namespace XTMF2.Bus
             Directory.CreateDirectory(directory);
             return directory;
         }
+
+        internal string ResolveRunWorkingDirectory(string runId, string requestedDirectory)
+            => _usePrivateWorkspace ? CreateRunDirectory(runId) : requestedDirectory;
     }
 }

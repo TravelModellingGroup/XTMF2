@@ -157,7 +157,7 @@ namespace XTMF2.Client
                             {
                                 RunClient(serverStream, dllsToLoad, config: null,
                                     usePrivateWorkspace: false, remoteEstimationRegistry: null,
-                                    remoteRunRegistry: new RemoteRunRegistry(), allowDeployment: false);
+                                    remoteRunRegistry: null, allowDeployment: false);
                             }
                             else
                             {
@@ -165,11 +165,9 @@ namespace XTMF2.Client
                                 Directory.CreateDirectory(storagePaths.DataRoot);
                                 LogNamedPipeConfiguration(storagePaths, dllsToLoad);
                                 using var remoteEstimationRegistry = new RemoteSharedEstimationRegistry();
-                                using var remoteRunRegistry = new RemoteRunRegistry(
-                                    storagePaths.RemoteRunDirectory, storagePaths.RunWorkspaceBaseDirectory);
                                 RunClient(serverStream, dllsToLoad, config: null,
-                                    usePrivateWorkspace: true, remoteEstimationRegistry: remoteEstimationRegistry,
-                                    remoteRunRegistry: remoteRunRegistry, allowDeployment: false,
+                                    usePrivateWorkspace: false, remoteEstimationRegistry: remoteEstimationRegistry,
+                                    remoteRunRegistry: null, allowDeployment: false,
                                     storagePaths: storagePaths);
                             }
                         }
@@ -387,7 +385,7 @@ namespace XTMF2.Client
 
         private static void RunClient(Stream serverStream, List<string> extraDlls, SystemConfiguration? config,
             bool usePrivateWorkspace, RemoteSharedEstimationRegistry? remoteEstimationRegistry,
-            RemoteRunRegistry remoteRunRegistry, bool allowDeployment, XTMFStoragePaths? storagePaths = null)
+            RemoteRunRegistry? remoteRunRegistry, bool allowDeployment, XTMFStoragePaths? storagePaths = null)
         {
             LogStartup("Initializing the XTMF runtime for a client connection.");
             var runtime = storagePaths is null
@@ -413,16 +411,16 @@ namespace XTMF2.Client
             clientBus.SetDeploymentGate(
                 () =>
                 {
-                    remoteRunRegistry.BeginDrain();
+                    remoteRunRegistry?.BeginDrain();
                     registry.BeginDrain();
                 },
                 () =>
                 {
-                    remoteRunRegistry.EndDrain();
+                    remoteRunRegistry?.EndDrain();
                     registry.EndDrain();
                 },
                 () =>
-                    remoteRunRegistry.IsIdle && registry.IsIdle,
+                    (remoteRunRegistry?.IsIdle ?? true) && registry.IsIdle,
                 RestartWithOriginalArguments);
             clientBus.SetSharedActivityProviders(registry.GetActiveActivities,
                 sharedEstimationWorker.GetActiveActivities);
@@ -432,7 +430,7 @@ namespace XTMF2.Client
             }
             finally
             {
-                remoteRunRegistry.Detach(clientBus);
+                remoteRunRegistry?.Detach(clientBus);
             }
         }
 

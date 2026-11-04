@@ -17,11 +17,11 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Text.Unicode;
 using System.Threading;
+using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace XTMF2.RuntimeModules;
 
@@ -30,39 +30,77 @@ Description = "Provides functionality for synchronizing the writing of events to
 [AiModuleInstructions("Connect the required LogStream hook to a WriteStream-producing module before using this Log with WriteToLogA or another logging module.")]
 public sealed class Log : BaseAction<string>, IFunction<Log>, IDisposable
 {
+    private const int StatusMessageQueueCapacity = 50;
+    private static readonly UTF8Encoding StatusMessageEncoding = new(false, true);
+
     [SubModule(Required = true, Name = "LogStream", Description = "The stream to save the log to.", Index = 0)]
     public IFunction<WriteStream>? LogStream;
 
     private readonly Lock _writeLock = new();
-
     private StreamWriter? _writer;
-
-    private bool _alwaysFlush = false;
+    private RunStatusStream? _statusStream;
+    private Channel<string>? _statusMessages;
+    private Task? _statusSender;
+    private bool _initialized;
+    private bool _disposed;
 
     public override void Invoke(string message)
     {
         lock (_writeLock)
         {
-            if(_writer is null)
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (!_initialized)
             {
                 if (LogStream?.Invoke() is WriteStream writeStream)
                 {
-                    // Check to see if we need to always flush the stream.
-                    _alwaysFlush = writeStream is RunStatusStream;
-                    var encoding = _alwaysFlush ? new UTF8Encoding(false, true) : Encoding.UTF8;
-                    _writer = new StreamWriter(writeStream, encoding, 0x4000, false);
+                    if (writeStream is RunStatusStream statusStream)
+                    {
+                        _statusStream = statusStream;
+                        _statusMessages = Channel.CreateBounded<string>(new BoundedChannelOptions(StatusMessageQueueCapacity)
+                        {
+                            FullMode = BoundedChannelFullMode.Wait,
+                            SingleReader = true,
+                            SingleWriter = false
+                        });
+                        _statusSender = Task.Run(() => SendStatusMessagesAsync(_statusMessages, statusStream));
+                    }
+                    else
+                    {
+                        _writer = new StreamWriter(writeStream, Encoding.UTF8, 0x4000, false);
+                    }
+                    _initialized = true;
                 }
                 else
                 {
                     throw new XTMFRuntimeException(this, "Unable to create a write stream to store the log into!");
                 }
             }
-            // don't block while writing
-            _writer.Write(TimeStampMessage(message));
-            if (_alwaysFlush)
+            var timestampedMessage = TimeStampMessage(message);
+            if (_statusMessages is not null)
             {
-                _writer.Flush();
+                _statusMessages.Writer.WriteAsync(timestampedMessage).AsTask().GetAwaiter().GetResult();
             }
+            else
+            {
+                _writer!.Write(timestampedMessage);
+            }
+        }
+    }
+
+    private static async Task SendStatusMessagesAsync(Channel<string> messages, RunStatusStream stream)
+    {
+        try
+        {
+            await foreach (var message in messages.Reader.ReadAllAsync())
+            {
+                var bytes = StatusMessageEncoding.GetBytes(message);
+                stream.Write(bytes, 0, bytes.Length);
+            }
+        }
+        catch (Exception exception)
+        {
+            messages.Writer.TryComplete(exception);
+            throw;
         }
     }
 
@@ -79,21 +117,37 @@ public sealed class Log : BaseAction<string>, IFunction<Log>, IDisposable
 
     private void Dispose(bool managed)
     {
-        if(managed)
+        if (!managed)
         {
-            GC.SuppressFinalize(this);
+            return;
         }
-        _writer?.Dispose();
-        _writer = null;
+
+        GC.SuppressFinalize(this);
+        lock (_writeLock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _statusMessages?.Writer.TryComplete();
+            try
+            {
+                _statusSender?.GetAwaiter().GetResult();
+            }
+            finally
+            {
+                _writer?.Dispose();
+                _statusStream?.Dispose();
+                _writer = null;
+                _statusStream = null;
+            }
+        }
     }
 
     public void Dispose()
     {
         Dispose(true);
-    }
-
-    ~Log()
-    {
-        Dispose(false);
     }
 }
