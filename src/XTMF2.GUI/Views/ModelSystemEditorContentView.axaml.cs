@@ -17,6 +17,7 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -51,6 +52,10 @@ public partial class ModelSystemEditorContentView : UserControl
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
         AttachedToVisualTree += OnAttachedToVisualTree;
+        AddHandler(KeyDownEvent, OnEditorCommandKeyDown, RoutingStrategies.Tunnel);
+        CommandPalette.SearchFocused += OnCommandPaletteSearchFocused;
+        CommandPalette.CanvasFocusRequested += (_, _) => TheCanvas.Focus();
+        CommandPalette.CenterPopupOn(this);
 
         // F2 anywhere in this view fires inline rename on the canvas.
         KeyDown += OnViewKeyDown;
@@ -73,7 +78,7 @@ public partial class ModelSystemEditorContentView : UserControl
         CanvasScrollViewer.ScrollChanged += OnCanvasScrollChanged;
     }
 
-    private void OpenAiAssistant_Click(object? sender, RoutedEventArgs e)
+    public void OpenAiAssistant()
     {
         if (_vm?.AiAssistant is null)
             return;
@@ -95,10 +100,114 @@ public partial class ModelSystemEditorContentView : UserControl
             _aiAssistantWindow.Show();
     }
 
+    public void OpenCommandPalette()
+    {
+        if (_vm is null)
+            return;
+
+        RefreshCommandPaletteActions();
+        CommandPalette.FocusSearch();
+    }
+
+    private void OnCommandPaletteSearchFocused(object? sender, EventArgs e)
+        => RefreshCommandPaletteActions();
+
+    private void RefreshCommandPaletteActions()
+    {
+        if (_vm is null)
+        {
+            CommandPalette.SetActions([]);
+            return;
+        }
+
+        var vm = _vm;
+        CommandPalette.SetActions(
+        [
+            new("Save model system", () => vm.SaveModelSystemCommand.Execute(null),
+                "Tool", "Ctrl+S", vm.SaveModelSystemCommand.CanExecute(null)),
+            new("Undo", () => vm.UndoCommand.Execute(null),
+                "Tool", "Ctrl+Z", vm.CanUndo),
+            new("Redo", () => vm.RedoCommand.Execute(null),
+                "Tool", "Ctrl+Y", vm.CanRedo),
+            new("Export model system", () => vm.ExportModelSystemCommand.Execute(null), "Tool"),
+            new("Revert model system", () => vm.RevertModelSystemCommand.Execute(null), "Tool"),
+            new("Browse boundaries", () => vm.BrowseBoundariesCommand.Execute(null),
+                "Navigation", "Ctrl+B", vm.BrowseBoundariesCommand.CanExecute(null)),
+            new("Return to previous boundary", TheCanvas.NavigateBackToPreviousBoundary,
+                "Navigation", "Alt+Left"),
+            new("Step out to parent scope", () => vm.NavigateUpCommand.Execute(null),
+                "Navigation", "Alt+Up", vm.NavigateUpCommand.CanExecute(null)),
+            new("Run model system", () => vm.RunModelSystemCommand.Execute(null),
+                "Tool", "F5", vm.RunModelSystemCommand.CanExecute(null)),
+            new("Run estimation", () => vm.RunEstimationCommand.Execute(null),
+                "Tool", "Ctrl+F5", vm.RunEstimationCommand.CanExecute(null)),
+            new("Run calibration", () => vm.RunCalibrationCommand.Execute(null),
+                "Tool", "Shift+F5", vm.RunCalibrationCommand.CanExecute(null)),
+            new("View or manage model system variables",
+                () => OnShowVariablesClick(this, new RoutedEventArgs()), "Tool", "Ctrl+Shift+V"),
+            new("View or manage estimation parameters",
+                () => OnShowEstimationClick(this, new RoutedEventArgs()), "Tool", "Ctrl+Shift+E"),
+            new("View or manage calibration parameters",
+                () => OnShowCalibrationClick(this, new RoutedEventArgs()), "Tool", "Ctrl+Shift+C"),
+            new("Open AI assistant", OpenAiAssistant,
+                "Tool", "Ctrl+Shift+A", vm.AiAssistant is not null),
+            new("Open documentation for selected module",
+                () => vm.OpenSelectedDocumentationCommand.Execute(null), "Navigation",
+                isEnabled: vm.OpenSelectedDocumentationCommand.CanExecute(null)),
+            new("Open function template for selected module",
+                () => vm.OpenSelectedFunctionTemplateCommand.Execute(null), "Navigation",
+                isEnabled: vm.OpenSelectedFunctionTemplateCommand.CanExecute(null))
+        ]);
+    }
+
     private void OnActualThemeVariantChanged(object? sender, EventArgs e)
     {
         UpdateThemeClass();
         TheCanvas.InvalidateVisual();
+    }
+
+    private void OnEditorCommandKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift))
+        {
+            switch (e.Key)
+            {
+                case Key.P:
+                    OpenCommandPalette();
+                    e.Handled = true;
+                    return;
+                case Key.E:
+                    OnShowEstimationClick(this, new RoutedEventArgs());
+                    e.Handled = true;
+                    return;
+                case Key.C:
+                    OnShowCalibrationClick(this, new RoutedEventArgs());
+                    e.Handled = true;
+                    return;
+                case Key.V:
+                    OnShowVariablesClick(this, new RoutedEventArgs());
+                    e.Handled = true;
+                    return;
+                case Key.A:
+                    OpenAiAssistant();
+                    e.Handled = true;
+                    return;
+            }
+        }
+        else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.F5)
+        {
+            var command = _vm?.RunEstimationCommand;
+            if (command?.CanExecute(null) == true)
+                command.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.KeyModifiers == KeyModifiers.Shift && e.Key == Key.F5)
+        {
+            var command = _vm?.RunCalibrationCommand;
+            if (command?.CanExecute(null) == true)
+                command.Execute(null);
+            e.Handled = true;
+        }
     }
 
     private void OnNavigateBackClick(object? sender, RoutedEventArgs e)
@@ -204,6 +313,7 @@ public partial class ModelSystemEditorContentView : UserControl
         }
 
         _vm = DataContext as ModelSystemEditorViewModel;
+        RefreshCommandPaletteActions();
 
         if (_vm is not null)
         {

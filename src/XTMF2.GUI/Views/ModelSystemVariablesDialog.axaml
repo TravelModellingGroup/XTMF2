@@ -74,7 +74,8 @@
                                    Opacity="0.55"
                                    Margin="4,4,0,4"
                                    Foreground="{DynamicResource DlgAccent}"/>
-                        <ListBox ItemsSource="{Binding FilteredLocalVariables}"
+                        <ListBox x:Name="LocalVariableListBox"
+                                 ItemsSource="{Binding FilteredLocalVariables}"
                                  Background="Transparent"
                                  ScrollViewer.VerticalScrollBarVisibility="Disabled">
                             <ListBox.ItemTemplate>
@@ -143,7 +144,8 @@
                                    Margin="0,6,0,0"
                                    IsVisible="{Binding HasNoModelSystemVariables}"/>
 
-                        <ListBox ItemsSource="{Binding FilteredModelSystemVariables}"
+                        <ListBox x:Name="GlobalVariableListBox"
+                                 ItemsSource="{Binding FilteredModelSystemVariables}"
                                  Background="Transparent"
                                  ScrollViewer.VerticalScrollBarVisibility="Disabled"
                                  IsVisible="{Binding !HasNoModelSystemVariables}">

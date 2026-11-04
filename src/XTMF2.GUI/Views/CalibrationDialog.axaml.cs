@@ -254,6 +254,12 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
 
     private void OnDialogKeyDown(object? sender, KeyEventArgs e)
     {
+        if (DialogKeyboardNavigation.TrySwitchPane(
+                this, GroupPane, TargetPane, GroupSearchBox, TargetSearchBox, HasSelectedGroup, e))
+            return;
+        if (DialogKeyboardNavigation.TryNavigateTargetTab(this, TargetListBox, e))
+            return;
+
         if (e.Key != Key.Escape)
         {
             return;
@@ -261,6 +267,38 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
 
         e.Handled = true;
         Close();
+    }
+
+    private void GroupSearchBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        FilterBoxSelectionNavigation.MoveSelection(GroupListBox, e);
+    }
+
+    private void GroupSearchBox_EnterPressed(object? sender, RoutedEventArgs e)
+    {
+        if (!HasSelectedGroup)
+            return;
+        TargetSearchBox.FocusSearchBox();
+    }
+
+    private void TargetSearchBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        FilterBoxSelectionNavigation.MoveSelection(TargetListBox, e);
+    }
+
+    private void TargetSearchBox_EnterPressed(object? sender, RoutedEventArgs e)
+    {
+        DialogKeyboardNavigation.FocusFirstEntryEditor(TargetListBox);
+    }
+
+    private void TargetListBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Return or Key.Enter) ||
+            e.Source is not (ListBox or ListBoxItem))
+            return;
+
+        if (DialogKeyboardNavigation.FocusFirstEntryEditor(TargetListBox))
+            e.Handled = true;
     }
 
     protected override void OnOpened(EventArgs e)
@@ -457,6 +495,13 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
             BeginGroupRename(_selectedGroup);
             e.Handled = true;
         }
+        else if (e.Key is Key.Return or Key.Enter &&
+                 e.Source is ListBox or ListBoxItem &&
+                 HasSelectedGroup)
+        {
+            TargetSearchBox.FocusSearchBox();
+            e.Handled = true;
+        }
     }
 
     private void GroupRenameBox_KeyDown(object? sender, KeyEventArgs e)
@@ -570,48 +615,10 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
             await CommitEntryAsync(vm);
             e.Handled = true;
         }
-        else if (e.Key is Key.Tab or Key.Up or Key.Down)
+        else if (e.Key is Key.Up or Key.Down)
         {
-            bool backward = e.KeyModifiers.HasFlag(KeyModifiers.Shift)
-                         || e.KeyModifiers.HasFlag(KeyModifiers.Control);
-            NavigateEntryTextBox(tb, e.Key, backward);
-            e.Handled = true;
-        }
-    }
-
-    private static void NavigateEntryTextBox(TextBox current, Key key, bool shiftHeld = false)
-    {
-        var lbi = current.FindAncestorOfType<ListBoxItem>();
-        if (lbi is null) return;
-        var lb = lbi.FindAncestorOfType<ListBox>();
-        if (lb is null) return;
-
-        var rows = lb.GetVisualDescendants().OfType<ListBoxItem>().ToList();
-        int rowIdx = rows.IndexOf(lbi);
-        if (rowIdx < 0) return;
-
-        var cols = lbi.GetVisualDescendants().OfType<TextBox>().ToList();
-        int colIdx = cols.IndexOf(current);
-        if (colIdx < 0) return;
-
-        TextBox? target = null;
-        if (key == Key.Tab && !shiftHeld)
-            target = colIdx < cols.Count - 1 ? cols[colIdx + 1]
-                   : rowIdx < rows.Count - 1 ? rows[rowIdx + 1].GetVisualDescendants().OfType<TextBox>().FirstOrDefault()
-                   : null;
-        else if (key == Key.Tab && shiftHeld)
-            target = colIdx > 0 ? cols[colIdx - 1]
-                   : rowIdx > 0 ? rows[rowIdx - 1].GetVisualDescendants().OfType<TextBox>().LastOrDefault()
-                   : null;
-        else if (key == Key.Up && rowIdx > 0)
-            target = rows[rowIdx - 1].GetVisualDescendants().OfType<TextBox>().ElementAtOrDefault(colIdx);
-        else if (key == Key.Down && rowIdx < rows.Count - 1)
-            target = rows[rowIdx + 1].GetVisualDescendants().OfType<TextBox>().ElementAtOrDefault(colIdx);
-
-        if (target is not null)
-        {
-            target.Focus();
-            target.SelectAll();
+            if (DialogKeyboardNavigation.TryNavigateEntryEditor(tb, e))
+                e.Handled = true;
         }
     }
 

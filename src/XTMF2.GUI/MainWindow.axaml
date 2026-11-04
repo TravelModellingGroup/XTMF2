@@ -38,6 +38,16 @@
                           Command="{Binding NavigateBoundaryCommand}"
                           InputGesture="Ctrl+B"/>
             </MenuItem>
+            <MenuItem x:Name="ModelSystemMenu"
+                      Header="Model System">
+                <MenuItem Header="Command Palette…"
+                          Click="OpenCommandPalette_Click"
+                          InputGesture="Ctrl+Shift+P"/>
+                <MenuItem x:Name="AiAssistantMenuItem"
+                          Header="AI Assistant"
+                          Click="OpenAiAssistant_Click"
+                          InputGesture="Ctrl+Shift+A"/>
+            </MenuItem>
             <MenuItem Header="{res:Localize MainWindow_MenuTools}">
                 <MenuItem Header="RunServer Activity" Click="RunServerActivity_Click"/>
                 <MenuItem Header="{res:Localize MainWindow_MenuSettings}" Click="Settings_Click"/>

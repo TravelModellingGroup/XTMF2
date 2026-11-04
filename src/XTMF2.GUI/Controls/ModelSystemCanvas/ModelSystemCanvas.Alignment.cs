@@ -38,6 +38,90 @@ partial class ModelSystemCanvas
     }
 
     /// <summary>
+    /// Moves the selected canvas elements by a small fixed amount in one undoable session operation.
+    /// </summary>
+    private void NudgeSelectedElements(int dx, int dy)
+    {
+        if (_vm is null) return;
+
+        var elements = _multiSelection.Count > 1
+            ? _multiSelection.ToList()
+            : _vm.SelectedElement is { } selected
+                ? new List<ICanvasElement> { selected }
+                : new List<ICanvasElement>();
+        if (elements.Count == 0) return;
+
+        var nodeMoves     = new List<(Node, Rectangle)>();
+        var commentMoves  = new List<(CommentBlock, Rectangle)>();
+        var templateMoves = new List<(FunctionTemplate, Rectangle)>();
+        var instanceMoves = new List<(FunctionInstance, Rectangle)>();
+
+        foreach (var el in elements)
+        {
+            float newX = Math.Max(0f, (float)el.X + dx);
+            float newY = Math.Max(0f, (float)el.Y + dy);
+            if (newX == el.X && newY == el.Y)
+                continue;
+
+            switch (el)
+            {
+                case NodeViewModel nvm:
+                {
+                    var loc = nvm.UnderlyingNode.Location;
+                    float w = loc.Width is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f : loc.Height;
+                    nodeMoves.Add((nvm.UnderlyingNode, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+                case StartViewModel svm:
+                    nodeMoves.Add((svm.UnderlyingStart,
+                        new Rectangle(newX, newY, (float)svm.Diameter, (float)svm.Diameter)));
+                    break;
+                case CommentBlockViewModel cvm:
+                    commentMoves.Add((cvm.UnderlyingBlock,
+                        new Rectangle(newX, newY, (float)cvm.Width, (float)cvm.Height)));
+                    break;
+                case GhostNodeViewModel gvm:
+                {
+                    var loc = gvm.UnderlyingGhostNode.Location;
+                    float w = loc.Width is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f : loc.Height;
+                    nodeMoves.Add((gvm.UnderlyingGhostNode, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+                case FunctionTemplateViewModel ftvm:
+                    templateMoves.Add((ftvm.UnderlyingTemplate,
+                        new Rectangle(newX, newY, (float)ftvm.Width, (float)ftvm.Height)));
+                    break;
+                case FunctionInstanceViewModel fivm:
+                    instanceMoves.Add((fivm.UnderlyingInstance,
+                        new Rectangle(newX, newY, (float)fivm.Width, (float)fivm.Height)));
+                    break;
+                case FunctionParameterViewModel fpvm:
+                {
+                    var loc = fpvm.UnderlyingParameter.Location;
+                    float w = loc.Width is 0 ? 120f : loc.Width;
+                    float h = loc.Height is 0 ? 50f : loc.Height;
+                    nodeMoves.Add((fpvm.UnderlyingParameter, new Rectangle(newX, newY, w, h)));
+                    break;
+                }
+            }
+        }
+
+        if (nodeMoves.Count + commentMoves.Count + templateMoves.Count + instanceMoves.Count == 0)
+            return;
+
+        _vm.Session.MoveElements(
+            _vm.User,
+            nodeMoves.Count > 0 ? nodeMoves : null,
+            commentMoves.Count > 0 ? commentMoves : null,
+            templateMoves.Count > 0 ? templateMoves : null,
+            instanceMoves.Count > 0 ? instanceMoves : null,
+            out _);
+        InvalidateAndMeasure();
+    }
+
+    /// <summary>
     /// Moves all elements in <see cref="_multiSelection"/> so that their edges (or centres)
     /// are aligned according to <paramref name="mode"/>.
     /// The operation is committed as a single undoable batch via
