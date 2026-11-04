@@ -21,6 +21,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -85,7 +86,22 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     // ── Session / model ────────────────────────────────────────────────────
     /// <summary>The active editing session for the model system.</summary>
-    public ModelSystemSession Session { get; }
+    public ModelSystemSession Session { get; private set; } = null!;
+    private ModelSystemHeader? _loadingHeader;
+    private readonly bool _isLoadingHost;
+    private CancellationTokenSource? _loadCancellation;
+    private ModelSystemEditorViewModel? _loadedEditorViewModel;
+    public bool IsLoadingHost => _isLoadingHost;
+    public ModelSystemEditorViewModel? LoadedEditorViewModel => _loadedEditorViewModel;
+    public object? DisplayViewModel => _isLoadingHost ? _loadedEditorViewModel : this;
+    public bool HasLoadError => LoadErrorMessage is not null;
+    public CancellationToken LoadCancellationToken => _loadCancellation?.Token ?? CancellationToken.None;
+
+    [ObservableProperty]
+    private bool _isLoading;
+
+    [ObservableProperty]
+    private string? _loadErrorMessage;
 
     // ── Run support ───────────────────────────────────────────────────────
     /// <summary>
@@ -103,6 +119,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return;
 
         _runController = runController;
+        _loadedEditorViewModel?.SetRunController(runController);
         OnPropertyChanged(nameof(CanRun));
     }
 
@@ -121,16 +138,18 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public Action? RunStarted { get; set; }
 
     /// <summary>The user who owns this editing session.</summary>
-    public User User { get; }
+    public User User { get; private set; } = null!;
 
     /// <summary>The optional AI assistant for this editor session.</summary>
-    public AiAssistantViewModel? AiAssistant { get; }
+    public AiAssistantViewModel? AiAssistant { get; private set; }
 
     /// <summary>True when AI assistance is configured for this editor session.</summary>
     public bool HasAiAssistant => AiAssistant is not null;
 
     /// <summary>The header of the model system being edited.</summary>
-    public ModelSystemHeader ModelSystemHeader => Session.ModelSystemHeader;
+    public ModelSystemHeader ModelSystemHeader => Session is not null
+        ? Session.ModelSystemHeader
+        : _loadingHeader ?? throw new InvalidOperationException("The model system header has not been set.");
 
     /// <summary>The global boundary of the model system; the root canvas scope.</summary>
     public Boundary GlobalBoundary => Session.ModelSystem.GlobalBoundary;
@@ -161,7 +180,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary><c>true</c> when the current boundary is the global (root) boundary.</summary>
-    public bool IsAtRootBoundary => ReferenceEquals(_currentBoundary, GlobalBoundary);
+    public bool IsAtRootBoundary => Session is not null
+        && ReferenceEquals(_currentBoundary, GlobalBoundary);
 
     // ── Function-template navigation ──────────────────────────────────────
     /// <summary>
@@ -181,7 +201,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     // ── Dock integration ──────────────────────────────────────────────────
     /// <summary>Tab title shown in the dock.</summary>
-    public string Title => $"✎  {ModelSystemHeader.Name ?? "Model System"}{(IsDirty ? " *" : string.Empty)}";
+    public string Title => _isLoadingHost && _loadedEditorViewModel is not null
+        ? _loadedEditorViewModel.Title
+        : $"✎  {ModelSystemHeader.Name ?? "Model System"}{(IsDirty ? " *" : string.Empty)}";
+
+    [ObservableProperty]
+    private string _loadingStatus = Strings.DocumentLoad_ModelSystemStatus;
 
     /// <summary>Allow the user to close this tab.</summary>
     public bool CanClose => true;
@@ -611,13 +636,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     // ── Undo / Redo state ─────────────────────────────────────────────────
     /// <summary>True when there is at least one undoable command in the session buffer.</summary>
-    public bool CanUndo => Session.CanUndo;
+    public bool CanUndo => Session is not null && Session.CanUndo;
 
     /// <summary>True when there is at least one redoable command in the session buffer.</summary>
-    public bool CanRedo => Session.CanRedo;
+    public bool CanRedo => Session is not null && Session.CanRedo;
 
     /// <summary>True when the model system changed since its last successful save.</summary>
-    public bool IsDirty => Session.IsDirty;
+    public bool IsDirty => Session is not null && Session.IsDirty;
 
     /// <summary>True while the model system is being saved.</summary>
     public bool IsSaving => Volatile.Read(ref _saveInProgress) != 0;
@@ -886,6 +911,58 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 nvm.PropertyChanged += OnTrackedNodePropertyChanged;
         RebuildSearchItems();
     }
+
+    public ModelSystemEditorViewModel(
+        ModelSystemHeader header,
+        User user,
+        RunController? runController = null)
+    {
+        ArgumentNullException.ThrowIfNull(header);
+        ArgumentNullException.ThrowIfNull(user);
+        _loadingHeader = header;
+        User = user;
+        _runController = runController;
+        _isLoadingHost = true;
+        _isLoading = true;
+        _loadCancellation = new CancellationTokenSource();
+    }
+
+    public void SetLoadedEditorViewModel(ModelSystemEditorViewModel editorViewModel)
+    {
+        if (!_isLoadingHost)
+            throw new InvalidOperationException("Only a loading editor view model can host a loaded editor.");
+
+        _loadedEditorViewModel = editorViewModel;
+        editorViewModel.SetRunController(_runController);
+        editorViewModel.PropertyChanged += OnLoadedEditorPropertyChanged;
+        OnPropertyChanged(nameof(LoadedEditorViewModel));
+        OnPropertyChanged(nameof(DisplayViewModel));
+        OnPropertyChanged(nameof(Title));
+        LoadErrorMessage = null;
+    }
+
+    public void ShowLoadError(string message)
+    {
+        if (!_isLoadingHost)
+            throw new InvalidOperationException("Only a loading editor view model can report a load error.");
+        LoadErrorMessage = message;
+        LoadErrorMessage = message;
+    }
+
+    public void CompleteLoading()
+    {
+        IsLoading = false;
+        _loadCancellation?.Dispose();
+        _loadCancellation = null;
+    }
+
+    private void OnLoadedEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(IsDirty) or nameof(ModelSystemHeader))
+            OnPropertyChanged(nameof(Title));
+    }
+
+    partial void OnLoadErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasLoadError));
 
     private void OnSessionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -5031,6 +5108,22 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (_disposed) return;
         _disposed = true;
+
+        if (_isLoadingHost)
+        {
+            if (IsLoading)
+                _loadCancellation?.Cancel();
+
+            if (_loadedEditorViewModel is not null)
+            {
+                _loadedEditorViewModel.PropertyChanged -= OnLoadedEditorPropertyChanged;
+                _loadedEditorViewModel.Dispose();
+            }
+
+            _loadCancellation?.Dispose();
+            _loadCancellation = null;
+            return;
+        }
 
         ((System.Collections.Specialized.INotifyCollectionChanged)Session.ModelSystem.Variables)
             .CollectionChanged -= OnModelSystemVariablesChanged;

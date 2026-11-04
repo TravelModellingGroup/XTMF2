@@ -50,6 +50,7 @@ using XTMF2.Bus.Optimization;
 using XTMF2.Editing;
 using XTMF2.GUI.AI;
 using XTMF2.GUI.Controls;
+using XTMF2.GUI.Resources;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Views;
 
@@ -103,6 +104,12 @@ public partial class MainWindow : Window
 
     private Factory? _factory;
     private IDockable? _activeDockable;
+    private readonly List<object> _documentActivationHistory = new();
+    private readonly Dictionary<ModelSystemHeader, PendingEditorLoad> _pendingEditorLoads = new();
+    private object? _lastActiveDocumentContext;
+    private bool _suppressDocumentActivationHistory;
+    private bool _documentFocusRestoreScheduled;
+    private int _documentFocusRestoreGeneration;
     /// <summary>The <see cref="ModelSystemEditorViewModel"/> in the currently active dock tab, or null.</summary>
     private ModelSystemEditorViewModel? _activeEditorVm;
 
@@ -129,10 +136,28 @@ public partial class MainWindow : Window
 
     private void OnDocumentsSourceChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems is not null)
+        if (e.Action != NotifyCollectionChangedAction.Remove || e.OldItems is null)
         {
-            foreach (var item in e.OldItems)
-                (item as IDisposable)?.Dispose();
+            return;
+        }
+
+        var removedActiveDocument = false;
+        for (var index = 0; index < e.OldItems.Count; index++)
+        {
+            if (e.OldItems[index] is not object oldItem)
+                continue;
+
+            if (ReferenceEquals(oldItem, _lastActiveDocumentContext))
+                removedActiveDocument = true;
+            _documentActivationHistory.Remove(oldItem);
+
+            (oldItem as IDisposable)?.Dispose();
+        }
+
+        if (removedActiveDocument)
+        {
+            _lastActiveDocumentContext = null;
+            ScheduleDocumentFocusRestore();
         }
     }
 
@@ -160,9 +185,83 @@ public partial class MainWindow : Window
     {
         if (Documents.Contains(context))
         {
-            Documents.Remove(context);
+            RemoveDocumentFromCollection(context);
             CloseEmptyFloatingWindows();
         }
+    }
+
+    private void RemoveDocumentFromCollection(object context)
+    {
+        if (!Documents.Contains(context))
+            return;
+
+        if (ReferenceEquals(context, _lastActiveDocumentContext))
+            _suppressDocumentActivationHistory = true;
+
+        Documents.Remove(context);
+    }
+
+    private void ScheduleDocumentFocusRestore()
+    {
+        _suppressDocumentActivationHistory = true;
+        _documentFocusRestoreScheduled = true;
+        var generation = ++_documentFocusRestoreGeneration;
+        Dispatcher.UIThread.Post(
+            () => RestoreMostRecentDocument(generation),
+            DispatcherPriority.Background);
+    }
+
+    private void RestoreMostRecentDocument(int generation)
+    {
+        if (generation != _documentFocusRestoreGeneration)
+            return;
+
+        _documentFocusRestoreScheduled = false;
+        object? restoredContext = null;
+        foreach (var context in _documentActivationHistory.ToArray())
+        {
+            if (Documents.Contains(context) && ActivateDocument(context, isFocusRestore: true))
+            {
+                restoredContext = context;
+                break;
+            }
+        }
+
+        if (restoredContext is not null)
+        {
+            RecordActiveDocument(restoredContext);
+        }
+        else if (_activeDockable is IDocument { Context: object activeContext }
+            && Documents.Contains(activeContext))
+        {
+            RecordActiveDocument(activeContext);
+        }
+        else
+        {
+            _lastActiveDocumentContext = null;
+        }
+
+        _suppressDocumentActivationHistory = false;
+    }
+
+    private void CancelPendingDocumentFocusRestore()
+    {
+        if (!_documentFocusRestoreScheduled)
+            return;
+
+        _documentFocusRestoreScheduled = false;
+        _documentFocusRestoreGeneration++;
+        _suppressDocumentActivationHistory = false;
+    }
+
+    private void RecordActiveDocument(object context)
+    {
+        if (!Documents.Contains(context))
+            return;
+
+        _documentActivationHistory.Remove(context);
+        _documentActivationHistory.Insert(0, context);
+        _lastActiveDocumentContext = context;
     }
 
     private bool IsDocumentInLayout(IDocument document)
@@ -222,7 +321,7 @@ public partial class MainWindow : Window
         foreach (var editor in dirtyEditors)
         {
             await PromptToCloseEditorAsync(editor);
-            if (Documents.Contains(editor))
+            if (IsEditorOpen(editor))
                 return;
         }
 
@@ -257,6 +356,7 @@ public partial class MainWindow : Window
         var closingDocumentSet = closingDocuments.ToHashSet();
         return closingDocumentSet
             .Select(document => document.Context)
+            .Select(GetEditorViewModel)
             .OfType<ModelSystemEditorViewModel>()
             .Where(editor => editor.IsDirty)
             .Where(editor => IsOnlyOpenEditorForModelSystem(editor, closingDocumentSet))
@@ -269,9 +369,25 @@ public partial class MainWindow : Window
     {
         return !EnumerateOpenDocuments()
             .Any(document => !closingDocuments.Contains(document)
-                && document.Context is ModelSystemEditorViewModel other
+                && GetEditorViewModel(document.Context) is { } other
                 && other.ModelSystemHeader == editor.ModelSystemHeader);
     }
+
+    private static ModelSystemEditorViewModel? GetEditorViewModel(object? documentContext)
+        => documentContext switch
+        {
+            ModelSystemEditorViewModel editor when editor.IsLoadingHost => editor.LoadedEditorViewModel,
+            ModelSystemEditorViewModel editor => editor,
+            _ => null
+        };
+
+    private object? FindEditorDocumentContext(ModelSystemEditorViewModel editor)
+        => EnumerateOpenDocuments()
+            .Select(document => document.Context)
+            .FirstOrDefault(context => ReferenceEquals(GetEditorViewModel(context), editor));
+
+    private bool IsEditorOpen(ModelSystemEditorViewModel editor)
+        => FindEditorDocumentContext(editor) is not null;
 
     private IEnumerable<IDocument> EnumerateOpenDocuments()
     {
@@ -311,6 +427,7 @@ public partial class MainWindow : Window
 
         foreach (var editor in EnumerateOpenDocuments()
             .Select(document => document.Context)
+            .Select(GetEditorViewModel)
             .OfType<ModelSystemEditorViewModel>())
             editor.SetRunController(_runController);
 
@@ -334,76 +451,337 @@ public partial class MainWindow : Window
     /// Open a new tab for a project, showing its model systems.
     /// If a tab for this project is already open it is activated instead.
     /// </summary>
-    public void OpenProjectTab(Project project)
+    public async Task OpenProjectTab(Project project)
     {
-        if (_runtime is null)
+        if (_runtime is null || _currentUser is null)
             return;
 
-        // Check if a tab for this project already exists
-        var existing = Documents
+        var runtime = _runtime;
+        var user = _currentUser;
+        var existingDocument = Documents
             .OfType<ModelSystemsViewModel>()
-            .FirstOrDefault(vm => vm.Project == project);
+            .FirstOrDefault(document => document.Project == project);
 
-        if (existing is not null)
+        if (existingDocument is not null)
         {
-            if (ActivateDocument(existing))
+            if (existingDocument.LoadErrorMessage is null)
+            {
+                ActivateDocumentWhenAvailable(existingDocument);
                 return;
+            }
 
-            Documents.Remove(existing);
+            RemoveDocumentFromCollection(existingDocument);
         }
-        // No existing tab, create a new one
-        var modelSystems = new ModelSystemsViewModel(_runtime, _currentUser!, project, this);
-        Documents.Add(modelSystems);
-        ActivateDocument(modelSystems);
+
+        var loadingViewModel = ModelSystemsViewModel.CreateLoading(runtime, user, project, this);
+        Documents.Add(loadingViewModel);
+        ActivateDocumentWhenAvailable(loadingViewModel);
+
+        var cancellationToken = loadingViewModel.LoadCancellationToken;
+        ModelSystemsViewModel? modelSystemsViewModel = null;
+        try
+        {
+            modelSystemsViewModel = await Task.Run(
+                () => new ModelSystemsViewModel(runtime, user, project, this),
+                cancellationToken);
+
+            if (cancellationToken.IsCancellationRequested || !Documents.Contains(loadingViewModel))
+            {
+                modelSystemsViewModel.Dispose();
+                modelSystemsViewModel = null;
+                return;
+            }
+
+            loadingViewModel.SetLoadedViewModel(modelSystemsViewModel);
+            modelSystemsViewModel = null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception) when (IsExpectedDocumentLoadFailure(exception))
+        {
+            if (Documents.Contains(loadingViewModel))
+                loadingViewModel.ShowLoadError(exception.Message);
+        }
+        finally
+        {
+            modelSystemsViewModel?.Dispose();
+            loadingViewModel.CompleteLoading();
+        }
     }
 
     private bool ActivateDocument(object viewModel)
+        => ActivateDocument(viewModel, isFocusRestore: false);
+
+    private bool ActivateDocument(object viewModel, bool isFocusRestore)
     {
-        if (_factory?.GetContainerFromItem(viewModel) is IDocument document
-            && document.Owner is IDock dock)
+        if (_factory?.GetContainerFromItem(viewModel) is not IDocument document
+            || document.Owner is not IDock dock)
+            return false;
+
+        if (!isFocusRestore)
+            CancelPendingDocumentFocusRestore();
+
+        dock.ActiveDockable = document;
+        if (!isFocusRestore)
+            RecordActiveDocument(viewModel);
+
+        return true;
+    }
+
+    private void ActivateDocumentWhenAvailable(object document)
+    {
+        if (ActivateDocument(document))
+            return;
+
+        Dispatcher.UIThread.Post(() =>
         {
-            dock.ActiveDockable = document;
-            return true;
+            if (Documents.Contains(document))
+                ActivateDocument(document);
+        }, DispatcherPriority.Loaded);
+    }
+
+
+    /// <summary>
+    /// Opens a model system editor after immediately showing a loading tab.
+    /// </summary>
+    public Task<ModelSystemEditorViewModel?> OpenModelSystemTabAsync(
+        ModelSystemsViewModel modelSystemsViewModel,
+        ModelSystemHeader header)
+    {
+        if (FindOpenEditor(header) is { } existing)
+        {
+            FocusEditorTab(existing);
+            return Task.FromResult<ModelSystemEditorViewModel?>(existing);
         }
 
-        return false;
+        if (_pendingEditorLoads.TryGetValue(header, out var existingLoad))
+        {
+            if (Documents.Contains(existingLoad.Document))
+            {
+                ActivateDocumentWhenAvailable(existingLoad.Document);
+                return existingLoad.Task;
+            }
+
+            _pendingEditorLoads.Remove(header);
+        }
+
+        RemoveFailedEditorLoad(header);
+
+        if (_runtime is null)
+            return Task.FromResult<ModelSystemEditorViewModel?>(null);
+
+        var runtime = _runtime;
+        var project = modelSystemsViewModel.Project;
+        var loadingDocument = CreateEditorLoadingViewModel(header, modelSystemsViewModel.CurrentUser);
+        var user = modelSystemsViewModel.CurrentUser;
+        return StartEditorLoad(
+            loadingDocument,
+            header,
+            user,
+            cancellationToken => Task.Run(
+                () => LoadModelSystemSession(runtime, project, user, header),
+                cancellationToken));
     }
 
-
-    /// <summary>
-    /// Opens a new tab for the given model system editing session.
-    /// </summary>
-    /// <param name="session">The model system editing session to open.</param>
-    /// <param name="user">The user who opened the session (forwarded to the editor VM).</param>
-    public void OpenModelSystemTab(ModelSystemSession session, User user)
+    private static ModelSystemSessionLoadResult LoadModelSystemSession(
+        XTMFRuntime runtime,
+        Project project,
+        User user,
+        ModelSystemHeader header)
     {
-        var editor = CreateEditorViewModel(session, user);
-        editor.RunStarted = SwitchToRunsDocument;
-        Documents.Add(editor);
-        ActivateDocument(editor);
+        if (!runtime.ProjectController.GetProjectSession(user, project, out var projectSession, out var projectError)
+            || projectSession is null)
+        {
+            return new(null, projectError?.Message, null);
+        }
+
+        using (projectSession)
+        {
+            if (!projectSession.EditModelSystem(user, header, out var session, out var error, out var warnings))
+                return new(null, error?.Message, warnings);
+
+            return new(session, null, warnings);
+        }
     }
 
-    /// <summary>
-    /// Opens a new model-system editor tab and returns its VM.
-    /// </summary>
-    public ModelSystemEditorViewModel OpenModelSystemTabAndGet(ModelSystemSession session, User user)
+    public Task<ModelSystemEditorViewModel?> OpenModelSystemTabAndGetAsync(ModelSystemSession session, User user)
     {
-        var existing = EnumerateOpenDocuments()
-            .Select(document => document.Context)
-            .OfType<ModelSystemEditorViewModel>()
-            .FirstOrDefault(editor => editor.ModelSystemHeader == session.ModelSystemHeader);
+        var header = session.ModelSystemHeader;
+        var existing = FindOpenEditor(header);
         if (existing is not null)
         {
-            ActivateDocument(existing);
-            return existing;
+            FocusEditorTab(existing);
+            return Task.FromResult<ModelSystemEditorViewModel?>(existing);
         }
 
-        var editor = CreateEditorViewModel(session, user);
-        editor.RunStarted = SwitchToRunsDocument;
-        Documents.Add(editor);
-        ActivateDocument(editor);
-        return editor;
+        if (_pendingEditorLoads.TryGetValue(header, out var existingLoad))
+        {
+            if (Documents.Contains(existingLoad.Document))
+            {
+                ActivateDocumentWhenAvailable(existingLoad.Document);
+                return existingLoad.Task;
+            }
+
+            _pendingEditorLoads.Remove(header);
+        }
+
+        RemoveFailedEditorLoad(header);
+
+        if (_runtime is null)
+            return Task.FromResult<ModelSystemEditorViewModel?>(null);
+
+        var loadingDocument = CreateEditorLoadingViewModel(header, user);
+        return StartEditorLoad(
+            loadingDocument,
+            header,
+            user,
+            _ => Task.FromResult(new ModelSystemSessionLoadResult(session, null, null)));
     }
+
+    private ModelSystemEditorViewModel? FindOpenEditor(ModelSystemHeader header)
+        => EnumerateOpenDocuments()
+            .Select(document => document.Context)
+            .Select(GetEditorViewModel)
+            .OfType<ModelSystemEditorViewModel>()
+            .FirstOrDefault(editor => editor.ModelSystemHeader == header);
+
+    public ModelSystemEditorViewModel? FindOpenEditorTab(ModelSystemHeader header)
+        => FindOpenEditor(header);
+
+    private void RemoveFailedEditorLoad(ModelSystemHeader header)
+    {
+        var failedLoad = Documents
+            .OfType<ModelSystemEditorViewModel>()
+            .FirstOrDefault(document => document.IsLoadingHost
+                && document.HasLoadError
+                && document.ModelSystemHeader == header);
+        if (failedLoad is not null)
+            RemoveDocumentFromCollection(failedLoad);
+    }
+
+    private ModelSystemEditorViewModel CreateEditorLoadingViewModel(ModelSystemHeader header, User user)
+    {
+        var loadingDocument = new ModelSystemEditorViewModel(header, user, _runController);
+        Documents.Add(loadingDocument);
+        ActivateDocumentWhenAvailable(loadingDocument);
+        return loadingDocument;
+    }
+
+    private Task<ModelSystemEditorViewModel?> StartEditorLoad(
+        ModelSystemEditorViewModel loadingDocument,
+        ModelSystemHeader header,
+        User user,
+        Func<CancellationToken, Task<ModelSystemSessionLoadResult>> loadSession)
+    {
+        var task = LoadModelSystemEditorAsync(loadingDocument, header, user, loadSession);
+        _pendingEditorLoads.Add(header, new PendingEditorLoad(loadingDocument, task));
+        return task;
+    }
+
+    private async Task<ModelSystemEditorViewModel?> LoadModelSystemEditorAsync(
+        ModelSystemEditorViewModel loadingDocument,
+        ModelSystemHeader header,
+        User user,
+        Func<CancellationToken, Task<ModelSystemSessionLoadResult>> loadSession)
+    {
+        var cancellationToken = loadingDocument.LoadCancellationToken;
+        ModelSystemSession? session = null;
+        ModelSystemEditorViewModel? editor = null;
+        try
+        {
+            var result = await loadSession(cancellationToken);
+            session = result.Session;
+            if (session is null)
+            {
+                if (Documents.Contains(loadingDocument))
+                    loadingDocument.ShowLoadError(result.ErrorMessage ?? Strings.ModelSystems_UnknownError);
+                return null;
+            }
+
+            if (cancellationToken.IsCancellationRequested || !Documents.Contains(loadingDocument))
+                return null;
+
+            if (result.Warnings is { Count: > 0 })
+            {
+                loadingDocument.LoadingStatus = Strings.DocumentLoad_CheckingStatus;
+                var warningDialog = new ValidationIssueDialog(
+                    Strings.ModelSystems_OpenFailedTitle,
+                    string.Join(Environment.NewLine, result.Warnings));
+                await warningDialog.ShowDialog(this);
+                if (!warningDialog.Result)
+                {
+                    RemoveDocumentFromCollection(loadingDocument);
+                    return null;
+                }
+            }
+
+            if (cancellationToken.IsCancellationRequested || !Documents.Contains(loadingDocument))
+                return null;
+
+            loadingDocument.LoadingStatus = Strings.DocumentLoad_PreparingEditorStatus;
+            editor = await Task.Run(() => CreateEditorViewModel(session, user), cancellationToken);
+            session = null;
+            editor.RunStarted = SwitchToRunsDocument;
+
+            if (cancellationToken.IsCancellationRequested || !Documents.Contains(loadingDocument))
+            {
+                return null;
+            }
+
+            var loadedEditor = editor;
+            loadingDocument.SetLoadedEditorViewModel(editor);
+            if (_activeDockable is IDocument activeDocument
+                && ReferenceEquals(activeDocument.Context, loadingDocument))
+            {
+                SetActiveEditorViewModel(editor);
+            }
+
+            editor = null;
+            return loadedEditor;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (Exception exception) when (IsExpectedDocumentLoadFailure(exception))
+        {
+            if (Documents.Contains(loadingDocument))
+                loadingDocument.ShowLoadError(exception.Message);
+            return null;
+        }
+        finally
+        {
+            editor?.Dispose();
+            session?.Dispose();
+            loadingDocument.CompleteLoading();
+            if (_pendingEditorLoads.TryGetValue(header, out var pendingLoad)
+                && ReferenceEquals(pendingLoad.Document, loadingDocument))
+            {
+                _pendingEditorLoads.Remove(header);
+            }
+        }
+    }
+
+    private static bool IsExpectedDocumentLoadFailure(Exception exception)
+        => exception is IOException
+            or UnauthorizedAccessException
+            or InvalidOperationException
+            or ArgumentException
+            or FormatException
+            or NotSupportedException
+            or System.Text.Json.JsonException
+            or System.Reflection.ReflectionTypeLoadException
+            or TypeLoadException;
+
+    private sealed record ModelSystemSessionLoadResult(
+        ModelSystemSession? Session,
+        string? ErrorMessage,
+        List<string>? Warnings);
+
+    private sealed record PendingEditorLoad(
+        ModelSystemEditorViewModel Document,
+        Task<ModelSystemEditorViewModel?> Task);
 
     private ModelSystemEditorViewModel CreateEditorViewModel(ModelSystemSession session, User user)
     {
@@ -425,7 +803,8 @@ public partial class MainWindow : Window
     /// </summary>
     public void FocusEditorTab(ModelSystemEditorViewModel editorVm)
     {
-        ActivateDocument(editorVm);
+        if (FindEditorDocumentContext(editorVm) is { } documentContext)
+            ActivateDocument(documentContext);
     }
 
     public bool BindRecoveredRunToActiveModelSystem(string runId, out string? error)
@@ -500,12 +879,12 @@ public partial class MainWindow : Window
     /// </summary>
     public void CloseProjectTab(Project project)
     {
-        var vm = Documents
+        var documentContext = Documents
             .OfType<ModelSystemsViewModel>()
-            .FirstOrDefault(vm => vm.Project == project);
+            .FirstOrDefault(document => ReferenceEquals(document.Project, project));
 
-        if (vm is not null)
-            Documents.Remove(vm);
+        if (documentContext is not null)
+            RemoveDocumentFromCollection(documentContext);
     }
 
     private void Settings_Click(object? sender, RoutedEventArgs e)
@@ -561,7 +940,17 @@ public partial class MainWindow : Window
     private void OnActiveDockableChanged(object? sender, ActiveDockableChangedEventArgs e)
     {
         _activeDockable = e.Dockable;
-        var newVm = (e.Dockable as IDocument)?.Context as ModelSystemEditorViewModel;
+        if (!_suppressDocumentActivationHistory
+            && e.Dockable is IDocument { Context: object documentContext })
+        {
+            RecordActiveDocument(documentContext);
+        }
+
+        SetActiveEditorViewModel(GetEditorViewModel((e.Dockable as IDocument)?.Context));
+    }
+
+    private void SetActiveEditorViewModel(ModelSystemEditorViewModel? newVm)
+    {
         if (ReferenceEquals(_activeEditorVm, newVm)) return;
 
         if (_activeEditorVm is INotifyPropertyChanged oldNpc)
@@ -619,7 +1008,7 @@ public partial class MainWindow : Window
                 _allowDocumentClose = true;
                 try
                 {
-                    Documents.Remove(context);
+                    RemoveDocumentFromCollection(context);
                 }
                 finally
                 {
@@ -634,7 +1023,7 @@ public partial class MainWindow : Window
         foreach (var editor in dirtyEditors)
         {
             await PromptToCloseEditorAsync(editor);
-            if (Documents.Contains(editor))
+            if (IsEditorOpen(editor))
                 return;
         }
     }
@@ -657,8 +1046,12 @@ public partial class MainWindow : Window
                 && !await editor.SaveModelSystemAsync())
                 return;
 
+            var documentContext = FindEditorDocumentContext(editor);
+            if (documentContext is null)
+                return;
+
             _allowDocumentClose = true;
-            Documents.Remove(editor);
+            RemoveDocumentFromCollection(documentContext);
         }
         finally
         {
@@ -680,7 +1073,8 @@ public partial class MainWindow : Window
         _closeCheckInProgress = true;
         try
         {
-            foreach (var editor in Documents
+            foreach (var editor in EnumerateOpenDocuments()
+                .Select(document => GetEditorViewModel(document.Context))
                 .OfType<ModelSystemEditorViewModel>()
                 .Where(vm => vm.IsDirty)
                 .GroupBy(vm => vm.Session)
@@ -809,14 +1203,14 @@ public partial class MainWindow : Window
             && activeDoc.CanClose
             && activeDoc.Context is object context)
         {
-            if (activeDoc.Context is ModelSystemEditorViewModel editor && editor.IsDirty)
+            if (GetEditorViewModel(activeDoc.Context) is { IsDirty: true } editor)
             {
                 _ = PromptToCloseEditorAsync(editor);
                 return;
             }
 
             // Now that we tried to move back, we can remove the active document.
-            Documents.Remove(context);
+            RemoveDocumentFromCollection(context);
         }
     }
 }

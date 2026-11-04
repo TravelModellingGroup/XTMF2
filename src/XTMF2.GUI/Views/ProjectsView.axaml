@@ -58,7 +58,8 @@
                                     <Setter Property="Background" Value="{DynamicResource DlgAccentMid}"/>
                                 </Style>
                             </StackPanel.Styles>
-                            <Button Click="NewProject_Click"
+                            <Button x:Name="NewProjectButton"
+                                    Click="NewProject_Click"
                                     Classes="toolbar-icon"
                                     ToolTip.Tip="{res:Localize Projects_NewProject}">
                                 <Viewbox Width="18" Height="18">
@@ -76,7 +77,8 @@
                                     </Canvas>
                                 </Viewbox>
                             </Button>
-                            <Button Click="ImportProject_Click"
+                            <Button x:Name="ImportProjectButton"
+                                    Click="ImportProject_Click"
                                     Classes="toolbar-icon"
                                     ToolTip.Tip="{res:Localize Projects_Import}">
                                 <Viewbox Width="18" Height="18">
@@ -110,7 +112,10 @@
                 
                 <!-- Projects DataGrid -->
                 <ScrollViewer Grid.Row="1" Background="Transparent">
-                    <ListBox ItemsSource="{Binding FilteredProjects}" Background="Transparent">
+                    <ListBox x:Name="ProjectListBox"
+                             ItemsSource="{Binding FilteredProjects}"
+                             SelectedItem="{Binding SelectedProject, Mode=TwoWay}"
+                             Background="Transparent">
                         <ListBox.Styles>
                             <Style Selector="ListBoxItem">
                                 <Setter Property="Padding" Value="0"/>
@@ -160,25 +165,29 @@
                                     <Border.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="{res:Localize Projects_Open}"
-                                                      Click="OpenProject_Click">
+                                                      Click="OpenProject_Click"
+                                                      InputGesture="Enter">
                                                 <MenuItem.Icon>
                                                     <TextBlock Text="→" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>
                                             </MenuItem>
                                             <MenuItem Header="{res:Localize Projects_Rename}"
-                                                      Click="RenameProject_Click">
+                                                      Click="RenameProject_Click"
+                                                      InputGesture="F2">
                                                 <MenuItem.Icon>
                                                     <TextBlock Text="✏" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>
                                             </MenuItem>
                                             <MenuItem Header="{res:Localize Projects_Export}"
-                                                      Click="ExportProject_Click">
+                                                      Click="ExportProject_Click"
+                                                      InputGesture="Ctrl+Shift+E">
                                                 <MenuItem.Icon>
                                                     <TextBlock Text="↓" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>
                                             </MenuItem>
                                             <MenuItem Header="{res:Localize Projects_Delete}"
-                                                      Click="DeleteProject_Click">
+                                                      Click="DeleteProject_Click"
+                                                      InputGesture="Delete">
                                                 <MenuItem.Icon>
                                                     <TextBlock Text="✕" FontSize="11" VerticalAlignment="Center"/>
                                                 </MenuItem.Icon>

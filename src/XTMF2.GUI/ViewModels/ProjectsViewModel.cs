@@ -35,6 +35,9 @@ public partial class ProjectsViewModel : ObservableObject
     [ObservableProperty]
     private string _searchText = "";
 
+    [ObservableProperty]
+    private Project? _selectedProject;
+
     /// <summary>
     /// Projects filtered by <see cref="SearchText"/>, used as the list's ItemsSource.
     /// </summary>
@@ -68,6 +71,11 @@ public partial class ProjectsViewModel : ObservableObject
             {
                 FilteredProjects.Add(project);
             }
+        }
+
+        if (SelectedProject is not null && !FilteredProjects.Contains(SelectedProject))
+        {
+            SelectedProject = null;
         }
     }
 

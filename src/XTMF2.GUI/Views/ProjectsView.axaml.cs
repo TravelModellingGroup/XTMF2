@@ -17,11 +17,13 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Resources;
 
@@ -44,6 +46,9 @@ public partial class ProjectsView : UserControl
         
         // Subscribe to visual tree attachment to find MainWindow
         AttachedToVisualTree += OnAttachedToVisualTree;
+        KeyDown += OnViewKeyDown;
+        ProjectListBox.KeyDown += OnProjectListBoxKeyDown;
+        ProjectSearchBox.KeyDown += OnProjectSearchBoxKeyDown;
     }
 
 
@@ -106,6 +111,93 @@ public partial class ProjectsView : UserControl
         {
             UserTextBlock.Text = Strings.Format(Strings.Projects_UserFormat, _viewModel.CurrentUser.UserName);
         }
+
+        ToolTip.SetTip(NewProjectButton, $"{Strings.Projects_NewProject} (Ctrl+N)");
+        ToolTip.SetTip(ImportProjectButton, $"{Strings.Projects_Import} (Ctrl+Shift+O)");
+        ToolTip.SetTip(ProjectSearchBox, "Search (Ctrl+E)");
+    }
+
+    private void OnViewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers == KeyModifiers.Control)
+        {
+            if (e.Key == Key.N)
+            {
+                NewProject_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            else if (e.Key == Key.E)
+            {
+                ProjectSearchBox.FocusSearchBox();
+                e.Handled = true;
+            }
+        }
+        else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.O)
+        {
+            ImportProject_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+        }
+    }
+
+    private async void OnProjectListBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_viewModel?.SelectedProject is not { } project)
+        {
+            return;
+        }
+
+        if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.Enter)
+        {
+            if (_parentWindow is { } parentWindow)
+                await parentWindow.OpenProjectTab(project);
+            e.Handled = true;
+        }
+        else if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.F2)
+        {
+            await RenameProjectAsync(project);
+            e.Handled = true;
+        }
+        else if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.Delete)
+        {
+            await DeleteProjectAsync(project);
+            e.Handled = true;
+        }
+        else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.E)
+        {
+            await ExportProjectAsync(project);
+            e.Handled = true;
+        }
+    }
+
+    private void OnProjectSearchBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_viewModel is null || e.KeyModifiers != KeyModifiers.None ||
+            e.Key is not (Key.Up or Key.Down))
+        {
+            return;
+        }
+
+        var projects = _viewModel.FilteredProjects;
+        if (projects.Count == 0)
+        {
+            return;
+        }
+
+        var selectedIndex = ProjectListBox.SelectedIndex;
+        if (selectedIndex < 0)
+        {
+            selectedIndex = 0;
+        }
+        else
+        {
+            var offset = e.Key == Key.Down ? 1 : -1;
+            selectedIndex = System.Math.Clamp(selectedIndex + offset, 0, projects.Count - 1);
+        }
+
+        var project = projects[selectedIndex];
+        _viewModel.SelectedProject = project;
+        ProjectListBox.ScrollIntoView(project);
+        e.Handled = true;
     }
 
     private async void NewProject_Click(object? sender, RoutedEventArgs e)
@@ -206,6 +298,11 @@ public partial class ProjectsView : UserControl
         if (sender is not MenuItem menuItem || menuItem.DataContext is not Project project)
             return;
 
+        await ExportProjectAsync(project);
+    }
+
+    private async Task ExportProjectAsync(Project project)
+    {
         if (_viewModel?.CurrentUser == null || _parentWindow == null)
             return;
 
@@ -250,16 +347,22 @@ public partial class ProjectsView : UserControl
         }
     }
 
-    private void Border_DoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e)
+    private async void Border_DoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e)
     {
         if (sender is Border border && border.DataContext is Project project)
-            _parentWindow?.OpenProjectTab(project);
+        {
+            if (_parentWindow is { } parentWindow)
+                await parentWindow.OpenProjectTab(project);
+        }
     }
 
-    private void OpenProject_Click(object? sender, RoutedEventArgs e)
+    private async void OpenProject_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is MenuItem menuItem && menuItem.DataContext is Project project)
-            _parentWindow?.OpenProjectTab(project);
+        {
+            if (_parentWindow is { } parentWindow)
+                await parentWindow.OpenProjectTab(project);
+        }
     }
 
     private async void RenameProject_Click(object? sender, RoutedEventArgs e)
@@ -267,6 +370,11 @@ public partial class ProjectsView : UserControl
         if (sender is not MenuItem menuItem || menuItem.DataContext is not Project project)
             return;
 
+        await RenameProjectAsync(project);
+    }
+
+    private async Task RenameProjectAsync(Project project)
+    {
         if (_viewModel?.CurrentUser == null || _parentWindow == null)
             return;
 
@@ -293,12 +401,13 @@ public partial class ProjectsView : UserControl
         }
     }
 
-    private void SearchBox_EnterPressed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void SearchBox_EnterPressed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var first = _viewModel?.FilteredProjects.FirstOrDefault();
-        if (first is not null)
+        var project = _viewModel?.SelectedProject ?? _viewModel?.FilteredProjects.FirstOrDefault();
+        if (project is not null)
         {
-            _parentWindow?.OpenProjectTab(first);
+            if (_parentWindow is { } parentWindow)
+                await parentWindow.OpenProjectTab(project);
         }
     }
 
@@ -307,6 +416,11 @@ public partial class ProjectsView : UserControl
         if (sender is not MenuItem menuItem || menuItem.DataContext is not Project project)
             return;
 
+        await DeleteProjectAsync(project);
+    }
+
+    private async Task DeleteProjectAsync(Project project)
+    {
         if (_viewModel?.CurrentUser == null || _parentWindow == null)
         {
             return;

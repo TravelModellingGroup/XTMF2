@@ -247,6 +247,18 @@ Esta acción no se puede deshacer.</value>
   <data name="ModelSystems_UnknownError" xml:space="preserve">
     <value>Error desconocido</value>
   </data>
+  <data name="DocumentLoad_ModelSystemsStatus" xml:space="preserve">
+    <value>Cargando sistemas de modelos...</value>
+  </data>
+  <data name="DocumentLoad_ModelSystemStatus" xml:space="preserve">
+    <value>Cargando sistema de modelos...</value>
+  </data>
+  <data name="DocumentLoad_CheckingStatus" xml:space="preserve">
+    <value>Comprobando sistema de modelos...</value>
+  </data>
+  <data name="DocumentLoad_PreparingEditorStatus" xml:space="preserve">
+    <value>Preparando el editor del sistema de modelos...</value>
+  </data>
   
   <!-- Settings Window -->
   <data name="Settings_Title" xml:space="preserve">
