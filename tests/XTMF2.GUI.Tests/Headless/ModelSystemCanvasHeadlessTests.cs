@@ -74,6 +74,75 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void CommandPaletteBackgroundActionExecutesContextMenuHandler()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(CommandPaletteBackgroundActionExecutesContextMenuHandler),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    canvas.Measure(new Avalonia.Size(800, 600));
+                    canvas.Arrange(new Avalonia.Rect(0, 0, 800, 600));
+
+                    var actions = canvas.GetCommandPaletteActions();
+                    var showGhostLines = actions.Single(action =>
+                        action.DisplayName == "Show Ghost Correspondence Lines");
+                    var initialGhostLineVisibility = vm.ShowGhostCorrespondenceLines;
+                    showGhostLines.Execute();
+                    Assert.AreNotEqual(initialGhostLineVisibility, vm.ShowGhostCorrespondenceLines);
+
+                    var addStart = actions.Single(action => action.DisplayName == "Add Start…");
+                    addStart.Execute();
+
+                    Assert.HasCount(1, vm.Starts);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void CommandPaletteIncludesSelectedNodeAndHookContextActions()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(CommandPaletteIncludesSelectedNodeAndHookContextActions),
+            (user, projectSession, msSession) =>
+            {
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    msSession.ModelSystem.GlobalBoundary,
+                    "LinkedNode",
+                    typeof(LinkedGuiTestModule),
+                    new Rectangle(0, 0, 120, 50),
+                    out var node,
+                    out var error), error?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var nodeViewModel = vm.Nodes.Single(candidate => candidate.UnderlyingNode == node);
+                nodeViewModel.ShowHooks = true;
+                vm.SelectedElement = nodeViewModel;
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    canvas.Measure(new Avalonia.Size(800, 600));
+                    canvas.Arrange(new Avalonia.Rect(0, 0, 800, 600));
+
+                    var actions = canvas.GetCommandPaletteActions();
+                    Assert.IsTrue(actions.Any(action => action.DisplayName == "Delete"));
+                    Assert.IsTrue(actions.Any(action => action.DisplayName == "Add Start…"));
+                    Assert.IsTrue(actions.Any(action => action.DisplayName == "Add Comment"));
+                    Assert.IsTrue(actions.Any(action => action.DisplayName == "Add Module…"));
+                    Assert.IsTrue(actions.Any(action => action.DisplayName.StartsWith(
+                        "Hook LinkedNode.Child /", StringComparison.Ordinal)),
+                        string.Join(" | ", actions.Select(action => action.DisplayName)));
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void ModelSystemCanvas_AddShortcuts_CreateCommentAndFunctionTemplate()
     {
         TestGuiHelper.RunInModelSystemContext(

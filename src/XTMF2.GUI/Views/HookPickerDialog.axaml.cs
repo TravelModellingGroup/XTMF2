@@ -78,6 +78,12 @@ public partial class HookPickerDialog : Window, INotifyPropertyChanged
             ke.Handled = true;
         }, RoutingStrategies.Tunnel);
 
+        HookListBox.DoubleTapped += (_, _) =>
+        {
+            if (HookListBox.SelectedItem is NodeHook)
+                OK_Click(null, new RoutedEventArgs());
+        };
+
         // Pre-select the first item and focus the list on open.
         Opened += (_, _) =>
         {
