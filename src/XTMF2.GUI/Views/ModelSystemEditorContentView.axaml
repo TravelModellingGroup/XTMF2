@@ -5,6 +5,7 @@
              xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
              xmlns:ctrl="clr-namespace:XTMF2.GUI.Controls"
              xmlns:views="clr-namespace:XTMF2.GUI.Views"
+             xmlns:tutorials="clr-namespace:XTMF2.GUI.Tutorials"
              xmlns:res="clr-namespace:XTMF2.GUI.Resources"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
              x:Class="XTMF2.GUI.Views.ModelSystemEditorContentView"
@@ -162,6 +163,7 @@
             <Border BorderBrush="{DynamicResource DlgListBorder}"
                     BorderThickness="1"
                     CornerRadius="4"
+                    Classes.canvas-tutorial-target="{Binding TutorialGuide.IsCanvasTarget}"
                     Margin="0,0,0,0"
                     ClipToBounds="True">
                 <ScrollViewer x:Name="CanvasScrollViewer"
@@ -210,6 +212,31 @@
                         </Style>
                         <Style Selector="Button:disabled">
                             <Setter Property="Opacity" Value="0.35"/>
+                        </Style>
+                        <Style Selector="Border.canvas-tutorial-target">
+                            <Setter Property="BorderBrush" Value="#FF00D4FF"/>
+                            <Setter Property="BorderThickness" Value="2"/>
+                        </Style>
+                        <Style Selector="Button.tutorial-button-target">
+                            <Setter Property="BorderBrush" Value="#FF00D4FF"/>
+                            <Setter Property="BorderThickness" Value="2"/>
+                            <Setter Property="Background" Value="#3300D4FF"/>
+                            <Style.Animations>
+                                <Animation Duration="0:0:1.4" IterationCount="Infinite">
+                                    <KeyFrame Cue="0%">
+                                        <Setter Property="BorderBrush" Value="#FF00D4FF"/>
+                                        <Setter Property="Background" Value="#3300D4FF"/>
+                                    </KeyFrame>
+                                    <KeyFrame Cue="50%">
+                                        <Setter Property="BorderBrush" Value="#FFBF7FFF"/>
+                                        <Setter Property="Background" Value="#33BF7FFF"/>
+                                    </KeyFrame>
+                                    <KeyFrame Cue="100%">
+                                        <Setter Property="BorderBrush" Value="#FF00D4FF"/>
+                                        <Setter Property="Background" Value="#3300D4FF"/>
+                                    </KeyFrame>
+                                </Animation>
+                            </Style.Animations>
                         </Style>
                     </StackPanel.Styles>
 
@@ -298,6 +325,8 @@
 
                     <!-- Save -->
                     <Button Command="{Binding SaveModelSystemCommand}"
+                            x:Name="SaveModelSystemButton"
+                            Classes.tutorial-button-target="{Binding TutorialGuide.TargetId, Converter={x:Static ctrl:TutorialTargetMatchesConverter.Instance}, ConverterParameter={x:Static tutorials:TutorialTargetIds.SaveButton}}"
                             AutomationProperties.Name="Save model system"
                             ToolTip.Tip="Save model system (Ctrl+S)">
                         <Grid Width="24" Height="24">
@@ -386,6 +415,7 @@
 
                     <!-- Run -->
                     <Button Command="{Binding RunModelSystemCommand}"
+                            Classes.tutorial-button-target="{Binding TutorialGuide.TargetId, Converter={x:Static ctrl:TutorialTargetMatchesConverter.Instance}, ConverterParameter={x:Static tutorials:TutorialTargetIds.RunButton}}"
                             AutomationProperties.Name="Run model system"
                             IsEnabled="{Binding CanRun}"
                             ToolTip.Tip="Run this model system (save first to apply changes) (F5)">
@@ -625,6 +655,81 @@
                        Foreground="White"
                        FontSize="13"
                        HorizontalAlignment="Center"/>
+        </Border>
+
+        <Border Grid.Row="1"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Margin="16"
+                Width="340"
+                Padding="16"
+                CornerRadius="8"
+                Background="{DynamicResource DlgBg}"
+                BorderBrush="{DynamicResource NeonPillBorder}"
+                BorderThickness="1.5"
+                IsVisible="{Binding IsTutorialGuideVisible}"
+                ZIndex="200">
+            <StackPanel Spacing="10">
+                <TextBlock Text="{Binding TutorialGuide.StepProgress}"
+                           Foreground="{DynamicResource NeonIconPrimary}"
+                           FontSize="12"
+                           FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding TutorialGuide.Title}"
+                           FontSize="18"
+                           FontWeight="Bold"
+                           TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding TutorialGuide.Instructions}"
+                           TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding TutorialGuide.CompletionConditionWarning}"
+                           Foreground="#FFC62828"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding TutorialGuide.CompletionConditionWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                <TextBlock Text="{Binding TutorialGuide.TargetLabel}"
+                           Foreground="{DynamicResource NeonIconSecondary}"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding TutorialGuide.TargetLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                <StackPanel Spacing="6"
+                            IsVisible="{Binding TutorialGuide.CanShowWhyThisMatters}">
+                    <Button Content="Why this matters"
+                            HorizontalAlignment="Left"
+                            Command="{Binding TutorialGuide.ShowWhyThisMattersCommand}"
+                            IsVisible="{Binding TutorialGuide.CanRevealWhyThisMatters}"
+                            AutomationProperties.Name="Show why this matters explanation"/>
+                    <Border Background="{DynamicResource NeonPillHover}"
+                            BorderBrush="{DynamicResource NeonPillBorder}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="10"
+                            IsVisible="{Binding TutorialGuide.IsWhyThisMattersVisible}">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Why this matters"
+                                       Foreground="{DynamicResource NeonIconSecondary}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding TutorialGuide.WhyThisMatters}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Back"
+                            Command="{Binding TutorialGuide.BackCommand}"
+                            IsEnabled="{Binding TutorialGuide.CanGoBack}"
+                            AutomationProperties.Name="Previous tutorial step"/>
+                    <Button Content="{Binding TutorialGuide.NextButtonText}"
+                            Command="{Binding TutorialGuide.NextCommand}"
+                            IsEnabled="{Binding TutorialGuide.CanAdvance}"
+                            AutomationProperties.Name="Continue tutorial"/>
+                    <Button Content="Skip step"
+                            Command="{Binding TutorialGuide.SkipCommand}"
+                            IsVisible="{Binding TutorialGuide.CanSkip}"
+                            AutomationProperties.Name="Skip current tutorial step"/>
+                </StackPanel>
+            </StackPanel>
         </Border>
 
     </Grid>

@@ -83,27 +83,31 @@ public class Settings
     public int AiMaxCompactionCycles { get; set; } = 100;
     public string DataRoot { get; set; } = XTMFStoragePaths.GetDefaultDesktopDataRoot();
     public List<RunServerEndpoint> RunServers { get; set; } = new() { RunServerEndpoint.CreateLocal() };
+    public List<string> CompletedTutorialIds { get; set; } = new();
 
     public void Save()
     {
         try
         {
-            if (!Directory.Exists(SettingsDirectory))
-            {
-                Directory.CreateDirectory(SettingsDirectory);
-            }
-
-            var json = JsonSerializer.Serialize(this, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            });
-            File.WriteAllText(SettingsPath, json);
+            SaveOrThrow();
         }
         catch
         {
             // Ignore save errors for now
         }
+    }
+
+    public void SaveOrThrow()
+    {
+        if (!Directory.Exists(SettingsDirectory))
+            Directory.CreateDirectory(SettingsDirectory);
+
+        var json = JsonSerializer.Serialize(this, new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        });
+        File.WriteAllText(SettingsPath, json);
     }
 
     private static Settings Load()
@@ -133,6 +137,7 @@ public class Settings
                         ? XTMFStoragePaths.GetDefaultDesktopDataRoot()
                         : loaded.DataRoot;
                     settings.RunServers = NormalizeRunServers(loaded.RunServers);
+                    settings.CompletedTutorialIds = NormalizeTutorialIds(loaded.CompletedTutorialIds);
                 }
             }
         }
@@ -143,6 +148,14 @@ public class Settings
 
         return settings;
     }
+
+    private static List<string> NormalizeTutorialIds(IEnumerable<string>? ids)
+        => ids?
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()
+            ?? new List<string>();
 
     private static List<RunServerEndpoint> NormalizeRunServers(IEnumerable<RunServerEndpoint>? endpoints)
     {

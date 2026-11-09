@@ -26,13 +26,15 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="10">
-            <Button Content="{res:Localize Dialog_Yes}"
+            <Button x:Name="YesButton"
+                    Content="{res:Localize Dialog_Yes}"
                     Classes="dlg-primary"
                     Click="Yes_Click"
                     IsDefault="True"
                     Padding="20,8"
                     MinWidth="80"/>
-            <Button Content="{res:Localize Dialog_No}"
+            <Button x:Name="NoButton"
+                    Content="{res:Localize Dialog_No}"
                     Click="No_Click"
                     IsCancel="True"
                     Padding="20,8"

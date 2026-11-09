@@ -39,6 +39,7 @@ using XTMF2.Editing;
 using XTMF2.GUI.AI;
 using XTMF2.GUI.Controls;
 using XTMF2.GUI.Resources;
+using XTMF2.GUI.Tutorials;
 using XTMF2.GUI.Views;
 using XTMF2.GUI.Properties;
 using XTMF2.ModelSystemConstruct;
@@ -118,7 +119,13 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (ReferenceEquals(_runController, runController))
             return;
 
+        if (_runController is not null)
+            _runController.ModelSystemRunCompleted -= NotifyModelSystemRunCompleted;
+
         _runController = runController;
+        if (_runController is not null)
+            _runController.ModelSystemRunCompleted += NotifyModelSystemRunCompleted;
+
         _loadedEditorViewModel?.SetRunController(runController);
         OnPropertyChanged(nameof(CanRun));
     }
@@ -136,6 +143,14 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// Set by <see cref="MainWindow"/> to switch the active document to the Runs view.
     /// </summary>
     public Action? RunStarted { get; set; }
+
+    public event Action<bool>? ModelSystemRunCompleted;
+
+    internal void NotifyModelSystemRunCompleted(ModelSystemSession session, bool succeeded)
+    {
+        if (ReferenceEquals(Session, session))
+            ModelSystemRunCompleted?.Invoke(succeeded);
+    }
 
     /// <summary>The user who owns this editing session.</summary>
     public User User { get; private set; } = null!;
@@ -214,6 +229,43 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     // ── Canvas collections ────────────────────────────────────────────────
     /// <summary>Observable wrappers around <see cref="Boundary.Modules"/>.</summary>
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
+
+    public TutorialGuideViewModel? TutorialGuide { get; private set; }
+    public bool IsTutorialGuideVisible => TutorialGuide?.IsVisible == true;
+
+    public bool StartTutorial(TutorialDefinition tutorial, Action<TutorialDefinition>? onCompleted = null)
+    {
+        ArgumentNullException.ThrowIfNull(tutorial);
+        if (tutorial.InitializeAction is { } initialize)
+        {
+            var result = initialize(new ModelSystemTutorialSkipContext(this));
+            if (result is null || !result.Succeeded)
+            {
+                ShowToast(result?.Error ?? "The tutorial model could not be prepared.",
+                    isError: true,
+                    durationMs: 6000);
+                return false;
+            }
+        }
+
+        if (TutorialGuide is not null)
+        {
+            TutorialGuide.PropertyChanged -= OnTutorialGuidePropertyChanged;
+            TutorialGuide.Dispose();
+        }
+
+        TutorialGuide = new TutorialGuideViewModel(this, tutorial, onCompleted);
+        TutorialGuide.PropertyChanged += OnTutorialGuidePropertyChanged;
+        OnPropertyChanged(nameof(TutorialGuide));
+        OnPropertyChanged(nameof(IsTutorialGuideVisible));
+        return true;
+    }
+
+    private void OnTutorialGuidePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TutorialGuideViewModel.IsVisible))
+            OnPropertyChanged(nameof(IsTutorialGuideVisible));
+    }
 
     /// <summary>Observable wrappers around <see cref="Boundary.Starts"/>.</summary>
     public ObservableCollection<StartViewModel> Starts { get; } = new();
@@ -861,7 +913,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         ArgumentNullException.ThrowIfNull(user);
         Session = session;
         User = user;
-        _runController = runController;
+        SetRunController(runController);
         if (aiAssistantService is not null)
         {
             AiAssistant = new AiAssistantViewModel(
@@ -921,10 +973,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         ArgumentNullException.ThrowIfNull(user);
         _loadingHeader = header;
         User = user;
-        _runController = runController;
         _isLoadingHost = true;
         _isLoading = true;
         _loadCancellation = new CancellationTokenSource();
+        SetRunController(runController);
     }
 
     public void SetLoadedEditorViewModel(ModelSystemEditorViewModel editorViewModel)
@@ -4335,7 +4387,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public void AddStartAt(double x, double y)
     {
         var location = new Rectangle((float)x, (float)y);
-        Session.AddModelSystemStart(User, _currentBoundary, $"Start {++_startCounter}", location, out _, out _);
+        string name;
+        do
+        {
+            name = $"Start {++_startCounter}";
+        }
+        while (_currentBoundary.Starts.Any(start =>
+            string.Equals(start.Name, name, StringComparison.OrdinalIgnoreCase)));
+
+        Session.AddModelSystemStart(User, _currentBoundary, name, location, out _, out _);
     }
 
     /// <summary>Show a type-picker then add a new module node at the specified canvas position, named after the chosen type.</summary>
@@ -5108,6 +5168,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (_disposed) return;
         _disposed = true;
+        if (_runController is not null)
+            _runController.ModelSystemRunCompleted -= NotifyModelSystemRunCompleted;
+        if (TutorialGuide is not null)
+            TutorialGuide.PropertyChanged -= OnTutorialGuidePropertyChanged;
+        TutorialGuide?.Dispose();
+        TutorialGuide = null;
 
         if (_isLoadingHost)
         {

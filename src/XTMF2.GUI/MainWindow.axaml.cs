@@ -51,6 +51,7 @@ using XTMF2.Editing;
 using XTMF2.GUI.AI;
 using XTMF2.GUI.Controls;
 using XTMF2.GUI.Resources;
+using XTMF2.GUI.Tutorials;
 using XTMF2.GUI.ViewModels;
 using XTMF2.GUI.Views;
 
@@ -934,6 +935,144 @@ public partial class MainWindow : Window
     {
         var aboutDialog = new AboutDialog();
         aboutDialog.ShowDialog(this);
+    }
+
+    private async void StartInteractiveTutorial_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_runtime is null || _currentUser is null)
+            return;
+
+        var runtime = _runtime;
+        var user = _currentUser;
+        TutorialCatalog catalog;
+        try
+        {
+            catalog = TutorialCatalog.FromModuleAssemblies(
+                runtime.Modules.LoadedModuleTypes.Select(moduleType => moduleType.Assembly));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            var catalogDialog = new MessageDialog(
+                exception.Message,
+                "Unable to Load Tutorials",
+                MessageDialog.MessageType.Error);
+            await catalogDialog.ShowDialog(this);
+            return;
+        }
+
+        var settings = Properties.Settings.Default;
+        var progressStore = new TutorialProgressStore(
+            settings.CompletedTutorialIds,
+            completedTutorialIds =>
+            {
+                var previousCompletedTutorialIds = settings.CompletedTutorialIds;
+                settings.CompletedTutorialIds = completedTutorialIds.ToList();
+                try
+                {
+                    settings.SaveOrThrow();
+                }
+                catch
+                {
+                    settings.CompletedTutorialIds = previousCompletedTutorialIds;
+                    throw;
+                }
+            });
+
+        TutorialDefinition? selectedTutorial;
+        if (catalog.Tutorials.Count == 1)
+        {
+            selectedTutorial = catalog.Tutorials[0];
+        }
+        else
+        {
+            var picker = new TutorialPickerDialog(catalog.Entries, progressStore.CompletedTutorialIds);
+            await picker.ShowDialog(this);
+            selectedTutorial = picker.SelectedTutorial;
+            if (selectedTutorial is null)
+                return;
+        }
+
+        var projectName = $"XTMF2 Tutorial {Guid.NewGuid():N}";
+        if (!runtime.ProjectController.CreateNewProject(user, projectName, out var projectSession, out var createError))
+        {
+            var createDialog = new MessageDialog(
+                createError?.Message ?? "The tutorial project could not be created.",
+                "Unable to Start Tutorial",
+                MessageDialog.MessageType.Error);
+            await createDialog.ShowDialog(this);
+            return;
+        }
+
+        ModelSystemSession? tutorialSession = null;
+        string? setupError = null;
+        using (projectSession)
+        {
+            if (!projectSession.CreateNewModelSystem(user, "Getting Started", out var header, out var modelSystemError))
+            {
+                setupError = modelSystemError?.Message ?? "The tutorial model system could not be created.";
+            }
+            else if (!projectSession.EditModelSystem(user, header!, out tutorialSession, out modelSystemError))
+            {
+                setupError = modelSystemError?.Message ?? "The tutorial model system could not be opened.";
+            }
+        }
+
+        if (setupError is not null)
+        {
+            if (!runtime.ProjectController.DeleteProject(user, projectName, out var deleteError))
+                setupError += $"{Environment.NewLine}The empty tutorial project could not be removed: {deleteError?.Message}";
+
+            var setupDialog = new MessageDialog(
+                setupError,
+                "Unable to Start Tutorial",
+                MessageDialog.MessageType.Error);
+            await setupDialog.ShowDialog(this);
+            return;
+        }
+
+        if (tutorialSession is null)
+        {
+            var sessionDialog = new MessageDialog(
+                "The tutorial model system session was not created.",
+                "Unable to Start Tutorial",
+                MessageDialog.MessageType.Error);
+            await sessionDialog.ShowDialog(this);
+            return;
+        }
+
+        var editorTask = OpenModelSystemTabAndGetAsync(tutorialSession, user);
+        tutorialSession = null;
+        var editor = await editorTask;
+        if (editor is null)
+        {
+            var editorDialog = new MessageDialog(
+                "The tutorial model system could not be opened. Check the loading tab for details.",
+                "Unable to Start Tutorial",
+                MessageDialog.MessageType.Error);
+            await editorDialog.ShowDialog(this);
+            return;
+        }
+
+        editor.StartTutorial(selectedTutorial, tutorial =>
+        {
+            try
+            {
+                progressStore.MarkCompleted(tutorial.Id);
+            }
+            catch (Exception exception)
+            {
+                ShowTutorialProgressSaveFailure(exception);
+            }
+        });
+    }
+
+    private async void ShowTutorialProgressSaveFailure(Exception exception)
+    {
+        var dialog = new MessageDialog(
+            $"The tutorial was completed, but its completion status could not be saved.{Environment.NewLine}{exception.Message}",
+            "Unable to Save Tutorial Progress",
+            MessageDialog.MessageType.Error);
+        await dialog.ShowDialog(this);
     }
 
     /// <summary>Updates the active editor when any dock, including a floating dock, activates a document.</summary>

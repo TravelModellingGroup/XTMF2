@@ -24,8 +24,11 @@ using Avalonia.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.GUI.Controls;
 using XTMF2.GUI.Tests.Modules;
+using XTMF2.GUI.Tutorials;
 using XTMF2.GUI.ViewModels;
+using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
+using XTMF2.RuntimeModules;
 using System.Linq;
 using System.Reflection;
 using System;
@@ -138,6 +141,618 @@ public class ModelSystemCanvasHeadlessTests
                     Assert.IsTrue(actions.Any(action => action.DisplayName.StartsWith(
                         "Hook LinkedNode.Child /", StringComparison.Ordinal)),
                         string.Join(" | ", actions.Select(action => action.DisplayName)));
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void TutorialGuideAdvancesAfterRealEditingActions()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(TutorialGuideAdvancesAfterRealEditingActions),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+
+                Session.Dispatch(() =>
+                {
+                    Assert.IsFalse(vm.IsTutorialGuideVisible);
+                    var completionCount = 0;
+                    vm.StartTutorial(
+                        new GettingStartedTutorialProvider().GetTutorials().Single(),
+                        _ => completionCount++);
+                    var tutorial = vm.TutorialGuide!;
+                    Assert.IsTrue(vm.IsTutorialGuideVisible);
+                    Assert.AreEqual("Welcome to XTMF2", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanShowWhyThisMatters);
+                    Assert.IsTrue(tutorial.IsWhyThisMattersVisible);
+                    Assert.IsFalse(tutorial.CanRevealWhyThisMatters);
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Add a Start", tutorial.Title);
+                    Assert.IsTrue(tutorial.IsWhyThisMattersVisible);
+
+                    vm.AddStartAt(20, 20);
+                    Assert.IsTrue(tutorial.CanAdvance);
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Add a module node", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanAdvance);
+                    Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                        user,
+                        msSession.ModelSystem.GlobalBoundary,
+                        "Sleep",
+                        typeof(Sleep),
+                        new Rectangle(20, 20, 120, 50),
+                        out _,
+                        out _,
+                        out var error), error?.Message);
+                    Assert.IsTrue(tutorial.CanAdvance);
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Connect Start to the node", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanAdvance);
+                    var start = msSession.ModelSystem.GlobalBoundary.Starts.Single();
+                    var toExecute = start.Hooks!.Single(hook => hook.Name == "ToExecute");
+                    Assert.IsTrue(msSession.AddLink(
+                        user,
+                        start,
+                        toExecute,
+                        msSession.ModelSystem.GlobalBoundary.Modules.Single(node => node.Type == typeof(Sleep)),
+                        out _,
+                        out error), error?.Message);
+                    Assert.IsTrue(tutorial.CanAdvance);
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Add a comment", tutorial.Title);
+                    Assert.IsTrue(msSession.AddCommentBlock(
+                        user,
+                        msSession.ModelSystem.GlobalBoundary,
+                        "Tutorial comment",
+                        new Rectangle(20, 100, 160, 80),
+                        out _,
+                        out error), error?.Message);
+                    Assert.IsTrue(tutorial.CanAdvance);
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Save your model system", tutorial.Title);
+                    Assert.AreEqual(TutorialTargetIds.SaveButton, tutorial.TargetId);
+                    Assert.IsTrue(msSession.Save(out error), error?.Message);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    Assert.AreEqual(0, completionCount);
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Run your model system", tutorial.Title);
+                    Assert.AreEqual(TutorialTargetIds.RunButton, tutorial.TargetId);
+                    Assert.IsFalse(tutorial.CanAdvance);
+                    vm.NotifyModelSystemRunCompleted(msSession, succeeded: false);
+                    Assert.IsFalse(tutorial.CanAdvance);
+                    vm.NotifyModelSystemRunCompleted(msSession, succeeded: true);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    Assert.AreEqual(0, completionCount);
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Getting Started complete", tutorial.Title);
+                    Assert.IsNull(tutorial.TargetId);
+                    Assert.AreEqual(1, completionCount);
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual(1, completionCount);
+                    Assert.IsFalse(vm.IsTutorialGuideVisible);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void TutorialGuideDoesNotOfferSkipWithoutStateAction()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(TutorialGuideDoesNotOfferSkipWithoutStateAction),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var completionCount = 0;
+                var tutorialDefinition = new TutorialDefinition(
+                    "tests.skipped-tutorial",
+                    "Skipped tutorial",
+                    "Test that skipping does not count as completion.",
+                    [
+                        new TutorialStepDefinition(
+                            "intro",
+                            "Intro",
+                            "Begin the lesson.",
+                            new TutorialCompletionCondition(TutorialCompletionKinds.Manual)),
+                        new TutorialStepDefinition(
+                            "lesson",
+                            "Lesson",
+                            "Complete the lesson.",
+                            new TutorialCompletionCondition(TutorialCompletionKinds.Manual))
+                    ]);
+
+                Session.Dispatch(() =>
+                {
+                    vm.StartTutorial(tutorialDefinition, _ => completionCount++);
+                    var tutorial = vm.TutorialGuide!;
+                    Assert.IsFalse(tutorial.CanSkip);
+                    tutorial.SkipCommand.Execute(null);
+
+                    Assert.AreEqual(0, completionCount);
+                    Assert.AreEqual("Intro", tutorial.Title);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void TutorialGuideSkipAppliesStateActionAndAdvancesOneStep()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(TutorialGuideSkipAppliesStateActionAndAdvancesOneStep),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var tutorialDefinition = new GettingStartedTutorialProvider().GetTutorials().Single();
+
+                Session.Dispatch(() =>
+                {
+                    vm.StartTutorial(tutorialDefinition);
+                    var tutorial = vm.TutorialGuide!;
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Add a Start", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                    tutorial.SkipCommand.Execute(null);
+
+                    Assert.AreEqual("Add a module node", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                    tutorial.SkipCommand.Execute(null);
+
+                    Assert.AreEqual("Connect Start to the node", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                    tutorial.SkipCommand.Execute(null);
+
+                    Assert.AreEqual("Add a comment", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                    tutorial.SkipCommand.Execute(null);
+
+                    Assert.AreEqual("Save your model system", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                    tutorial.SkipCommand.Execute(null);
+
+                    Assert.AreEqual("Run your model system", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanSkip);
+                    Assert.AreEqual(
+                        "Start 1",
+                        msSession.ModelSystem.GlobalBoundary.Starts.Single().Name);
+                    Assert.IsGreaterThanOrEqualTo(
+                        420f,
+                        msSession.ModelSystem.GlobalBoundary.Starts.Single().Location.X);
+                    Assert.AreEqual(
+                        typeof(Sleep),
+                        msSession.ModelSystem.GlobalBoundary.Modules.Single(node => node.Type == typeof(Sleep)).Type);
+                    Assert.IsGreaterThanOrEqualTo(
+                        420f,
+                        msSession.ModelSystem.GlobalBoundary.Modules.Single(node => node.Type == typeof(Sleep)).Location.X);
+                    var executionLink = (SingleLink)msSession.ModelSystem.GlobalBoundary.Links
+                        .Single(link => link.OriginHook.Name == "ToExecute");
+                    Assert.AreEqual(typeof(Sleep), executionLink.Destination.Type);
+                    Assert.AreEqual(
+                        "Model behavior",
+                        msSession.ModelSystem.GlobalBoundary.CommentBlocks.Single().Header);
+                    Assert.HasCount(1, vm.Starts);
+                    Assert.IsTrue(vm.Nodes.Any(node => node.UnderlyingNode.Type == typeof(Sleep)));
+                    Assert.HasCount(1, vm.Links.Where(link => link.UnderlyingLink.OriginHook.Name == "ToExecute"));
+                    Assert.HasCount(1, vm.CommentBlocks);
+                    Assert.IsFalse(msSession.IsDirty);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void LogTutorialSkipPreparesThePipelineBeforeMessageConfiguration()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(LogTutorialSkipPreparesThePipelineBeforeMessageConfiguration),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var tutorialDefinition = new BuiltInRuntimeModuleTutorialProvider()
+                    .GetTutorials()
+                    .Single(tutorial => tutorial.Order == 2);
+
+                Session.Dispatch(() =>
+                {
+                    vm.StartTutorial(tutorialDefinition);
+                    var tutorial = vm.TutorialGuide!;
+                    tutorial.NextCommand.Execute(null);
+
+                    string[] skippableStepTitles =
+                    [
+                        "Add a Start",
+                        "Add a run-status stream",
+                        "Add a Log",
+                        "Choose where Log writes",
+                        "Add the first message action",
+                        "Connect the first action to Log",
+                        "Start the message sequence"
+                    ];
+                    foreach (var title in skippableStepTitles)
+                    {
+                        Assert.AreEqual(title, tutorial.Title);
+                        Assert.IsTrue(tutorial.CanSkip);
+                        tutorial.SkipCommand.Execute(null);
+                    }
+
+                    Assert.AreEqual("Set the first message", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanSkip);
+
+                    var boundary = msSession.ModelSystem.GlobalBoundary;
+                    var start = boundary.Starts.Single();
+                    var statusStream = boundary.Modules.Single(node => node.Name == "Run Status Stream");
+                    var log = boundary.Modules.Single(node => node.Name == "Log");
+                    var firstAction = boundary.Modules.Single(node => node.Name == "Write Message 1");
+                    bool HasLink(Node origin, string hookName, Node destination)
+                        => boundary.Links.Any(link =>
+                            ReferenceEquals(link.Origin, origin)
+                            && link.OriginHook.Name == hookName
+                            && (link is SingleLink single && ReferenceEquals(single.Destination, destination)
+                                || link is MultiLink multi && multi.Destinations.Contains(destination)));
+
+                    Assert.AreEqual(typeof(OpenWriteStreamToRunStatus), statusStream.Type);
+                    Assert.AreEqual(typeof(Log), log.Type);
+                    Assert.AreEqual(typeof(WriteToLogA), firstAction.Type);
+                    Assert.IsTrue(HasLink(log, "LogStream", statusStream));
+                    Assert.IsTrue(HasLink(firstAction, "Log", log));
+                    Assert.IsTrue(HasLink(start, "ToExecute", firstAction));
+
+                    tutorial.NextCommand.Execute(null);
+                    string[] secondActionStepTitles =
+                    [
+                        "Add a second message action",
+                        "Connect the second action to Log",
+                        "Run the second action next"
+                    ];
+                    foreach (var title in secondActionStepTitles)
+                    {
+                        Assert.AreEqual(title, tutorial.Title);
+                        Assert.IsTrue(tutorial.CanSkip);
+                        tutorial.SkipCommand.Execute(null);
+                    }
+
+                    Assert.AreEqual("Set the second message", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanSkip);
+                    var secondAction = boundary.Modules.Single(node => node.Name == "Write Message 2");
+                    Assert.AreEqual(typeof(WriteToLogA), secondAction.Type);
+                    Assert.IsTrue(HasLink(secondAction, "Log", log));
+                    Assert.IsTrue(HasLink(firstAction, "To Invoke", secondAction));
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Save the model system", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                    tutorial.SkipCommand.Execute(null);
+                    Assert.AreEqual("Run and inspect the messages", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanSkip);
+                    Assert.IsFalse(msSession.IsDirty);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ExecuteIterationTutorialSkipPreparesTheExecutionAndLoggingGraph()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ExecuteIterationTutorialSkipPreparesTheExecutionAndLoggingGraph),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var tutorialDefinition = new BuiltInRuntimeModuleTutorialProvider()
+                    .GetTutorials()
+                    .Single(tutorial => tutorial.Order == 3);
+
+                Session.Dispatch(() =>
+                {
+                    vm.StartTutorial(tutorialDefinition);
+                    var tutorial = vm.TutorialGuide!;
+                    tutorial.NextCommand.Execute(null);
+
+                    string[] setupStepTitles =
+                    [
+                        "Add a Start",
+                        "Add Execute",
+                        "Connect Start to Execute",
+                        "Add a Log",
+                        "Add a run-status stream",
+                        "Connect Log to the run output",
+                        "Add an iteration value",
+                        "Connect Execute to the iteration value"
+                    ];
+                    foreach (var title in setupStepTitles)
+                    {
+                        Assert.AreEqual(title, tutorial.Title);
+                        Assert.IsTrue(tutorial.CanSkip);
+                        tutorial.SkipCommand.Execute(null);
+                    }
+
+                    Assert.AreEqual("Make the iteration value available", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanSkip);
+                    var boundary = msSession.ModelSystem.GlobalBoundary;
+                    var start = boundary.Starts.Single();
+                    var execute = boundary.Modules.Single(node => node.Name == "Execute");
+                    var log = boundary.Modules.Single(node => node.Name == "Log");
+                    var statusStream = boundary.Modules.Single(node => node.Name == "Run Status Stream");
+                    var currentIteration = boundary.Modules.Single(node => node.Name == "CurrentIteration");
+                    bool HasLink(Node origin, string hookName, Node destination)
+                        => boundary.Links.Any(link =>
+                            ReferenceEquals(link.Origin, origin)
+                            && link.OriginHook.Name == hookName
+                            && (link is SingleLink single && ReferenceEquals(single.Destination, destination)
+                                || link is MultiLink multi && multi.Destinations.Contains(destination)));
+
+                    Assert.AreEqual(typeof(Execute), execute.Type);
+                    Assert.AreEqual(typeof(Log), log.Type);
+                    Assert.AreEqual(typeof(OpenWriteStreamToRunStatus), statusStream.Type);
+                    Assert.AreEqual(typeof(SetableParameter<int>), currentIteration.Type);
+                    Assert.IsTrue(HasLink(start, "ToExecute", execute));
+                    Assert.IsTrue(HasLink(execute, "Current Iteration", currentIteration));
+                    Assert.IsTrue(HasLink(log, "LogStream", statusStream));
+
+                    Assert.IsNull(currentIteration.ParameterValue);
+                    Assert.IsTrue(msSession.SetParameterValue(user, currentIteration, "0", out var error), error?.Message);
+                    Assert.IsTrue(msSession.AddVariable(user, currentIteration, out error), error?.Message);
+                    Assert.Contains(currentIteration, msSession.ModelSystem.Variables);
+                    tutorial.NextCommand.Execute(null);
+                    foreach (var title in new[]
+                    {
+                        "Add a logging action",
+                        "Add the action to Execute",
+                        "Connect the action to Log"
+                    })
+                    {
+                        Assert.AreEqual(title, tutorial.Title);
+                        Assert.IsTrue(tutorial.CanSkip);
+                        tutorial.SkipCommand.Execute(null);
+                    }
+
+                    Assert.AreEqual("Script the iteration message", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanSkip);
+                    var logAction = boundary.Modules.Single(node => node.Name == "Log Iteration");
+                    Assert.AreEqual(typeof(WriteToLogA), logAction.Type);
+                    Assert.IsTrue(HasLink(execute, "To Execute", logAction));
+                    Assert.IsTrue(HasLink(logAction, "Log", log));
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Choose the number of iterations", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanSkip);
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Save the model system", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void FunctionTemplateTutorialTracksExtractionNavigationAndReuse()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(FunctionTemplateTutorialTracksExtractionNavigationAndReuse),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var tutorialDefinition = new BuiltInRuntimeModuleTutorialProvider()
+                    .GetTutorials()
+                    .Single(tutorial => tutorial.Order == 4);
+
+                Session.Dispatch(() =>
+                {
+                    Assert.IsTrue(vm.StartTutorial(tutorialDefinition));
+                    var tutorial = vm.TutorialGuide!;
+                    Assert.AreEqual("Reuse an Iteration Logger", tutorial.Title);
+                    Assert.AreEqual("welcome", tutorialDefinition.Steps[0].Id);
+                    var boundary = msSession.ModelSystem.GlobalBoundary;
+                    var start = boundary.Starts.Single();
+                    var execute = boundary.Modules.Single(node => node.Name == "Execute");
+                    var logAction = boundary.Modules.Single(node => node.Name == "Log Iteration");
+                    var log = boundary.Modules.Single(node => node.Name == "Log");
+                    var statusStream = boundary.Modules.Single(node => node.Name == "Run Status Stream");
+                    var currentIteration = boundary.Modules.Single(node => node.Name == "CurrentIteration");
+                    var scriptedMessage = boundary.Modules.Single(node => node.Name == "Message");
+                    var iterations = boundary.Modules.Single(node => node.Name == "Iterations");
+
+                    Assert.AreEqual(typeof(Execute), execute.Type);
+                    Assert.AreEqual(typeof(WriteToLogA), logAction.Type);
+                    Assert.AreEqual(typeof(SetableParameter<int>), currentIteration.Type);
+                    Assert.AreEqual(typeof(ScriptedParameter<string>), scriptedMessage.Type);
+                    Assert.AreEqual(typeof(OpenWriteStreamToRunStatus), statusStream.Type);
+                    Assert.IsNotNull(currentIteration.ParameterValue);
+                    Assert.IsNotNull(iterations.ParameterValue);
+                    Assert.Contains(currentIteration, msSession.ModelSystem.Variables);
+                    Assert.IsEmpty(boundary.FunctionTemplates);
+                    Assert.IsEmpty(boundary.FunctionInstances);
+                    Assert.IsTrue(boundary.Links.Any(link =>
+                        ReferenceEquals(link.Origin, start)
+                        && link.OriginHook.Name == "ToExecute"
+                        && link is SingleLink startLink
+                        && ReferenceEquals(startLink.Destination, execute)));
+                    Assert.IsTrue(boundary.Links.Any(link =>
+                        ReferenceEquals(link.Origin, execute)
+                        && link.OriginHook.Name == "To Execute"
+                        && (link is SingleLink executeLink
+                                && ReferenceEquals(executeLink.Destination, logAction)
+                            || link is MultiLink executeMultiLink
+                                && executeMultiLink.Destinations.Contains(logAction))));
+                    Assert.IsTrue(boundary.Links.Any(link =>
+                        ReferenceEquals(link.Origin, execute)
+                        && link.OriginHook.Name == "Current Iteration"
+                        && link is SingleLink iterationLink
+                        && ReferenceEquals(iterationLink.Destination, currentIteration)));
+                    Assert.IsTrue(boundary.Links.Any(link =>
+                        ReferenceEquals(link.Origin, logAction)
+                        && link.OriginHook.Name == "Log"
+                        && link is SingleLink logLink
+                        && ReferenceEquals(logLink.Destination, log)));
+                    Assert.IsTrue(boundary.Links.Any(link =>
+                        ReferenceEquals(link.Origin, log)
+                        && link.OriginHook.Name == "LogStream"
+                        && link is SingleLink streamLink
+                        && ReferenceEquals(streamLink.Destination, statusStream)));
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Extract the logger into a template", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanAdvance);
+
+                    Assert.IsTrue(msSession.ExtractToFunctionTemplate(
+                        user,
+                        boundary,
+                        [logAction],
+                        "Iteration Logger",
+                        "Iteration Logger",
+                        Rectangle.Hidden,
+                        Rectangle.Hidden,
+                        out var template,
+                        out var firstInstance,
+                        out var error), error?.Message);
+                    Assert.IsNotNull(template);
+                    Assert.IsNotNull(firstInstance);
+                    Assert.AreEqual("Log", template!.FunctionParameters.Single().Name);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+
+                    Assert.AreEqual("Open the instance's template", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanAdvance);
+                    var templateViewModel = vm.FunctionTemplates.Single(candidate =>
+                        candidate.UnderlyingTemplate == template);
+                    vm.NavigateIntoFunctionTemplate(templateViewModel);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+
+                    Assert.AreEqual("Inspect the template contents", tutorial.Title);
+                    Assert.IsTrue(vm.IsInsideFunctionTemplate);
+                    Assert.IsTrue(vm.Nodes.Any(node => node.UnderlyingNode.Type == typeof(WriteToLogA)));
+                    tutorial.NextCommand.Execute(null);
+
+                    Assert.AreEqual("Return to the parent model", tutorial.Title);
+                    vm.NavigateUpCommand.Execute(null);
+                    Assert.IsFalse(vm.IsInsideFunctionTemplate);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+
+                    Assert.AreEqual("Add another instance", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanAdvance);
+                    Assert.IsTrue(msSession.AddFunctionInstanceGenerateParameters(
+                        user,
+                        boundary,
+                        template,
+                        "Iteration Logger 2",
+                        Rectangle.Hidden,
+                        out var secondInstance,
+                        out _,
+                        out error), error?.Message);
+                    Assert.IsNotNull(secondInstance);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+
+                    Assert.AreEqual("Supply the second instance's Log", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanAdvance);
+                    Assert.IsTrue(msSession.AddLink(
+                        user,
+                        secondInstance!,
+                        secondInstance!.Hooks.Single(hook => hook.Name == "Log"),
+                        log,
+                        out _,
+                        out error), error?.Message);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+
+                    Assert.AreEqual("Run both instances in each iteration", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanAdvance);
+                    Assert.IsTrue(msSession.AddLink(
+                        user,
+                        execute,
+                        execute.Hooks.Single(hook => hook.Name == "To Execute"),
+                        secondInstance!,
+                        out _,
+                        out error), error?.Message);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+
+                    Assert.AreEqual("Save the model system", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                    tutorial.SkipCommand.Execute(null);
+                    Assert.AreEqual("Run and confirm reuse", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanSkip);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void TutorialGuideTracksStartAndTargetedLinkAddedForCurrentStep()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(TutorialGuideTracksStartAndTargetedLinkAddedForCurrentStep),
+            (user, projectSession, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+
+                Session.Dispatch(() =>
+                {
+                    var tutorialDefinition = new TutorialDefinition(
+                        "tests.start-and-link",
+                        "Start and link",
+                        "Test start and link completion conditions.",
+                        [
+                            new TutorialStepDefinition(
+                                "intro",
+                                "Intro",
+                                "Begin the lesson.",
+                                new TutorialCompletionCondition(TutorialCompletionKinds.Manual),
+                                "This explanation is optional for provider tutorials."),
+                            new TutorialStepDefinition(
+                                "add-start",
+                                "Add Start",
+                                "Add a Start node.",
+                                new TutorialCompletionCondition(TutorialCompletionKinds.StartAdded)),
+                            new TutorialStepDefinition(
+                                "add-execute",
+                                "Add Execute",
+                                "Add an Execute module.",
+                                new TutorialCompletionCondition(
+                                    TutorialCompletionKinds.ModuleAdded,
+                                    typeof(Execute).AssemblyQualifiedName)),
+                            new TutorialStepDefinition(
+                                "connect",
+                                "Connect Start",
+                                "Connect Start to Execute.",
+                                new TutorialCompletionCondition(TutorialCompletionKinds.LinkAdded, "ToExecute"))
+                        ]);
+                    vm.StartTutorial(tutorialDefinition);
+                    var guide = vm.TutorialGuide!;
+                    Assert.IsTrue(guide.CanShowWhyThisMatters);
+                    Assert.IsFalse(guide.IsWhyThisMattersVisible);
+                    Assert.IsTrue(guide.CanRevealWhyThisMatters);
+                    guide.ShowWhyThisMattersCommand.Execute(null);
+                    Assert.IsTrue(guide.IsWhyThisMattersVisible);
+                    Assert.IsFalse(guide.CanRevealWhyThisMatters);
+                    guide.NextCommand.Execute(null);
+                    Assert.IsFalse(guide.IsWhyThisMattersVisible);
+
+                    Assert.IsFalse(guide.CanAdvance);
+                    vm.AddStartAt(20, 20);
+                    Assert.IsTrue(guide.CanAdvance);
+                    guide.NextCommand.Execute(null);
+
+                    Assert.IsFalse(guide.CanAdvance);
+                    Assert.IsTrue(msSession.AddNode(
+                        user,
+                        msSession.ModelSystem.GlobalBoundary,
+                        "Execute",
+                        typeof(Execute),
+                        new Rectangle(180, 20, 120, 50),
+                        out var execute,
+                        out var error), error?.Message);
+                    Assert.IsTrue(guide.CanAdvance);
+                    guide.NextCommand.Execute(null);
+
+                    Assert.IsFalse(guide.CanAdvance);
+                    var start = vm.Starts.Single().UnderlyingStart;
+                    var toExecute = start.Hooks!.Single(hook => hook.Name == "ToExecute");
+                    Assert.IsTrue(msSession.AddLink(user, start, toExecute, execute!, out _, out error), error?.Message);
+                    Assert.IsTrue(guide.CanAdvance);
                 }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
             });
     }

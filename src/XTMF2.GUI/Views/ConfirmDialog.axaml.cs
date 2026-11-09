@@ -57,13 +57,16 @@ public partial class ConfirmDialog : Window, INotifyPropertyChanged
         Message = message;
     }
 
-    private void RegisterEscapeClose() =>
+    private void RegisterEscapeClose()
+    {
+        Opened += (_, _) => YesButton.Focus();
         AddHandler(KeyDownEvent, (_, ke) =>
         {
             if (ke.Key != Key.Escape) return;
             No_Click(null, new RoutedEventArgs());
             ke.Handled = true;
         }, RoutingStrategies.Tunnel);
+    }
 
     private void Yes_Click(object? sender, RoutedEventArgs e)
     {

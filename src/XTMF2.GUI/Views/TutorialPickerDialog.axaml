@@ -1,0 +1,97 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:XTMF2.GUI.Views"
+        x:Class="XTMF2.GUI.Views.TutorialPickerDialog"
+        x:DataType="local:TutorialPickerDialog"
+        x:CompileBindings="True"
+        Classes="neon-dialog"
+        Title="Choose a Tutorial"
+        Width="760"
+        Height="460"
+        MinWidth="620"
+        MinHeight="380"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+    <Grid RowDefinitions="Auto,*,Auto"
+          ColumnDefinitions="*,*"
+          ColumnSpacing="16"
+          Margin="20">
+        <StackPanel Grid.Row="0"
+                    Grid.ColumnSpan="2"
+                    Spacing="6"
+                    Margin="0,0,0,14">
+            <TextBlock Text="Interactive Tutorials"
+                       FontSize="20"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource DlgAccent}"/>
+            <TextBlock Text="Choose a tutorial to practice in a separate project."
+                       Foreground="{DynamicResource DlgSubFg}"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <ListBox x:Name="TutorialList"
+                 Grid.Row="1"
+                 Grid.Column="0"
+                 DoubleTapped="OnTutorialDoubleTapped"
+                 SelectionChanged="OnTutorialSelectionChanged">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="local:TutorialPickerItem">
+                    <Border Padding="6" Margin="1">
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="{Binding LibraryName}"
+                                       FontSize="10"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource DlgAccent}"
+                                       IsVisible="{Binding IsFirstInLibrary}"/>
+                            <Grid ColumnDefinitions="28,*">
+                                <CheckBox Grid.Column="0"
+                                          IsChecked="{Binding IsCompleted, Mode=OneWay}"
+                                          IsHitTestVisible="False"
+                                          Focusable="False"
+                                          Foreground="{DynamicResource DlgAccent}"
+                                          VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding NumberedTitle}"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="Wrap"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <Border Grid.Row="1"
+                Grid.Column="1"
+                Classes="dlg-list"
+                Padding="16"
+                Background="{DynamicResource DlgInputBg}">
+            <StackPanel Spacing="10">
+                <TextBlock x:Name="SelectedTutorialTitle"
+                           Text="Select a tutorial"
+                           FontSize="18"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource DlgAccent}"
+                           TextWrapping="Wrap"/>
+                <TextBlock x:Name="SelectedTutorialDescription"
+                           Text="Choose a tutorial to read its description."
+                           Foreground="{DynamicResource DlgSubFg}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="2"
+                    Grid.ColumnSpan="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,14,0,0">
+            <Button Content="Cancel" Click="OnCancelClick"/>
+            <Button x:Name="StartButton"
+                    Classes="dlg-primary"
+                    Content="Start Tutorial"
+                    IsEnabled="False"
+                    Click="OnStartClick"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -98,6 +98,12 @@ public class RunController : IDisposable
     public event Action<string, ModelSystemSession, IReadOnlyList<(int nodeIndex, double value)>>? OptimizationResultsAvailable;
 
     /// <summary>
+    /// Raised when a model-system run reaches a terminal state.
+    /// The Boolean value is true only when the run completed successfully.
+    /// </summary>
+    public event Action<ModelSystemSession, bool>? ModelSystemRunCompleted;
+
+    /// <summary>
     /// Raised when a configured RunServer changes connection state.
     /// </summary>
     public event Action<RunServerConnectionInfo>? RunServerStateChanged;
@@ -218,6 +224,7 @@ public class RunController : IDisposable
         Console.WriteLine($"GUI received RunServer runtime error: {runID}: {errorMessage}");
         Console.Out.Flush();
         RunsViewModel.NotifyError(runID, errorMessage, stack, moduleName, elementId);
+        NotifyModelSystemRunCompleted(runID, succeeded: false);
     }
 
     private void OnClientFinishedModelSystem(object? sender, string runID)
@@ -227,6 +234,17 @@ public class RunController : IDisposable
         var isRemoteRun = sender is HostBus hostBus &&
             _connections.TryGetEndpoint(hostBus, out var endpoint) && endpoint is { IsLocal: false };
         RunsViewModel.NotifyFinished(runID, isRemoteRunPreparingOutput: isRemoteRun);
+        NotifyModelSystemRunCompleted(runID, succeeded: true);
+    }
+
+    private void NotifyModelSystemRunCompleted(string runId, bool succeeded)
+    {
+        ModelSystemSession? session;
+        lock (_sessionsByRunId)
+            session = _sessionsByRunId.TryGetValue(runId, out var run) ? run.Session : null;
+
+        if (session is not null)
+            ModelSystemRunCompleted?.Invoke(session, succeeded);
     }
 
     private void OnClientRunArtifactsReceived(object? sender, HostBus.RunArtifactsReceivedEventArgs args)
