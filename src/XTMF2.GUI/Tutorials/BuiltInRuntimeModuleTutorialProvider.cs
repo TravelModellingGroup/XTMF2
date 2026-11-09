@@ -453,6 +453,104 @@ public sealed class BuiltInRuntimeModuleTutorialProvider : ITutorialProvider
             ],
             order: 4,
             initializeAction: PrepareIterationLoggingModel);
+
+        yield return new TutorialDefinition(
+            "xtmf2.runtime.parameter-estimation",
+            "Estimate a Model Parameter",
+            "You nominated a numeric parameter, configured its fitness function and search bounds, ran an estimation, and applied the best result.",
+            [
+                new TutorialStepDefinition(
+                    "welcome",
+                    "Estimate a Model Parameter",
+                    "This isolated example is ready to estimate EstimatedValue. Its fitness function is lowest at 0.2, so you can compare the result with a known answer.",
+                    new TutorialCompletionCondition(TutorialCompletionKinds.Manual),
+                    "Estimation evaluates the model repeatedly with candidate parameter values, then searches for the value that best satisfies the selected objective."),
+                new TutorialStepDefinition(
+                    "add-estimation-parameter",
+                    "Choose the parameter to estimate",
+                    "Right-click EstimatedValue and choose Add to Estimation Parameters. This creates a Default group and adds the numeric parameter to it.",
+                    new TutorialCompletionCondition(
+                        TutorialCompletionKinds.EstimationParameterAdded,
+                        "EstimatedValue"),
+                    "The entry's minimum and maximum constrain the search; its null hypothesis is the initial candidate value.",
+                    TutorialTargetIds.Canvas)
+                {
+                    SkipAction = context => context.EnsureEstimationParameter(
+                        "EstimatedValue", min: 0.0, max: 1.0, nullHypothesis: 0.8)
+                },
+                new TutorialStepDefinition(
+                    "configure-estimation",
+                    "Configure the fitness and objective",
+                    "Open Estimation Parameters with Ctrl+Shift+E. Select Fitness as the Fitness Function Node, choose Minimize, and confirm the enabled EstimatedValue entry has bounds 0 to 1 and null hypothesis 0.8. Leave the default Nelder-Mead algorithm selected.",
+                    new TutorialCompletionCondition(
+                        TutorialCompletionKinds.EstimationConfigured,
+                        "Fitness"),
+                    "The fitness function scores each candidate. Minimize asks the search algorithm to find the lowest score within the parameter bounds.",
+                    TutorialTargetIds.EstimationSettingsButton),
+                new TutorialStepDefinition(
+                    "save",
+                    "Save the estimation setup",
+                    "Save the model system with Ctrl+S or the Save button before starting the estimation.",
+                    new TutorialCompletionCondition(TutorialCompletionKinds.ModelSystemSaved),
+                    "Saving preserves the fitness selection and estimation parameter settings.",
+                    TutorialTargetIds.SaveButton)
+                {
+                    SkipAction = context => context.SaveModelSystem()
+                },
+                new TutorialStepDefinition(
+                    "run-estimation",
+                    "Run the estimation",
+                    "Press Ctrl+F5 or choose Run Estimation. Select Start 1 and the Local RunServer, then start the run. Return to this tutorial after the estimation finishes.",
+                    new TutorialCompletionCondition(TutorialCompletionKinds.EstimationRunCompleted),
+                    "The estimator runs the model for candidate values and reports its best fitness and parameter values.",
+                    TutorialTargetIds.EstimationRunButton),
+                new TutorialStepDefinition(
+                    "apply-estimation-result",
+                    "Review and apply the result",
+                    "In the Runs view, select the completed estimation. Confirm EstimatedValue is near 0.2 and the fitness is near 0, then choose Apply Optimization Results to Model System. Return to this tutorial afterward.",
+                    new TutorialCompletionCondition(
+                        TutorialCompletionKinds.ParameterValueChanged,
+                        "EstimatedValue"),
+                    "Estimation results are kept separate from the model until you apply them."),
+                new TutorialStepDefinition(
+                    "save-estimated-value",
+                    "Save the estimated value",
+                    "Save the model system again to preserve the applied parameter value.",
+                    new TutorialCompletionCondition(TutorialCompletionKinds.ModelSystemSaved),
+                    "The model now contains the best value found by the estimation run.",
+                    TutorialTargetIds.SaveButton)
+                {
+                    SkipAction = context => context.SaveModelSystem()
+                }
+            ],
+            order: 5,
+            initializeAction: PrepareEstimationModel);
+    }
+
+    private static TutorialSkipResult PrepareEstimationModel(ITutorialSkipContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        TutorialStepSkipAction[] setupActions =
+        [
+            c => c.EnsureStart("Start 1"),
+            c => c.EnsureModule(typeof(BasicParameter<float>), "EstimatedValue"),
+            c => c.EnsureParameterValue("EstimatedValue", "0.8"),
+            c => c.EnsureModelSystemVariable("EstimatedValue"),
+            c => c.EnsureModule(typeof(ScriptedParameter<float>), "Fitness"),
+            c => c.EnsureScriptedParameter(
+                "Fitness",
+                typeof(ScriptedParameter<float>),
+                "(EstimatedValue - 0.2) * (EstimatedValue - 0.2)")
+        ];
+
+        foreach (var setupAction in setupActions)
+        {
+            var result = setupAction(context);
+            if (!result.Succeeded)
+                return result;
+        }
+
+        return TutorialSkipResult.Success;
     }
 
     private static TutorialSkipResult PrepareIterationLoggingModel(ITutorialSkipContext context)

@@ -152,6 +152,8 @@ public interface ITutorialSkipContext
     TutorialSkipResult EnsureStart(string name);
     TutorialSkipResult EnsureModule(Type moduleType, string name);
     TutorialSkipResult EnsureLink(string originName, string hookName, string destinationName);
+    TutorialSkipResult EnsureEstimationParameter(
+        string parameterNodeName, double min, double max, double nullHypothesis);
     TutorialSkipResult EnsureParameterValue(string parameterNodeName, string value);
     TutorialSkipResult EnsureModelSystemVariable(string nodeName);
     TutorialSkipResult EnsureScriptedParameter(string parameterNodeName, Type scriptedParameterType, string expression);
@@ -214,6 +216,10 @@ public static class TutorialCompletionKinds
     public const string FunctionTemplateOpened = "function-template-opened";
     public const string FunctionTemplateClosed = "function-template-closed";
     public const string CommentAdded = "comment-added";
+    public const string EstimationParameterAdded = "estimation-parameter-added";
+    public const string EstimationConfigured = "estimation-configured";
+    public const string EstimationRunCompleted = "estimation-run-completed";
+    public const string ParameterValueChanged = "parameter-value-changed";
     public const string ModelSystemSaved = "model-system-saved";
     public const string ModelSystemRunCompleted = "model-system-run-completed";
 }

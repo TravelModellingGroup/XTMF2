@@ -436,6 +436,7 @@
 
                     <!-- Estimation Run — only visible when estimation targets are configured -->
                     <Button Command="{Binding RunEstimationCommand}"
+                            Classes.tutorial-button-target="{Binding TutorialGuide.TargetId, Converter={x:Static ctrl:TutorialTargetMatchesConverter.Instance}, ConverterParameter={x:Static tutorials:TutorialTargetIds.EstimationRunButton}}"
                             AutomationProperties.Name="Run estimation"
                             IsEnabled="{Binding CanRun}"
                             IsVisible="{Binding HasEstimationTargets}"
@@ -510,6 +511,7 @@
 
                     <!-- Estimation parameters -->
                     <Button Click="OnShowEstimationClick"
+                            Classes.tutorial-button-target="{Binding TutorialGuide.TargetId, Converter={x:Static ctrl:TutorialTargetMatchesConverter.Instance}, ConverterParameter={x:Static tutorials:TutorialTargetIds.EstimationSettingsButton}}"
                             AutomationProperties.Name="View or manage estimation parameters"
                             ToolTip.Tip="View / manage Estimation Parameters (Ctrl+Shift+E)">
                         <Viewbox Width="18" Height="18">

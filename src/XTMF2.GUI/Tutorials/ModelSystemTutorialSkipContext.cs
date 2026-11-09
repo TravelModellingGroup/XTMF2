@@ -129,6 +129,50 @@ internal sealed class ModelSystemTutorialSkipContext : ITutorialSkipContext
             : TutorialSkipResult.Failure(error?.Message ?? "Could not create the tutorial connection.");
     }
 
+    public TutorialSkipResult EnsureEstimationParameter(
+        string parameterNodeName, double min, double max, double nullHypothesis)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(parameterNodeName);
+        var result = FindNode(_editor.CurrentBoundary, parameterNodeName, out var parameter);
+        if (!result.Succeeded)
+            return result;
+
+        var parameterType = parameter!.Type;
+        if (parameterType is null
+            || !parameterType.IsGenericType
+            || parameterType.GetGenericTypeDefinition() != typeof(XTMF2.RuntimeModules.BasicParameter<>))
+        {
+            return TutorialSkipResult.Failure(
+                $"'{parameterNodeName}' must be a BasicParameter<float> or BasicParameter<double>.");
+        }
+        var valueType = parameterType.GetGenericArguments()[0];
+        if (valueType != typeof(float) && valueType != typeof(double))
+        {
+            return TutorialSkipResult.Failure(
+                $"'{parameterNodeName}' must be a BasicParameter<float> or BasicParameter<double>.");
+        }
+
+        if (_editor.Session.ModelSystem.EstimationGroups
+            .Any(group => group.Parameters.Any(entry => ReferenceEquals(entry.Node, parameter))))
+        {
+            return TutorialSkipResult.Success;
+        }
+
+        var group = _editor.Session.ModelSystem.EstimationGroups.FirstOrDefault();
+        if (group is null
+            && !_editor.Session.AddEstimationGroup(_editor.User, "Default", out group, out var groupError))
+        {
+            return TutorialSkipResult.Failure(groupError?.Message
+                ?? "Could not create the default estimation group.");
+        }
+
+        return _editor.Session.AddEstimationParameter(
+                _editor.User, group!, parameter!, min, max, nullHypothesis, out _, out var error)
+            ? TutorialSkipResult.Success
+            : TutorialSkipResult.Failure(error?.Message
+                ?? $"Could not add '{parameterNodeName}' to the estimation group.");
+    }
+
     public TutorialSkipResult EnsureParameterValue(string parameterNodeName, string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(parameterNodeName);

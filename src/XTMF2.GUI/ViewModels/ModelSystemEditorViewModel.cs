@@ -120,11 +120,17 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return;
 
         if (_runController is not null)
+        {
             _runController.ModelSystemRunCompleted -= NotifyModelSystemRunCompleted;
+            _runController.EstimationRunCompleted -= NotifyEstimationRunCompleted;
+        }
 
         _runController = runController;
         if (_runController is not null)
+        {
             _runController.ModelSystemRunCompleted += NotifyModelSystemRunCompleted;
+            _runController.EstimationRunCompleted += NotifyEstimationRunCompleted;
+        }
 
         _loadedEditorViewModel?.SetRunController(runController);
         OnPropertyChanged(nameof(CanRun));
@@ -145,11 +151,18 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     public Action? RunStarted { get; set; }
 
     public event Action<bool>? ModelSystemRunCompleted;
+    public event Action? EstimationRunCompleted;
 
     internal void NotifyModelSystemRunCompleted(ModelSystemSession session, bool succeeded)
     {
         if (ReferenceEquals(Session, session))
             ModelSystemRunCompleted?.Invoke(succeeded);
+    }
+
+    internal void NotifyEstimationRunCompleted(ModelSystemSession session)
+    {
+        if (ReferenceEquals(Session, session))
+            EstimationRunCompleted?.Invoke();
     }
 
     /// <summary>The user who owns this editing session.</summary>
@@ -5169,7 +5182,10 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         if (_disposed) return;
         _disposed = true;
         if (_runController is not null)
+        {
             _runController.ModelSystemRunCompleted -= NotifyModelSystemRunCompleted;
+            _runController.EstimationRunCompleted -= NotifyEstimationRunCompleted;
+        }
         if (TutorialGuide is not null)
             TutorialGuide.PropertyChanged -= OnTutorialGuidePropertyChanged;
         TutorialGuide?.Dispose();

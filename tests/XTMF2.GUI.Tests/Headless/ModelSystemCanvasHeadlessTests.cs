@@ -681,6 +681,80 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void EstimationTutorialPreparesAndTracksTheEstimationWorkflow()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(EstimationTutorialPreparesAndTracksTheEstimationWorkflow),
+            (user, _, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var tutorialDefinition = new BuiltInRuntimeModuleTutorialProvider()
+                    .GetTutorials()
+                    .Single(tutorial => tutorial.Order == 5);
+
+                Session.Dispatch(() =>
+                {
+                    Assert.IsTrue(vm.StartTutorial(tutorialDefinition));
+                    var tutorial = vm.TutorialGuide!;
+                    var boundary = msSession.ModelSystem.GlobalBoundary;
+                    var start = boundary.Starts.Single();
+                    var estimatedValue = boundary.Modules.Single(node => node.Name == "EstimatedValue");
+                    var fitness = boundary.Modules.Single(node => node.Name == "Fitness");
+
+                    Assert.AreEqual(typeof(BasicParameter<float>), estimatedValue.Type);
+                    Assert.AreEqual(typeof(ScriptedParameter<float>), fitness.Type);
+                    Assert.AreEqual(
+                        "(EstimatedValue - 0.2) * (EstimatedValue - 0.2)",
+                        fitness.ParameterValue?.Representation);
+                    Assert.Contains(estimatedValue, msSession.ModelSystem.Variables);
+                    Assert.IsEmpty(msSession.ModelSystem.EstimationGroups);
+                    Assert.AreEqual("Estimate a Model Parameter", tutorial.Title);
+                    Assert.IsNotNull(start);
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Choose the parameter to estimate", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                    tutorial.SkipCommand.Execute(null);
+
+                    var entry = msSession.ModelSystem.EstimationGroups.Single().Parameters.Single();
+                    Assert.AreSame(estimatedValue, entry.Node);
+                    Assert.AreEqual(0.0, entry.Min);
+                    Assert.AreEqual(1.0, entry.Max);
+                    Assert.AreEqual(0.8, entry.NullHypothesis, 1e-6);
+                    Assert.AreEqual("Configure the fitness and objective", tutorial.Title);
+                    Assert.AreEqual(TutorialTargetIds.EstimationSettingsButton, tutorial.TargetId);
+                    Assert.IsFalse(tutorial.CanAdvance);
+
+                    Assert.IsTrue(msSession.SetEstimationFitnessNode(user, fitness, out var fitnessError),
+                        fitnessError?.Message);
+                    Assert.IsTrue(msSession.SetEstimationObjective(
+                        user, EstimationObjective.Minimize, out var objectiveError), objectiveError?.Message);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+
+                    Assert.AreEqual("Save the estimation setup", tutorial.Title);
+                    tutorial.SkipCommand.Execute(null);
+                    Assert.AreEqual("Run the estimation", tutorial.Title);
+                    Assert.AreEqual(TutorialTargetIds.EstimationRunButton, tutorial.TargetId);
+                    Assert.IsFalse(tutorial.CanAdvance);
+
+                    vm.NotifyEstimationRunCompleted(msSession);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Review and apply the result", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanAdvance);
+
+                    Assert.IsTrue(msSession.SetParameterValue(user, estimatedValue, "0.2", out var valueError),
+                        valueError?.Message);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Save the estimated value", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void TutorialGuideTracksStartAndTargetedLinkAddedForCurrentStep()
     {
         TestGuiHelper.RunInModelSystemContext(

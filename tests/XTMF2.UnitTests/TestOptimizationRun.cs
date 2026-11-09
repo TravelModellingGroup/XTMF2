@@ -138,6 +138,74 @@ public class TestOptimizationRun
         });
     }
 
+    [TestMethod]
+    public void EstimationRun_FindsKnownMinimumFromScriptedFitness()
+    {
+        RunInModelSystemContext(
+            nameof(EstimationRun_FindsKnownMinimumFromScriptedFitness),
+            (user, pSession, msSession) =>
+            {
+                var modelSystem = msSession.ModelSystem;
+                Assert.IsTrue(msSession.AddModelSystemStart(user, modelSystem.GlobalBoundary, "Start",
+                    Rectangle.Hidden, out _, out var error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, modelSystem.GlobalBoundary, "EstimatedValue",
+                    typeof(BasicParameter<float>), Rectangle.Hidden, out var estimatedValue, out error),
+                    error?.Message);
+                Assert.IsNotNull(estimatedValue);
+                Assert.IsTrue(msSession.SetParameterValue(user, estimatedValue!, "0.8", out error), error?.Message);
+                Assert.IsTrue(msSession.AddVariable(user, estimatedValue!, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddNode(user, modelSystem.GlobalBoundary, "Fitness",
+                    typeof(ScriptedParameter<float>), Rectangle.Hidden, out var fitness, out error),
+                    error?.Message);
+                Assert.IsNotNull(fitness);
+                Assert.IsTrue(msSession.SetParameterExpression(
+                    user,
+                    fitness!,
+                    "(EstimatedValue - 0.2) * (EstimatedValue - 0.2)",
+                    out error), error?.Message);
+                Assert.IsTrue(msSession.SetEstimationFitnessNode(user, fitness!, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddEstimationGroup(user, "Default", out var group, out error), error?.Message);
+                Assert.IsTrue(msSession.AddEstimationParameter(
+                    user, group!, estimatedValue!, 0.0, 1.0, 0.8, out _, out error), error?.Message);
+
+                IReadOnlyList<(int nodeIndex, double value)> results = null;
+                bool finished = false;
+                using var completed = new SemaphoreSlim(0);
+                CreateRunClient(true, runBus =>
+                {
+                    runBus.ClientOptimizationResultsAvailable += (_, _, values) => results = values;
+                    runBus.ClientFinishedModelSystem += (_, _) =>
+                    {
+                        finished = true;
+                        completed.Release();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, message, stack, _, _) =>
+                    {
+                        error = new CommandError($"{message}\r\n{stack}");
+                        completed.Release();
+                    };
+
+                    Assert.IsTrue(runBus.RunModelSystem(
+                        msSession,
+                        Path.Combine(pSession.RunsDirectory, nameof(EstimationRun_FindsKnownMinimumFromScriptedFitness)),
+                        "Start",
+                        RunMode.Estimation,
+                        out _,
+                        out error), error?.Message);
+                    if (!completed.Wait(30000))
+                        Assert.Fail("Estimation run timed out after 30 seconds.");
+                });
+
+                Assert.IsTrue(finished, $"Estimation run failed: {error?.Message}");
+                Assert.IsNotNull(results, "The estimation run did not return parameter results.");
+                Assert.HasCount(1, results);
+                Assert.AreEqual(0.2, results[0].value, 0.05,
+                    "The best parameter should be near the known fitness minimum.");
+            });
+    }
+
     /// <summary>
     /// Build a minimal model system, configure a calibration group with a <see cref="SetableParameter{T}"/>
     /// as the parameter and a constant-one <see cref="BasicParameter{T}"/> as the calibration target

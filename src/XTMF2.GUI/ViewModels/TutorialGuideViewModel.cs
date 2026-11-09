@@ -26,6 +26,7 @@ using CommunityToolkit.Mvvm.Input;
 using XTMF2;
 using XTMF2.Editing;
 using XTMF2.GUI.Tutorials;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.GUI.ViewModels;
 
@@ -57,6 +58,7 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
         editor.PropertyChanged += OnEditorPropertyChanged;
         ((INotifyPropertyChanged)editor.Session).PropertyChanged += OnSessionChanged;
         editor.ModelSystemRunCompleted += OnModelSystemRunCompleted;
+        editor.EstimationRunCompleted += OnEstimationRunCompleted;
         CaptureStepBaseline(0);
         UpdateWhyThisMattersVisibility();
     }
@@ -74,6 +76,8 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
         TutorialTargetIds.Canvas => "Try this on the model canvas",
         TutorialTargetIds.SaveButton => "Save from the toolbar or press Ctrl+S",
         TutorialTargetIds.RunButton => "Run from the toolbar or press F5",
+        TutorialTargetIds.EstimationSettingsButton => "Open estimation settings from the toolbar or press Ctrl+Shift+E",
+        TutorialTargetIds.EstimationRunButton => "Run estimation from the toolbar or press Ctrl+F5",
         { } targetId => targetId,
         _ => string.Empty
     };
@@ -145,11 +149,39 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
                 && !_editor.IsInsideFunctionTemplate,
             TutorialCompletionKinds.CommentAdded => _editor.CommentBlocks
                 .Any(comment => !_stepBaselines[_stepIndex].Comments.Contains(comment)),
+            TutorialCompletionKinds.EstimationParameterAdded => _editor.Session.ModelSystem.EstimationGroups
+                .SelectMany(group => group.Parameters)
+                .Any(entry => MatchesTarget(entry.Node.Name ?? string.Empty, condition.Target)),
+            TutorialCompletionKinds.EstimationConfigured => IsEstimationConfigured(condition.Target),
+            TutorialCompletionKinds.EstimationRunCompleted => _stepBaselines[_stepIndex].HasCompletedEstimationRun,
+            TutorialCompletionKinds.ParameterValueChanged => _stepBaselines[_stepIndex].NodeParameterValues
+                .Any(pair => _editor.Nodes.Contains(pair.Key)
+                    && MatchesTarget(pair.Key.Name, condition.Target)
+                    && !string.Equals(
+                        pair.Value,
+                        pair.Key.ParameterValueRepresentation,
+                        StringComparison.Ordinal)),
             TutorialCompletionKinds.ModelSystemSaved => _stepBaselines[_stepIndex].HasSeenDirty
                 && !_editor.Session.IsDirty,
             TutorialCompletionKinds.ModelSystemRunCompleted => _stepBaselines[_stepIndex].HasCompletedRun,
             _ => false
         };
+
+    private bool IsEstimationConfigured(string? fitnessNodeName)
+    {
+        var modelSystem = _editor.Session.ModelSystem;
+        var fitnessNode = modelSystem.EstimationFitnessNode;
+        if (fitnessNode is null || !MatchesTarget(fitnessNode.Name ?? string.Empty, fitnessNodeName))
+            return false;
+        if (modelSystem.EstimationObjective != EstimationObjective.Minimize)
+            return false;
+
+        return modelSystem.EstimationGroups.Any(group => group.IsEnabled
+            && group.Parameters.Any(entry => entry.IsEnabled
+                && Math.Abs(entry.Min) < 1e-9
+                && Math.Abs(entry.Max - 1.0) < 1e-9
+                && Math.Abs(entry.NullHypothesis - 0.8) < 1e-6));
+    }
 
     private static bool MatchesTarget(NodeViewModel node, string? target)
     {
@@ -181,6 +213,10 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
             or TutorialCompletionKinds.FunctionTemplateOpened
             or TutorialCompletionKinds.FunctionTemplateClosed
             or TutorialCompletionKinds.CommentAdded
+            or TutorialCompletionKinds.EstimationParameterAdded
+            or TutorialCompletionKinds.EstimationConfigured
+            or TutorialCompletionKinds.EstimationRunCompleted
+            or TutorialCompletionKinds.ParameterValueChanged
             or TutorialCompletionKinds.ModelSystemSaved
             or TutorialCompletionKinds.ModelSystemRunCompleted;
 
@@ -197,6 +233,7 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
             _editor.FunctionInstances.ToHashSet(),
             _editor.CommentBlocks.ToHashSet(),
             _editor.Nodes.ToDictionary(node => node, node => node.Name),
+            _editor.Nodes.ToDictionary(node => node, node => node.ParameterValueRepresentation),
             _editor.Session.IsDirty,
             _editor.IsInsideFunctionTemplate);
         _stepBaselines.Add(stepIndex, baseline);
@@ -241,7 +278,8 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
 
     private void OnTutorialNodeChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(NodeViewModel.Name))
+        if (e.PropertyName is nameof(NodeViewModel.Name)
+            or nameof(NodeViewModel.ParameterValueRepresentation))
             RefreshState();
     }
 
@@ -285,6 +323,26 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
                 return;
 
             _stepBaselines[_stepIndex].HasCompletedRun = true;
+            RefreshState();
+        }
+
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(CompleteOnUiThread);
+            return;
+        }
+
+        CompleteOnUiThread();
+    }
+
+    private void OnEstimationRunCompleted()
+    {
+        void CompleteOnUiThread()
+        {
+            if (_disposed || CurrentStep?.Completion.Kind != TutorialCompletionKinds.EstimationRunCompleted)
+                return;
+
+            _stepBaselines[_stepIndex].HasCompletedEstimationRun = true;
             RefreshState();
         }
 
@@ -408,6 +466,7 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
         _editor.PropertyChanged -= OnEditorPropertyChanged;
         ((INotifyPropertyChanged)_editor.Session).PropertyChanged -= OnSessionChanged;
         _editor.ModelSystemRunCompleted -= OnModelSystemRunCompleted;
+        _editor.EstimationRunCompleted -= OnEstimationRunCompleted;
         foreach (var node in _trackedNodes)
             node.PropertyChanged -= OnTutorialNodeChanged;
         _trackedNodes.Clear();
@@ -421,6 +480,7 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
         HashSet<FunctionInstanceViewModel> functionInstances,
         HashSet<CommentBlockViewModel> comments,
         Dictionary<NodeViewModel, string> nodeNames,
+        Dictionary<NodeViewModel, string> nodeParameterValues,
         bool hasSeenDirty,
         bool wasInsideFunctionTemplate)
     {
@@ -431,8 +491,10 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
         public HashSet<FunctionInstanceViewModel> FunctionInstances { get; } = functionInstances;
         public HashSet<CommentBlockViewModel> Comments { get; } = comments;
         public Dictionary<NodeViewModel, string> NodeNames { get; } = nodeNames;
+        public Dictionary<NodeViewModel, string> NodeParameterValues { get; } = nodeParameterValues;
         public bool HasSeenDirty { get; set; } = hasSeenDirty;
         public bool HasCompletedRun { get; set; }
+        public bool HasCompletedEstimationRun { get; set; }
         public bool WasInsideFunctionTemplate { get; } = wasInsideFunctionTemplate;
     }
 }
