@@ -21,9 +21,11 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Styling;
 using XTMF2.GUI.ViewModels;
+using XTMF2.GUI.Views;
 using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.GUI.Controls;
@@ -323,13 +325,26 @@ partial class ModelSystemCanvas
 
     private void ShowContextMenu(ICanvasElement? element, LinkViewModel? link)
     {
-        if (_vm is null) return;
+        var menu = BuildContextMenu(element, link, ToCanvasPos(_rightClickPressPos));
+        if (menu is null) return;
 
-        // ── Background right-click: offer Add items when nothing was hit ──
+        ContextMenu = menu;
+        menu.Open(this);
+    }
+
+    private ContextMenu? BuildContextMenu(
+        ICanvasElement? element,
+        LinkViewModel? link,
+        Point spawnPt,
+        bool hookOnly = false,
+        bool creationOnly = false)
+    {
+        if (_vm is null) return null;
+
+        // ── Background context: offer Add items when nothing was hit ──
         if (element is null && link is null)
         {
             var bgMenu = new ContextMenu();
-            var spawnPt = ToCanvasPos(_rightClickPressPos);
 
             var addStartItem = new MenuItem { Header = "Add Start…" };
             addStartItem.Click += (_, _) => _vm.AddStartAt(spawnPt.X, spawnPt.Y);
@@ -358,6 +373,9 @@ partial class ModelSystemCanvas
                 addFpItem.Click += (_, _) => _ = _vm.AddFunctionParameterDirectAsync(spawnPt.X, spawnPt.Y);
                 bgMenu.Items.Add(addFpItem);
             }
+
+            if (creationOnly)
+                return bgMenu;
 
             // ── Paste (always available; reads system clipboard at click-time) ────
             bgMenu.Items.Add(new Separator());
@@ -392,9 +410,7 @@ partial class ModelSystemCanvas
             };
             bgMenu.Items.Add(showGhostLinesItem);
 
-            ContextMenu = bgMenu;
-            ContextMenu.Open(this);
-            return;
+            return bgMenu;
         }
 
         var vm = _vm; // capture for closure
@@ -467,11 +483,10 @@ partial class ModelSystemCanvas
             // Inside a function template, offer creating a FunctionParameter from a regular node hook.
             if (vm.IsInsideFunctionTemplate && capturedHook is not FunctionParameterHook)
             {
-                var spawnPt2 = ToCanvasPos(_rightClickPressPos);
                 var addFpItem = new MenuItem { Header = "Add Function Parameter" };
                 addFpItem.Click += (_, _) =>
                     _ = vm.AddFunctionParameterFromHookAsync(
-                        capturedNode, capturedHook, spawnPt2.X, spawnPt2.Y);
+                        capturedNode, capturedHook, spawnPt.X, spawnPt.Y);
                 menu.Items.Add(addFpItem);
             }
 
@@ -489,6 +504,9 @@ partial class ModelSystemCanvas
 
             menu.Items.Add(new Separator());
         }
+
+        if (hookOnly && _rightClickHookHit is not null)
+            return menu;
 
         // ── FunctionInstance hook right-click items ────────────────────────────
         if (_rightClickFiHookHit is { } fiHookEntry)
@@ -544,6 +562,9 @@ partial class ModelSystemCanvas
 
             menu.Items.Add(new Separator());
         }
+
+        if (hookOnly && _rightClickFiHookHit is not null)
+            return menu;
 
         // ── Link routing style ────────────────────────────────────────────────
         if (link is not null)
@@ -1258,8 +1279,126 @@ partial class ModelSystemCanvas
 
         menu.Items.Add(deleteItem);
 
-        ContextMenu = menu;
-        ContextMenu.Open(this);
+        return menu;
+    }
+
+    internal IReadOnlyList<CommandPaletteAction> GetCommandPaletteActions()
+    {
+        if (_vm is null) return [];
+
+        var actions = new List<CommandPaletteAction>();
+        var element = _vm.SelectedElement;
+        var link = _vm.SelectedLink;
+        var spawnPt = GetKeyboardSpawnPoint();
+        var originalHookHit = _rightClickHookHit;
+        var originalFiHookHit = _rightClickFiHookHit;
+
+        try
+        {
+            _rightClickHookHit = null;
+            _rightClickFiHookHit = null;
+            if (BuildContextMenu(element, link, spawnPt) is { } menu)
+                AddPaletteActions(menu.Items, actions, string.Empty,
+                    omitOpenTemplate: element is FunctionInstanceViewModel);
+
+            if (element is not null || link is not null)
+            {
+                if (BuildContextMenu(null, null, spawnPt, creationOnly: true) is { } creationMenu)
+                    AddPaletteActions(creationMenu.Items, actions, string.Empty, omitOpenTemplate: false);
+            }
+
+            if (element is NodeViewModel node)
+            {
+                var hooks = _nodeVisibleHooks.TryGetValue(node, out var visibleHooks)
+                    ? visibleHooks
+                    : node.UnderlyingNode.Hooks ?? [];
+                foreach (var hook in hooks)
+                {
+                    _rightClickHookHit = (node, hook);
+                    if (BuildContextMenu(node, null, spawnPt, hookOnly: true) is { } hookMenu)
+                    {
+                        AddPaletteActions(hookMenu.Items, actions, $"Hook {node.Name}.{hook.Name}",
+                            omitOpenTemplate: false);
+                    }
+                }
+            }
+            else if (element is FunctionInstanceViewModel functionInstance)
+            {
+                var hooks = _fiVisibleHooks.TryGetValue(functionInstance, out var visibleHooks)
+                    ? visibleHooks
+                    : functionInstance.UnderlyingInstance.Hooks.OfType<FunctionParameterHook>().ToArray();
+                foreach (var hook in hooks)
+                {
+                    _rightClickFiHookHit = (functionInstance, hook);
+                    if (BuildContextMenu(functionInstance, null, spawnPt, hookOnly: true) is { } hookMenu)
+                    {
+                        AddPaletteActions(hookMenu.Items, actions,
+                            $"Hook {functionInstance.Name}.{hook.Name}",
+                            omitOpenTemplate: false);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _rightClickHookHit = originalHookHit;
+            _rightClickFiHookHit = originalFiHookHit;
+        }
+
+        return actions;
+    }
+
+    private static void AddPaletteActions(
+        IEnumerable<object?> items,
+        List<CommandPaletteAction> actions,
+        string prefix,
+        bool omitOpenTemplate)
+    {
+        foreach (var item in items)
+        {
+            if (item is Separator) continue;
+
+            if (item is not MenuItem menuItem) continue;
+
+            var (header, shortcut) = GetPaletteHeader(menuItem.Header);
+            if (string.IsNullOrWhiteSpace(header)) continue;
+
+            var childItems = menuItem.Items.OfType<MenuItem>().ToArray();
+            if (childItems.Length > 0)
+            {
+                var childPrefix = string.IsNullOrEmpty(prefix) ? header : $"{prefix} / {header}";
+                AddPaletteActions(childItems, actions, childPrefix, omitOpenTemplate: false);
+                continue;
+            }
+
+            if (omitOpenTemplate && header == "Open Template") continue;
+
+            var displayName = string.IsNullOrEmpty(prefix) ? header : $"{prefix} / {header}";
+            actions.Add(new CommandPaletteAction(displayName, () => ExecuteContextMenuItem(menuItem),
+                "Context", shortcut, menuItem.IsEnabled));
+        }
+    }
+
+    private static (string Header, string? Shortcut) GetPaletteHeader(object? header)
+    {
+        if (header is Grid grid)
+        {
+            var text = grid.Children.OfType<TextBlock>()
+                .Select(child => child.Text?.Trim())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToArray();
+            return (text.FirstOrDefault() ?? string.Empty, text.Skip(1).FirstOrDefault());
+        }
+
+        return (header?.ToString() ?? string.Empty, null);
+    }
+
+    private static void ExecuteContextMenuItem(MenuItem menuItem)
+    {
+        if (menuItem.ToggleType == MenuItemToggleType.CheckBox)
+            menuItem.IsChecked = !menuItem.IsChecked;
+
+        menuItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
     }
 
 }

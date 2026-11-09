@@ -76,6 +76,7 @@ public class RunController : IDisposable
     /// so that optimization results can be forwarded to the correct session.
     /// </summary>
     private readonly Dictionary<string, (ModelSystemSession Session, User User)> _sessionsByRunId = new();
+    private readonly Dictionary<string, RunMode> _runModesByRunId = new();
     private readonly Dictionary<string, HostBus> _hostBusesByRunId = new();
     private readonly Dictionary<string, string> _runDirectoriesByRunId = new();
     private readonly Dictionary<string, IReadOnlyList<(int nodeIndex, string name, double min, double max)>>
@@ -96,6 +97,18 @@ public class RunController : IDisposable
     /// optionally applied back to the model system.
     /// </summary>
     public event Action<string, ModelSystemSession, IReadOnlyList<(int nodeIndex, double value)>>? OptimizationResultsAvailable;
+
+    /// <summary>Raised after a successful estimation run has produced parameter results.</summary>
+    public event Action<ModelSystemSession>? EstimationRunCompleted;
+
+    /// <summary>Raised after a successful calibration run has produced parameter results.</summary>
+    public event Action<ModelSystemSession>? CalibrationRunCompleted;
+
+    /// <summary>
+    /// Raised when a model-system run reaches a terminal state.
+    /// The Boolean value is true only when the run completed successfully.
+    /// </summary>
+    public event Action<ModelSystemSession, bool>? ModelSystemRunCompleted;
 
     /// <summary>
     /// Raised when a configured RunServer changes connection state.
@@ -218,6 +231,7 @@ public class RunController : IDisposable
         Console.WriteLine($"GUI received RunServer runtime error: {runID}: {errorMessage}");
         Console.Out.Flush();
         RunsViewModel.NotifyError(runID, errorMessage, stack, moduleName, elementId);
+        NotifyModelSystemRunCompleted(runID, succeeded: false);
     }
 
     private void OnClientFinishedModelSystem(object? sender, string runID)
@@ -227,6 +241,25 @@ public class RunController : IDisposable
         var isRemoteRun = sender is HostBus hostBus &&
             _connections.TryGetEndpoint(hostBus, out var endpoint) && endpoint is { IsLocal: false };
         RunsViewModel.NotifyFinished(runID, isRemoteRunPreparingOutput: isRemoteRun);
+        NotifyModelSystemRunCompleted(runID, succeeded: true);
+    }
+
+    private void NotifyModelSystemRunCompleted(string runId, bool succeeded)
+    {
+        ModelSystemSession? session;
+        RunMode? runMode;
+        lock (_sessionsByRunId)
+        {
+            session = _sessionsByRunId.TryGetValue(runId, out var run) ? run.Session : null;
+            runMode = _runModesByRunId.Remove(runId, out var mode) ? mode : null;
+        }
+
+        if (session is not null && succeeded && runMode == RunMode.Estimation)
+            EstimationRunCompleted?.Invoke(session);
+        if (session is not null && succeeded && runMode == RunMode.Calibration)
+            CalibrationRunCompleted?.Invoke(session);
+        if (session is not null)
+            ModelSystemRunCompleted?.Invoke(session, succeeded);
     }
 
     private void OnClientRunArtifactsReceived(object? sender, HostBus.RunArtifactsReceivedEventArgs args)
@@ -338,6 +371,7 @@ public class RunController : IDisposable
         RunsViewModel.NotifyFinished(completion.RunId,
             $"[Estimation] converged after {completion.TotalEvaluations} fitness test(s) " +
             $"in {completion.Iterations} iteration(s). Best fitness = {completion.BestFitness:G6}.");
+        EstimationRunCompleted?.Invoke(session);
     }
 
     private void OnClientOptimizationResultsAvailable(
@@ -533,6 +567,7 @@ public class RunController : IDisposable
                 RunsViewModel.NotifyFinished(runId,
                     $"[Estimation] converged after {completion.TotalEvaluations} fitness test(s) " +
                     $"in {completion.Iterations} iteration(s). Best fitness = {completion.BestFitness:G6}.");
+                EstimationRunCompleted?.Invoke(msSession);
             }
             finally
             {
@@ -802,6 +837,8 @@ public class RunController : IDisposable
                 runId =>
                 {
                     runViewModel = RunsViewModel.AddRun(runId, runName, runDirectory, serverLabel, msSession, user);
+                    lock (_sessionsByRunId)
+                        _runModesByRunId[runId] = runMode;
                 },
                 out id,
                 out error,

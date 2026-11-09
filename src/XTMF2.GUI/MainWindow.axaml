@@ -53,6 +53,8 @@
                 <MenuItem Header="{res:Localize MainWindow_MenuSettings}" Click="Settings_Click"/>
             </MenuItem>
             <MenuItem Header="{res:Localize MainWindow_MenuHelp}">
+                <MenuItem Header="Interactive Tutorial…"
+                          Click="StartInteractiveTutorial_Click"/>
                 <MenuItem Header="{res:Localize MainWindow_MenuAbout}" Command="{Binding LaunchAboutDialogCommand}"/>
             </MenuItem>
         </Menu>

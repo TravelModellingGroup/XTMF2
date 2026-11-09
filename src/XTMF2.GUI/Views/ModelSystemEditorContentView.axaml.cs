@@ -121,8 +121,8 @@ public partial class ModelSystemEditorContentView : UserControl
         }
 
         var vm = _vm;
-        CommandPalette.SetActions(
-        [
+        var actions = new List<CommandPaletteAction>
+        {
             new("Save model system", () => vm.SaveModelSystemCommand.Execute(null),
                 "Tool", "Ctrl+S", vm.SaveModelSystemCommand.CanExecute(null)),
             new("Undo", () => vm.UndoCommand.Execute(null),
@@ -157,7 +157,9 @@ public partial class ModelSystemEditorContentView : UserControl
             new("Open function template for selected module",
                 () => vm.OpenSelectedFunctionTemplateCommand.Execute(null), "Navigation",
                 isEnabled: vm.OpenSelectedFunctionTemplateCommand.CanExecute(null))
-        ]);
+        };
+        actions.AddRange(TheCanvas.GetCommandPaletteActions());
+        CommandPalette.SetActions(actions);
     }
 
     private void OnActualThemeVariantChanged(object? sender, EventArgs e)

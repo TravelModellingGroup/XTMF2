@@ -159,8 +159,8 @@ public partial class ProjectsView : UserControl
         }
         else if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.Delete)
         {
-            await DeleteProjectAsync(project);
             e.Handled = true;
+            await DeleteProjectAsync(project);
         }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.E)
         {

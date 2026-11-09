@@ -17,7 +17,10 @@
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
+using System.Collections.Concurrent;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.UnitTests.Modules;
@@ -89,6 +92,381 @@ namespace XTMF2.UnitTests
                         Assert.Fail("The model system failed to execute in time!");
                     }
                     Assert.IsTrue(success, "The model system failed to execute to success! " + error);
+                });
+            });
+        }
+
+        [TestMethod]
+        public void TutorialStartSleepModelSystemRunsToCompletion()
+        {
+            RunInModelSystemContext("TutorialStartSleepModelSystemRunsToCompletion", (user, pSession, msSession) =>
+            {
+                var modelSystem = msSession.ModelSystem;
+                Assert.IsTrue(msSession.AddModelSystemStart(
+                    user,
+                    modelSystem.GlobalBoundary,
+                    "Start 1",
+                    Rectangle.Hidden,
+                    out var start,
+                    out var error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user,
+                    modelSystem.GlobalBoundary,
+                    "Sleep",
+                    typeof(Sleep),
+                    Rectangle.Hidden,
+                    out var sleep,
+                    out _,
+                    out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user,
+                    start,
+                    start.Hooks.Single(hook => hook.Name == "ToExecute"),
+                    sleep!,
+                    out _,
+                    out error), error?.Message);
+
+                CreateRunClient(true, runBus =>
+                {
+                    using var completion = new SemaphoreSlim(0);
+                    var succeeded = false;
+                    string failure = string.Empty;
+                    runBus.ClientFinishedModelSystem += (_, _) =>
+                    {
+                        succeeded = true;
+                        completion.Release();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, message, stack, _, _) =>
+                    {
+                        failure = $"{message}{Environment.NewLine}{stack}";
+                        completion.Release();
+                    };
+
+                    Assert.IsTrue(runBus.RunModelSystem(
+                        msSession,
+                        Path.Combine(pSession.RunsDirectory, "TutorialStartSleep"),
+                        "Start 1",
+                        out _,
+                        out error), error?.Message);
+                    Assert.IsTrue(
+                        completion.Wait(5000),
+                        string.IsNullOrEmpty(failure) ? "The tutorial model system did not finish in time." : failure);
+                    Assert.IsTrue(succeeded, string.IsNullOrEmpty(failure) ? "The tutorial model system failed." : failure);
+                });
+            });
+        }
+
+        [TestMethod]
+        public void TutorialLogMessageModelSystemRunsAndReportsBothMessages()
+        {
+            RunInModelSystemContext("TutorialLogMessageModelSystemRunsAndReportsBothMessages", (user, pSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddModelSystemStart(
+                    user, boundary, "Start 1", Rectangle.Hidden, out var start, out var error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Run Status Stream", typeof(OpenWriteStreamToRunStatus), Rectangle.Hidden,
+                    out var statusStream, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Log", typeof(Log), Rectangle.Hidden,
+                    out var log, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Write Message 1", typeof(WriteToLogA), Rectangle.Hidden,
+                    out var firstMessageAction, out var firstMessageParameters, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Write Message 2", typeof(WriteToLogA), Rectangle.Hidden,
+                    out var secondMessageAction, out var secondMessageParameters, out error), error?.Message);
+
+                var firstMessage = firstMessageParameters!.Single(node => node.Type == typeof(BasicParameter<string>));
+                var secondMessage = secondMessageParameters!.Single(node => node.Type == typeof(BasicParameter<string>));
+                Assert.IsTrue(msSession.SetParameterValue(user, firstMessage, "The run has started.", out error), error?.Message);
+                Assert.IsTrue(msSession.SetParameterValue(user, secondMessage, "The logging sequence is complete.", out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(
+                    user, log!, log!.Hooks.Single(hook => hook.Name == "LogStream"), statusStream!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, firstMessageAction!, firstMessageAction!.Hooks.Single(hook => hook.Name == "Log"), log!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, secondMessageAction!, secondMessageAction!.Hooks.Single(hook => hook.Name == "Log"), log!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, start!, start!.Hooks.Single(hook => hook.Name == "ToExecute"), firstMessageAction!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, firstMessageAction!, firstMessageAction!.Hooks.Single(hook => hook.Name == "To Invoke"),
+                    secondMessageAction!, out _, out error), error?.Message);
+
+                CreateRunClient(true, runBus =>
+                {
+                    using var completion = new SemaphoreSlim(0);
+                    var reportedStatuses = new ConcurrentQueue<string>();
+                    var succeeded = false;
+                    string failure = string.Empty;
+                    runBus.ClientReportedStatus += (_, _, status) => reportedStatuses.Enqueue(status);
+                    runBus.ClientFinishedModelSystem += (_, _) =>
+                    {
+                        succeeded = true;
+                        completion.Release();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, message, stack, _, _) =>
+                    {
+                        failure = $"{message}{Environment.NewLine}{stack}";
+                        completion.Release();
+                    };
+
+                    Assert.IsTrue(runBus.RunModelSystem(
+                        msSession,
+                        Path.Combine(pSession.RunsDirectory, "TutorialLogMessages"),
+                        "Start 1",
+                        out _,
+                        out error), error?.Message);
+                    Assert.IsTrue(
+                        completion.Wait(5000),
+                        string.IsNullOrEmpty(failure) ? "The tutorial logging model did not finish in time." : failure);
+                    Assert.IsTrue(succeeded, string.IsNullOrEmpty(failure) ? "The tutorial logging model failed." : failure);
+
+                    var statuses = reportedStatuses.ToArray();
+                    Assert.IsTrue(
+                        statuses.Any(status => status.EndsWith("The run has started.", StringComparison.Ordinal)),
+                        "The first log message was not reported by the run.");
+                    Assert.IsTrue(
+                        statuses.Any(status => status.EndsWith("The logging sequence is complete.", StringComparison.Ordinal)),
+                        "The second log message was not reported by the run.");
+                });
+            });
+        }
+
+        [TestMethod]
+        public void ExecuteScriptedIterationModelSystemLogsCurrentIteration()
+        {
+            RunInModelSystemContext("ExecuteScriptedIterationModelSystemLogsCurrentIteration", (user, pSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddModelSystemStart(
+                    user, boundary, "Start 1", Rectangle.Hidden, out var start, out var error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Execute", typeof(Execute), Rectangle.Hidden,
+                    out var execute, out var executeParameters, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(
+                    user, boundary, "CurrentIteration", typeof(SetableParameter<int>), Rectangle.Hidden,
+                    out var currentIteration, out error), error?.Message);
+                Assert.IsTrue(msSession.SetParameterValue(user, currentIteration!, "0", out error), error?.Message);
+                Assert.IsTrue(msSession.AddVariable(user, currentIteration!, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Log", typeof(Log), Rectangle.Hidden,
+                    out var log, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Run Status Stream", typeof(OpenWriteStreamToRunStatus), Rectangle.Hidden,
+                    out var statusStream, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Log Iteration", typeof(WriteToLogA), Rectangle.Hidden,
+                    out var logAction, out var logActionParameters, out error), error?.Message);
+
+                var iterations = executeParameters!.Single(node => node.Name == "Iterations");
+                var message = logActionParameters!.Single(node => node.Name == "Message");
+                Assert.IsTrue(msSession.SetParameterValue(user, iterations, "3", out error), error?.Message);
+                Assert.IsTrue(msSession.SetNodeType(
+                    user, message, typeof(ScriptedParameter<string>), out error), error?.Message);
+                Assert.IsTrue(msSession.SetParameterExpression(
+                    user, message, "\"Iteration: \" + CurrentIteration", out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(
+                    user, start!, start!.Hooks.Single(hook => hook.Name == "ToExecute"), execute!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, execute!, execute!.Hooks.Single(hook => hook.Name == "Current Iteration"),
+                    currentIteration!, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, execute!, execute!.Hooks.Single(hook => hook.Name == "To Execute"), logAction!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, logAction!, logAction!.Hooks.Single(hook => hook.Name == "Log"), log!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, log!, log!.Hooks.Single(hook => hook.Name == "LogStream"), statusStream!,
+                    out _, out error), error?.Message);
+
+                CreateRunClient(true, runBus =>
+                {
+                    using var completion = new SemaphoreSlim(0);
+                    var reportedStatuses = new ConcurrentQueue<string>();
+                    var succeeded = false;
+                    string failure = string.Empty;
+                    runBus.ClientReportedStatus += (_, _, status) => reportedStatuses.Enqueue(status);
+                    runBus.ClientFinishedModelSystem += (_, _) =>
+                    {
+                        succeeded = true;
+                        completion.Release();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, messageText, stack, _, _) =>
+                    {
+                        failure = $"{messageText}{Environment.NewLine}{stack}";
+                        completion.Release();
+                    };
+
+                    Assert.IsTrue(runBus.RunModelSystem(
+                        msSession,
+                        Path.Combine(pSession.RunsDirectory, "ExecuteScriptedIterationLog"),
+                        "Start 1",
+                        out _,
+                        out error), error?.Message);
+                    Assert.IsTrue(
+                        completion.Wait(5000),
+                        string.IsNullOrEmpty(failure) ? "The iteration logging model did not finish in time." : failure);
+                    Assert.IsTrue(succeeded, string.IsNullOrEmpty(failure) ? "The iteration logging model failed." : failure);
+
+                    var iterationMessages = reportedStatuses
+                        .Where(status => status.Contains("Iteration: ", StringComparison.Ordinal))
+                        .Select(status =>
+                        {
+                            var startIndex = status.IndexOf("Iteration: ", StringComparison.Ordinal);
+                            return status[startIndex..];
+                        })
+                        .ToArray();
+                    CollectionAssert.AreEqual(
+                        new[] { "Iteration: 0", "Iteration: 1", "Iteration: 2" },
+                        iterationMessages);
+                });
+            });
+        }
+
+        [TestMethod]
+        public void FunctionTemplateInstancesLogEachExecuteIteration()
+        {
+            RunInModelSystemContext(nameof(FunctionTemplateInstancesLogEachExecuteIteration), (user, pSession, msSession) =>
+            {
+                var boundary = msSession.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(msSession.AddModelSystemStart(
+                    user, boundary, "Start 1", Rectangle.Hidden, out var start, out var error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Execute", typeof(Execute), Rectangle.Hidden,
+                    out var execute, out var executeParameters, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(
+                    user, boundary, "CurrentIteration", typeof(SetableParameter<int>), Rectangle.Hidden,
+                    out var currentIteration, out error), error?.Message);
+                Assert.IsTrue(msSession.SetParameterValue(user, currentIteration!, "0", out error), error?.Message);
+                Assert.IsTrue(msSession.AddVariable(user, currentIteration!, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Log", typeof(Log), new Rectangle(500, 200, 120, 50),
+                    out var log, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Run Status Stream", typeof(OpenWriteStreamToRunStatus), Rectangle.Hidden,
+                    out var statusStream, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(
+                    user, boundary, "Log Iteration", typeof(WriteToLogA), Rectangle.Hidden,
+                    out var logAction, out var logActionParameters, out error), error?.Message);
+
+                var iterations = executeParameters!.Single(node => node.Name == "Iterations");
+                var message = logActionParameters!.Single(node => node.Name == "Message");
+                Assert.IsTrue(msSession.SetParameterValue(user, iterations, "3", out error), error?.Message);
+                Assert.IsTrue(msSession.SetNodeType(
+                    user, message, typeof(ScriptedParameter<string>), out error), error?.Message);
+                Assert.IsTrue(msSession.SetParameterExpression(
+                    user, message, "\"Iteration: \" + CurrentIteration", out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddLink(
+                    user, start!, start!.Hooks.Single(hook => hook.Name == "ToExecute"), execute!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, execute!, execute!.Hooks.Single(hook => hook.Name == "Current Iteration"),
+                    currentIteration!, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, execute!, execute!.Hooks.Single(hook => hook.Name == "To Execute"), logAction!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, logAction!, logAction!.Hooks.Single(hook => hook.Name == "Log"), log!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user, log!, log!.Hooks.Single(hook => hook.Name == "LogStream"), statusStream!,
+                    out _, out error), error?.Message);
+
+                Assert.IsTrue(msSession.ExtractToFunctionTemplate(
+                    user,
+                    boundary,
+                    [logAction!],
+                    "Iteration Logger",
+                    "Iteration Logger",
+                    Rectangle.Hidden,
+                    Rectangle.Hidden,
+                    out var template,
+                    out _,
+                    out error), error?.Message);
+                Assert.IsNotNull(template);
+                Assert.AreEqual("Log", template!.FunctionParameters.Single().Name);
+                Assert.IsTrue(msSession.AddFunctionInstanceGenerateParameters(
+                    user,
+                    boundary,
+                    template,
+                    "Iteration Logger 2",
+                    Rectangle.Hidden,
+                    out var secondInstance,
+                    out _,
+                    out error), error?.Message);
+                Assert.IsNotNull(secondInstance);
+                Assert.IsTrue(msSession.AddLink(
+                    user,
+                    secondInstance!,
+                    secondInstance!.Hooks.Single(hook => hook.Name == "Log"),
+                    log!,
+                    out _,
+                    out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(
+                    user,
+                    execute!,
+                    execute!.Hooks.Single(hook => hook.Name == "To Execute"),
+                    secondInstance!,
+                    out _,
+                    out error), error?.Message);
+
+                CreateRunClient(true, runBus =>
+                {
+                    using var completion = new SemaphoreSlim(0);
+                    var reportedStatuses = new ConcurrentQueue<string>();
+                    var succeeded = false;
+                    string failure = string.Empty;
+                    runBus.ClientReportedStatus += (_, _, status) => reportedStatuses.Enqueue(status);
+                    runBus.ClientFinishedModelSystem += (_, _) =>
+                    {
+                        succeeded = true;
+                        completion.Release();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, messageText, stack, _, _) =>
+                    {
+                        failure = $"{messageText}{Environment.NewLine}{stack}";
+                        completion.Release();
+                    };
+
+                    Assert.IsTrue(runBus.RunModelSystem(
+                        msSession,
+                        Path.Combine(pSession.RunsDirectory, "FunctionTemplateIterationLog"),
+                        "Start 1",
+                        out _,
+                        out error), error?.Message);
+                    Assert.IsTrue(
+                        completion.Wait(5000),
+                        string.IsNullOrEmpty(failure) ? "The function-template iteration model did not finish in time." : failure);
+                    Assert.IsTrue(
+                        succeeded,
+                        string.IsNullOrEmpty(failure) ? "The function-template iteration model failed." : failure);
+
+                    var iterationMessages = reportedStatuses
+                        .Where(status => status.Contains("Iteration: ", StringComparison.Ordinal))
+                        .Select(status =>
+                        {
+                            var startIndex = status.IndexOf("Iteration: ", StringComparison.Ordinal);
+                            return status[startIndex..];
+                        })
+                        .ToArray();
+                    CollectionAssert.AreEquivalent(
+                        new[]
+                        {
+                            "Iteration: 0", "Iteration: 0",
+                            "Iteration: 1", "Iteration: 1",
+                            "Iteration: 2", "Iteration: 2"
+                        },
+                        iterationMessages);
                 });
             });
         }
