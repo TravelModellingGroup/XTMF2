@@ -35,11 +35,11 @@ public class TutorialCatalogTests
         var catalog = TutorialCatalog.FromModuleAssemblies(
             [typeof(TestLibraryTutorialProvider).Assembly]);
 
-        Assert.AreEqual(5, catalog.Tutorials.Count(tutorial =>
+        Assert.AreEqual(6, catalog.Tutorials.Count(tutorial =>
             !tutorial.Id.StartsWith("tests.", StringComparison.Ordinal)));
-        Assert.IsTrue(catalog.Tutorials.Take(5).All(tutorial =>
+        Assert.IsTrue(catalog.Tutorials.Take(6).All(tutorial =>
             !tutorial.Id.StartsWith("tests.", StringComparison.Ordinal)));
-        Assert.IsTrue(catalog.Tutorials.Skip(5).All(tutorial =>
+        Assert.IsTrue(catalog.Tutorials.Skip(6).All(tutorial =>
             tutorial.Id.StartsWith("tests.", StringComparison.Ordinal)));
         CollectionAssert.AreEqual(
             new[]
@@ -48,29 +48,54 @@ public class TutorialCatalogTests
                 "xtmf2.runtime.log-messages",
                 "xtmf2.runtime.execute-actions",
                 "xtmf2.runtime.function-templates",
-                "xtmf2.runtime.parameter-estimation"
+                "xtmf2.runtime.parameter-estimation",
+                "xtmf2.runtime.calibration"
             },
-            catalog.Entries.Take(5).Select(entry => entry.Tutorial.Id).ToArray());
+            catalog.Entries.Take(6).Select(entry => entry.Tutorial.Id).ToArray());
         CollectionAssert.AreEqual(
-            new[] { 1, 2, 3, 4, 5 },
-            catalog.Entries.Take(5).Select(entry => entry.SequenceNumber).ToArray());
+            new[] { 1, 2, 3, 4, 5, 6 },
+            catalog.Entries.Take(6).Select(entry => entry.SequenceNumber).ToArray());
         CollectionAssert.AreEqual(
             new[] { "tests.library-tutorial", "tests.another-library-tutorial", "tests.unordered-library-tutorial" },
-            catalog.Entries.Skip(5).Select(entry => entry.Tutorial.Id).ToArray());
+            catalog.Entries.Skip(6).Select(entry => entry.Tutorial.Id).ToArray());
         CollectionAssert.AreEqual(
             new[] { 1, 2, 3 },
-            catalog.Entries.Skip(5).Select(entry => entry.SequenceNumber).ToArray());
+            catalog.Entries.Skip(6).Select(entry => entry.SequenceNumber).ToArray());
         Assert.AreEqual(
-            catalog.Entries[5].LibraryName,
-            catalog.Entries[7].LibraryName);
+            catalog.Entries[6].LibraryName,
+            catalog.Entries[8].LibraryName);
         Assert.IsTrue(catalog.Tutorials.Any(tutorial => tutorial.Id == "xtmf2.getting-started"));
         Assert.IsTrue(catalog.Tutorials.Any(tutorial => tutorial.Id == "xtmf2.runtime.log-messages"));
         Assert.IsTrue(catalog.Tutorials.Any(tutorial => tutorial.Id == "xtmf2.runtime.execute-actions"));
         Assert.IsTrue(catalog.Tutorials.Any(tutorial => tutorial.Id == "xtmf2.runtime.function-templates"));
         Assert.IsTrue(catalog.Tutorials.Any(tutorial => tutorial.Id == "xtmf2.runtime.parameter-estimation"));
+        Assert.IsTrue(catalog.Tutorials.Any(tutorial => tutorial.Id == "xtmf2.runtime.calibration"));
         Assert.IsTrue(catalog.Tutorials.Any(tutorial => tutorial.Id == "tests.library-tutorial"));
         Assert.IsTrue(catalog.Tutorials.Any(tutorial => tutorial.Id == "tests.another-library-tutorial"));
         Assert.IsTrue(catalog.Tutorials.Any(tutorial => tutorial.Id == "tests.unordered-library-tutorial"));
+    }
+
+    [TestMethod]
+    public void CalibrationTutorialCoversSetupRunAndApplyingResults()
+    {
+        var tutorial = new BuiltInRuntimeModuleTutorialProvider()
+            .GetTutorials()
+            .Single(candidate => candidate.Order == 6);
+
+        Assert.AreEqual("xtmf2.runtime.calibration", tutorial.Id);
+        Assert.AreEqual("Calibrate a Model Parameter", tutorial.Title);
+        Assert.AreEqual(TutorialCompletionKinds.CalibrationParameterAdded,
+            tutorial.Steps.Single(step => step.Id == "add-calibration-parameter").Completion.Kind);
+        Assert.AreEqual(TutorialTargetIds.CalibrationSettingsButton,
+            tutorial.Steps.Single(step => step.Id == "configure-calibration").TargetId);
+        Assert.AreEqual(TutorialCompletionKinds.CalibrationConfigured,
+            tutorial.Steps.Single(step => step.Id == "configure-calibration").Completion.Kind);
+        Assert.AreEqual(TutorialTargetIds.CalibrationRunButton,
+            tutorial.Steps.Single(step => step.Id == "run-calibration").TargetId);
+        Assert.AreEqual(TutorialCompletionKinds.CalibrationRunCompleted,
+            tutorial.Steps.Single(step => step.Id == "run-calibration").Completion.Kind);
+        Assert.AreEqual(TutorialCompletionKinds.CalibrationParameterApplied,
+            tutorial.Steps.Single(step => step.Id == "apply-calibration-result").Completion.Kind);
     }
 
     [TestMethod]

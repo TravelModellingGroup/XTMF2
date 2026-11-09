@@ -123,6 +123,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         {
             _runController.ModelSystemRunCompleted -= NotifyModelSystemRunCompleted;
             _runController.EstimationRunCompleted -= NotifyEstimationRunCompleted;
+            _runController.CalibrationRunCompleted -= NotifyCalibrationRunCompleted;
         }
 
         _runController = runController;
@@ -130,6 +131,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         {
             _runController.ModelSystemRunCompleted += NotifyModelSystemRunCompleted;
             _runController.EstimationRunCompleted += NotifyEstimationRunCompleted;
+            _runController.CalibrationRunCompleted += NotifyCalibrationRunCompleted;
         }
 
         _loadedEditorViewModel?.SetRunController(runController);
@@ -152,6 +154,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     public event Action<bool>? ModelSystemRunCompleted;
     public event Action? EstimationRunCompleted;
+    public event Action? CalibrationRunCompleted;
 
     internal void NotifyModelSystemRunCompleted(ModelSystemSession session, bool succeeded)
     {
@@ -163,6 +166,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     {
         if (ReferenceEquals(Session, session))
             EstimationRunCompleted?.Invoke();
+    }
+
+    internal void NotifyCalibrationRunCompleted(ModelSystemSession session)
+    {
+        if (ReferenceEquals(Session, session))
+            CalibrationRunCompleted?.Invoke();
     }
 
     /// <summary>The user who owns this editing session.</summary>
@@ -5185,6 +5194,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         {
             _runController.ModelSystemRunCompleted -= NotifyModelSystemRunCompleted;
             _runController.EstimationRunCompleted -= NotifyEstimationRunCompleted;
+            _runController.CalibrationRunCompleted -= NotifyCalibrationRunCompleted;
         }
         if (TutorialGuide is not null)
             TutorialGuide.PropertyChanged -= OnTutorialGuidePropertyChanged;

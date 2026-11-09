@@ -18,9 +18,11 @@
 */
 using System;
 using System.Linq;
+using XTMF2.Bus.Optimization;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.GUI.ViewModels;
+using XTMF2.RuntimeModules;
 
 namespace XTMF2.GUI.Tutorials;
 
@@ -171,6 +173,100 @@ internal sealed class ModelSystemTutorialSkipContext : ITutorialSkipContext
             ? TutorialSkipResult.Success
             : TutorialSkipResult.Failure(error?.Message
                 ?? $"Could not add '{parameterNodeName}' to the estimation group.");
+    }
+
+    public TutorialSkipResult EnsureCalibrationParameter(
+        string parameterNodeName,
+        string modelOutputNodeName,
+        string targetOutputNodeName,
+        double min,
+        double max)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(parameterNodeName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelOutputNodeName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetOutputNodeName);
+        var parameterResult = FindNode(_editor.CurrentBoundary, parameterNodeName, out var parameter);
+        if (!parameterResult.Succeeded)
+            return parameterResult;
+        var modelOutputResult = FindNode(_editor.CurrentBoundary, modelOutputNodeName, out var modelOutput);
+        if (!modelOutputResult.Succeeded)
+            return modelOutputResult;
+        var targetOutputResult = FindNode(_editor.CurrentBoundary, targetOutputNodeName, out var targetOutput);
+        if (!targetOutputResult.Succeeded)
+            return targetOutputResult;
+
+        var parameterType = parameter!.Type;
+        var valueType = parameterType is { IsGenericType: true }
+            ? parameterType.GetGenericArguments()[0]
+            : null;
+        if (parameterType is null
+            || !parameterType.IsGenericType
+            || parameterType.GetGenericTypeDefinition() != typeof(BasicParameter<>)
+            || valueType != typeof(float) && valueType != typeof(double))
+        {
+            return TutorialSkipResult.Failure(
+                $"'{parameterNodeName}' must be a BasicParameter<float> or BasicParameter<double>.");
+        }
+
+        var modelSystem = _editor.Session.ModelSystem;
+        var group = modelSystem.CalibrationGroups
+            .FirstOrDefault(candidate => candidate.Parameters.Any(entry => ReferenceEquals(entry.Node, parameter)));
+        var entry = group?.Parameters.First(candidate => ReferenceEquals(candidate.Node, parameter));
+        if (group is null)
+        {
+            group = modelSystem.CalibrationGroups.FirstOrDefault();
+            if (group is null
+                && !_editor.Session.AddCalibrationGroup(_editor.User, "Default", out group, out var groupError))
+            {
+                return TutorialSkipResult.Failure(groupError?.Message
+                    ?? "Could not create the default calibration group.");
+            }
+        }
+
+        if (entry is null
+            && !_editor.Session.AddCalibrationParameter(
+                _editor.User, group!, parameter, min, max, out entry, out var addError))
+        {
+            return TutorialSkipResult.Failure(addError?.Message
+                ?? $"Could not add '{parameterNodeName}' to the calibration group.");
+        }
+
+        if (!group!.IsEnabled
+            && !_editor.Session.SetCalibrationGroupEnabled(_editor.User, group, true, out var enableError))
+        {
+            return TutorialSkipResult.Failure(enableError?.Message
+                ?? "Could not enable the calibration group.");
+        }
+
+        if (!ReferenceEquals(entry!.ModelOutputNode, modelOutput)
+            && !_editor.Session.SetCalibrationEntryModelOutputNode(
+                _editor.User, entry, modelOutput, out var modelOutputError))
+        {
+            return TutorialSkipResult.Failure(modelOutputError?.Message
+                ?? $"Could not assign '{modelOutputNodeName}' as the model output.");
+        }
+
+        if (!ReferenceEquals(entry.TargetOutputNode, targetOutput)
+            && !_editor.Session.SetCalibrationEntryTargetOutputNode(
+                _editor.User, entry, targetOutput, out var targetOutputError))
+        {
+            return TutorialSkipResult.Failure(targetOutputError?.Message
+                ?? $"Could not assign '{targetOutputNodeName}' as the target output.");
+        }
+
+        return _editor.Session.UpdateCalibrationParameter(
+                _editor.User,
+                entry,
+                min,
+                max,
+                isEnabled: true,
+                errorTolerance: 1e-4,
+                stepSize: 1.0,
+                algorithm: new ProportionalScalingAlgorithm(),
+                out var updateError)
+            ? TutorialSkipResult.Success
+            : TutorialSkipResult.Failure(updateError?.Message
+                ?? $"Could not configure '{parameterNodeName}' for calibration.");
     }
 
     public TutorialSkipResult EnsureParameterValue(string parameterNodeName, string value)

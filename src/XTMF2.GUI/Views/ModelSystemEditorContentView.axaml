@@ -458,6 +458,7 @@
 
                     <!-- Calibration Run — only visible when calibration targets are configured -->
                     <Button Command="{Binding RunCalibrationCommand}"
+                            Classes.tutorial-button-target="{Binding TutorialGuide.TargetId, Converter={x:Static ctrl:TutorialTargetMatchesConverter.Instance}, ConverterParameter={x:Static tutorials:TutorialTargetIds.CalibrationRunButton}}"
                             AutomationProperties.Name="Run calibration"
                             IsEnabled="{Binding CanRun}"
                             IsVisible="{Binding HasCalibrationTargets}"
@@ -532,6 +533,7 @@
 
                     <!-- Calibration parameters -->
                     <Button Click="OnShowCalibrationClick"
+                            Classes.tutorial-button-target="{Binding TutorialGuide.TargetId, Converter={x:Static ctrl:TutorialTargetMatchesConverter.Instance}, ConverterParameter={x:Static tutorials:TutorialTargetIds.CalibrationSettingsButton}}"
                             AutomationProperties.Name="View or manage calibration parameters"
                             ToolTip.Tip="View / manage Calibration Parameters (Ctrl+Shift+C)">
                         <Viewbox Width="18" Height="18">

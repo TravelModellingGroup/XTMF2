@@ -20,10 +20,12 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XTMF2;
+using XTMF2.Bus.Optimization;
 using XTMF2.Editing;
 using XTMF2.GUI.Tutorials;
 using XTMF2.ModelSystemConstruct;
@@ -59,6 +61,7 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
         ((INotifyPropertyChanged)editor.Session).PropertyChanged += OnSessionChanged;
         editor.ModelSystemRunCompleted += OnModelSystemRunCompleted;
         editor.EstimationRunCompleted += OnEstimationRunCompleted;
+        editor.CalibrationRunCompleted += OnCalibrationRunCompleted;
         CaptureStepBaseline(0);
         UpdateWhyThisMattersVisibility();
     }
@@ -78,6 +81,8 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
         TutorialTargetIds.RunButton => "Run from the toolbar or press F5",
         TutorialTargetIds.EstimationSettingsButton => "Open estimation settings from the toolbar or press Ctrl+Shift+E",
         TutorialTargetIds.EstimationRunButton => "Run estimation from the toolbar or press Ctrl+F5",
+        TutorialTargetIds.CalibrationSettingsButton => "Open calibration settings from the toolbar or press Ctrl+Shift+C",
+        TutorialTargetIds.CalibrationRunButton => "Run calibration from the toolbar or press Shift+F5",
         { } targetId => targetId,
         _ => string.Empty
     };
@@ -154,6 +159,12 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
                 .Any(entry => MatchesTarget(entry.Node.Name ?? string.Empty, condition.Target)),
             TutorialCompletionKinds.EstimationConfigured => IsEstimationConfigured(condition.Target),
             TutorialCompletionKinds.EstimationRunCompleted => _stepBaselines[_stepIndex].HasCompletedEstimationRun,
+            TutorialCompletionKinds.CalibrationParameterAdded => _editor.Session.ModelSystem.CalibrationGroups
+                .SelectMany(group => group.Parameters)
+                .Any(entry => MatchesTarget(entry.Node.Name ?? string.Empty, condition.Target)),
+            TutorialCompletionKinds.CalibrationConfigured => IsCalibrationConfigured(condition.Target),
+            TutorialCompletionKinds.CalibrationRunCompleted => _stepBaselines[_stepIndex].HasCompletedCalibrationRun,
+            TutorialCompletionKinds.CalibrationParameterApplied => IsCalibrationParameterApplied(condition.Target),
             TutorialCompletionKinds.ParameterValueChanged => _stepBaselines[_stepIndex].NodeParameterValues
                 .Any(pair => _editor.Nodes.Contains(pair.Key)
                     && MatchesTarget(pair.Key.Name, condition.Target)
@@ -181,6 +192,43 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
                 && Math.Abs(entry.Min) < 1e-9
                 && Math.Abs(entry.Max - 1.0) < 1e-9
                 && Math.Abs(entry.NullHypothesis - 0.8) < 1e-6));
+    }
+
+    private bool IsCalibrationConfigured(string? parameterNodeName)
+    {
+        return _editor.Session.ModelSystem.CalibrationGroups
+            .Where(group => group.IsEnabled)
+            .SelectMany(group => group.Parameters)
+            .Any(entry => MatchesTarget(entry.Node.Name ?? string.Empty, parameterNodeName)
+                && entry.IsEnabled
+                && Math.Abs(entry.Min) < 1e-9
+                && Math.Abs(entry.Max - 1.0) < 1e-9
+                && entry.Algorithm is ProportionalScalingAlgorithm
+                && string.Equals(entry.ModelOutputNode?.Name, "ModelOutput", StringComparison.Ordinal)
+                && string.Equals(entry.TargetOutputNode?.Name, "ObservedTarget", StringComparison.Ordinal));
+    }
+
+    private bool IsCalibrationParameterApplied(string? parameterNodeName)
+    {
+        foreach (var pair in _stepBaselines[_stepIndex].NodeParameterValues)
+        {
+            if (!_editor.Nodes.Contains(pair.Key)
+                || !MatchesTarget(pair.Key.Name, parameterNodeName)
+                || string.Equals(pair.Value, pair.Key.ParameterValueRepresentation, StringComparison.Ordinal)
+                || !double.TryParse(
+                    pair.Key.ParameterValueRepresentation,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var value))
+            {
+                continue;
+            }
+
+            if (Math.Abs(value - 0.4) <= 1e-3)
+                return true;
+        }
+
+        return false;
     }
 
     private static bool MatchesTarget(NodeViewModel node, string? target)
@@ -216,6 +264,10 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
             or TutorialCompletionKinds.EstimationParameterAdded
             or TutorialCompletionKinds.EstimationConfigured
             or TutorialCompletionKinds.EstimationRunCompleted
+            or TutorialCompletionKinds.CalibrationParameterAdded
+            or TutorialCompletionKinds.CalibrationConfigured
+            or TutorialCompletionKinds.CalibrationRunCompleted
+            or TutorialCompletionKinds.CalibrationParameterApplied
             or TutorialCompletionKinds.ParameterValueChanged
             or TutorialCompletionKinds.ModelSystemSaved
             or TutorialCompletionKinds.ModelSystemRunCompleted;
@@ -355,6 +407,26 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
         CompleteOnUiThread();
     }
 
+    private void OnCalibrationRunCompleted()
+    {
+        void CompleteOnUiThread()
+        {
+            if (_disposed || CurrentStep?.Completion.Kind != TutorialCompletionKinds.CalibrationRunCompleted)
+                return;
+
+            _stepBaselines[_stepIndex].HasCompletedCalibrationRun = true;
+            RefreshState();
+        }
+
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(CompleteOnUiThread);
+            return;
+        }
+
+        CompleteOnUiThread();
+    }
+
     private void RefreshState()
     {
         if (!IsFinished && _editor.Session.IsDirty)
@@ -467,6 +539,7 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
         ((INotifyPropertyChanged)_editor.Session).PropertyChanged -= OnSessionChanged;
         _editor.ModelSystemRunCompleted -= OnModelSystemRunCompleted;
         _editor.EstimationRunCompleted -= OnEstimationRunCompleted;
+        _editor.CalibrationRunCompleted -= OnCalibrationRunCompleted;
         foreach (var node in _trackedNodes)
             node.PropertyChanged -= OnTutorialNodeChanged;
         _trackedNodes.Clear();
@@ -495,6 +568,7 @@ public sealed partial class TutorialGuideViewModel : ObservableObject, IDisposab
         public bool HasSeenDirty { get; set; } = hasSeenDirty;
         public bool HasCompletedRun { get; set; }
         public bool HasCompletedEstimationRun { get; set; }
+        public bool HasCompletedCalibrationRun { get; set; }
         public bool WasInsideFunctionTemplate { get; } = wasInsideFunctionTemplate;
     }
 }

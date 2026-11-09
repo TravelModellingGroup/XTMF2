@@ -201,6 +201,8 @@ public static class TutorialTargetIds
     public const string RunButton = "run-button";
     public const string EstimationSettingsButton = "estimation-settings-button";
     public const string EstimationRunButton = "estimation-run-button";
+    public const string CalibrationSettingsButton = "calibration-settings-button";
+    public const string CalibrationRunButton = "calibration-run-button";
 }
 
 public sealed class GettingStartedTutorialProvider : ITutorialProvider

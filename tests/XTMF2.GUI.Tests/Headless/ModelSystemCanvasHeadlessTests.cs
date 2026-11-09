@@ -755,6 +755,75 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void CalibrationTutorialPreparesAndTracksTheCalibrationWorkflow()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(CalibrationTutorialPreparesAndTracksTheCalibrationWorkflow),
+            (user, _, msSession) =>
+            {
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var tutorialDefinition = new BuiltInRuntimeModuleTutorialProvider()
+                    .GetTutorials()
+                    .Single(tutorial => tutorial.Order == 6);
+
+                Session.Dispatch(() =>
+                {
+                    Assert.IsTrue(vm.StartTutorial(tutorialDefinition), vm.ToastMessage);
+                    var tutorial = vm.TutorialGuide!;
+                    var boundary = msSession.ModelSystem.GlobalBoundary;
+                    var start = boundary.Starts.Single();
+                    var scale = boundary.Modules.Single(node => node.Name == "Scale");
+                    var modelOutput = boundary.Modules.Single(node => node.Name == "ModelOutput");
+                    var observedTarget = boundary.Modules.Single(node => node.Name == "ObservedTarget");
+
+                    Assert.AreEqual(typeof(BasicParameter<float>), scale.Type);
+                    Assert.AreEqual("0.25", scale.ParameterValue?.Representation);
+                    Assert.AreEqual(typeof(ScriptedParameter<float>), modelOutput.Type);
+                    Assert.AreEqual("Scale + Scale", modelOutput.ParameterValue?.Representation);
+                    Assert.AreEqual("0.8", observedTarget.ParameterValue?.Representation);
+                    Assert.Contains(scale, msSession.ModelSystem.Variables);
+                    Assert.IsEmpty(msSession.ModelSystem.CalibrationGroups);
+                    Assert.IsNotNull(start);
+
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Choose the parameter to calibrate", tutorial.Title);
+                    tutorial.SkipCommand.Execute(null);
+
+                    Assert.AreEqual("Connect model and target outputs", tutorial.Title);
+                    Assert.AreEqual(TutorialTargetIds.CalibrationSettingsButton, tutorial.TargetId);
+                    var entry = msSession.ModelSystem.CalibrationGroups.Single().Parameters.Single();
+                    Assert.AreSame(scale, entry.Node);
+                    Assert.AreSame(modelOutput, entry.ModelOutputNode);
+                    Assert.AreSame(observedTarget, entry.TargetOutputNode);
+                    Assert.AreEqual(0.0, entry.Min);
+                    Assert.AreEqual(1.0, entry.Max);
+                    Assert.IsInstanceOfType<XTMF2.Bus.Optimization.ProportionalScalingAlgorithm>(entry.Algorithm);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+
+                    Assert.AreEqual("Save the calibration setup", tutorial.Title);
+                    tutorial.SkipCommand.Execute(null);
+                    Assert.AreEqual("Run calibration", tutorial.Title);
+                    Assert.AreEqual(TutorialTargetIds.CalibrationRunButton, tutorial.TargetId);
+                    Assert.IsFalse(tutorial.CanAdvance);
+
+                    vm.NotifyCalibrationRunCompleted(msSession);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Review and apply the result", tutorial.Title);
+                    Assert.IsFalse(tutorial.CanAdvance);
+
+                    Assert.IsTrue(msSession.SetParameterValue(user, scale, "0.4", out var valueError),
+                        valueError?.Message);
+                    Assert.IsTrue(tutorial.CanAdvance);
+                    tutorial.NextCommand.Execute(null);
+                    Assert.AreEqual("Save the calibrated value", tutorial.Title);
+                    Assert.IsTrue(tutorial.CanSkip);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void TutorialGuideTracksStartAndTargetedLinkAddedForCurrentStep()
     {
         TestGuiHelper.RunInModelSystemContext(

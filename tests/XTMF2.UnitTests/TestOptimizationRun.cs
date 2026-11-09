@@ -22,6 +22,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using XTMF2.Bus;
+using XTMF2.Bus.Optimization;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
@@ -490,6 +491,81 @@ public class TestOptimizationRun
                 Assert.IsTrue(msSession.ApplyOptimizationResults(user, receivedResults!, out error), error?.Message);
                 Assert.IsNotNull(paramNode.ParameterValue?.ToString(),
                     "Parameter value should be non-null after apply.");
+            });
+        });
+    }
+
+    [TestMethod]
+    public void CalibrationRun_ProportionalScalingFindsKnownTarget()
+    {
+        RunInModelSystemContext("CalibrationRun_ProportionalScalingFindsKnownTarget", (user, pSession, msSession) =>
+        {
+            CommandError error = null;
+            var ms = msSession.ModelSystem;
+
+            Assert.IsTrue(msSession.AddModelSystemStart(user, ms.GlobalBoundary, "Start",
+                Rectangle.Hidden, out Start start, out error), error?.Message);
+            Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "Scale",
+                typeof(BasicParameter<float>), Rectangle.Hidden, out var scaleNode, out error), error?.Message);
+            Assert.IsTrue(msSession.SetParameterValue(user, scaleNode, "0.25", out error), error?.Message);
+            Assert.IsTrue(msSession.AddVariable(user, scaleNode, out error), error?.Message);
+            Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "ModelOutput",
+                typeof(ScriptedParameter<float>), Rectangle.Hidden, out var modelOutputNode, out error), error?.Message);
+            Assert.IsTrue(msSession.SetParameterExpression(user, modelOutputNode, "Scale + Scale", out error), error?.Message);
+            Assert.IsTrue(msSession.AddNode(user, ms.GlobalBoundary, "ObservedTarget",
+                typeof(BasicParameter<float>), Rectangle.Hidden, out var targetNode, out error), error?.Message);
+            Assert.IsTrue(msSession.SetParameterValue(user, targetNode, "0.8", out error), error?.Message);
+
+            Assert.IsTrue(msSession.AddCalibrationGroup(user, "Default", out var group, out error), error?.Message);
+            Assert.IsTrue(msSession.AddCalibrationParameter(
+                user, group!, scaleNode, 0.0, 1.0, out var entry, out error), error?.Message);
+            Assert.IsTrue(msSession.SetCalibrationEntryModelOutputNode(
+                user, entry!, modelOutputNode, out error), error?.Message);
+            Assert.IsTrue(msSession.SetCalibrationEntryTargetOutputNode(
+                user, entry!, targetNode, out error), error?.Message);
+            Assert.IsTrue(msSession.UpdateCalibrationParameter(
+                user,
+                entry!,
+                min: 0.0,
+                max: 1.0,
+                isEnabled: true,
+                errorTolerance: 1e-4,
+                stepSize: 1.0,
+                algorithm: new ProportionalScalingAlgorithm(),
+                out error), error?.Message);
+
+            CreateRunClient(true, runBus =>
+            {
+                IReadOnlyList<(int nodeIndex, double value)> receivedResults = null;
+                var finished = false;
+                using SemaphoreSlim sim = new SemaphoreSlim(0);
+                runBus.ClientOptimizationResultsAvailable += (_, _, results) => receivedResults = results;
+                runBus.ClientFinishedModelSystem += (_, _) =>
+                {
+                    finished = true;
+                    sim.Release();
+                };
+                runBus.ClientErrorWhenRunningModelSystem += (_, _, message, stack, _, _) =>
+                {
+                    error = new CommandError(message + "\r\n" + stack);
+                    sim.Release();
+                };
+
+                Assert.IsTrue(runBus.RunModelSystem(
+                    msSession,
+                    Path.Combine(pSession.RunsDirectory, "CalibrationKnownTarget"),
+                    "Start",
+                    RunMode.Calibration,
+                    out _,
+                    out error), error?.Message);
+                if (!sim.Wait(30000))
+                    Assert.Fail("Calibration run timed out.");
+                Assert.IsTrue(finished, "Calibration run did not complete successfully: " + error?.ToString());
+                Assert.IsNotNull(receivedResults, "No calibration results were received.");
+                Assert.IsTrue(msSession.ApplyOptimizationResults(user, receivedResults!, out error), error?.Message);
+                Assert.AreEqual(0.4f, float.Parse(
+                    scaleNode.ParameterValue!.Representation,
+                    System.Globalization.CultureInfo.InvariantCulture), 1e-3f);
             });
         });
     }

@@ -101,6 +101,9 @@ public class RunController : IDisposable
     /// <summary>Raised after a successful estimation run has produced parameter results.</summary>
     public event Action<ModelSystemSession>? EstimationRunCompleted;
 
+    /// <summary>Raised after a successful calibration run has produced parameter results.</summary>
+    public event Action<ModelSystemSession>? CalibrationRunCompleted;
+
     /// <summary>
     /// Raised when a model-system run reaches a terminal state.
     /// The Boolean value is true only when the run completed successfully.
@@ -253,6 +256,8 @@ public class RunController : IDisposable
 
         if (session is not null && succeeded && runMode == RunMode.Estimation)
             EstimationRunCompleted?.Invoke(session);
+        if (session is not null && succeeded && runMode == RunMode.Calibration)
+            CalibrationRunCompleted?.Invoke(session);
         if (session is not null)
             ModelSystemRunCompleted?.Invoke(session, succeeded);
     }

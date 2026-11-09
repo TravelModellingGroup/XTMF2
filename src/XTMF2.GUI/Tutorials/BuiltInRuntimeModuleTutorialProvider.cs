@@ -525,6 +525,107 @@ public sealed class BuiltInRuntimeModuleTutorialProvider : ITutorialProvider
             ],
             order: 5,
             initializeAction: PrepareEstimationModel);
+
+        yield return new TutorialDefinition(
+            "xtmf2.runtime.calibration",
+            "Calibrate a Model Parameter",
+            "You nominated a parameter, matched the model output to an observed target, ran calibration, and applied the calibrated value.",
+            [
+                new TutorialStepDefinition(
+                    "welcome",
+                    "Calibrate a Model Parameter",
+                    "This isolated example starts with Scale at 0.25. The model output is twice Scale and the observed target is 0.8, so proportional scaling should calibrate Scale to 0.4.",
+                    new TutorialCompletionCondition(TutorialCompletionKinds.Manual),
+                    "Calibration repeatedly runs the model, compares each model output with its target, and adjusts nominated parameters."),
+                new TutorialStepDefinition(
+                    "add-calibration-parameter",
+                    "Choose the parameter to calibrate",
+                    "Right-click Scale on the canvas and choose Add to Calibration. This creates a Default calibration group and adds Scale with bounds based on its current value.",
+                    new TutorialCompletionCondition(
+                        TutorialCompletionKinds.CalibrationParameterAdded,
+                        "Scale"),
+                    "A calibration parameter is the value the algorithm is allowed to adjust; its bounds keep the value in a valid range.",
+                    TutorialTargetIds.Canvas)
+                {
+                    SkipAction = context => context.EnsureCalibrationParameter(
+                        "Scale", "ModelOutput", "ObservedTarget", min: 0.0, max: 1.0)
+                },
+                new TutorialStepDefinition(
+                    "configure-calibration",
+                    "Connect model and target outputs",
+                    "Open Calibration Parameters with Ctrl+Shift+C. Select Scale, set Model Output to ModelOutput and Target Output to ObservedTarget, and choose Proportional Scaling. Keep the enabled parameter's bounds at 0 and 1.",
+                    new TutorialCompletionCondition(
+                        TutorialCompletionKinds.CalibrationConfigured,
+                        "Scale"),
+                    "Proportional Scaling multiplies the current parameter by target output divided by model output. Here, 0.25 is multiplied by 0.8 / 0.5 to reach 0.4.",
+                    TutorialTargetIds.CalibrationSettingsButton)
+                {
+                    SkipAction = context => context.EnsureCalibrationParameter(
+                        "Scale", "ModelOutput", "ObservedTarget", min: 0.0, max: 1.0)
+                },
+                new TutorialStepDefinition(
+                    "save-calibration",
+                    "Save the calibration setup",
+                    "Save the model system with Ctrl+S or the Save button before running calibration.",
+                    new TutorialCompletionCondition(TutorialCompletionKinds.ModelSystemSaved),
+                    "Saving preserves the parameter group, selected outputs, and update algorithm.",
+                    TutorialTargetIds.SaveButton)
+                {
+                    SkipAction = context => context.SaveModelSystem()
+                },
+                new TutorialStepDefinition(
+                    "run-calibration",
+                    "Run calibration",
+                    "Press Shift+F5 or choose Run Calibration. Select Start 1 and the Local RunServer, then start the run. Return to this tutorial after it finishes.",
+                    new TutorialCompletionCondition(TutorialCompletionKinds.CalibrationRunCompleted),
+                    "Calibration runs the model, compares ModelOutput with ObservedTarget, and reports the resulting parameter value.",
+                    TutorialTargetIds.CalibrationRunButton),
+                new TutorialStepDefinition(
+                    "apply-calibration-result",
+                    "Review and apply the result",
+                    "In the Runs view, select the completed calibration run and choose Apply Optimization Results to Model System. Confirm Scale is now near 0.4, then return to this tutorial.",
+                    new TutorialCompletionCondition(
+                        TutorialCompletionKinds.CalibrationParameterApplied,
+                        "Scale"),
+                    "The run's calibrated value stays separate from the model until you apply the optimization results."),
+                new TutorialStepDefinition(
+                    "save-calibrated-value",
+                    "Save the calibrated value",
+                    "Save the model system again to preserve the applied value.",
+                    new TutorialCompletionCondition(TutorialCompletionKinds.ModelSystemSaved),
+                    "The model now stores the calibrated parameter value.",
+                    TutorialTargetIds.SaveButton)
+                {
+                    SkipAction = context => context.SaveModelSystem()
+                }
+            ],
+            order: 6,
+            initializeAction: PrepareCalibrationModel);
+    }
+
+    private static TutorialSkipResult PrepareCalibrationModel(ITutorialSkipContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        TutorialStepSkipAction[] setupActions =
+        [
+            c => c.EnsureStart("Start 1"),
+            c => c.EnsureModule(typeof(BasicParameter<float>), "Scale"),
+            c => c.EnsureParameterValue("Scale", "0.25"),
+            c => c.EnsureModelSystemVariable("Scale"),
+            c => c.EnsureModule(typeof(ScriptedParameter<float>), "ModelOutput"),
+            c => c.EnsureScriptedParameter("ModelOutput", typeof(ScriptedParameter<float>), "Scale + Scale"),
+            c => c.EnsureModule(typeof(BasicParameter<float>), "ObservedTarget"),
+            c => c.EnsureParameterValue("ObservedTarget", "0.8")
+        ];
+
+        foreach (var setupAction in setupActions)
+        {
+            var result = setupAction(context);
+            if (!result.Succeeded)
+                return result;
+        }
+
+        return TutorialSkipResult.Success;
     }
 
     private static TutorialSkipResult PrepareEstimationModel(ITutorialSkipContext context)

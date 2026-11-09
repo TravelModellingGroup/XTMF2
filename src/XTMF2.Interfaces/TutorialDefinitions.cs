@@ -154,6 +154,13 @@ public interface ITutorialSkipContext
     TutorialSkipResult EnsureLink(string originName, string hookName, string destinationName);
     TutorialSkipResult EnsureEstimationParameter(
         string parameterNodeName, double min, double max, double nullHypothesis);
+    TutorialSkipResult EnsureCalibrationParameter(
+        string parameterNodeName,
+        string modelOutputNodeName,
+        string targetOutputNodeName,
+        double min,
+        double max)
+        => TutorialSkipResult.Failure("This tutorial provider does not support preparing calibration parameters.");
     TutorialSkipResult EnsureParameterValue(string parameterNodeName, string value);
     TutorialSkipResult EnsureModelSystemVariable(string nodeName);
     TutorialSkipResult EnsureScriptedParameter(string parameterNodeName, Type scriptedParameterType, string expression);
@@ -219,6 +226,10 @@ public static class TutorialCompletionKinds
     public const string EstimationParameterAdded = "estimation-parameter-added";
     public const string EstimationConfigured = "estimation-configured";
     public const string EstimationRunCompleted = "estimation-run-completed";
+    public const string CalibrationParameterAdded = "calibration-parameter-added";
+    public const string CalibrationConfigured = "calibration-configured";
+    public const string CalibrationRunCompleted = "calibration-run-completed";
+    public const string CalibrationParameterApplied = "calibration-parameter-applied";
     public const string ParameterValueChanged = "parameter-value-changed";
     public const string ModelSystemSaved = "model-system-saved";
     public const string ModelSystemRunCompleted = "model-system-run-completed";
