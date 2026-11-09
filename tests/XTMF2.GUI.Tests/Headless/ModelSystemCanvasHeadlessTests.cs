@@ -1039,6 +1039,49 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void ModelSystemCanvas_HitTestsVisibleHookRowsBeyondStoredNodeHeight()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_HitTestsVisibleHookRowsBeyondStoredNodeHeight),
+            (user, _, msSession) =>
+            {
+                Assert.IsTrue(msSession.AddNode(
+                    user,
+                    msSession.ModelSystem.GlobalBoundary,
+                    "NodeWithHooks",
+                    typeof(OptionalThenParameterGuiTestModule),
+                    new Rectangle(100, 100, 120, 50),
+                    out var node,
+                    out var error), error?.Message);
+                Assert.IsNotNull(node);
+
+                using var vm = new ModelSystemEditorViewModel(msSession, user, runController: null);
+                var nodeVm = vm.Nodes.Single(candidate => ReferenceEquals(candidate.UnderlyingNode, node));
+                nodeVm.ShowHooks = true;
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var buildCache = typeof(ModelSystemCanvas).GetMethod(
+                        "BuildHookAnchorCache",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var hitTest = typeof(ModelSystemCanvas).GetMethod(
+                        "HitTest",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(buildCache);
+                    Assert.IsNotNull(hitTest);
+                    buildCache!.Invoke(canvas, null);
+
+                    Assert.IsGreaterThanOrEqualTo(node!.Hooks.Count, 2,
+                        "The test node must have multiple visible hook rows.");
+                    var hit = hitTest!.Invoke(canvas, [new Avalonia.Point(120, 154), false]);
+                    Assert.AreSame(nodeVm, hit,
+                        "A visible hook row below the stored node height must still hit its node.");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void ModelSystemCanvas_AutoScrollTimer_ContinuesForRubberBandSelection()
     {
         Session.Dispatch(() =>

@@ -740,12 +740,21 @@ partial class ModelSystemCanvas
     {
         if (_vm is null) return null;
 
-        static ICanvasElement? TestHitsElement<T>(ObservableCollection<T> collection, Point pos) where T : ICanvasElement
+        bool IsPointWithinRenderedBounds(ICanvasElement element, Point pos)
+        {
+            if (element is StartViewModel)
+                return element.IsPointWithin(pos);
+
+            return new Rect(element.X, element.Y, ElementRenderWidth(element), ElementRenderHeight(element))
+                .Contains(pos);
+        }
+
+        ICanvasElement? TestHitsElement<T>(ObservableCollection<T> collection, Point pos) where T : ICanvasElement
         {
             for (int index = collection.Count - 1; index >= 0; index--)
             {
                 var element = collection[index];
-                if (element.IsPointWithin(pos))
+                if (IsPointWithinRenderedBounds(element, pos))
                     return element;
             }
             return null;
