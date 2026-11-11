@@ -98,6 +98,69 @@ namespace XTMF2.UnitTests
 
         [TestMethod]
         [DoNotParallelize]
+        public void CancelModelSystemStopsActiveRun()
+        {
+            RunInModelSystemContext(nameof(CancelModelSystemStopsActiveRun), (user, pSession, msSession) =>
+            {
+                var modelSystem = msSession.ModelSystem;
+                Assert.IsTrue(msSession.AddModelSystemStart(user, modelSystem.GlobalBoundary, "Start",
+                    Rectangle.Hidden, out var start, out var error), error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(user, modelSystem.GlobalBoundary, "Report Started",
+                    typeof(ReportActionInvocation), Rectangle.Hidden, out var report, out var reportParameters, out error),
+                    error?.Message);
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(user, modelSystem.GlobalBoundary, "Long Sleep",
+                    typeof(Sleep), Rectangle.Hidden, out var sleep, out var sleepParameters, out error), error?.Message);
+                var reportMessage = reportParameters!.Single(parameter => parameter.Type == typeof(BasicParameter<string>));
+                var sleepDuration = sleepParameters!.Single(parameter => parameter.Type == typeof(BasicParameter<int>));
+                Assert.IsTrue(msSession.SetParameterValue(user, reportMessage,
+                    "Cancellation test entered sleep.", out error), error?.Message);
+                Assert.IsTrue(msSession.SetParameterValue(user, sleepDuration, "30000", out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, start, GetHook(start.Hooks, "ToExecute"),
+                    report, out _, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, report, GetHook(report.Hooks, "To Invoke"),
+                    sleep, out _, out error), error?.Message);
+
+                CreateRunClient(true, runBus =>
+                {
+                    using var started = new ManualResetEventSlim();
+                    using var terminal = new ManualResetEventSlim();
+                    string terminalState = string.Empty;
+                    runBus.ClientReportedStatus += (_, _, status) =>
+                    {
+                        if (status == "Cancellation test entered sleep.")
+                            started.Set();
+                    };
+                    runBus.ClientRunCancelled += (_, _) =>
+                    {
+                        terminalState = "Cancelled";
+                        terminal.Set();
+                    };
+                    runBus.ClientFinishedModelSystem += (_, _) =>
+                    {
+                        terminalState = "Finished";
+                        terminal.Set();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, message, _, _, _) =>
+                    {
+                        terminalState = $"Failed: {message}";
+                        terminal.Set();
+                    };
+
+                    Assert.IsTrue(runBus.RunModelSystem(msSession,
+                        Path.Combine(pSession.RunsDirectory, Guid.NewGuid().ToString("N")),
+                        "Start", out var runId, out error), error?.Message);
+                    Assert.IsTrue(started.Wait(TimeSpan.FromSeconds(10)),
+                        "The run did not reach the long-running action.");
+                    Assert.IsTrue(runBus.CancelModelRun(runId!, out error), error?.Message);
+                    Assert.IsTrue(terminal.Wait(TimeSpan.FromSeconds(10)),
+                        "The run did not report a terminal state after cancellation.");
+                    Assert.AreEqual("Cancelled", terminalState);
+                });
+            });
+        }
+
+        [TestMethod]
+        [DoNotParallelize]
         public void TutorialStartSleepModelSystemRunsToCompletion()
         {
             RunInModelSystemContext("TutorialStartSleepModelSystemRunsToCompletion", (user, pSession, msSession) =>

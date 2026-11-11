@@ -47,7 +47,9 @@ public enum RunStatus
     /// <summary>The run encountered an error.</summary>
     Error,
     /// <summary>The RunServer restarted before the run completed.</summary>
-    Interrupted
+    Interrupted,
+    /// <summary>The run was cancelled by the user.</summary>
+    Cancelled
 }
 
 /// <summary>
@@ -197,6 +199,9 @@ public sealed partial class RunViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
     [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(CanCancelRun))]
+    [NotifyPropertyChangedFor(nameof(CanRequestCancelRun))]
+    [NotifyCanExecuteChangedFor(nameof(CancelRunCommand))]
     private RunStatus _status = RunStatus.Running;
 
     /// <summary>
@@ -220,8 +225,20 @@ public sealed partial class RunViewModel : ObservableObject
         RunStatus.Finished => "✅",
         RunStatus.Error    => "❌",
         RunStatus.Interrupted => "↻",
+        RunStatus.Cancelled => "⏹",
         _                  => "?"
     };
+
+    /// <summary>True while this run is active and has a cancellation action.</summary>
+    public bool CanCancelRun => Status == RunStatus.Running && _cancelAction is not null;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRequestCancelRun))]
+    [NotifyCanExecuteChangedFor(nameof(CancelRunCommand))]
+    private bool _isCancellationRequested;
+
+    /// <summary>True while a cancellation request can be sent.</summary>
+    public bool CanRequestCancelRun => CanCancelRun && !IsCancellationRequested;
 
     private ModelSystemSession? _session;
     private User? _user;
@@ -239,7 +256,7 @@ public sealed partial class RunViewModel : ObservableObject
         _user = user;
     }
 
-    public RunViewModel(RemoteRunSnapshot snapshot, string runServer, Action? cancelAction = null)
+    public RunViewModel(RemoteRunSnapshot snapshot, string runServer, Func<string?>? cancelAction = null)
         : this(snapshot.RunId, snapshot.RunName, RemoteRunOutputPaths.GetLocalDirectory(snapshot.RunId), runServer, null!, null!)
     {
         _recoveredSnapshot = snapshot;
@@ -248,7 +265,7 @@ public sealed partial class RunViewModel : ObservableObject
         RemoteOutputAvailable = snapshot.ArtifactsAvailable && !ArtifactsAvailable;
         IsRecoveredRunUnbound = true;
         SetRunMode(snapshot.RunMode,
-            Array.Empty<(int nodeIndex, string name, double min, double max)>(), cancelAction ?? (() => { }));
+            Array.Empty<(int nodeIndex, string name, double min, double max)>(), cancelAction ?? (() => null));
         var parameterValues = snapshot.ProgressParameters
             .Concat(snapshot.OptimizationResults ?? Array.Empty<RemoteRunParameterValue>())
             .GroupBy(value => value.NodeIndex)
@@ -280,6 +297,9 @@ public sealed partial class RunViewModel : ObservableObject
             case RemoteRunState.Interrupted:
                 MarkInterrupted(snapshot.Status);
                 break;
+            case RemoteRunState.Cancelled:
+                MarkCancelled();
+                break;
             default:
                 AppendStatus(snapshot.Status);
                 break;
@@ -288,7 +308,7 @@ public sealed partial class RunViewModel : ObservableObject
             AppendStatus("Run output is retained on the RunServer and can be retrieved after binding this run.");
     }
 
-    public RunViewModel(SharedEstimationJobSnapshot snapshot, string runServer, Action cancelAction)
+    public RunViewModel(SharedEstimationJobSnapshot snapshot, string runServer, Func<string?> cancelAction)
         : this(snapshot.RunId,
             string.IsNullOrWhiteSpace(snapshot.RunName) ? $"Estimation {snapshot.RunId}" : snapshot.RunName,
             snapshot.WorkingDirectory, runServer, null!, null!)
@@ -316,7 +336,7 @@ public sealed partial class RunViewModel : ObservableObject
         _session = session;
         _user = user;
         IsRecoveredRunUnbound = false;
-        SetRunMode(RunType, metadata, _cancelAction ?? (() => { }));
+        SetRunMode(RunType, metadata, _cancelAction ?? (() => null));
         if (_recoveredSnapshot is { ProgressParameters.Count: > 0 } snapshot)
             UpdateIterationProgress(snapshot.Iteration, snapshot.Fitness, 0,
                 snapshot.ProgressParameters.Select(value => (value.NodeIndex, value.Value)).ToArray());
@@ -371,6 +391,9 @@ public sealed partial class RunViewModel : ObservableObject
             case RemoteRunState.Interrupted when Status != RunStatus.Interrupted:
                 MarkInterrupted(snapshot.Status);
                 break;
+            case RemoteRunState.Cancelled when Status != RunStatus.Cancelled:
+                MarkCancelled();
+                break;
             case RemoteRunState.Running when Status != RunStatus.Running:
                 Status = RunStatus.Running;
                 StatusText = snapshot.Status;
@@ -388,14 +411,17 @@ public sealed partial class RunViewModel : ObservableObject
         if (OptimizationParameters.Count == 0 && parameters.Count > 0)
             SetRunMode(RunMode.Estimation,
                 parameters.Select(parameter => (parameter.NodeIndex, parameter.Name, parameter.Min, parameter.Max)).ToArray(),
-                _cancelAction ?? (() => { }));
+                _cancelAction ?? (() => null));
         if (snapshot.Progress is { } progress)
             UpdateSharedEstimationProgress(progress);
         if (snapshot.Completion is { } completion)
         {
             if (!completion.Succeeded)
             {
-                MarkError(completion.FailureReason ?? "Remote estimation failed.", string.Empty, null, null);
+                if (IsCancellationRequested)
+                    MarkCancelled();
+                else
+                    MarkError(completion.FailureReason ?? "Remote estimation failed.", string.Empty, null, null);
                 return;
             }
             _optimizationResults = completion.BestParameters
@@ -413,7 +439,6 @@ public sealed partial class RunViewModel : ObservableObject
                 Status = RunStatus.Running;
                 OnPropertyChanged(nameof(StatusBadge));
                 OnPropertyChanged(nameof(IsCompleted));
-                CancelRunCommand.NotifyCanExecuteChanged();
             }
             StatusText = "Estimation running";
         }
@@ -645,10 +670,11 @@ public sealed partial class RunViewModel : ObservableObject
     /// <summary>Called by <see cref="RunController"/> after the run is submitted.</summary>
     internal void SetRunMode(RunMode runMode,
         IReadOnlyList<(int nodeIndex, string name, double min, double max)> meta,
-        Action cancelAction)
+        Func<string?> cancelAction)
     {
         RunType = runMode;
         _cancelAction = cancelAction;
+        IsCancellationRequested = false;
         OptimizationParameters.Clear();
         _paramByIndex.Clear();
         foreach (var (idx, name, min, max) in meta)
@@ -658,6 +684,8 @@ public sealed partial class RunViewModel : ObservableObject
             _paramByIndex[idx] = vm;
         }
         OnPropertyChanged(nameof(IsOptimizationRun));
+        OnPropertyChanged(nameof(CanCancelRun));
+        OnPropertyChanged(nameof(CanRequestCancelRun));
         CancelRunCommand.NotifyCanExecuteChanged();
     }
 
@@ -852,12 +880,28 @@ public sealed partial class RunViewModel : ObservableObject
 
     // ── Cancel command ────────────────────────────────────────────────────
 
-    private Action? _cancelAction;
+    private Func<string?>? _cancelAction;
 
-    private bool CanCancelRun() => Status == RunStatus.Running && IsOptimizationRun;
+    private bool CanExecuteCancelRun() => CanRequestCancelRun;
 
-    [RelayCommand(CanExecute = nameof(CanCancelRun))]
-    private void CancelRun() => _cancelAction?.Invoke();
+    [RelayCommand(CanExecute = nameof(CanExecuteCancelRun))]
+    private void CancelRun()
+    {
+        if (!CanExecuteCancelRun() || _cancelAction is null)
+            return;
+
+        IsCancellationRequested = true;
+        AppendStatus("Cancellation requested by user.");
+        StatusText = "Cancellation requested…";
+
+        var error = _cancelAction();
+        if (error is null)
+            return;
+
+        IsCancellationRequested = false;
+        AppendStatus($"Unable to cancel run: {error}");
+        StatusText = "Cancellation request failed.";
+    }
 
     // ── Optimization results ──────────────────────────────────────────────
 
@@ -991,6 +1035,7 @@ public sealed partial class RunViewModel : ObservableObject
     /// <summary>Marks the run as finished successfully.</summary>
     internal void MarkFinished(string? completionMessage = null)
     {
+        IsCancellationRequested = false;
         Status     = RunStatus.Finished;
         MarkSharedEstimationOutputAvailableIfPresent();
         StatusText = completionMessage ??
@@ -1001,12 +1046,12 @@ public sealed partial class RunViewModel : ObservableObject
             AddMessage(completionMessage);
         OnPropertyChanged(nameof(StatusBadge));
         OnPropertyChanged(nameof(IsCompleted));
-        CancelRunCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>Marks the run as failed with an error message.</summary>
     internal void MarkError(string errorMessage, string stack, string? moduleName, Guid? elementId)
     {
+        IsCancellationRequested = false;
         Status     = RunStatus.Error;
         MarkSharedEstimationOutputAvailableIfPresent();
         StatusText = errorMessage;
@@ -1020,22 +1065,32 @@ public sealed partial class RunViewModel : ObservableObject
             AddMessage($"Failing module: {moduleName}");
         OnPropertyChanged(nameof(StatusBadge));
         OnPropertyChanged(nameof(IsCompleted));
-        CancelRunCommand.NotifyCanExecuteChanged();
     }
 
     private void MarkInterrupted(string message)
     {
+        IsCancellationRequested = false;
         Status = RunStatus.Interrupted;
         MarkSharedEstimationOutputAvailableIfPresent();
         StatusText = message;
         AddMessage(message);
         OnPropertyChanged(nameof(StatusBadge));
         OnPropertyChanged(nameof(IsCompleted));
-        CancelRunCommand.NotifyCanExecuteChanged();
     }
 
     internal void MarkConnectionLost()
         => MarkInterrupted("RunServer connection was lost; the run status is unknown until it reconnects.");
+
+    internal void MarkCancelled()
+    {
+        IsCancellationRequested = false;
+        Status = RunStatus.Cancelled;
+        MarkSharedEstimationOutputAvailableIfPresent();
+        StatusText = "Run cancelled by user.";
+        AddMessage(StatusText);
+        OnPropertyChanged(nameof(StatusBadge));
+        OnPropertyChanged(nameof(IsCompleted));
+    }
 
     private void MarkSharedEstimationOutputAvailableIfPresent()
     {

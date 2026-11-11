@@ -64,7 +64,7 @@ public class RunControllerCompletionTests
             {
                 var run = new RunViewModel("run-3", "estimation", string.Empty, "remote", session, user);
                 run.SetRunMode(RunMode.Estimation,
-                    Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => { });
+                    Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => null);
                 const string completion = "[Estimation] converged after 8 fitness tests in 3 iterations.";
 
                 run.AppendStatus(completion);
@@ -332,7 +332,7 @@ public class RunControllerCompletionTests
     {
         var run = new RunViewModel(runId, "estimation", runDirectory, "Local RunServer", null!, null!);
         run.SetRunMode(RunMode.Estimation,
-            Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => { });
+            Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => null);
         run.SetRemoteRunTracking(isRemote);
         run.SetRemoteEstimationWorkers(Array.Empty<RunServerEndpoint>(), Array.Empty<string>(),
             _ => null, _ => null);
@@ -373,6 +373,23 @@ public class RunControllerCompletionTests
     }
 
     [TestMethod]
+    public void RecoveredCancelledRun_RestoresCancelledState()
+    {
+        var snapshot = new RemoteRunSnapshot("run-cancelled", "forecast", RunMode.Normal,
+            "/remote/runs/forecast", "Start", "model-hash", RemoteRunState.Cancelled,
+            "Run cancelled by user.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
+            null, null, false, DateTimeOffset.UtcNow);
+
+        var run = new RunViewModel(snapshot, "orchestrator");
+
+        Assert.AreEqual(RunStatus.Cancelled, run.Status);
+        Assert.IsTrue(run.IsCompleted);
+        Assert.AreEqual(snapshot.Status, run.StatusText);
+        Assert.Contains(snapshot.Status, run.Messages);
+        Assert.IsFalse(run.CanCancelRun);
+    }
+
+    [TestMethod]
     public void RecoveredSharedEstimation_RestoresProgressAndWorkers()
     {
         var progress = new SharedEstimationProgress("shared-recovered", 5, 0.125,
@@ -382,7 +399,7 @@ public class RunControllerCompletionTests
             [new SharedEstimationParameterMetadata(14, "Fare", 0, 10),
              new SharedEstimationParameterMetadata(27, "Wait", 0, 20)]);
 
-        var run = new RunViewModel(snapshot, "Remote Orchestrator", () => { });
+        var run = new RunViewModel(snapshot, "Remote Orchestrator", () => null);
 
         Assert.AreEqual("restored-estimation", run.RunName);
         Assert.AreEqual(RunStatus.Running, run.Status);
@@ -405,7 +422,7 @@ public class RunControllerCompletionTests
             null, completion, [], "completed-estimation", "/runs/completed-estimation", "model-hash",
             [new SharedEstimationParameterMetadata(18, "Mode share", 0, 1)]);
 
-        var run = new RunViewModel(snapshot, "Remote Orchestrator", () => { });
+        var run = new RunViewModel(snapshot, "Remote Orchestrator", () => null);
 
         Assert.AreEqual(RunStatus.Finished, run.Status);
         Assert.IsTrue(run.HasOptimizationResults);
@@ -424,7 +441,7 @@ public class RunControllerCompletionTests
                 var endpoint = new RunServerEndpoint { Id = "worker-1", Name = "Worker 1" };
                 var addRequests = 0;
                 run.SetRunMode(RunMode.Estimation,
-                    Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => { });
+                    Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => null);
                 run.SetRemoteEstimationWorkers([endpoint], [endpoint.Id], _ =>
                 {
                     addRequests++;
@@ -463,7 +480,7 @@ public class RunControllerCompletionTests
         var sharedSnapshot = new SharedEstimationJobSnapshot("shared-reconnect-state",
             SharedEstimationJobState.Running, null, null, ["worker-1"], "estimation",
             "/remote/runs/estimation", "model-hash");
-        var sharedRun = new RunViewModel(sharedSnapshot, "Remote Coordinator", () => { });
+        var sharedRun = new RunViewModel(sharedSnapshot, "Remote Coordinator", () => null);
 
         sharedRun.MarkConnectionLost();
 

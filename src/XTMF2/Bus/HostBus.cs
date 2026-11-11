@@ -105,7 +105,8 @@ public sealed class HostBus : IDisposable
         ClientIterationProgress = 10,
         ClientRunArtifacts = 11,
         SharedEstimationMessage = 12,
-        DeploymentMessage = 13
+        DeploymentMessage = 13,
+        ClientRunCancelled = 14
     }
 
     /// <summary>
@@ -113,6 +114,8 @@ public sealed class HostBus : IDisposable
     /// The parameter is the name of the completed model system.
     /// </summary>
     public event EventHandler<string>? ClientFinishedModelSystem;
+
+    public event EventHandler<string>? ClientRunCancelled;
 
     public event EventHandler<RunArtifactsReceivedEventArgs>? ClientRunArtifactsReceived;
 
@@ -312,6 +315,12 @@ public sealed class HostBus : IDisposable
                                 Console.WriteLine($"Host <- RunServer completion: {runId}");
                                 Console.Out.Flush();
                                 IgnoreWarnings(() => ClientFinishedModelSystem?.Invoke(this, runId));
+                            }
+                            break;
+                        case In.ClientRunCancelled:
+                            {
+                                var runId = reader.ReadString();
+                                IgnoreWarnings(() => ClientRunCancelled?.Invoke(this, runId));
                             }
                             break;
                         case In.ClientErrorWhenRunningModelSystem:

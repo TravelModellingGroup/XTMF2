@@ -16,7 +16,8 @@ public enum RemoteRunState
     Running,
     Completed,
     Failed,
-    Interrupted
+    Interrupted,
+    Cancelled
 }
 
 public sealed record RemoteRunParameterValue(int NodeIndex, double Value);
@@ -643,6 +644,17 @@ public sealed class RemoteRunRegistry : IDisposable
                 UpdatedAt = DateTimeOffset.UtcNow
             });
             Forward(observer => observer.ModelRunComplete(runId));
+        }
+
+        public void ModelRunCancelled(string runId)
+        {
+            Update(snapshot => snapshot with
+            {
+                State = RemoteRunState.Cancelled,
+                Status = "Run cancelled by user.",
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            Forward(observer => observer.ModelRunCancelled(runId));
         }
 
         public void SendRunArtifacts(string runId, string runDirectory)

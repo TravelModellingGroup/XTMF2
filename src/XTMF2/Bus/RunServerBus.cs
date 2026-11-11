@@ -94,6 +94,9 @@ namespace XTMF2.Bus
         void IRunOutputSink.ModelRunComplete(string runId)
             => ModelRunComplete(runId);
 
+        void IRunOutputSink.ModelRunCancelled(string runId)
+            => ModelRunCancelled(runId);
+
         void IRunOutputSink.SendRunArtifacts(string runId, string runDirectory)
             => SendRunArtifacts(runId, runDirectory);
 
@@ -174,7 +177,8 @@ namespace XTMF2.Bus
             ClientIterationProgress = 10,
             ClientRunArtifacts = 11,
             SharedEstimationMessage = 12,
-            DeploymentMessage = 13
+            DeploymentMessage = 13,
+            ClientRunCancelled = 14
         }
 
         public event Action<object, SharedEstimationRunRequest>? SharedEstimationRunRequested;
@@ -493,6 +497,15 @@ namespace XTMF2.Bus
             Write((writer) =>
             {
                 writer.Write((int)Out.ClientFinishedModelSystem);
+                writer.Write(runId);
+            });
+        }
+
+        internal void ModelRunCancelled(string runId)
+        {
+            Write(writer =>
+            {
+                writer.Write((int)Out.ClientRunCancelled);
                 writer.Write(runId);
             });
         }

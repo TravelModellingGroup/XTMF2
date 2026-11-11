@@ -23,5 +23,7 @@ internal interface IRunOutputSink
 
     void ModelRunComplete(string runId);
 
+    void ModelRunCancelled(string runId);
+
     void SendRunArtifacts(string runId, string runDirectory);
 }

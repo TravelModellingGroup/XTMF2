@@ -75,11 +75,13 @@ namespace XTMF2.Bus
 
         public RunMode Mode => _runMode;
 
-        /// <summary>Set to true to request that the optimisation loop terminates after the current iteration.</summary>
+        /// <summary>Set when cancellation has been requested.</summary>
         private volatile bool _cancelRequested;
         private volatile bool _killRequested;
         private readonly object _processSync = new();
         private Process? _runProcess;
+
+        internal bool CancellationRequested => _cancelRequested && !_killRequested;
 
         private List<Action<double>>? _sharedWorkerSetters;
         private IAction? _sharedWorkerStart;
@@ -87,12 +89,19 @@ namespace XTMF2.Bus
         private ModelSystem? _sharedWorkerModelSystem;
 
         /// <summary>
-        /// Requests that the optimisation loop for this run terminates, if this run's ID matches.
+        /// Requests cancellation of this run, if the ID matches.
         /// </summary>
         internal void RequestCancelRun(string runId)
         {
-            if (ID == runId)
-                _cancelRequested = true;
+            if (ID != runId)
+                return;
+
+            _cancelRequested = true;
+            if (_runMode == RunMode.Normal)
+            {
+                lock (_processSync)
+                    KillProcessIfRunning(_runProcess);
+            }
         }
 
         internal bool KillRequested => _killRequested;
@@ -305,7 +314,7 @@ namespace XTMF2.Bus
                 lock (_processSync)
                 {
                     _runProcess = runProcess;
-                    if (_killRequested)
+                    if (_killRequested || _cancelRequested)
                         KillProcessIfRunning(runProcess);
                 }
             });
@@ -328,6 +337,9 @@ namespace XTMF2.Bus
 
         internal void RunInNewProcess(IRunOutputSink client)
         {
+            if (_cancelRequested)
+                return;
+
             // Optimisation runs always orchestrate their loop in-process; only the individual
             // model-system executions within each iteration use the out-of-process runner
             // (future multi-server extension).  For now, fall through to RunInCurrentProcess.
@@ -362,6 +374,9 @@ namespace XTMF2.Bus
 
         internal void RunInCurrentProcess(IRunOutputSink client)
         {
+            if (_cancelRequested)
+                return;
+
             if (_runMode == RunMode.Estimation)
             {
                 RunEstimationLoop(client);
@@ -570,6 +585,9 @@ namespace XTMF2.Bus
                     loopRunBus.CurrentRun = null;
             }
 
+            if (_cancelRequested)
+                return;
+
             if (firstRunError != null)
             {
                 if (firstRunError.Type is RunErrorType.Validation or RunErrorType.RuntimeValidation)
@@ -725,6 +743,9 @@ namespace XTMF2.Bus
                 if (ReferenceEquals(loopRunBus.CurrentRun, loopRun))
                     loopRunBus.CurrentRun = null;
             }
+
+            if (_cancelRequested)
+                return;
 
             client.SendStatusMessage(ID,
                 $"[Calibration] complete. Final parameters: " +

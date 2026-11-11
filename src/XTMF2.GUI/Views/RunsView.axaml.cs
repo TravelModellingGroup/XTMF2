@@ -150,6 +150,23 @@ public partial class RunsView : UserControl
             run.AppendStatus(error ?? "Unable to request remote output transfer.");
     }
 
+    private async void CancelRunButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm?.SelectedRun is not { } run || !run.CanRequestCancelRun)
+            return;
+        if (TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            run.AppendStatus("Unable to display the cancel confirmation.");
+            return;
+        }
+
+        var confirmation = new ConfirmDialog("Cancel Run?",
+            $"Cancel '{run.RunName}'? The run will be stopped and may leave partial output.");
+        await confirmation.ShowDialog(owner);
+        if (confirmation.Result && run.CancelRunCommand.CanExecute(null))
+            run.CancelRunCommand.Execute(null);
+    }
+
     private async void RemoveRunButton_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button { DataContext: RunViewModel run } || _vm is null)

@@ -47,7 +47,8 @@
                                         <TextBlock Text="{Binding RunName}"
                                                    FontWeight="SemiBold"
                                                    FontSize="13"
-                                                   TextTrimming="CharacterEllipsis"/>
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"/>
                                         <TextBlock Text="{Binding RunServer}"
                                                    FontSize="10"
                                                    Opacity="0.55"
@@ -109,9 +110,39 @@
                     <StackPanel Grid.Row="0"
                                 IsVisible="{Binding SelectedRun, Converter={x:Static ObjectConverters.IsNotNull}}"
                                 Margin="0,0,0,8">
-                        <TextBlock Text="{Binding SelectedRun.RunName}"
-                                   FontSize="15"
-                                   FontWeight="SemiBold"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="{Binding SelectedRun.RunName}"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="CancelRunButton"
+                                    Grid.Column="1"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    MinWidth="32"
+                                    Width="32"
+                                    Height="32"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    HorizontalContentAlignment="Center"
+                                    VerticalContentAlignment="Center"
+                                    IsVisible="{Binding SelectedRun.CanCancelRun}"
+                                    IsEnabled="{Binding SelectedRun.CanRequestCancelRun}"
+                                    Click="CancelRunButton_Click"
+                                    ToolTip.Tip="Cancel this run.">
+                                <Viewbox Width="18" Height="18">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="M 5,5 L 15,15 M 15,5 L 5,15"
+                                              Stroke="{DynamicResource NeonIconSecondary}"
+                                              StrokeThickness="2.4"
+                                              StrokeLineCap="Round"
+                                              Fill="Transparent"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                        </Grid>
                         <TextBlock Text="{Binding SelectedRun.RunServer}"
                                    FontSize="11"
                                    Opacity="0.6"
@@ -123,6 +154,11 @@
                                        Opacity="0.7"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
+                        <TextBlock Text="Cancellation requested…"
+                                   IsVisible="{Binding SelectedRun.IsCancellationRequested}"
+                                   FontSize="11"
+                                   Opacity="0.7"
+                                   Margin="0,4,0,0"/>
                         <StackPanel Orientation="Horizontal"
                                     Spacing="8"
                                     Margin="0,4,0,0"
