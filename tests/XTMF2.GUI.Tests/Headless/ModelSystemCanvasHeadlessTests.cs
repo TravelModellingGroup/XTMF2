@@ -20,6 +20,7 @@
 using Avalonia.Headless;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.GUI.Controls;
@@ -63,6 +64,57 @@ public class ModelSystemCanvasHeadlessTests
             canvas.Measure(new Avalonia.Size(800, 600));
             // No exception means success; Bounds may be zero without layout root.
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_HookTextStylesFollowNodeParameterRules()
+    {
+        foreach (var isLight in new[] { false, true })
+        {
+            var basicInline = ModelSystemCanvas.SelectHookTextBrush(
+                isLight, false, false, false, true, false);
+            var connected = ModelSystemCanvas.SelectHookTextBrush(
+                isLight, false, false, true, false, false);
+            var scriptedInline = ModelSystemCanvas.SelectHookTextBrush(
+                isLight, false, false, false, true, true);
+            var optionalUnconnected = ModelSystemCanvas.SelectHookTextBrush(
+                isLight, false, false, false, false, false);
+            var basicInlineDot = ModelSystemCanvas.SelectHookDotBrush(
+                isLight, false, false, false, true);
+            var optionalUnconnectedDot = ModelSystemCanvas.SelectHookDotBrush(
+                isLight, false, false, false, false);
+
+            Assert.AreSame(connected, basicInline,
+                "Basic parameters inlined into either host should use the connected-hook text style.");
+            Assert.AreEqual(
+                isLight ? Color.FromRgb(0x1A, 0x7A, 0x40) : Color.FromRgb(0x2E, 0xCC, 0x71),
+                ((SolidColorBrush)basicInlineDot).Color);
+            Assert.AreEqual(
+                isLight ? Color.FromRgb(0x66, 0x00, 0xCC) : Color.FromRgb(0xAA, 0x88, 0xFF),
+                ((SolidColorBrush)scriptedInline).Color,
+                "Scripted parameters should retain their distinct accent.");
+            Assert.AreEqual(
+                isLight ? Color.FromRgb(0x5A, 0x70, 0x80) : Color.FromRgb(0x77, 0x88, 0x99),
+                ((SolidColorBrush)optionalUnconnected).Color,
+                "Optional unconnected hooks should use the Node's dim text style.");
+            Assert.AreEqual(
+                isLight ? Color.FromRgb(0x88, 0x99, 0xAA) : Color.FromRgb(0x55, 0x66, 0x77),
+                ((SolidColorBrush)optionalUnconnectedDot).Color);
+        }
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_HookLabelsUseSharedParameterFormatting()
+    {
+        Assert.AreEqual(
+            "≡ Input: 42",
+            ModelSystemCanvas.FormatHookLabel("Input", true, true, "42"));
+        Assert.AreEqual(
+            "ƒ Expression: (no value)",
+            ModelSystemCanvas.FormatHookLabel("Expression", true, false, string.Empty));
+        Assert.AreEqual(
+            "Input",
+            ModelSystemCanvas.FormatHookLabel("Input", false, false, "ignored"));
     }
 
     [TestMethod]

@@ -191,7 +191,7 @@ partial class ModelSystemCanvas
     private static readonly IBrush FtCountTextBrush = new SolidColorBrush(Color.FromArgb(0x90, 0xCC, 0xAA, 0xFF));
     private static readonly DashStyle FtBorderDash = new DashStyle([8, 3], 0);
     private const double FtHeaderHeight = 28.0;
-    private const double FtHookRowHeight = 16.0;
+    private const double FtHookRowHeight = HookRowHeight;
     private const double FtNameFontSize = 11.0;
     private const double FpTypeRowHeight = 20.0;
     private const double FpDescriptionRowHeight = 20.0;
