@@ -133,7 +133,7 @@ public class RemoteEstimationWorkersWindowTests
     {
         var run = new RunViewModel("shared-run", "Shared forecast", "/runs/shared", "server-1",
             null!, null!);
-        run.SetRunMode(RunMode.Estimation, Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => { });
+        run.SetRunMode(RunMode.Estimation, Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => null);
         run.SetRemoteEstimationWorkers(
             [new RunServerEndpoint { Id = "server-2", Name = "Remote Two", Address = "10.0.0.2", Port = 5000 }],
             ["server-2"],

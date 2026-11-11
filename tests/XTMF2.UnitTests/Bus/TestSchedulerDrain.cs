@@ -35,6 +35,7 @@ public class TestSchedulerDrain
         public void SendIterationProgress(string runId, int iteration, double fitness, int fitnessTestsThisIteration,
             System.Collections.Generic.IReadOnlyList<(int nodeIndex, double value)> values) { }
         public void ModelRunComplete(string runId) { }
+        public void ModelRunCancelled(string runId) { }
         public void SendRunArtifacts(string runId, string runDirectory) { }
     }
 }

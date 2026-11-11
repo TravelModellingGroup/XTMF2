@@ -350,6 +350,7 @@ namespace XTMF2.Bus
                                 }
                                 continue;
                             }
+                            var cancellationReported = false;
                             try
                             {
                                 var context = work.Context;
@@ -367,11 +368,24 @@ namespace XTMF2.Bus
                                 if (context.KillRequested)
                                     sink.ModelRunFailed(context.ID, "Run stopped from RunServer Activity window.", string.Empty);
                                 else
+                                {
+                                    if (context.CancellationRequested)
+                                    {
+                                        sink.ModelRunCancelled(context.ID);
+                                        cancellationReported = true;
+                                    }
                                     sink.SendRunArtifacts(context.ID, context.WorkingDirectory);
+                                }
                             }
                             catch (Exception e)
                             {
-                                work.Sink!.ModelRunFailed(work.Context.ID, e.Message, e.StackTrace, null, null);
+                                if (work.Context.CancellationRequested)
+                                {
+                                    if (!cancellationReported)
+                                        work.Sink!.ModelRunCancelled(work.Context.ID);
+                                }
+                                else
+                                    work.Sink!.ModelRunFailed(work.Context.ID, e.Message, e.StackTrace, null, null);
                             }
                             finally
                             {

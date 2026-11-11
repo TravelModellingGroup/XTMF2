@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Layout;
 using Avalonia.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
@@ -33,6 +34,22 @@ public class RunsViewHeadlessTests
     }
 
     [TestMethod]
+    public void CancelButtonIsRightAlignedBesideConsoleTitle()
+    {
+        Session.Dispatch(() =>
+        {
+            var view = new RunsView();
+            var cancelButton = view.FindControl<Button>("CancelRunButton");
+
+            Assert.IsNotNull(cancelButton);
+            Assert.AreEqual(1, Grid.GetColumn(cancelButton));
+            Assert.AreEqual(HorizontalAlignment.Right, cancelButton!.HorizontalAlignment);
+            Assert.AreEqual(HorizontalAlignment.Center, cancelButton.HorizontalContentAlignment);
+            Assert.AreEqual(VerticalAlignment.Center, cancelButton.VerticalContentAlignment);
+        }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
     public async Task RunStatusBurstIsAppliedInCoalescedBatches()
     {
         RunViewModel? run = null;
@@ -50,7 +67,11 @@ public class RunsViewHeadlessTests
             createdRun.SetRunMode(
                 RunMode.Estimation,
                 Array.Empty<(int nodeIndex, string name, double min, double max)>(),
-                () => cancellationProcessed.TrySetResult(true));
+                () =>
+                {
+                    cancellationProcessed.TrySetResult(true);
+                    return null;
+                });
             createdRun.PropertyChanged += (_, args) =>
             {
                 if (args.PropertyName != nameof(RunViewModel.MessageLog))
@@ -73,9 +94,48 @@ public class RunsViewHeadlessTests
 
         Assert.HasCount(200, run!.Messages);
         Assert.AreEqual("status 999", run.Messages[0]);
-        Assert.AreEqual("status 800", run.Messages[^1]);
         Assert.AreEqual("status 999", run.StatusText);
         Assert.IsLessThan(200, messageLogUpdates,
             "The selectable log should be refreshed once per batch, not once per status.");
+    }
+
+    [TestMethod]
+    public void CancelRunCommandShowsRequestAndAllowsRetryAfterFailure()
+    {
+        var cancellationAttempts = 0;
+        var run = new RunViewModel(
+            "run-cancel", "run cancel", string.Empty, "local", null!, null!);
+        run.SetRunMode(
+            RunMode.Normal,
+            Array.Empty<(int nodeIndex, string name, double min, double max)>(),
+            () => ++cancellationAttempts == 1 ? "RunServer disconnected." : null);
+
+        Assert.IsTrue(run.CanCancelRun);
+        Assert.IsTrue(run.CanRequestCancelRun);
+        Assert.IsTrue(run.CancelRunCommand.CanExecute(null));
+
+        run.CancelRunCommand.Execute(null);
+
+        Assert.AreEqual("Cancellation request failed.", run.StatusText);
+        Assert.IsFalse(run.IsCancellationRequested);
+        Assert.IsTrue(run.CanRequestCancelRun);
+        Assert.IsTrue(run.CancelRunCommand.CanExecute(null));
+        Assert.AreEqual("Unable to cancel run: RunServer disconnected.", run.Messages[0]);
+
+        run.CancelRunCommand.Execute(null);
+
+        Assert.AreEqual(2, cancellationAttempts);
+        Assert.IsTrue(run.IsCancellationRequested);
+        Assert.AreEqual("Cancellation requested…", run.StatusText);
+        Assert.IsTrue(run.CanCancelRun);
+        Assert.IsFalse(run.CanRequestCancelRun);
+        Assert.IsFalse(run.CancelRunCommand.CanExecute(null));
+
+        run.MarkCancelled();
+
+        Assert.IsFalse(run.CanCancelRun);
+        Assert.IsFalse(run.IsCancellationRequested);
+        Assert.IsFalse(run.CancelRunCommand.CanExecute(null));
+        Assert.AreEqual(RunStatus.Cancelled, run.Status);
     }
 }

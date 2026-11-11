@@ -89,6 +89,7 @@ public class TestSchedulerReservations
         public void SendIterationProgress(string runId, int iteration, double fitness,
             int fitnessTestsThisIteration, IReadOnlyList<(int nodeIndex, double value)> values) { }
         public void ModelRunComplete(string runId) { }
+        public void ModelRunCancelled(string runId) { }
         public void SendRunArtifacts(string runId, string runDirectory) { }
     }
 }

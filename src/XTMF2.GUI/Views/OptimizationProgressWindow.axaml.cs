@@ -38,5 +38,17 @@ public partial class OptimizationProgressWindow : Window
         Title = $"Optimization Progress — {vm.RunName}";
     }
 
+    private async void CancelRunButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not RunViewModel run || !run.CanRequestCancelRun)
+            return;
+
+        var confirmation = new ConfirmDialog("Cancel Run?",
+            $"Cancel '{run.RunName}'? The run will be stopped and may leave partial output.");
+        await confirmation.ShowDialog(this);
+        if (confirmation.Result && run.CancelRunCommand.CanExecute(null))
+            run.CancelRunCommand.Execute(null);
+    }
+
     private void CloseButton_Click(object? sender, RoutedEventArgs e) => Close();
 }

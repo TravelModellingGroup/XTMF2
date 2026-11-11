@@ -244,6 +244,12 @@ public class RunController : IDisposable
         NotifyModelSystemRunCompleted(runID, succeeded: true);
     }
 
+    private void OnClientRunCancelled(object? sender, string runID)
+    {
+        RunsViewModel.NotifyCancelled(runID);
+        NotifyModelSystemRunCompleted(runID, succeeded: false);
+    }
+
     private void NotifyModelSystemRunCompleted(string runId, bool succeeded)
     {
         ModelSystemSession? session;
@@ -358,8 +364,8 @@ public class RunController : IDisposable
             return;
         if (!completion.Succeeded)
         {
-            RunsViewModel.NotifyError(completion.RunId,
-                completion.FailureReason ?? "Remote estimation failed.", String.Empty, null, null);
+            RunsViewModel.NotifySharedEstimationFailed(completion.RunId,
+                completion.FailureReason ?? "Remote estimation failed.");
             return;
         }
 
@@ -537,6 +543,7 @@ public class RunController : IDisposable
         {
             cancellation.Cancel();
             pool.CancelRun("Cancelled by user.");
+            return null;
         });
         lock (_sessionsByRunId)
             _sessionsByRunId[runId] = (msSession, user);
@@ -554,8 +561,8 @@ public class RunController : IDisposable
                     cancellationToken: cancellation.Token);
                 if (!completion.Succeeded)
                 {
-                    RunsViewModel.NotifyError(runId, completion.FailureReason ?? "Shared estimation failed.",
-                        String.Empty, null, null);
+                    RunsViewModel.NotifySharedEstimationFailed(runId,
+                        completion.FailureReason ?? "Shared estimation failed.");
                     return;
                 }
 
@@ -688,7 +695,10 @@ public class RunController : IDisposable
         runViewModel.SetRemoteRunTracking(orchestratorEndpointId != LocalEndpointId);
         runViewModel.SetRunMode(RunMode.Estimation, metadata, () =>
         {
-            orchestrator.CancelSharedEstimation(submittedRunId, "Cancelled by user.", out _);
+            return orchestrator.CancelSharedEstimation(submittedRunId, "Cancelled by user.",
+                out var cancelError)
+                ? null
+                : cancelError?.Message ?? "Unable to request cancellation.";
         });
         var initialWorkers = request.Workers.ToDictionary(worker => worker.WorkerId,
             worker => worker, StringComparer.Ordinal);
@@ -856,13 +866,15 @@ public class RunController : IDisposable
                 _remoteRunBusesByRunId[id] = hostBus;
         }
         runViewModel?.SetRemoteRunTracking(endpointId != LocalEndpointId);
-        if (runMode != RunMode.Normal)
-        {
-            // Extract parameter metadata so the progress dialog can show names/bounds.
-            var meta = msSession.GetOptimizationParameterMeta(runMode);
-            var runId = id;
-            runViewModel?.SetRunMode(runMode, meta, () => hostBus.CancelModelRun(runId, out _));
-        }
+        // Extract parameter metadata so the progress dialog can show names/bounds.
+        var meta = runMode == RunMode.Normal
+            ? Array.Empty<(int nodeIndex, string name, double min, double max)>()
+            : msSession.GetOptimizationParameterMeta(runMode);
+        var runId = id;
+        runViewModel?.SetRunMode(runMode, meta, () =>
+            hostBus.CancelModelRun(runId, out var cancelError)
+                ? null
+                : cancelError?.Message ?? "Unable to request cancellation.");
         return true;
     }
 
@@ -1088,6 +1100,7 @@ public class RunController : IDisposable
 
         hostBus.ClientReportedStatus += OnClientReportedStatus;
         hostBus.ClientFinishedModelSystem += OnClientFinishedModelSystem;
+        hostBus.ClientRunCancelled += OnClientRunCancelled;
         hostBus.ClientErrorWhenRunningModelSystem += OnClientErrorWhenRunningModelSystem;
         hostBus.ClientOptimizationResultsAvailable += OnClientOptimizationResultsAvailable;
         hostBus.ClientIterationProgressAvailable += OnClientIterationProgressAvailable;
@@ -1126,7 +1139,15 @@ public class RunController : IDisposable
             var isRemoteRun = endpoint is null || !endpoint.IsLocal;
             var runServerName = endpoint?.Name ?? "Remote RunServer";
             var run = RunsViewModel.RestoreSharedEstimationRun(snapshot, runServerName,
-                () => hostBus?.CancelSharedEstimation(snapshot.RunId, "Cancelled by user.", out _));
+                () =>
+                {
+                    if (hostBus is null)
+                        return "RunServer connection is unavailable.";
+                    return hostBus.CancelSharedEstimation(snapshot.RunId, "Cancelled by user.",
+                        out var cancelError)
+                        ? null
+                        : cancelError?.Message ?? "Unable to request cancellation.";
+                });
             run.SetRemoteRunTracking(isRemoteRun);
             if (!isRemoteRun)
                 run.SetLocalOutputDirectory(snapshot.WorkingDirectory);
@@ -1178,7 +1199,14 @@ public class RunController : IDisposable
                 continue;
             var isRemoteRun = endpoint is null || !endpoint.IsLocal;
             var run = RunsViewModel.RestoreRemoteRun(snapshot, endpoint?.Name ?? "Remote RunServer",
-                () => hostBus?.CancelModelRun(snapshot.RunId, out _));
+                () =>
+                {
+                    if (hostBus is null)
+                        return "RunServer connection is unavailable.";
+                    return hostBus.CancelModelRun(snapshot.RunId, out var cancelError)
+                        ? null
+                        : cancelError?.Message ?? "Unable to request cancellation.";
+                });
             run.SetRemoteRunTracking(isRemoteRun);
             if (isRemoteRun)
             {
@@ -1607,6 +1635,7 @@ public class RunController : IDisposable
 
         hostBus.ClientReportedStatus -= OnClientReportedStatus;
         hostBus.ClientFinishedModelSystem -= OnClientFinishedModelSystem;
+        hostBus.ClientRunCancelled -= OnClientRunCancelled;
         hostBus.ClientErrorWhenRunningModelSystem -= OnClientErrorWhenRunningModelSystem;
         hostBus.ClientOptimizationResultsAvailable -= OnClientOptimizationResultsAvailable;
         hostBus.ClientIterationProgressAvailable -= OnClientIterationProgressAvailable;

@@ -72,8 +72,8 @@ public class RunServerActivityWindowTests
                 "Run completed.", 0, double.NaN, Array.Empty<RemoteRunParameterValue>(), null,
                 null, null, false, DateTimeOffset.UtcNow);
 
-            var run = runs.RestoreRemoteRun(snapshot, "Local RunServer", () => { });
-            runs.RestoreRemoteRun(snapshot, "Remote Production", () => { });
+            var run = runs.RestoreRemoteRun(snapshot, "Local RunServer", () => null);
+            runs.RestoreRemoteRun(snapshot, "Remote Production", () => null);
 
             Assert.AreEqual("Remote Production", run.RunServer);
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();

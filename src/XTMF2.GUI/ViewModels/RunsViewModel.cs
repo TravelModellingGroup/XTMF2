@@ -76,7 +76,7 @@ public sealed partial class RunsViewModel : ObservableObject
         return vm;
     }
 
-    internal RunViewModel RestoreRemoteRun(RemoteRunSnapshot snapshot, string runServer, Action cancelAction)
+    internal RunViewModel RestoreRemoteRun(RemoteRunSnapshot snapshot, string runServer, Func<string?> cancelAction)
     {
         lock (_runsLock)
         {
@@ -111,7 +111,7 @@ public sealed partial class RunsViewModel : ObservableObject
     }
 
     internal RunViewModel RestoreSharedEstimationRun(
-        SharedEstimationJobSnapshot snapshot, string runServer, Action cancelAction)
+        SharedEstimationJobSnapshot snapshot, string runServer, Func<string?> cancelAction)
     {
         lock (_runsLock)
         {
@@ -204,6 +204,31 @@ public sealed partial class RunsViewModel : ObservableObject
                 vm.FlushPendingStatuses();
                 vm.MarkConnectionLost();
             }
+        });
+    }
+
+    internal void NotifyCancelled(string runId)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            vm.FlushPendingStatuses();
+            vm.MarkCancelled();
+        });
+    }
+
+    internal void NotifySharedEstimationFailed(string runId, string errorMessage)
+    {
+        var vm = FindRun(runId);
+        if (vm is null) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            vm.FlushPendingStatuses();
+            if (vm.IsCancellationRequested)
+                vm.MarkCancelled();
+            else
+                vm.MarkError(errorMessage, string.Empty, null, null);
         });
     }
 
