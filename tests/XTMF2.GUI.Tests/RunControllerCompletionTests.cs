@@ -76,6 +76,30 @@ public class RunControllerCompletionTests
     }
 
     [TestMethod]
+    public void AppendStatus_UpdatesSelectableMessageLogNewestFirst()
+    {
+        TestGuiHelper.RunInModelSystemContext(nameof(AppendStatus_UpdatesSelectableMessageLogNewestFirst),
+            (user, _, session) =>
+            {
+                var run = new RunViewModel("run-log", "run log", string.Empty, "local", session, user);
+                var messageLogUpdates = 0;
+                run.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName == nameof(RunViewModel.MessageLog))
+                        messageLogUpdates++;
+                };
+
+                run.AppendStatus("older message");
+                run.AppendStatus("newest message");
+
+                Assert.AreEqual(
+                    $"newest message{Environment.NewLine}older message",
+                    run.MessageLog);
+                Assert.AreEqual(2, messageLogUpdates);
+            });
+    }
+
+    [TestMethod]
     public void RecoveredOptimizationRun_RemainsUnboundUntilExplicitBinding()
     {
         var snapshot = new RemoteRunSnapshot("run-recovered", "estimation", RunMode.Estimation,

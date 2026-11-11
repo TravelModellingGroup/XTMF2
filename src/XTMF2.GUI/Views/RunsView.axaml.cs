@@ -16,7 +16,6 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
-using System.Collections.Specialized;
 using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -33,6 +32,7 @@ public partial class RunsView : UserControl
 {
     private RunsViewModel? _vm;
     private RemoteEstimationWorkersWindow? _workerWindow;
+    private RunViewModel? _subscribedMessageLogRun;
 
     public RunsView()
     {
@@ -50,22 +50,22 @@ public partial class RunsView : UserControl
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(RunsViewModel.SelectedRun))
-            WireSelectedRunMessages();
+            WireSelectedRunMessageLog();
     }
 
-    private INotifyCollectionChanged? _subscribedMessages;
-
-    private void WireSelectedRunMessages()
+    private void WireSelectedRunMessageLog()
     {
-        _subscribedMessages?.CollectionChanged -= OnMessagesChanged;
-        _subscribedMessages = _vm?.SelectedRun?.Messages;
-        _subscribedMessages?.CollectionChanged += OnMessagesChanged;
+        if (_subscribedMessageLogRun is not null)
+            _subscribedMessageLogRun.PropertyChanged -= OnSelectedRunPropertyChanged;
+        _subscribedMessageLogRun = _vm?.SelectedRun;
+        if (_subscribedMessageLogRun is not null)
+            _subscribedMessageLogRun.PropertyChanged += OnSelectedRunPropertyChanged;
     }
 
-    private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void OnSelectedRunPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Keep the newest message visible at the top.
-        MessageScrollViewer.ScrollToHome();
+        if (e.PropertyName == nameof(RunViewModel.MessageLog))
+            MessageScrollViewer.ScrollToHome();
     }
 
     private void ViewProgressButton_Click(object? sender, RoutedEventArgs e)

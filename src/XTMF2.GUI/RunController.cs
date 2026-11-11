@@ -1293,7 +1293,7 @@ public class RunController : IDisposable
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            run.AppendStatus($"Remote completion receipt is pending: {exception.Message}");
+            run.QueueStatus($"Remote completion receipt is pending: {exception.Message}");
         }
     }
 

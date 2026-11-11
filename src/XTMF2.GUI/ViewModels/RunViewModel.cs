@@ -23,6 +23,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using Avalonia.Threading;
 using XTMF2.Configuration;
 using XTMF2.GUI;
 using XTMF2.GUI.Properties;
@@ -56,6 +57,11 @@ public enum RunStatus
 public sealed partial class RunViewModel : ObservableObject
 {
     private const int MaximumMessageCount = 200;
+    private const int MaximumPendingStatusCount = MaximumMessageCount;
+    private const int StatusBatchSize = 32;
+    private readonly object _pendingStatusesLock = new();
+    private readonly Queue<string> _pendingStatuses = new();
+    private bool _statusFlushScheduled;
 
     /// <summary>The unique identifier assigned to this run by the host bus.</summary>
     public string RunId { get; }
@@ -199,8 +205,11 @@ public sealed partial class RunViewModel : ObservableObject
     [ObservableProperty]
     private string _statusText = "Running…";
 
-    /// <summary>All status messages received during this run (chronological order).</summary>
+    /// <summary>The most recent status messages for this run, newest first.</summary>
     public ObservableCollection<string> Messages { get; } = new();
+
+    /// <summary>All status messages as one selectable run-log document, newest first.</summary>
+    public string MessageLog => string.Join(Environment.NewLine, Messages);
 
     /// <summary>
     /// A short badge label derived from <see cref="Status"/>; shown in the run list.
@@ -910,11 +919,69 @@ public sealed partial class RunViewModel : ObservableObject
     /// <summary>Records a status message from the client and updates <see cref="StatusText"/>.</summary>
     internal void AppendStatus(string message)
     {
+        FlushPendingStatuses();
         AddMessage(message);
         StatusText = message;
     }
 
+    internal void QueueStatus(string message)
+    {
+        bool scheduleFlush;
+        lock (_pendingStatusesLock)
+        {
+            // Older pending entries would be evicted by the retained-log limit anyway.
+            if (_pendingStatuses.Count == MaximumPendingStatusCount)
+                _pendingStatuses.Dequeue();
+            _pendingStatuses.Enqueue(message);
+
+            scheduleFlush = !_statusFlushScheduled;
+            _statusFlushScheduled = true;
+        }
+
+        if (scheduleFlush)
+            Dispatcher.UIThread.Post(FlushPendingStatuses, DispatcherPriority.Background);
+    }
+
+    internal void FlushPendingStatuses()
+    {
+        string[] batch;
+        bool hasMore;
+        lock (_pendingStatusesLock)
+        {
+            int batchCount = Math.Min(StatusBatchSize, _pendingStatuses.Count);
+            batch = new string[batchCount];
+            for (int i = 0; i < batchCount; i++)
+                batch[i] = _pendingStatuses.Dequeue();
+
+            hasMore = _pendingStatuses.Count > 0;
+            if (!hasMore)
+                _statusFlushScheduled = false;
+        }
+
+        AppendStatuses(batch);
+
+        if (hasMore)
+            Dispatcher.UIThread.Post(FlushPendingStatuses, DispatcherPriority.Background);
+    }
+
+    private void AppendStatuses(IReadOnlyList<string> messages)
+    {
+        if (messages.Count == 0)
+            return;
+
+        foreach (var message in messages)
+            InsertMessage(message);
+        StatusText = messages[^1];
+        OnPropertyChanged(nameof(MessageLog));
+    }
+
     private void AddMessage(string message)
+    {
+        InsertMessage(message);
+        OnPropertyChanged(nameof(MessageLog));
+    }
+
+    private void InsertMessage(string message)
     {
         Messages.Insert(0, message);
         if (Messages.Count > MaximumMessageCount)
