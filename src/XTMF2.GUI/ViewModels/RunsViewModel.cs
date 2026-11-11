@@ -185,6 +185,7 @@ public sealed partial class RunsViewModel : ObservableObject
         if (vm is null) return;
         Dispatcher.UIThread.Post(() =>
         {
+            vm.FlushPendingStatuses();
             vm.MarkFinished(completionMessage);
             if (isRemoteRunPreparingOutput)
                 vm.MarkRemoteOutputPreparing();
@@ -199,7 +200,10 @@ public sealed partial class RunsViewModel : ObservableObject
         Dispatcher.UIThread.Post(() =>
         {
             if (vm.Status == RunStatus.Running)
+            {
+                vm.FlushPendingStatuses();
                 vm.MarkConnectionLost();
+            }
         });
     }
 
@@ -212,6 +216,7 @@ public sealed partial class RunsViewModel : ObservableObject
         if (vm is null) return;
         Dispatcher.UIThread.Post(() =>
         {
+            vm.FlushPendingStatuses();
             vm.MarkError(errorMessage, stack, moduleName, elementId);
             SystemAlert.ShowRunFailed(vm.RunName);
         });
@@ -225,7 +230,7 @@ public sealed partial class RunsViewModel : ObservableObject
     {
         var vm = FindRun(runId);
         if (vm is null) return;
-        Dispatcher.UIThread.Post(() => vm.AppendStatus(status));
+        vm.QueueStatus(status);
     }
 
     internal void NotifyArtifactsTransferred(string runId)

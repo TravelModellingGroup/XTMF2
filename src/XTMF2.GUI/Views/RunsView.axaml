@@ -212,17 +212,12 @@
                                   x:Name="MessageScrollViewer"
                                   VerticalScrollBarVisibility="Auto"
                                   IsVisible="{Binding SelectedRun, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <ItemsControl ItemsSource="{Binding SelectedRun.Messages}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding}"
-                                               FontFamily="Cascadia Code,Consolas,Courier New,monospace"
-                                               FontSize="12"
-                                               TextWrapping="Wrap"
-                                               Padding="2,1"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <SelectableTextBlock x:Name="MessageTextBlock"
+                                             Text="{Binding SelectedRun.MessageLog}"
+                                             FontFamily="Cascadia Code,Consolas,Courier New,monospace"
+                                             FontSize="12"
+                                             TextWrapping="Wrap"
+                                             Margin="2,1"/>
                     </ScrollViewer>
 
                     <!-- Placeholder when no run selected -->
