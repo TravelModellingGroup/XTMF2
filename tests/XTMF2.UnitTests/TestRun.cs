@@ -239,6 +239,7 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        [DoNotParallelize]
         public void ExecuteScriptedIterationModelSystemLogsCurrentIteration()
         {
             RunInModelSystemContext("ExecuteScriptedIterationModelSystemLogsCurrentIteration", (user, pSession, msSession) =>
@@ -333,6 +334,7 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        [DoNotParallelize]
         public void FunctionTemplateInstancesLogEachExecuteIteration()
         {
             RunInModelSystemContext(nameof(FunctionTemplateInstancesLogEachExecuteIteration), (user, pSession, msSession) =>
