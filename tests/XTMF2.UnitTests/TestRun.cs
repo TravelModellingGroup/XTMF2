@@ -97,6 +97,7 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        [DoNotParallelize]
         public void TutorialStartSleepModelSystemRunsToCompletion()
         {
             RunInModelSystemContext("TutorialStartSleepModelSystemRunsToCompletion", (user, pSession, msSession) =>
@@ -157,6 +158,7 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        [DoNotParallelize]
         public void TutorialLogMessageModelSystemRunsAndReportsBothMessages()
         {
             RunInModelSystemContext("TutorialLogMessageModelSystemRunsAndReportsBothMessages", (user, pSession, msSession) =>
