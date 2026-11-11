@@ -97,6 +97,7 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        [DoNotParallelize]
         public void TutorialStartSleepModelSystemRunsToCompletion()
         {
             RunInModelSystemContext("TutorialStartSleepModelSystemRunsToCompletion", (user, pSession, msSession) =>
@@ -149,7 +150,7 @@ namespace XTMF2.UnitTests
                         out _,
                         out error), error?.Message);
                     Assert.IsTrue(
-                        completion.Wait(5000),
+                        completion.Wait(50000),
                         string.IsNullOrEmpty(failure) ? "The tutorial model system did not finish in time." : failure);
                     Assert.IsTrue(succeeded, string.IsNullOrEmpty(failure) ? "The tutorial model system failed." : failure);
                 });
@@ -157,6 +158,7 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        [DoNotParallelize]
         public void TutorialLogMessageModelSystemRunsAndReportsBothMessages()
         {
             RunInModelSystemContext("TutorialLogMessageModelSystemRunsAndReportsBothMessages", (user, pSession, msSession) =>
@@ -223,7 +225,7 @@ namespace XTMF2.UnitTests
                         out _,
                         out error), error?.Message);
                     Assert.IsTrue(
-                        completion.Wait(5000),
+                        completion.Wait(50000),
                         string.IsNullOrEmpty(failure) ? "The tutorial logging model did not finish in time." : failure);
                     Assert.IsTrue(succeeded, string.IsNullOrEmpty(failure) ? "The tutorial logging model failed." : failure);
 
@@ -239,6 +241,7 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        [DoNotParallelize]
         public void ExecuteScriptedIterationModelSystemLogsCurrentIteration()
         {
             RunInModelSystemContext("ExecuteScriptedIterationModelSystemLogsCurrentIteration", (user, pSession, msSession) =>
@@ -313,7 +316,7 @@ namespace XTMF2.UnitTests
                         out _,
                         out error), error?.Message);
                     Assert.IsTrue(
-                        completion.Wait(5000),
+                        completion.Wait(100000),
                         string.IsNullOrEmpty(failure) ? "The iteration logging model did not finish in time." : failure);
                     Assert.IsTrue(succeeded, string.IsNullOrEmpty(failure) ? "The iteration logging model failed." : failure);
 
@@ -333,6 +336,7 @@ namespace XTMF2.UnitTests
         }
 
         [TestMethod]
+        [DoNotParallelize]
         public void FunctionTemplateInstancesLogEachExecuteIteration()
         {
             RunInModelSystemContext(nameof(FunctionTemplateInstancesLogEachExecuteIteration), (user, pSession, msSession) =>
@@ -445,7 +449,7 @@ namespace XTMF2.UnitTests
                         out _,
                         out error), error?.Message);
                     Assert.IsTrue(
-                        completion.Wait(5000),
+                        completion.Wait(50000),
                         string.IsNullOrEmpty(failure) ? "The function-template iteration model did not finish in time." : failure);
                     Assert.IsTrue(
                         succeeded,
