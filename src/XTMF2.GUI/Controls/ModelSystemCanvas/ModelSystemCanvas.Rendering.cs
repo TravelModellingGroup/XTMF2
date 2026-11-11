@@ -461,15 +461,18 @@ partial class ModelSystemCanvas
             if (!_vm.ShowAllHooks && fi.FunctionParameters.Count > 0)
             {
                 var iconRect = FunctionInstanceHookToggleIconRect(fi);
-                var iconBg = fi.ShowHooks ? (_isLight ? HookToggleActiveBgL : HookToggleActiveBg)
-                                          : (_isLight ? HookToggleBgL : HookToggleBg);
+                var iconBg = isDisabled
+                    ? (_isLight ? DisabledToggleBgL : DisabledToggleBg)
+                    : fi.ShowHooks ? (_isLight ? HookToggleActiveBgL : HookToggleActiveBg)
+                    : (_isLight ? HookToggleBgL : HookToggleBg);
                 ctx.DrawRectangle(iconBg, null, iconRect, 3.0, 3.0);
                 var glyph = fi.ShowHooks ? "\u25BE" : "\u25B8";
                 var iconFt = MakeText(glyph, HookFontSize + 1.0,
-                    _isLight ? HookToggleTextL : HookToggleText);
-                ctx.DrawText(iconFt, new Point(
-                    iconRect.X + (iconRect.Width - iconFt.Width) / 2.0,
-                    iconRect.Y + (iconRect.Height - iconFt.Height) / 2.0));
+                    isDisabled ? (_isLight ? DisabledToggleTextL : DisabledToggleText)
+                               : (_isLight ? HookToggleTextL : HookToggleText));
+                var glyphX = iconRect.X + (iconRect.Width - iconFt.Width) / 2.0;
+                var glyphY = iconRect.Y + (iconRect.Height - iconFt.Height) / 2.0;
+                ctx.DrawText(iconFt, new Point(glyphX, glyphY));
             }
 
             // ── Resize grip (bottom-right corner) ─────────────────────────
@@ -521,15 +524,14 @@ partial class ModelSystemCanvas
                     ctx.DrawRectangle(HookUnsatisfiedRowBg, null,
                         new Rect(fi.X + 1, rowTopY, rw - 2, HookRowHeight));
 
-                ctx.DrawLine(isDisabled ? (_isLight ? DisabledDividerPenThinL : DisabledDividerPenThin) : (_isLight ? HookDividerPenThinL : HookDividerPenThin),
-                    new Point(fi.X, rowY), new Point(fi.X + rw, rowY));
-
-                // Dot on the RIGHT edge — green if satisfied, red if unsatisfied.
-                var dotBrush = isDisabled
-                    ? (_isLight ? DisabledDotBrushL : DisabledDotBrush)
-                    : fpUnsatisfied
-                    ? (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush)
-                    : (_isLight ? HookConnectedBrushL   : HookConnectedBrush);
+                // Dot on the RIGHT edge — red when unsatisfied, green when connected/inlined,
+                // and dim when an optional hook is unconnected.
+                var dotBrush = SelectHookDotBrush(
+                    _isLight,
+                    isDisabled,
+                    fpUnsatisfied,
+                    fpConn,
+                    hasInlinedFi);
                 ctx.DrawEllipse(dotBrush, null,
                     new Point(fi.X + rw, dotCy), HookDotRadius, HookDotRadius);
 
@@ -549,26 +551,27 @@ partial class ModelSystemCanvas
                     ctx.DrawRectangle(_isLight ? MinimizeBtnBgL : MinimizeBtnBg, null,
                         inlineRect, 3.0, 3.0);
                     var inlineFt = MakeText("\u229f", HookFontSize,
-                        _isLight ? MinimizeBtnTextL : MinimizeBtnText);
+                        isDisabled ? (_isLight ? DisabledToggleTextL : DisabledToggleText)
+                                   : (_isLight ? MinimizeBtnTextL : MinimizeBtnText));
                     var inlineGlyphX = inlineRect.X + (inlineRect.Width - inlineFt.Width) / 2.0;
                     var inlineGlyphY = inlineRect.Y + (inlineRect.Height - inlineFt.Height) / 2.0;
                     ctx.DrawText(inlineFt, new Point(inlineGlyphX, inlineGlyphY));
                 }
 
-                // Label: prefix with ≡ (BasicParameter) or ƒ (ScriptedParameter) when inlined.
                 const double textPad = 6.0;
-                string hookLabel = hasInlinedFi && inlinedFiParam is not null
-                    ? $"{(inlinedFiParam.IsBasicParameter ? "\u2261" : "\u0192")} {fp.Name}: {(string.IsNullOrEmpty(inlinedFiParam.ParameterValueRepresentation) ? "(no value)" : inlinedFiParam.ParameterValueRepresentation)}"
-                    : fp.Name ?? string.Empty;
-                IBrush hookTextBrush = isDisabled
-                    ? (_isLight ? DisabledHookTextBrushL : DisabledHookTextBrush)
-                    : fpUnsatisfied
-                    ? (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush)
-                    : fpConn
-                        ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
-                    : hasInlinedFi && inlinedFiParam is { IsScriptedParameter: true }
-                        ? (_isLight ? ScriptParamAccentBrushL : ScriptParamAccentBrush)
-                    : (_isLight ? ParamValueTextBrushL : ParamValueTextBrush);
+                bool showInlinedFiParam = hasInlinedFi && inlinedFiParam is not null;
+                string hookLabel = FormatHookLabel(
+                    fp.Name,
+                    showInlinedFiParam,
+                    inlinedFiParam?.IsBasicParameter ?? false,
+                    inlinedFiParam?.ParameterValueRepresentation);
+                IBrush hookTextBrush = SelectHookTextBrush(
+                    _isLight,
+                    isDisabled,
+                    fpUnsatisfied,
+                    fpConn,
+                    hasInlinedFi,
+                    hasInlinedFi && inlinedFiParam is { IsScriptedParameter: true });
                 var hookNameFt = MakeText(hookLabel, HookFontSize, hookTextBrush);
                 double labelLeft = canInlineFi ? InlineMinimizeButtonSize + 8.0 : textPad;
                 double maxW  = rw - labelLeft - textPad - HookDotRadius * 2;
@@ -577,8 +580,62 @@ partial class ModelSystemCanvas
                     ctx.DrawText(hookNameFt, new Point(fi.X + labelLeft, hookTy));
 
                 rowY += HookRowHeight;
+                if (fi_i < visibleFiHooks.Count - 1)
+                {
+                    ctx.DrawLine(isDisabled ? (_isLight ? DisabledDividerPenThinL : DisabledDividerPenThin) : (_isLight ? HookDividerPenThinL : HookDividerPenThin),
+                        new Point(fi.X + 1, rowY),
+                        new Point(fi.X + rw - 1, rowY));
+                }
             }
         }
+    }
+
+    internal static IBrush SelectHookTextBrush(
+        bool isLight,
+        bool isDisabled,
+        bool isUnsatisfied,
+        bool isConnected,
+        bool hasInlinedParameter,
+        bool isScriptedInlinedParameter)
+        => isDisabled
+            ? (isLight ? DisabledHookTextBrushL : DisabledHookTextBrush)
+            : isUnsatisfied
+                ? (isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush)
+                : hasInlinedParameter && isScriptedInlinedParameter
+                    ? (isLight ? ScriptParamAccentBrushL : ScriptParamAccentBrush)
+                    : hasInlinedParameter || isConnected
+                        ? (isLight ? HookTextConnBrushL : HookTextConnBrush)
+                        : (isLight ? HookTextDimBrushL : HookTextDimBrush);
+
+    internal static IBrush SelectHookDotBrush(
+        bool isLight,
+        bool isDisabled,
+        bool isUnsatisfied,
+        bool isConnected,
+        bool hasInlinedParameter)
+        => isDisabled
+            ? (isLight ? DisabledDotBrushL : DisabledDotBrush)
+            : isUnsatisfied
+                ? (isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush)
+                : isConnected || hasInlinedParameter
+                    ? (isLight ? HookConnectedBrushL : HookConnectedBrush)
+                    : (isLight ? HookUnconnectedBrushL : HookUnconnectedBrush);
+
+    internal static string FormatHookLabel(
+        string? hookName,
+        bool hasInlinedParameter,
+        bool isBasicParameter,
+        string? parameterValue)
+    {
+        var name = hookName ?? string.Empty;
+        if (!hasInlinedParameter)
+            return name;
+
+        var marker = isBasicParameter ? "≡" : "ƒ";
+        var value = string.IsNullOrEmpty(parameterValue)
+            ? "(no value)"
+            : parameterValue;
+        return $"{marker} {name}: {value}";
     }
 
     private void RenderFunctionParameters(DrawingContext ctx)
@@ -1320,10 +1377,12 @@ partial class ModelSystemCanvas
 
                 // Dot on the right edge (the link anchor).
                 // Red for unsatisfied required hooks, green for connected/inlined, grey otherwise.
-                var dotBrush = isDisabled ? (_isLight ? DisabledDotBrushL : DisabledDotBrush)
-                             : unsatisfied ? (_isLight ? HookUnsatisfiedBrushL : HookUnsatisfiedBrush)
-                             : (conn || hasInlined) ? (_isLight ? HookConnectedBrushL : HookConnectedBrush)
-                             : (_isLight ? HookUnconnectedBrushL : HookUnconnectedBrush);
+                var dotBrush = SelectHookDotBrush(
+                    _isLight,
+                    isDisabled,
+                    unsatisfied,
+                    conn,
+                    hasInlined);
                 ctx.DrawEllipse(dotBrush, null,
                     new Point(node.X + rw, rowMidY),
                     HookDotRadius, HookDotRadius);
@@ -1337,21 +1396,20 @@ partial class ModelSystemCanvas
                         HookDotRadius, HookDotRadius);
                 }
 
-                // Hook name + optional inlined value.
-                // When a param is inlined, prefix with ≡ (BasicParameter) or ƒ (ScriptedParameter).
-                // Inlined values use the same green as connected hooks; ScriptedParameter gets the
-                // extra lavender accent on top so users can tell the two param kinds apart.
                 const double textPad = 6.0;
-                string hookLabel = hasInlined && inlinedParam is not null
-                    ? $"{(inlinedParam.IsBasicParameter ? "≡" : "ƒ")} {hook.Name}: {(string.IsNullOrEmpty(inlinedParam.ParameterValueRepresentation) ? "(no value)" : inlinedParam.ParameterValueRepresentation)}"
-                    : hook.Name;
-                IBrush hookTextBrush = isDisabled ? (_isLight ? DisabledHookTextBrushL : DisabledHookTextBrush)
-                                     : unsatisfied ? (_isLight ? HookTextUnsatisfiedBrushL : HookTextUnsatisfiedBrush)
-                                     : hasInlined && inlinedParam is { IsScriptedParameter: true }
-                                         ? (_isLight ? ScriptParamAccentBrushL : ScriptParamAccentBrush)
-                                     : hasInlined ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
-                                     : conn ? (_isLight ? HookTextConnBrushL : HookTextConnBrush)
-                                     : (_isLight ? HookTextDimBrushL : HookTextDimBrush);
+                bool showInlinedParam = hasInlined && inlinedParam is not null;
+                string hookLabel = FormatHookLabel(
+                    hook.Name,
+                    showInlinedParam,
+                    inlinedParam?.IsBasicParameter ?? false,
+                    inlinedParam?.ParameterValueRepresentation);
+                IBrush hookTextBrush = SelectHookTextBrush(
+                    _isLight,
+                    isDisabled,
+                    unsatisfied,
+                    conn,
+                    hasInlined,
+                    hasInlined && inlinedParam is { IsScriptedParameter: true });
                 var hookFt = MakeText(hookLabel, HookFontSize, hookTextBrush);
                 double maxW = rw - textPad * 2 - HookDotRadius * 2;
                 double hookTy = rowMidY - hookFt.Height / 2.0;
