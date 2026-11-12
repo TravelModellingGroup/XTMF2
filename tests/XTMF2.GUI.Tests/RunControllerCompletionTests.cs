@@ -135,6 +135,7 @@ public class RunControllerCompletionTests
         Assert.IsFalse(run.ArtifactsAvailable);
         Assert.AreNotEqual(snapshot.WorkingDirectory, run.RunDirectory);
         Assert.AreEqual("Output is available on the RunServer.", run.OutputTransferStatus);
+        Assert.IsFalse(run.OpenRunDirectoryCommand.CanExecute(null));
 
         run.MarkArtifactsAvailable();
 
@@ -142,6 +143,7 @@ public class RunControllerCompletionTests
         Assert.IsFalse(run.RemoteOutputAvailable);
         Assert.IsFalse(run.CanTransferRemoteOutput);
         Assert.AreEqual("Output is on this computer.", run.OutputTransferStatus);
+        Assert.IsTrue(run.OpenRunDirectoryCommand.CanExecute(null));
     }
 
     [TestMethod]
@@ -196,6 +198,17 @@ public class RunControllerCompletionTests
         {
             directory.Delete(recursive: true);
         }
+    }
+
+    [TestMethod]
+    public void LocalRunCanOpenOutputDirectoryBeforeItExists()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "xtmf-local-run-" + Guid.NewGuid().ToString("N"));
+        var run = new RunViewModel("run-local-pending", "forecast", directory,
+            "Local RunServer", null!, null!);
+
+        Assert.IsFalse(Directory.Exists(directory));
+        Assert.IsTrue(run.OpenRunDirectoryCommand.CanExecute(null));
     }
 
     [TestMethod]
