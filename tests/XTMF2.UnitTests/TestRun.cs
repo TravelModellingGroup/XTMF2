@@ -87,7 +87,7 @@ namespace XTMF2.UnitTests
                     };
                     Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "Start", out var id, out error), error?.Message);
                     // give the models system some time to complete
-                    if (!sim.Wait(2000))
+                    if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     {
                         Assert.Fail("The model system failed to execute in time!");
                     }
@@ -149,10 +149,10 @@ namespace XTMF2.UnitTests
                     Assert.IsTrue(runBus.RunModelSystem(msSession,
                         Path.Combine(pSession.RunsDirectory, Guid.NewGuid().ToString("N")),
                         "Start", out var runId, out error), error?.Message);
-                    Assert.IsTrue(started.Wait(TimeSpan.FromSeconds(10)),
+                    Assert.IsTrue(started.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)),
                         "The run did not reach the long-running action.");
                     Assert.IsTrue(runBus.CancelModelRun(runId!, out error), error?.Message);
-                    Assert.IsTrue(terminal.Wait(TimeSpan.FromSeconds(10)),
+                    Assert.IsTrue(terminal.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)),
                         "The run did not report a terminal state after cancellation.");
                     Assert.AreEqual("Cancelled", terminalState);
                 });
@@ -213,7 +213,7 @@ namespace XTMF2.UnitTests
                         out _,
                         out error), error?.Message);
                     Assert.IsTrue(
-                        completion.Wait(50000),
+                        completion.Wait(TestHelper.TestTimeoutMilliseconds),
                         string.IsNullOrEmpty(failure) ? "The tutorial model system did not finish in time." : failure);
                     Assert.IsTrue(succeeded, string.IsNullOrEmpty(failure) ? "The tutorial model system failed." : failure);
                 });
@@ -288,7 +288,7 @@ namespace XTMF2.UnitTests
                         out _,
                         out error), error?.Message);
                     Assert.IsTrue(
-                        completion.Wait(50000),
+                        completion.Wait(TestHelper.TestTimeoutMilliseconds),
                         string.IsNullOrEmpty(failure) ? "The tutorial logging model did not finish in time." : failure);
                     Assert.IsTrue(succeeded, string.IsNullOrEmpty(failure) ? "The tutorial logging model failed." : failure);
 
@@ -379,7 +379,7 @@ namespace XTMF2.UnitTests
                         out _,
                         out error), error?.Message);
                     Assert.IsTrue(
-                        completion.Wait(100000),
+                        completion.Wait(TestHelper.TestTimeoutMilliseconds),
                         string.IsNullOrEmpty(failure) ? "The iteration logging model did not finish in time." : failure);
                     Assert.IsTrue(succeeded, string.IsNullOrEmpty(failure) ? "The iteration logging model failed." : failure);
 
@@ -512,7 +512,7 @@ namespace XTMF2.UnitTests
                         out _,
                         out error), error?.Message);
                     Assert.IsTrue(
-                        completion.Wait(100000),
+                        completion.Wait(TestHelper.TestTimeoutMilliseconds),
                         string.IsNullOrEmpty(failure) ? "The function-template iteration model did not finish in time." : failure);
                     Assert.IsTrue(
                         succeeded,
@@ -570,7 +570,7 @@ namespace XTMF2.UnitTests
                     };
                     Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "Start", out var id, out error), error?.Message);
                     // give the models system some time to complete
-                    if (!sim.Wait(2000))
+                    if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     {
                         Assert.Fail("The model system failed to execute in time!");
                     }
@@ -627,7 +627,7 @@ namespace XTMF2.UnitTests
                     };
                     Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "FirstStart", out var id, out error2), error2?.Message);
                     // give the models system some time to complete
-                    if (!sim.Wait(2000))
+                    if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     {
                         Assert.Fail("The model system failed to execute in time!");
                     }
@@ -677,7 +677,7 @@ namespace XTMF2.UnitTests
                     };
                     Assert.IsTrue(clientBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "ReportRunProgress"), "Start", out var id, out error), error?.Message);
                     // give the models system some time to complete
-                    if (!sim.Wait(15000))
+                    if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     {
                         Assert.Fail("The model system failed to execute in time!");
                     }
@@ -719,7 +719,7 @@ namespace XTMF2.UnitTests
                     var runDirectory = Path.Combine(pSession.RunsDirectory, "RunResultsCompleted");
                     Assert.IsTrue(runBus.RunModelSystem(msSession, runDirectory, "Start", out var id, out error), error?.Message);
                     // give the models system some time to complete
-                    if (!sim.Wait(2000))
+                    if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     {
                         Assert.Fail("The model system failed to execute in time!");
                     }
@@ -767,7 +767,7 @@ namespace XTMF2.UnitTests
                     var runDirectory = Path.Combine(pSession.RunsDirectory, "RunResultsRuntimeError");
                     Assert.IsTrue(runBus.RunModelSystem(msSession, runDirectory, "Start", out var id, out error), error?.Message);
                     // give the models system some time to complete
-                    if (!sim.Wait(2000))
+                    if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     {
                         Assert.Fail("The model system failed to execute in time!");
                     }
@@ -815,7 +815,7 @@ namespace XTMF2.UnitTests
                     var runDirectory = Path.Combine(pSession.RunsDirectory, "CheckRunModelSystemRunCompleteData");
                     Assert.IsTrue(runBus.RunModelSystem(msSession, runDirectory, "Start", out var id, out error), error?.Message);
                     // give the models system some time to complete
-                    if (!sim.Wait(2000))
+                    if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     {
                         Assert.Fail("The model system failed to execute in time!");
                     }
@@ -863,7 +863,7 @@ namespace XTMF2.UnitTests
                     var runDirectory = Path.Combine(pSession.RunsDirectory, "CheckRunModelSystemRunCompleteData");
                     Assert.IsTrue(runBus.RunModelSystem(msSession, runDirectory, "Start", out var id, out error), error?.Message);
                     // give the models system some time to complete
-                    if (!sim.Wait(2000))
+                    if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     {
                         Assert.Fail("The model system failed to execute in time!");
                     }

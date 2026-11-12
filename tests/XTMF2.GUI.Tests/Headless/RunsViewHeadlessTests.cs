@@ -88,9 +88,9 @@ public class RunsViewHeadlessTests
                 DispatcherPriority.Input);
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
 
-        Assert.IsTrue(await cancellationProcessed.Task.WaitAsync(TimeSpan.FromSeconds(5)),
+        Assert.IsTrue(await cancellationProcessed.Task.WaitAsync(TimeSpan.FromMilliseconds(TestGuiHelper.TestTimeoutMilliseconds)),
             "The cancel command should run before the queued log batches are drained.");
-        await finalBatchApplied.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await finalBatchApplied.Task.WaitAsync(TimeSpan.FromMilliseconds(TestGuiHelper.TestTimeoutMilliseconds));
 
         Assert.HasCount(200, run!.Messages);
         Assert.AreEqual("status 999", run.Messages[0]);

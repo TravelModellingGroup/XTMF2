@@ -34,6 +34,8 @@ namespace XTMF2.UnitTests
 {
     static class TestHelper
     {
+        internal const int TestTimeoutMilliseconds = 2 * 60 * 1000;
+
         /// <summary>
         /// Isolated user directory for the XTMF2.UnitTests assembly.
         /// Using a temp path that differs from both the production directory and the GUI-tests

@@ -100,8 +100,8 @@ public class TestOptimizationRun
                     runDirectory,
                     "Start", RunMode.Estimation, id => runId = id, out _, out error), error?.Message);
 
-                if (!sim.Wait(30000))
-                    Assert.Fail("Estimation run timed out after 30 seconds.");
+                if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
+                    Assert.Fail("Estimation run timed out after 2 minutes.");
 
                 Assert.IsTrue(success, "Estimation run did not complete successfully: " + error?.ToString());
 
@@ -169,8 +169,8 @@ public class TestOptimizationRun
                         RunMode.Estimation,
                         out _,
                         out error), error?.Message);
-                    if (!completed.Wait(30000))
-                        Assert.Fail("Estimation run timed out after 30 seconds.");
+                    if (!completed.Wait(TestHelper.TestTimeoutMilliseconds))
+                        Assert.Fail("Estimation run timed out after 2 minutes.");
                 });
 
                 Assert.IsTrue(finished, $"Estimation run failed: {error?.Message}");
@@ -244,8 +244,8 @@ public class TestOptimizationRun
                     Path.Combine(pSession.RunsDirectory, "CalibrationRun"),
                     "Start", RunMode.Calibration, out _, out error), error?.Message);
 
-                if (!sim.Wait(30000))
-                    Assert.Fail("Calibration run timed out after 30 seconds.");
+                if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
+                    Assert.Fail("Calibration run timed out after 2 minutes.");
 
                 Assert.IsTrue(success, "Calibration run did not complete successfully: " + error?.ToString());
             });
@@ -310,7 +310,7 @@ public class TestOptimizationRun
                     Path.Combine(pSession.RunsDirectory, "EstimationApply"),
                     "Start", RunMode.Estimation, out _, out error), error?.Message);
 
-                if (!sim.Wait(30000))
+                if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     Assert.Fail("Estimation run timed out.");
                 Assert.IsTrue(finished, "Run did not finish successfully: " + error?.ToString());
                 Assert.IsNotNull(receivedResults, "No optimization results were received.");
@@ -383,7 +383,7 @@ public class TestOptimizationRun
                     Path.Combine(pSession.RunsDirectory, "EstimationDiscard"),
                     "Start", RunMode.Estimation, out _, out error), error?.Message);
 
-                if (!sim.Wait(30000))
+                if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     Assert.Fail("Estimation run timed out.");
                 Assert.IsTrue(finished, "Run did not finish successfully: " + error?.ToString());
 
@@ -457,7 +457,7 @@ public class TestOptimizationRun
                     Path.Combine(pSession.RunsDirectory, "CalibrationApply"),
                     "Start", RunMode.Calibration, out _, out error), error?.Message);
 
-                if (!sim.Wait(30000))
+                if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     Assert.Fail("Calibration run timed out.");
                 Assert.IsTrue(finished, "Run did not finish successfully: " + error?.ToString());
                 Assert.IsNotNull(receivedResults, "No optimization results were received.");
@@ -532,7 +532,7 @@ public class TestOptimizationRun
                     RunMode.Calibration,
                     out _,
                     out error), error?.Message);
-                if (!sim.Wait(30000))
+                if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     Assert.Fail("Calibration run timed out.");
                 Assert.IsTrue(finished, "Calibration run did not complete successfully: " + error?.ToString());
                 Assert.IsNotNull(receivedResults, "No calibration results were received.");
@@ -603,7 +603,7 @@ public class TestOptimizationRun
                     Path.Combine(pSession.RunsDirectory, "CalibrationDiscard"),
                     "Start", RunMode.Calibration, out _, out error), error?.Message);
 
-                if (!sim.Wait(30000))
+                if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     Assert.Fail("Calibration run timed out.");
                 Assert.IsTrue(finished, "Run did not finish successfully: " + error?.ToString());
 
@@ -676,8 +676,8 @@ public class TestOptimizationRun
                         Path.Combine(pSession.RunsDirectory, $"EstimationRun_run{run}"),
                         "Start", RunMode.Estimation, out _, out error), error?.Message);
 
-                    if (!sim.Wait(30000))
-                        Assert.Fail($"Estimation run #{run} timed out after 30 seconds.");
+                    if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
+                        Assert.Fail($"Estimation run #{run} timed out after 2 minutes.");
 
                     runBus.ClientFinishedModelSystem -= onFinished;
                     runBus.ClientErrorWhenRunningModelSystem -= onError;

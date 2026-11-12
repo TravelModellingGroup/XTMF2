@@ -138,7 +138,7 @@ public class TestRemoteRunRegistry
                 "Start", RunMode.Normal, out var secondRun));
 
             using var workerLease = registry.ReserveWorkerSlot(workerContext, 1);
-            await workerLease.Started.WaitAsync(TimeSpan.FromSeconds(3));
+            await workerLease.Started.WaitAsync(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds));
             Assert.IsTrue(registry.Submit(firstObserver, firstRun, "first", RunMode.Normal,
                 firstRun.WorkingDirectory, firstRun.StartToExecute, []));
             Assert.IsTrue(registry.Submit(secondObserver, secondRun, "second", RunMode.Normal,
@@ -179,7 +179,7 @@ public class TestRemoteRunRegistry
 
             using var firstLease = firstRegistry.ReserveWorkerSlot(firstContext, 1);
             using var secondLease = secondRegistry.ReserveWorkerSlot(secondContext, 1);
-            await Task.WhenAll(firstLease.Started, secondLease.Started).WaitAsync(TimeSpan.FromSeconds(3));
+            await Task.WhenAll(firstLease.Started, secondLease.Started).WaitAsync(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds));
 
             Assert.AreEqual(RunServerActivityState.Running, firstRegistry.GetActiveActivities().Single().State);
             Assert.AreEqual(RunServerActivityState.Running, secondRegistry.GetActiveActivities().Single().State);

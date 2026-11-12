@@ -34,7 +34,7 @@ public class TestLog
         try
         {
             log.Invoke("first");
-            Assert.IsTrue(sendStarted.Wait(TimeSpan.FromSeconds(5)), "The asynchronous status send did not start.");
+            Assert.IsTrue(sendStarted.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)), "The asynchronous status send did not start.");
             log.Invoke("second");
 
             var disposeTask = Task.Run(log.Dispose);

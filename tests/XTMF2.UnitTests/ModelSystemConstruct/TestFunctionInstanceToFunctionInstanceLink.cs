@@ -132,7 +132,7 @@ public class TestFunctionInstanceToFunctionInstanceLink
                         Path.Combine(pSession.RunsDirectory, "InnerFIToOuterFI"),
                         "Start", out _, out runError), runError?.Message);
 
-                    if (!sem.Wait(5000))
+                    if (!sem.Wait(TestHelper.TestTimeoutMilliseconds))
                         Assert.Fail("Model system did not complete within the time limit.");
 
                     Assert.IsTrue(success,

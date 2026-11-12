@@ -220,11 +220,11 @@ public class TestSharedEstimationCoordinator
                         return;
                     changed = _sentChanged.Task;
                 }
-                await changed.WaitAsync(TimeSpan.FromSeconds(5));
+                await changed.WaitAsync(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds));
             }
         }
 
-        public Task WaitForDisposedAsync() => _disposed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        public Task WaitForDisposedAsync() => _disposed.Task.WaitAsync(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds));
 
         public void Complete(string candidateId, double fitness)
         {

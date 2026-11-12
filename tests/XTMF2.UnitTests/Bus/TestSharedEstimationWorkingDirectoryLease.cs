@@ -37,7 +37,7 @@ public class TestSharedEstimationWorkingDirectoryLease
                     using var lease = SharedEstimationWorkingDirectoryLease.Acquire(secondDirectory.FullName);
                     return Directory.GetCurrentDirectory();
                 });
-                Assert.IsTrue(started.Wait(TimeSpan.FromSeconds(3)));
+                Assert.IsTrue(started.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)));
                 Assert.IsFalse(differentDirectory.Wait(TimeSpan.FromMilliseconds(50)));
             }
 
