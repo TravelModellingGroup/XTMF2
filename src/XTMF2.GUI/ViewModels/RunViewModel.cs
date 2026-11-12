@@ -81,6 +81,8 @@ public sealed partial class RunViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
     [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
     [NotifyPropertyChangedFor(nameof(ShowArtifactTransferProgress))]
+    [NotifyPropertyChangedFor(nameof(CanOpenRunDirectory))]
+    [NotifyCanExecuteChangedFor(nameof(OpenRunDirectoryCommand))]
     private bool _isRemoteRun;
 
     [ObservableProperty]
@@ -98,6 +100,9 @@ public sealed partial class RunViewModel : ObservableObject
             && !IsPreparingRemoteOutput && !IsArtifactTransferActive;
 
     public bool ShowArtifactTransferProgress => IsRemoteRun && IsArtifactTransferActive;
+
+    public bool CanOpenRunDirectory
+        => !string.IsNullOrWhiteSpace(RunDirectory) && (!IsRemoteRun || HasRunDirectory);
 
     public string OutputTransferStatus => !IsRemoteRun
         ? ArtifactsAvailable ? "Output is on this computer." : "Output has not been transferred yet."
@@ -146,6 +151,8 @@ public sealed partial class RunViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
     [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    [NotifyPropertyChangedFor(nameof(CanOpenRunDirectory))]
+    [NotifyCanExecuteChangedFor(nameof(OpenRunDirectoryCommand))]
     private bool _artifactsAvailable;
 
     internal void MarkArtifactsAvailable()
@@ -176,6 +183,7 @@ public sealed partial class RunViewModel : ObservableObject
             RemoteOutputAvailable = false;
         OnPropertyChanged(nameof(RunDirectory));
         OnPropertyChanged(nameof(HasRunDirectory));
+        OnPropertyChanged(nameof(CanOpenRunDirectory));
         OpenRunDirectoryCommand.NotifyCanExecuteChanged();
     }
 
@@ -548,18 +556,32 @@ public sealed partial class RunViewModel : ObservableObject
         return unit == 0 ? $"{value:N0} {units[unit]}" : $"{value:0.0} {units[unit]}";
     }
 
-    private bool CanOpenRunDirectory() => HasRunDirectory;
+    private bool CanExecuteOpenRunDirectory() => CanOpenRunDirectory;
 
     /// <summary>
     /// Opens the run's output directory in the operating system's file explorer.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanOpenRunDirectory))]
+    [RelayCommand(CanExecute = nameof(CanExecuteOpenRunDirectory))]
     private void OpenRunDirectory()
     {
         if (!Directory.Exists(RunDirectory))
         {
-            AddMessage($"The run directory does not exist: {RunDirectory}");
-            return;
+            if (IsRemoteRun)
+            {
+                AddMessage($"The run directory does not exist: {RunDirectory}");
+                return;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(RunDirectory);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                or ArgumentException or NotSupportedException)
+            {
+                AddMessage($"Unable to create the run directory '{RunDirectory}': {exception.Message}");
+                return;
+            }
         }
         if (!TryOpenDirectoryInFileExplorer(RunDirectory))
         {

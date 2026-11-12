@@ -9,6 +9,17 @@
              x:CompileBindings="True"
              Classes="neon-view">
 
+    <UserControl.Styles>
+        <Style Selector="Button.run-header-icon">
+            <Setter Property="Foreground" Value="{DynamicResource NeonIconSecondary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NeonIconPrimary}"/>
+        </Style>
+        <Style Selector="Button.run-header-icon:disabled">
+            <Setter Property="Foreground" Value="#FF808080"/>
+            <Setter Property="BorderBrush" Value="#FF808080"/>
+        </Style>
+    </UserControl.Styles>
+
     <Grid RowDefinitions="Auto,*" Margin="10">
 
         <!-- Header -->
@@ -110,14 +121,15 @@
                     <StackPanel Grid.Row="0"
                                 IsVisible="{Binding SelectedRun, Converter={x:Static ObjectConverters.IsNotNull}}"
                                 Margin="0,0,0,8">
-                        <Grid ColumnDefinitions="*,Auto">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
                             <TextBlock Text="{Binding SelectedRun.RunName}"
                                        FontSize="15"
                                        FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis"
                                        VerticalAlignment="Center"/>
-                            <Button x:Name="CancelRunButton"
+                            <Button x:Name="OpenRunDirectoryButton"
                                     Grid.Column="1"
+                                    Classes="run-header-icon"
                                     Background="Transparent"
                                     BorderThickness="0"
                                     Padding="0"
@@ -128,17 +140,56 @@
                                     VerticalAlignment="Center"
                                     HorizontalContentAlignment="Center"
                                     VerticalContentAlignment="Center"
-                                    IsVisible="{Binding SelectedRun.CanCancelRun}"
+                                    Command="{Binding SelectedRun.OpenRunDirectoryCommand}"
+                                    IsEnabled="{Binding SelectedRun.CanOpenRunDirectory}"
+                                    Margin="0,0,4,0"
+                                    ToolTip.Tip="Open this run's output directory."
+                                    AutomationProperties.Name="Open run output directory">
+                                <Viewbox Width="18" Height="18">
+                                    <Canvas Width="20" Height="20">
+                                        <Path x:Name="OpenRunDirectoryPrimaryIcon"
+                                              Data="M 2,6 H 8 L 10,8 H 18 V 17 H 2 Z"
+                                              Stroke="{Binding #OpenRunDirectoryButton.BorderBrush}"
+                                              StrokeThickness="1.8"
+                                              StrokeLineCap="Round"
+                                              StrokeJoin="Round"
+                                              Fill="Transparent"/>
+                                        <Path x:Name="OpenRunDirectorySecondaryIcon"
+                                              Data="M 2,6 H 8 L 10,8 H 2 Z"
+                                              Fill="{Binding #OpenRunDirectoryButton.Foreground}"
+                                              StrokeThickness="0"/>
+                                        <Path
+                                              Data="M 2,9 H 18"
+                                              Stroke="{Binding #OpenRunDirectoryButton.Foreground}"
+                                              StrokeThickness="1.2"
+                                              StrokeLineCap="Round"
+                                              Fill="Transparent"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                            <Button x:Name="CancelRunButton"
+                                    Grid.Column="2"
+                                    Classes="run-header-icon"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    MinWidth="32"
+                                    Width="32"
+                                    Height="32"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    HorizontalContentAlignment="Center"
+                                    VerticalContentAlignment="Center"
                                     IsEnabled="{Binding SelectedRun.CanRequestCancelRun}"
                                     Click="CancelRunButton_Click"
                                     ToolTip.Tip="Cancel this run.">
                                 <Viewbox Width="18" Height="18">
                                     <Canvas Width="20" Height="20">
-                                        <Path Data="M 5,5 L 15,15 M 15,5 L 5,15"
-                                              Stroke="{DynamicResource NeonIconSecondary}"
+                                        <Path x:Name="CancelRunIcon"
+                                              Data="M 5,5 L 15,15 M 15,5 L 5,15"
+                                              Stroke="{Binding #CancelRunButton.Foreground}"
                                               StrokeThickness="2.4"
-                                              StrokeLineCap="Round"
-                                              Fill="Transparent"/>
+                                              StrokeLineCap="Round"/>
                                     </Canvas>
                                 </Viewbox>
                             </Button>
@@ -174,13 +225,6 @@
                                        FontSize="11" FontWeight="SemiBold"
                                        FontFamily="Cascadia Code,Consolas,monospace"/>
                         </StackPanel>
-                        <Button Content="📂  Open Run Output Directory"
-                                Command="{Binding SelectedRun.OpenRunDirectoryCommand}"
-                                IsVisible="{Binding SelectedRun.HasRunDirectory}"
-                                Classes="dlg-primary"
-                                Margin="0,6,0,0"
-                                HorizontalAlignment="Left"
-                                ToolTip.Tip="Open this run's output directory in the file explorer."/>
                             <TextBlock Text="{Binding SelectedRun.OutputTransferStatus}"
                                    IsVisible="{Binding SelectedRun.IsRemoteRun}"
                                    FontSize="11" Opacity="0.7" Margin="0,4,0,0"/>

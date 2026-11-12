@@ -34,18 +34,47 @@ public class RunsViewHeadlessTests
     }
 
     [TestMethod]
-    public void CancelButtonIsRightAlignedBesideConsoleTitle()
+    public void RunOutputAndCancelButtonsAreRightAlignedBesideConsoleTitle()
     {
         Session.Dispatch(() =>
         {
-            var view = new RunsView();
+            var run = new RunViewModel("run-icons", "run icons",
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                    "xtmf-run-icons-" + Guid.NewGuid().ToString("N")),
+                "Local RunServer", null!, null!);
+            run.SetRunMode(RunMode.Normal,
+                Array.Empty<(int nodeIndex, string name, double min, double max)>(), () => null);
+            var runsViewModel = new RunsViewModel { SelectedRun = run };
+            var view = new RunsView { DataContext = runsViewModel };
+            var openButton = view.FindControl<Button>("OpenRunDirectoryButton");
             var cancelButton = view.FindControl<Button>("CancelRunButton");
 
+            Assert.IsNotNull(openButton);
             Assert.IsNotNull(cancelButton);
-            Assert.AreEqual(1, Grid.GetColumn(cancelButton));
-            Assert.AreEqual(HorizontalAlignment.Right, cancelButton!.HorizontalAlignment);
+            Assert.IsTrue(openButton!.IsVisible);
+            Assert.IsTrue(cancelButton!.IsVisible);
+            Assert.AreEqual(1, Grid.GetColumn(openButton));
+            Assert.AreEqual(2, Grid.GetColumn(cancelButton));
+            Assert.AreEqual(HorizontalAlignment.Center, openButton.HorizontalContentAlignment);
+            Assert.AreEqual(VerticalAlignment.Center, openButton.VerticalContentAlignment);
+            Assert.AreEqual(HorizontalAlignment.Right, cancelButton.HorizontalAlignment);
             Assert.AreEqual(HorizontalAlignment.Center, cancelButton.HorizontalContentAlignment);
             Assert.AreEqual(VerticalAlignment.Center, cancelButton.VerticalContentAlignment);
+            Assert.IsTrue(openButton.IsEnabled);
+            Assert.IsTrue(cancelButton.IsEnabled);
+
+            run.MarkFinished();
+
+            Assert.IsTrue(openButton.IsVisible);
+            Assert.IsTrue(cancelButton.IsVisible);
+            Assert.IsTrue(openButton.IsEnabled);
+            Assert.IsFalse(cancelButton.IsEnabled);
+
+            run.SetRemoteRunTracking(true);
+
+            Assert.IsFalse(run.CanOpenRunDirectory);
+            Assert.IsFalse(openButton.IsEnabled);
+            Assert.IsFalse(cancelButton.IsEnabled);
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
     }
 
