@@ -39,4 +39,32 @@ public class TestRunServerWorkingDirectory
                 Directory.Delete(root, recursive: true);
         }
     }
+
+    [TestMethod]
+    public void LocalRunDoesNotTransferOrRemoveSharedOutputArtifacts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-RunWorkspace-" + Guid.NewGuid().ToString("N"));
+        var runDirectory = Path.Combine(root, "project", "runs", "sample");
+        var outputPath = Path.Combine(runDirectory, "output.txt");
+        Directory.CreateDirectory(runDirectory);
+        File.WriteAllText(outputPath, "local output");
+
+        try
+        {
+            using var stream = new MemoryStream();
+            using var localServer = new RunServerBus(stream, false, CreateRuntime(),
+                runLocal: true, usePrivateWorkspace: false,
+                storagePaths: new XTMFStoragePaths(root));
+
+            localServer.SendRunArtifacts("local-run", runDirectory);
+
+            Assert.AreEqual(0L, stream.Length);
+            Assert.AreEqual("local output", File.ReadAllText(outputPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
 }

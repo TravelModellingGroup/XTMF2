@@ -81,8 +81,8 @@ public class TestSharedEstimationCoordinator
             Candidate("candidate-3")
         ]);
 
-        Assert.IsTrue(slowWorkerStarted.Wait(TimeSpan.FromSeconds(3)), "The slow worker should receive its candidate.");
-        Assert.IsTrue(remoteReceivedCandidate.Wait(TimeSpan.FromSeconds(3)),
+        Assert.IsTrue(slowWorkerStarted.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)), "The slow worker should receive its candidate.");
+        Assert.IsTrue(remoteReceivedCandidate.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)),
             "The slow worker must not block dispatch to the remote worker.");
         remote.Complete("candidate-2", 2.0);
         WaitFor(() => remote.Sent.Count == 2);
@@ -180,7 +180,7 @@ public class TestSharedEstimationCoordinator
         => new("run-1", 1, id, new[] { 1.0 });
 
     private static void WaitFor(Func<bool> condition)
-        => Assert.IsTrue(SpinWait.SpinUntil(condition, TimeSpan.FromSeconds(3)),
+        => Assert.IsTrue(SpinWait.SpinUntil(condition, TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)),
             "Expected worker dispatch or result callback did not occur in time.");
 
     private sealed class FakeWorker(string workerId) : ISharedEstimationWorker

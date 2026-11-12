@@ -14,6 +14,8 @@ namespace XTMF2.GUI.Tests;
 /// </summary>
 internal static class TestGuiHelper
 {
+    internal const int TestTimeoutMilliseconds = 2 * 60 * 1000;
+
     private const string ProjectName = "TestProject";
     private const string ModelSystemName = "ModelSystem1";
 

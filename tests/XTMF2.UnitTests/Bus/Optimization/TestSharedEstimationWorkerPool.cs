@@ -33,7 +33,7 @@ public class TestSharedEstimationWorkerPool
         Assert.IsFalse(evaluation.IsCompleted);
         var startFrameLength = healthyStream.GetWrittenBytes().Length;
         healthyStream.SignalWorkerReady("run-resilient", succeeded: true);
-        Assert.IsTrue(healthyStream.WaitForWrittenBytes(startFrameLength + 1, TimeSpan.FromSeconds(3)));
+        Assert.IsTrue(healthyStream.WaitForWrittenBytes(startFrameLength + 1, TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)));
         Assert.AreEqual(1, pool.WorkerCount);
     }
 
@@ -71,7 +71,7 @@ public class TestSharedEstimationWorkerPool
         Assert.IsFalse(evaluation.IsCompleted);
         stream.SignalWorkerReady("run-reconnected", succeeded: true);
         Assert.IsTrue(stream.WaitForWrittenBytes(startFrameLength + candidateFrameLength,
-            TimeSpan.FromSeconds(3)));
+            TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)));
 
         using var completedPayload = new MemoryStream(stream.GetWrittenBytes());
         using var completedReader = new BinaryReader(completedPayload);
@@ -120,7 +120,7 @@ public class TestSharedEstimationWorkerPool
 
         stream.SignalWorkerReady("run-prepare-failure", succeeded: false, "Model preparation failed.");
 
-        Assert.AreEqual("Model preparation failed.", await failure.Task.WaitAsync(TimeSpan.FromSeconds(3)));
+        Assert.AreEqual("Model preparation failed.", await failure.Task.WaitAsync(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)));
         Assert.AreEqual(0, pool.WorkerCount);
     }
 

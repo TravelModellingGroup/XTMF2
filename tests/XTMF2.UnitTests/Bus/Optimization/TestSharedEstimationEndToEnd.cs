@@ -92,7 +92,7 @@ public class TestSharedEstimationEndToEnd
                                 completion.TrySetResult(result);
                         };
                         Assert.IsTrue(host.StartRemoteSharedEstimation(request, out var startError), startError?.Message);
-                        Assert.IsTrue(completion.Task.Wait(TimeSpan.FromSeconds(30)),
+                        Assert.IsTrue(completion.Task.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)),
                             $"The local coordinator did not report completion. Statuses: {string.Join(" | ", statuses)}; " +
                             $"progress updates: {progressUpdates.Count}.");
                         Assert.IsTrue(completion.Task.Result.Succeeded, completion.Task.Result.FailureReason);
@@ -155,7 +155,7 @@ public class TestSharedEstimationEndToEnd
                             ready.TrySetResult(workerReady);
                     };
                     Assert.IsTrue(host.StartSharedEstimation(request, out var startError), startError?.Message);
-                    Assert.IsTrue(ready.Task.Wait(TimeSpan.FromSeconds(10)), "The worker process did not become ready.");
+                    Assert.IsTrue(ready.Task.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)), "The worker process did not become ready.");
                     Assert.IsTrue(ready.Task.Result.Succeeded, ready.Task.Result.Error);
 
                     var responses = Task.WhenAll(host.QueryServerActivityAsync(), host.QueryServerActivityAsync())
@@ -170,7 +170,7 @@ public class TestSharedEstimationEndToEnd
                         cancelError?.Message);
                     Assert.IsTrue(SpinWait.SpinUntil(() => !Directory.Exists(Path.Combine(
                             workerRoot.FullName, ".xtmf-estimation-workers")),
-                        TimeSpan.FromSeconds(5)), "Cancellation should delete worker scratch directories.");
+                        TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)), "Cancellation should delete worker scratch directories.");
                 });
             }
             finally
@@ -235,7 +235,7 @@ public class TestSharedEstimationEndToEnd
                         Assert.IsTrue(pool.AddExistingWorker("worker-2", "worker-2", secondHost, out poolError), poolError);
                         Assert.IsTrue(pool.StartRun(request, out poolError, overrides), poolError);
                         Assert.IsTrue(SpinWait.SpinUntil(() => pool.WorkerCount == 2,
-                            TimeSpan.FromSeconds(10)), "Both RunServers should report readiness before evaluation starts.");
+                            TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)), "Both RunServers should report readiness before evaluation starts.");
 
                         var algorithm = new FixedBatchAlgorithm();
                         var reportPath = Path.Combine(workerRoot.FullName, "estimation_report.csv");
@@ -269,7 +269,7 @@ public class TestSharedEstimationEndToEnd
                         Assert.IsTrue(File.Exists(reportPath), "Coordinator estimation output should remain in the run directory.");
                         Assert.IsTrue(SpinWait.SpinUntil(() => !Directory.Exists(Path.Combine(
                                 workerRoot.FullName, ".xtmf-estimation-workers")),
-                            TimeSpan.FromSeconds(5)), "Worker scratch directories should be deleted when workers terminate.");
+                            TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)), "Worker scratch directories should be deleted when workers terminate.");
                     });
                 });
             }

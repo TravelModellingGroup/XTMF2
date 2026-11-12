@@ -472,7 +472,7 @@ public class TestFunctionTemplateVariables
                     Assert.IsTrue(runBus.RunModelSystem(ms,
                         Path.Combine(pSession.RunsDirectory, "FPLocalVarRuntime"),
                         "Start", out _, out runError), runError?.Message);
-                    Assert.IsTrue(sem.Wait(20000), "Model system did not complete in time!");
+                    Assert.IsTrue(sem.Wait(TestHelper.TestTimeoutMilliseconds), "Model system did not complete in time!");
                     Assert.IsTrue(success, "Model system failed: " + runError?.Message);
                 });
             });
@@ -536,7 +536,7 @@ public class TestFunctionTemplateVariables
                     Assert.IsTrue(runBus.RunModelSystem(ms,
                         Path.Combine(pSession.RunsDirectory, "SetableLocalVarRuntime"),
                         "Start", out _, out runError), runError?.Message);
-                    Assert.IsTrue(sem.Wait(20000), "Model system did not complete in time!");
+                    Assert.IsTrue(sem.Wait(TestHelper.TestTimeoutMilliseconds), "Model system did not complete in time!");
                     Assert.IsTrue(success, "Model system failed: " + runError?.Message);
                 });
             });
@@ -610,7 +610,7 @@ public class TestFunctionTemplateVariables
                     Assert.IsTrue(runBus.RunModelSystem(ms,
                         Path.Combine(pSession.RunsDirectory, "LocalVarRuntime"),
                         "Start", out _, out runError), runError?.Message);
-                    Assert.IsTrue(sem.Wait(5000), "Model system did not complete in time!");
+                    Assert.IsTrue(sem.Wait(TestHelper.TestTimeoutMilliseconds), "Model system did not complete in time!");
                     Assert.IsTrue(success, "Model system failed: " + runError?.Message);
                 });
             });

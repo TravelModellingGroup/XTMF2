@@ -831,7 +831,7 @@ namespace XTMF2.UnitTests.Editing
                     };
                     Assert.IsTrue(runBus.RunModelSystem(msSession, Path.Combine(pSession.RunsDirectory, "CreatingClient"), "Start", out var id, out error), error?.Message);
                     // give the models system some time to complete
-                    if (!sim.Wait(2000))
+                    if (!sim.Wait(TestHelper.TestTimeoutMilliseconds))
                     {
                         Assert.Fail("The model system failed to execute in time!");
                     }

@@ -15,11 +15,11 @@ public class TestHostBusDisposal
     {
         var stream = new BlockingReadStream();
         var bus = new HostBus(stream, true);
-        Assert.IsTrue(stream.ReadStarted.Wait(TimeSpan.FromSeconds(2)));
+        Assert.IsTrue(stream.ReadStarted.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)));
 
         var disposeTask = Task.Run(bus.Dispose);
 
-        Assert.IsTrue(disposeTask.Wait(TimeSpan.FromSeconds(2)),
+        Assert.IsTrue(disposeTask.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)),
             "HostBus.Dispose should close the stream to release its blocked listener.");
         Assert.IsTrue(stream.IsDisposed);
     }

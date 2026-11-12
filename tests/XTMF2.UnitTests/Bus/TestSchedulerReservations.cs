@@ -22,7 +22,7 @@ public class TestSchedulerReservations
         using var reservation = scheduler.Reserve(workerContext);
         var sink = new RecordingRunOutputSink();
 
-        await reservation.Started.WaitAsync(TimeSpan.FromSeconds(3));
+        await reservation.Started.WaitAsync(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds));
         scheduler.Run(ordinaryContext, sink);
 
         var inventory = scheduler.GetInventory();
@@ -35,7 +35,7 @@ public class TestSchedulerReservations
 
         reservation.Dispose();
         Assert.AreEqual("ordinary-run",
-            await sink.RunFailed.Task.WaitAsync(TimeSpan.FromSeconds(3)));
+            await sink.RunFailed.Task.WaitAsync(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)));
     }
 
     [TestMethod]
@@ -54,11 +54,11 @@ public class TestSchedulerReservations
         var secondSink = new RecordingRunOutputSink();
 
         using var firstLease = scheduler.ReserveGroup("estimation-run", firstWorkerContext, 2);
-        await firstLease.Started.WaitAsync(TimeSpan.FromSeconds(3));
+        await firstLease.Started.WaitAsync(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds));
         scheduler.Run(firstOrdinaryContext, firstSink);
 
         using var secondLease = scheduler.ReserveGroup("estimation-run", secondWorkerContext, 2);
-        await secondLease.Started.WaitAsync(TimeSpan.FromSeconds(3));
+        await secondLease.Started.WaitAsync(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds));
         scheduler.Run(ordinaryContext, secondSink);
 
         var inventory = scheduler.GetInventory();
@@ -71,7 +71,7 @@ public class TestSchedulerReservations
         Assert.IsFalse(secondSink.RunFailed.Task.IsCompleted);
         secondLease.Dispose();
         var failedRuns = await Task.WhenAll(firstSink.RunFailed.Task, secondSink.RunFailed.Task)
-            .WaitAsync(TimeSpan.FromSeconds(3));
+            .WaitAsync(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds));
         CollectionAssert.AreEquivalent(new[] { "ordinary-run-1", "ordinary-run-2" }, failedRuns);
     }
 

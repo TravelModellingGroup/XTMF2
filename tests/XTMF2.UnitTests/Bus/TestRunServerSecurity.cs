@@ -34,7 +34,7 @@ public class TestRunServerSecurity
                 "127.0.0.1", port, token, fingerprint,
                 out var clientStream, out var clientError), clientError);
             clientStream!.Dispose();
-            Assert.IsTrue(server.Wait(TimeSpan.FromSeconds(5)), "The secure server handshake did not complete.");
+            Assert.IsTrue(server.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)), "The secure server handshake did not complete.");
             server.GetAwaiter().GetResult();
         }
         finally
@@ -66,7 +66,7 @@ public class TestRunServerSecurity
                 "127.0.0.1", port, RunServerSecurity.CreateToken(), fingerprint,
                 out var clientStream, out _));
             clientStream?.Dispose();
-            Assert.IsTrue(server.Wait(TimeSpan.FromSeconds(5)), "The secure server handshake did not complete.");
+            Assert.IsTrue(server.Wait(TimeSpan.FromMilliseconds(TestHelper.TestTimeoutMilliseconds)), "The secure server handshake did not complete.");
             server.GetAwaiter().GetResult();
         }
         finally

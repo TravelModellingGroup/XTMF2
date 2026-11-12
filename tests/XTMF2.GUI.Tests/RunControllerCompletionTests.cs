@@ -177,6 +177,44 @@ public class RunControllerCompletionTests
     }
 
     [TestMethod]
+    public void LocalRunUsesExistingOutputDirectoryWithoutArtifactReceipt()
+    {
+        var directory = Directory.CreateTempSubdirectory("xtmf-local-run-output-");
+        try
+        {
+            File.WriteAllText(Path.Combine(directory.FullName, "output.txt"), "local output");
+            var run = new RunViewModel("run-local-output", "forecast", directory.FullName,
+                "Local RunServer", null!, null!);
+
+            run.MarkFinished();
+
+            Assert.IsTrue(run.ArtifactsAvailable);
+            Assert.IsTrue(run.HasRunDirectory);
+            Assert.AreEqual("Output is on this computer.", run.OutputTransferStatus);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void ArtifactTransferProgressIsOnlyVisibleForRemoteRuns()
+    {
+        var run = new RunViewModel("run-progress-local", "forecast", string.Empty,
+            "Local RunServer", null!, null!);
+
+        run.UpdateArtifactCompressionProgress(512, 1024);
+
+        Assert.IsTrue(run.IsArtifactTransferActive);
+        Assert.IsFalse(run.ShowArtifactTransferProgress);
+
+        run.SetRemoteRunTracking(true);
+
+        Assert.IsTrue(run.ShowArtifactTransferProgress);
+    }
+
+    [TestMethod]
     public void RemoteOutputTransferFailure_ClearsProgressAndOffersRetry()
     {
         var snapshot = new RemoteRunSnapshot("run-progress-failed", "forecast", RunMode.Normal,
