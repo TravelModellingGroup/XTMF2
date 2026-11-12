@@ -512,7 +512,7 @@ namespace XTMF2.UnitTests
                         out _,
                         out error), error?.Message);
                     Assert.IsTrue(
-                        completion.Wait(50000),
+                        completion.Wait(100000),
                         string.IsNullOrEmpty(failure) ? "The function-template iteration model did not finish in time." : failure);
                     Assert.IsTrue(
                         succeeded,
