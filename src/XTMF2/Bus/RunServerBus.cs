@@ -512,6 +512,10 @@ namespace XTMF2.Bus
 
         internal void SendRunArtifacts(string runId, string runDirectory)
         {
+            // Shared-directory runs already write into the host's target directory.
+            if (!_usePrivateWorkspace)
+                return;
+
             string? mirrorPath = null;
             try
             {

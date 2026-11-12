@@ -80,6 +80,7 @@ public sealed partial class RunViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
     [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
+    [NotifyPropertyChangedFor(nameof(ShowArtifactTransferProgress))]
     private bool _isRemoteRun;
 
     [ObservableProperty]
@@ -95,6 +96,8 @@ public sealed partial class RunViewModel : ObservableObject
     public bool CanTransferRemoteOutput
         => IsRemoteRun && IsCompleted && !ArtifactsAvailable && !HasPendingRemoteReceipt
             && !IsPreparingRemoteOutput && !IsArtifactTransferActive;
+
+    public bool ShowArtifactTransferProgress => IsRemoteRun && IsArtifactTransferActive;
 
     public string OutputTransferStatus => !IsRemoteRun
         ? ArtifactsAvailable ? "Output is on this computer." : "Output has not been transferred yet."
@@ -120,6 +123,7 @@ public sealed partial class RunViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(OutputTransferStatus))]
     [NotifyPropertyChangedFor(nameof(CanTransferRemoteOutput))]
+    [NotifyPropertyChangedFor(nameof(ShowArtifactTransferProgress))]
     private bool _isArtifactTransferActive;
 
     [ObservableProperty]
@@ -1037,7 +1041,7 @@ public sealed partial class RunViewModel : ObservableObject
     {
         IsCancellationRequested = false;
         Status     = RunStatus.Finished;
-        MarkSharedEstimationOutputAvailableIfPresent();
+        MarkRunOutputAvailableIfPresent();
         StatusText = completionMessage ??
             (IsOptimizationRun && StatusText.StartsWith("[Estimation] converged", StringComparison.Ordinal)
                 ? StatusText
@@ -1053,7 +1057,7 @@ public sealed partial class RunViewModel : ObservableObject
     {
         IsCancellationRequested = false;
         Status     = RunStatus.Error;
-        MarkSharedEstimationOutputAvailableIfPresent();
+        MarkRunOutputAvailableIfPresent();
         StatusText = errorMessage;
         ErrorModuleName = moduleName;
         _errorElementId = elementId;
@@ -1071,7 +1075,7 @@ public sealed partial class RunViewModel : ObservableObject
     {
         IsCancellationRequested = false;
         Status = RunStatus.Interrupted;
-        MarkSharedEstimationOutputAvailableIfPresent();
+        MarkRunOutputAvailableIfPresent();
         StatusText = message;
         AddMessage(message);
         OnPropertyChanged(nameof(StatusBadge));
@@ -1085,16 +1089,16 @@ public sealed partial class RunViewModel : ObservableObject
     {
         IsCancellationRequested = false;
         Status = RunStatus.Cancelled;
-        MarkSharedEstimationOutputAvailableIfPresent();
+        MarkRunOutputAvailableIfPresent();
         StatusText = "Run cancelled by user.";
         AddMessage(StatusText);
         OnPropertyChanged(nameof(StatusBadge));
         OnPropertyChanged(nameof(IsCompleted));
     }
 
-    private void MarkSharedEstimationOutputAvailableIfPresent()
+    private void MarkRunOutputAvailableIfPresent()
     {
-        if (IsRemoteSharedEstimation && Directory.Exists(RunDirectory))
+        if ((!IsRemoteRun || IsRemoteSharedEstimation) && Directory.Exists(RunDirectory))
             MarkArtifactsAvailable();
     }
 
