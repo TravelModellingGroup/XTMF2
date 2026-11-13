@@ -1,0 +1,49 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:XTMF2.GUI.Views"
+        x:Class="XTMF2.GUI.Views.RunDirectoryConflictDialog"
+        x:CompileBindings="True"
+        x:DataType="local:RunDirectoryConflictDialog"
+        Classes="neon-dialog"
+        Title="Existing Run Directory"
+        Width="520"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="Auto,Auto" Margin="20">
+        <StackPanel Grid.Row="0" Spacing="8">
+            <TextBlock Text="This run name already has a directory. Choose what to do with its existing files."
+                       FontSize="14"
+                       TextWrapping="Wrap"/>
+            <SelectableTextBlock Text="{Binding RunDirectory}"
+                                 FontSize="12"
+                                 Opacity="0.7"
+                                 TextWrapping="Wrap"/>
+            <TextBlock Text="Overwrite clears the directory when the RunServer starts the run. Keep Files leaves existing files in place; files written by the run may replace matching files."
+                       FontSize="12"
+                       Opacity="0.7"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,18,0,0">
+            <Button Content="Overwrite"
+                    Classes="dlg-danger"
+                    Click="Overwrite_Click"
+                    Padding="16,8"/>
+            <Button Content="Keep Files"
+                    Classes="dlg-primary"
+                    Click="KeepFiles_Click"
+                    IsDefault="True"
+                    Padding="16,8"/>
+            <Button Content="Cancel"
+                    Click="Cancel_Click"
+                    IsCancel="True"
+                    Padding="16,8"/>
+        </StackPanel>
+    </Grid>
+</Window>

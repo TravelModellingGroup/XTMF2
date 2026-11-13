@@ -283,6 +283,8 @@ public sealed class RemoteSharedEstimationRegistry : IDisposable
             SharedEstimationWorkerPool? pool = null;
             try
             {
+                if (_request.ClearRunDirectoryBeforeStart)
+                    RunContext.ClearWorkingDirectoryContents(_request.Run.WorkingDirectory);
                 ReportStatus("Coordinator is preparing the estimation.");
                 if (_request.Workers.Count == 0)
                 {

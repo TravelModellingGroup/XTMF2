@@ -594,7 +594,7 @@ public sealed class HostBus : IDisposable
         RunMode runMode,
         Action<string>? onIdCreated,
         [NotNullWhen(true)] out string? id, [NotNullWhen(false)] out CommandError? error,
-        string? runName = null, Guid? ownerUserId = null)
+        string? runName = null, Guid? ownerUserId = null, bool clearRunDirectoryBeforeStart = false)
     {
         id = null;
         lock (_outLock)
@@ -620,6 +620,7 @@ public sealed class HostBus : IDisposable
                 writer.Write(modelSystem.Project.Id.ToString("D"));
                 writer.Write(modelSystem.ModelSystemHeader.Id.ToString("D"));
                 writer.Write(ownerUserId?.ToString("D") ?? string.Empty);
+                writer.Write(clearRunDirectoryBeforeStart);
                 writer.Write(memStream.Length);
                 memStream.WriteTo(_HostStream);
                 return true;

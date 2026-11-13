@@ -26,7 +26,8 @@ public class TestSharedEstimationProtocol
             [new AlgorithmParameterDescriptor { Key = "MaxIterations", Label = "Max Iterations", Hint = "limit", Value = "12" }],
             [0.0], [1.0], [0.5], false, UseCoordinatorAsWorker: false,
             Parameters: [new SharedEstimationParameterMetadata(7, "Demand", 0.0, 1.0)],
-            CoordinatorConcurrentRuns: 2);
+            CoordinatorConcurrentRuns: 2,
+            ClearRunDirectoryBeforeStart: true);
 
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
@@ -47,6 +48,7 @@ public class TestSharedEstimationProtocol
         Assert.AreEqual(request.InitialValues[0], read.InitialValues[0]);
         Assert.AreEqual(request.UseCoordinatorAsWorker, read.UseCoordinatorAsWorker);
         Assert.AreEqual(2, read.CoordinatorConcurrentRuns);
+        Assert.IsTrue(read.ClearRunDirectoryBeforeStart);
         Assert.AreEqual(request.Parameters![0], read.Parameters![0]);
         Assert.AreEqual(projectId, read.Run.ProjectId);
         Assert.AreEqual(modelSystemId, read.Run.ModelSystemId);

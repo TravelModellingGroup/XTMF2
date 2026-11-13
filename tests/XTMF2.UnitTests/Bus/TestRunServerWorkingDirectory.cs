@@ -67,4 +67,31 @@ public class TestRunServerWorkingDirectory
                 Directory.Delete(root, recursive: true);
         }
     }
+
+    [TestMethod]
+    public void RunContextClearsExistingFilesOnlyWhenPreparedForExecution()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-RunClear-" + Guid.NewGuid().ToString("N"));
+        var runDirectory = Path.Combine(root, "runs", "sample");
+        var existingFile = Path.Combine(runDirectory, "previous-output.txt");
+        Directory.CreateDirectory(runDirectory);
+        File.WriteAllText(existingFile, "previous output");
+
+        try
+        {
+            Assert.IsTrue(RunContext.CreateRunContext(CreateRuntime(), "run-clear", [], runDirectory,
+                "Start", RunMode.Normal, out var context, clearWorkingDirectoryBeforeStart: true));
+
+            Assert.IsTrue(File.Exists(existingFile), "Creating a run context must not clear existing files.");
+            context.PrepareWorkingDirectory();
+
+            Assert.IsTrue(Directory.Exists(runDirectory));
+            Assert.IsEmpty(Directory.GetFileSystemEntries(runDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
 }

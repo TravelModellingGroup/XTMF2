@@ -593,12 +593,21 @@ namespace XTMF2.Bus
                                 var ownerUserId = Guid.TryParse(reader.ReadString(), out var parsedOwnerUserId)
                                     ? parsedOwnerUserId
                                     : (Guid?)null;
+                                var clearRunDirectoryBeforeStart = reader.ReadBoolean();
                                 var msSize = (int)reader.ReadInt64();
                                 Console.WriteLine($"RunServer model system run issued: {id} (start '{start}', mode {runMode}, {msSize} bytes)");
                                 Console.Out.Flush();
                                 using var mem = CreateMemoryStreamLoadingFrom(reader.BaseStream, msSize);
                                 var modelSystem = mem.ToArray();
-                                if (RunContext.CreateRunContext(Runtime, id, modelSystem, cwd, start, runMode, out var context))
+                                if (clearRunDirectoryBeforeStart && _usePrivateWorkspace)
+                                {
+                                    ModelRunFailed(id,
+                                        "Clearing existing run files is only supported by the local RunServer.",
+                                        string.Empty, null, null);
+                                }
+                                else if (RunContext.CreateRunContext(Runtime, id, modelSystem, cwd, start, runMode,
+                                             out var context,
+                                             clearWorkingDirectoryBeforeStart: clearRunDirectoryBeforeStart))
                                 {
                                     if (_remoteRunRegistry is not null)
                                     {

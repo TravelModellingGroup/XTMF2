@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
@@ -50,6 +51,60 @@ public class TestRemoteRunRegistry
             Assert.AreEqual(progress[^1].total, progress[^1].processed);
             Assert.IsTrue(Directory.Exists(Path.Combine(mirror, "files")));
             Assert.IsTrue(File.Exists(Path.Combine(mirror, "manifest.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void ArtifactMirror_ReadTransferExpandsEachPayloadBeforeTheNextOneArrives()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-ArtifactMirror-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "source");
+        var mirror = Path.Combine(root, "mirror");
+        var receivedMirror = Path.Combine(root, "received");
+        Directory.CreateDirectory(source);
+        var firstBytes = new byte[1024 * 1024];
+        new Random(17).NextBytes(firstBytes);
+        File.WriteAllBytes(Path.Combine(source, "first.bin"), firstBytes);
+        File.WriteAllBytes(Path.Combine(source, "second.bin"), [1, 2, 3]);
+        try
+        {
+            RunArtifactMirror.CreateFromDirectory(source, mirror);
+            byte[] transferBytes;
+            using (var transfer = new MemoryStream())
+            {
+                using (var writer = new BinaryWriter(transfer, Encoding.UTF8, leaveOpen: true))
+                    RunArtifactMirror.WriteTransfer(writer, mirror);
+                transferBytes = transfer.ToArray();
+            }
+
+            var firstPayloadEnd = GetFirstPayloadEnd(transferBytes);
+            using var blockingStream = new BlockingReadStream(transferBytes, firstPayloadEnd);
+            using var reader = new BinaryReader(blockingStream, Encoding.UTF8, leaveOpen: true);
+            var readTask = Task.Run(() => RunArtifactMirror.ReadTransfer(reader, receivedMirror));
+            try
+            {
+                Assert.IsTrue(blockingStream.WaitForBlock(TimeSpan.FromSeconds(5)),
+                    "The transfer did not reach the second payload.");
+                var stagingDirectory = Directory.EnumerateDirectories(root, "received.tmp-*").Single();
+                var expandedFirstPayload = Path.Combine(stagingDirectory, "expanded", "00000000.gz.expanded");
+                Assert.IsTrue(SpinWait.SpinUntil(() => File.Exists(expandedFirstPayload),
+                    TimeSpan.FromSeconds(5)),
+                    "The first payload was not decompressed while the second payload was still pending.");
+            }
+            finally
+            {
+                blockingStream.Release();
+                readTask.GetAwaiter().GetResult();
+            }
+
+            var destination = Path.Combine(root, "destination");
+            RunArtifactMirror.ExtractToDirectory(receivedMirror, destination);
+            CollectionAssert.AreEqual(firstBytes, File.ReadAllBytes(Path.Combine(destination, "first.bin")));
         }
         finally
         {
@@ -458,4 +513,86 @@ public class TestRemoteRunRegistry
     private static string GetArtifactMirrorPath(string storageDirectory, string runId)
         => Path.Combine(storageDirectory,
             $"{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(runId)))}.mirror");
+
+    private static long GetFirstPayloadEnd(byte[] transferBytes)
+    {
+        using var stream = new MemoryStream(transferBytes);
+        using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
+        reader.ReadInt32();
+        var count = reader.ReadInt32();
+        long firstPayloadLength = 0;
+        for (var index = 0; index < count; index++)
+        {
+            var isDirectory = reader.ReadBoolean();
+            reader.ReadString();
+            reader.ReadInt64();
+            var compressedLength = reader.ReadInt64();
+            if (!isDirectory)
+            {
+                reader.ReadBytes(32);
+                if (firstPayloadLength == 0)
+                    firstPayloadLength = compressedLength;
+            }
+        }
+
+        return stream.Position + firstPayloadLength;
+    }
+
+    private sealed class BlockingReadStream(byte[] content, long blockPosition) : Stream
+    {
+        private readonly MemoryStream _stream = new(content, writable: false);
+        private readonly ManualResetEventSlim _blocked = new();
+        private readonly ManualResetEventSlim _release = new();
+        private int _hasBlocked;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => true;
+        public override bool CanWrite => false;
+        public override long Length => _stream.Length;
+        public override long Position
+        {
+            get => _stream.Position;
+            set => _stream.Position = value;
+        }
+
+        public bool WaitForBlock(TimeSpan timeout) => _blocked.Wait(timeout);
+        public void Release() => _release.Set();
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            BlockAtPosition();
+            return _stream.Read(buffer, offset, count);
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            BlockAtPosition();
+            return _stream.Read(buffer);
+        }
+
+        private void BlockAtPosition()
+        {
+            if (_stream.Position >= blockPosition && Interlocked.Exchange(ref _hasBlocked, 1) == 0)
+            {
+                _blocked.Set();
+                _release.Wait();
+            }
+        }
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => _stream.Seek(offset, origin);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _stream.Dispose();
+                _blocked.Dispose();
+                _release.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+    }
 }

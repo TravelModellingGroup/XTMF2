@@ -154,7 +154,8 @@ public sealed record SharedEstimationCoordinatorRequest(
     bool IsMaximize,
     bool UseCoordinatorAsWorker = true,
     IReadOnlyList<SharedEstimationParameterMetadata>? Parameters = null,
-    int CoordinatorConcurrentRuns = 1);
+    int CoordinatorConcurrentRuns = 1,
+    bool ClearRunDirectoryBeforeStart = false);
 
 public sealed record SharedEstimationCandidate(
     string RunId,
@@ -194,7 +195,7 @@ public sealed record SharedEstimationCompletion(
 
 public static class SharedEstimationProtocol
 {
-    public const int Version = 3;
+    public const int Version = 4;
     private const int MaxCollectionLength = 1_000_000;
     private const int MaxServerActivities = 10_000;
 
@@ -246,6 +247,7 @@ public static class SharedEstimationProtocol
             writer.Write(parameter.Min);
             writer.Write(parameter.Max);
         }
+        writer.Write(request.ClearRunDirectoryBeforeStart);
     }
 
     public static SharedEstimationCoordinatorRequest ReadCoordinatorRequest(BinaryReader reader)
@@ -303,9 +305,10 @@ public static class SharedEstimationProtocol
             values[index] = new SharedEstimationParameterMetadata(nodeIndex, ReadRequiredString(reader),
                 reader.ReadDouble(), reader.ReadDouble());
         }
+        var clearRunDirectoryBeforeStart = reader.ReadBoolean();
         return new SharedEstimationCoordinatorRequest(run, workers, algorithmId, parameters,
             lowerBounds, upperBounds, initialValues, isMaximize, useCoordinatorAsWorker, values,
-            coordinatorConcurrentRuns);
+            coordinatorConcurrentRuns, clearRunDirectoryBeforeStart);
     }
 
     public static (int Version, SharedEstimationMessageType MessageType) ReadHeader(BinaryReader reader)

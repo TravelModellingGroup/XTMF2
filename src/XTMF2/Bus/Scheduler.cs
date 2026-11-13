@@ -357,6 +357,8 @@ namespace XTMF2.Bus
                                 var sink = work.Sink!;
                                 Console.WriteLine($"RunServer model system run started processing: {context.ID}");
                                 Console.Out.Flush();
+                                if (!context.CancellationRequested && !context.KillRequested)
+                                    context.PrepareWorkingDirectory();
                                 if (runLocal)
                                 {
                                     context.RunInCurrentProcess(sink);

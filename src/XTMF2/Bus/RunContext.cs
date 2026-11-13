@@ -47,6 +47,7 @@ namespace XTMF2.Bus
         /// </summary>
         private readonly string _currentWorkingDirectory;
         private readonly IReadOnlyDictionary<int, string>? _basicParameterOverrides;
+        private readonly bool _clearWorkingDirectoryBeforeStart;
 
         internal string WorkingDirectory => _currentWorkingDirectory;
 
@@ -130,7 +131,7 @@ namespace XTMF2.Bus
         }
 
         private RunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd, string start,
-            IReadOnlyDictionary<int, string>? basicParameterOverrides)
+            IReadOnlyDictionary<int, string>? basicParameterOverrides, bool clearWorkingDirectoryBeforeStart)
         {
             _runtime = runtime;
             ID = id;
@@ -139,6 +140,7 @@ namespace XTMF2.Bus
             HasExecuted = false;
             StartToExecute = start;
             _basicParameterOverrides = basicParameterOverrides;
+            _clearWorkingDirectoryBeforeStart = clearWorkingDirectoryBeforeStart;
         }
 
         /// <summary>
@@ -154,9 +156,11 @@ namespace XTMF2.Bus
         /// <returns>True if the model system was able to be processed, false otherwise.</returns>
         public static bool CreateRunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd,
             string start, RunMode runMode, out RunContext context,
-            IReadOnlyDictionary<int, string>? basicParameterOverrides = null)
+            IReadOnlyDictionary<int, string>? basicParameterOverrides = null,
+            bool clearWorkingDirectoryBeforeStart = false)
         {
-            context = new RunContext(runtime, id, modelSystem, cwd, start, basicParameterOverrides) { _runMode = runMode };
+            context = new RunContext(runtime, id, modelSystem, cwd, start, basicParameterOverrides,
+                clearWorkingDirectoryBeforeStart) { _runMode = runMode };
             return true;
         }
 
@@ -166,6 +170,44 @@ namespace XTMF2.Bus
         public static bool CreateRunContext(XTMFRuntime runtime, string id, byte[] modelSystem, string cwd,
             string start, out RunContext context)
             => CreateRunContext(runtime, id, modelSystem, cwd, start, RunMode.Normal, out context);
+
+        internal void PrepareWorkingDirectory()
+        {
+            if (_clearWorkingDirectoryBeforeStart)
+                ClearWorkingDirectoryContents(_currentWorkingDirectory);
+        }
+
+        internal static void ClearWorkingDirectoryContents(string workingDirectory)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
+
+            var fullPath = Path.GetFullPath(workingDirectory);
+            var pathRoot = Path.GetPathRoot(fullPath);
+            if (pathRoot is null || string.Equals(
+                    Path.TrimEndingDirectorySeparator(fullPath),
+                    Path.TrimEndingDirectorySeparator(pathRoot),
+                    StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Refusing to clear a filesystem root as a run directory.");
+
+            var directory = new DirectoryInfo(fullPath);
+            if (!directory.Exists)
+            {
+                directory.Create();
+                return;
+            }
+
+            if ((directory.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("Refusing to clear a run directory that is a symbolic link.");
+
+            foreach (var entry in directory.EnumerateFileSystemInfos())
+            {
+                if (entry is DirectoryInfo childDirectory &&
+                    (childDirectory.Attributes & FileAttributes.ReparsePoint) == 0)
+                    childDirectory.Delete(recursive: true);
+                else
+                    entry.Delete();
+            }
+        }
 
         internal bool PrepareSharedEstimationWorker([System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out RunError? error)
         {
