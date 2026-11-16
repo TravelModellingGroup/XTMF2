@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.GUI.Properties;
 using XTMF2.GUI.Views;
@@ -34,6 +35,7 @@ public class RunConfigurationDialogTests
                 "estimation",
                 [endpoint],
                 ["Start"],
+                [],
                 allowMultipleRunServers: true,
                 [new RunConfigurationDialog.PathParameter(7, nodeId, "Input path", "/shared/data")]);
             dialog.UseMultipleRunServers = true;
@@ -50,10 +52,10 @@ public class RunConfigurationDialogTests
     {
         Session.Dispatch(() =>
         {
-            var local = new RunServerEndpoint { Id = "local", Name = "Local" };
+            var local = new RunServerEndpoint { Id = "local", Name = "Local", IsLocal = true };
             var remote = new RunServerEndpoint { Id = "remote-1", Name = "Remote 1" };
             var dialog = new RunConfigurationDialog("Run Estimation", "estimation",
-                [local, remote], ["Start"], allowMultipleRunServers: true);
+                [local, remote], ["Start"], [], allowMultipleRunServers: true);
 
             Assert.IsFalse(dialog.UseMultipleRunServers);
             Assert.IsTrue(dialog.IsSingleRunServerSelectionVisible);
@@ -63,6 +65,7 @@ public class RunConfigurationDialogTests
             dialog.UseMultipleRunServers = true;
             Assert.IsTrue(dialog.IsMultipleRunServerSelectionVisible);
             Assert.IsFalse(dialog.IsSingleRunServerSelectionVisible);
+            dialog.SelectedCoordinatorRunServer = remote;
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
     }
 
@@ -71,10 +74,10 @@ public class RunConfigurationDialogTests
     {
         Session.Dispatch(() =>
         {
-            var local = new RunServerEndpoint { Id = "local", Name = "Local" };
+            var local = new RunServerEndpoint { Id = "local", Name = "Local", IsLocal = true };
             var remote = new RunServerEndpoint { Id = "remote-1", Name = "Remote 1" };
             var dialog = new RunConfigurationDialog("Run Estimation", "estimation",
-                [local, remote], ["Start"], allowMultipleRunServers: true);
+                [local, remote], ["Start"], [], allowMultipleRunServers: true);
             dialog.UseMultipleRunServers = true;
             dialog.SelectedCoordinatorRunServer = remote;
             dialog.RunServerChoices.Single(choice => choice.Endpoint.Id == local.Id).IsSelected = true;
@@ -93,7 +96,7 @@ public class RunConfigurationDialogTests
             var local = new RunServerEndpoint { Id = "local", Name = "Local" };
             var remote = new RunServerEndpoint { Id = "remote-1", Name = "Remote 1" };
             var dialog = new RunConfigurationDialog("Run Estimation", "estimation",
-                [coordinator, local, remote], ["Start"], allowMultipleRunServers: true);
+                [coordinator, local, remote], ["Start"], [], allowMultipleRunServers: true);
             dialog.UseMultipleRunServers = true;
             var remoteRow = dialog.RunServerChoices.Single(choice => choice.Endpoint.Id == remote.Id);
             var localRow = dialog.RunServerChoices.Single(choice => choice.Endpoint.Id == local.Id);
@@ -114,6 +117,55 @@ public class RunConfigurationDialogTests
             Assert.Contains(coordinator, dialog.RunServers);
             Assert.IsFalse(dialog.SelectedRunServers.Any(endpoint => endpoint.Id == coordinator.Id));
             Assert.IsTrue(coordinatorRow.CanConfigureRuns);
+        }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void EditableRunNameCompletesAndCyclesPreviousNames()
+    {
+        Session.Dispatch(() =>
+        {
+            var local = new RunServerEndpoint { Id = "local", Name = "Local", IsLocal = true };
+            var dialog = new RunConfigurationDialog("Run Model System", "Model",
+                [local], ["Start"], ["Model Base", "Model Alternate"]);
+            var comboBox = dialog.FindControl<ComboBox>("RunNameComboBox");
+
+            Assert.IsNotNull(comboBox);
+            Assert.IsTrue(comboBox!.IsEditable);
+
+            comboBox.Text = "Model B";
+            Assert.AreEqual("Model B", dialog.RunName);
+            var rightArrow = new KeyEventArgs
+            {
+                RoutedEvent = InputElement.KeyDownEvent,
+                Key = Key.Right
+            };
+            comboBox.RaiseEvent(rightArrow);
+            Assert.IsTrue(rightArrow.Handled);
+            Assert.AreEqual("Model Base", dialog.RunName);
+
+            comboBox.Text = "Custom name";
+            Assert.AreEqual("Custom name", dialog.RunName);
+            var downArrow = new KeyEventArgs
+            {
+                RoutedEvent = InputElement.KeyDownEvent,
+                Key = Key.Down
+            };
+            comboBox.RaiseEvent(downArrow);
+            Assert.IsTrue(downArrow.Handled);
+            Assert.AreEqual("Model Base", dialog.RunName);
+            comboBox.RaiseEvent(new KeyEventArgs
+            {
+                RoutedEvent = InputElement.KeyDownEvent,
+                Key = Key.Down
+            });
+            Assert.AreEqual("Model Alternate", dialog.RunName);
+            comboBox.RaiseEvent(new KeyEventArgs
+            {
+                RoutedEvent = InputElement.KeyDownEvent,
+                Key = Key.Down
+            });
+            Assert.AreEqual("Model Base", dialog.RunName);
         }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
     }
 }

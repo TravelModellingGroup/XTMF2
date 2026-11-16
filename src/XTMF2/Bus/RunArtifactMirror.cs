@@ -17,6 +17,7 @@ public static class RunArtifactMirror
     private const int MaximumEntries = 100_000;
     private const string ManifestFileName = "manifest.json";
     private const string PayloadDirectoryName = "files";
+    private const string ExpandedDirectoryName = "expanded";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     internal sealed record Entry(
@@ -69,7 +70,7 @@ public static class RunArtifactMirror
             {
                 MaxDegreeOfParallelism = maxDegreeOfParallelism > 0
                     ? maxDegreeOfParallelism
-                    : Math.Max(1, Math.Min(Environment.ProcessorCount, 4))
+                    : GetMaxDegreeOfParallelism()
             };
             Parallel.For(0, items.Length, parallelOptions, index =>
             {
@@ -249,7 +250,11 @@ public static class RunArtifactMirror
         if (Directory.Exists(destination) || File.Exists(destination))
             throw new IOException($"Artifact mirror destination already exists: {destination}");
         var staging = destination + ".tmp-" + Guid.NewGuid().ToString("N");
-        Directory.CreateDirectory(Path.Combine(staging, PayloadDirectoryName));
+        var payloadDirectory = Path.Combine(staging, PayloadDirectoryName);
+        var expandedDirectory = Path.Combine(staging, ExpandedDirectoryName);
+        Directory.CreateDirectory(payloadDirectory);
+        Directory.CreateDirectory(expandedDirectory);
+        var expansionTasks = new List<Task>();
         try
         {
             progress?.Invoke(0, totalBytes);
@@ -258,22 +263,30 @@ public static class RunArtifactMirror
             foreach (var entry in entries.Where(entry => !entry.IsDirectory))
             {
                 var payloadPath = Path.Combine(staging, PayloadDirectoryName, entry.PayloadName);
-                using var output = new FileStream(payloadPath, FileMode.CreateNew,
-                    FileAccess.Write, FileShare.None);
-                var remaining = entry.CompressedLength;
-                while (remaining > 0)
                 {
-                    var read = reader.BaseStream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
-                    if (read == 0)
-                        throw new EndOfStreamException($"Artifact payload was truncated: {entry.RelativePath}");
-                    output.Write(buffer, 0, read);
-                    remaining -= read;
-                    transferred += read;
-                    if (transferred == totalBytes || transferred % (1024 * 1024) < read)
-                        progress?.Invoke(transferred, totalBytes);
+                    using var output = new FileStream(payloadPath, FileMode.CreateNew,
+                        FileAccess.Write, FileShare.None);
+                    var remaining = entry.CompressedLength;
+                    while (remaining > 0)
+                    {
+                        var read = reader.BaseStream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                        if (read == 0)
+                            throw new EndOfStreamException($"Artifact payload was truncated: {entry.RelativePath}");
+                        output.Write(buffer, 0, read);
+                        remaining -= read;
+                        transferred += read;
+                        if (transferred == totalBytes || transferred % (1024 * 1024) < read)
+                            progress?.Invoke(transferred, totalBytes);
+                    }
                 }
+
+                var expandedPath = GetExpandedPayloadPath(staging, entry);
+                expansionTasks.Add(Task.Run(() => RestoreFile(payloadPath, expandedPath, entry, compressed: true)));
+                if (expansionTasks.Count >= GetMaxDegreeOfParallelism())
+                    CompleteOneArtifactTask(expansionTasks);
             }
 
+            Task.WhenAll(expansionTasks).GetAwaiter().GetResult();
             WriteManifest(Path.Combine(staging, ManifestFileName), entries);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             Directory.Move(staging, destination);
@@ -281,6 +294,13 @@ public static class RunArtifactMirror
         }
         catch
         {
+            try
+            {
+                Task.WhenAll(expansionTasks).GetAwaiter().GetResult();
+            }
+            catch (Exception)
+            {
+            }
             if (Directory.Exists(staging))
                 Directory.Delete(staging, recursive: true);
             throw;
@@ -305,47 +325,72 @@ public static class RunArtifactMirror
         foreach (var entry in entries.Where(entry => entry.IsDirectory))
             Directory.CreateDirectory(GetContainedPath(root, entry.RelativePath));
 
-        foreach (var entry in entries.Where(entry => !entry.IsDirectory))
+        var expandedDirectory = Path.Combine(mirrorDirectory, ExpandedDirectoryName);
+        var hasExpandedPayloads = Directory.Exists(expandedDirectory);
+        Parallel.ForEach(entries.Where(entry => !entry.IsDirectory),
+            new ParallelOptions { MaxDegreeOfParallelism = GetMaxDegreeOfParallelism() }, entry =>
         {
             var destination = GetContainedPath(root, entry.RelativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            var temporary = destination + ".tmp-" + Guid.NewGuid().ToString("N");
-            try
+            var source = hasExpandedPayloads
+                ? GetExpandedPayloadPath(mirrorDirectory, entry)
+                : GetPayloadPath(mirrorDirectory, entry);
+            RestoreFile(source, destination, entry, compressed: !hasExpandedPayloads);
+        });
+    }
+
+    private static void RestoreFile(string sourcePath, string destination, Entry entry, bool compressed)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        var temporary = destination + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            long length = 0;
+            byte[] actualHash;
+            using (var input = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (Stream content = compressed
+                       ? new GZipStream(input, CompressionMode.Decompress, leaveOpen: true)
+                       : input)
+            using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
             {
-                long length = 0;
-                byte[] actualHash;
-                using (var input = new FileStream(GetPayloadPath(mirrorDirectory, entry),
-                           FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var gzip = new GZipStream(input, CompressionMode.Decompress))
-                using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+                var buffer = new byte[81920];
+                while (true)
                 {
-                    var buffer = new byte[81920];
-                    while (true)
-                    {
-                        var read = gzip.Read(buffer, 0, buffer.Length);
-                        if (read == 0)
-                            break;
-                        if (read > entry.Length - length)
-                            throw new InvalidDataException($"Artifact exceeds its declared size: {entry.RelativePath}");
-                        output.Write(buffer, 0, read);
-                        hash.AppendData(buffer, 0, read);
-                        length += read;
-                    }
-                    output.Flush(true);
-                    actualHash = hash.GetHashAndReset();
+                    var read = content.Read(buffer, 0, buffer.Length);
+                    if (read == 0)
+                        break;
+                    if (read > entry.Length - length)
+                        throw new InvalidDataException($"Artifact exceeds its declared size: {entry.RelativePath}");
+                    output.Write(buffer, 0, read);
+                    hash.AppendData(buffer, 0, read);
+                    length += read;
                 }
-                if (length != entry.Length ||
-                    !CryptographicOperations.FixedTimeEquals(actualHash, Convert.FromHexString(entry.Sha256)))
-                    throw new InvalidDataException($"Artifact verification failed: {entry.RelativePath}");
-                File.Move(temporary, destination, true);
+                output.Flush(true);
+                actualHash = hash.GetHashAndReset();
             }
-            finally
-            {
-                if (File.Exists(temporary))
-                    File.Delete(temporary);
-            }
+            if (length != entry.Length ||
+                !CryptographicOperations.FixedTimeEquals(actualHash, Convert.FromHexString(entry.Sha256)))
+                throw new InvalidDataException($"Artifact verification failed: {entry.RelativePath}");
+            File.Move(temporary, destination, true);
         }
+        finally
+        {
+            if (File.Exists(temporary))
+                File.Delete(temporary);
+        }
+    }
+
+    private static string GetExpandedPayloadPath(string mirrorDirectory, Entry entry)
+        => Path.Combine(mirrorDirectory, ExpandedDirectoryName, entry.PayloadName + ".expanded");
+
+    private static int GetMaxDegreeOfParallelism()
+        => Math.Max(1, Environment.ProcessorCount - 2);
+
+    private static void CompleteOneArtifactTask(List<Task> tasks)
+    {
+        var completed = Task.WhenAny(tasks).GetAwaiter().GetResult();
+        completed.GetAwaiter().GetResult();
+        tasks.Remove(completed);
     }
 
     private static SourceItem CreateSourceItem(string root, string path)

@@ -71,6 +71,7 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
     private RunServerEndpoint? _selectedCoordinatorRunServer;
     private string? _selectedStartName;
     private bool _useMultipleRunServers;
+    private int _runNameSuggestionIndex = -1;
     private readonly IReadOnlyList<PathParameter> _pathParameters;
     private readonly Dictionary<string, Dictionary<int, string>> _pathOverrides = new(StringComparer.Ordinal);
 
@@ -78,6 +79,7 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
 
     public IReadOnlyList<RunServerEndpoint> RunServers { get; }
     public IReadOnlyList<string> StartNames { get; }
+    public IReadOnlyList<string> PreviousRunNames { get; }
     public ObservableCollection<RunServerChoice> RunServerChoices { get; } = new();
     public bool AllowMultipleRunServers { get; }
     public IReadOnlyList<RunServerEndpoint> SelectedRunServers => RunServerChoices
@@ -133,7 +135,9 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
         get => _runName;
         set
         {
+            if (_runName == value) return;
             _runName = value;
+            _runNameSuggestionIndex = -1;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RunName)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRunNameValid)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRunNameInvalid)));
@@ -152,6 +156,7 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
         get => _selectedRunServer;
         set
         {
+            if (_selectedRunServer == value) return;
             _selectedRunServer = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedRunServer)));
         }
@@ -173,6 +178,7 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
     {
         RunServers = [];
         StartNames = [];
+        PreviousRunNames = [];
         _pathParameters = [];
         AllowMultipleRunServers = false;
         InitializeComponent();
@@ -184,11 +190,13 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
     public RunConfigurationDialog(string title, string defaultRunName,
                                   IReadOnlyList<RunServerEndpoint> runServers,
                                   IReadOnlyList<string> startNames,
+                                  IReadOnlyList<string> previousRunNames,
                                   bool allowMultipleRunServers = false,
                                   IReadOnlyList<PathParameter>? pathParameters = null)
     {
         RunServers = runServers;
         StartNames = startNames;
+        PreviousRunNames = previousRunNames;
         for (var index = 0; index < runServers.Count; index++)
         {
             var choice = new RunServerChoice(runServers[index], index == 0);
@@ -207,11 +215,45 @@ public partial class RunConfigurationDialog : Window, INotifyPropertyChanged
         DataContext = this;
         RebuildPathEditors();
         RegisterEscapeClose();
+        RunNameComboBox.AddHandler(KeyDownEvent, OnRunNameComboBoxKeyDown, RoutingStrategies.Tunnel);
         Opened += (_, _) =>
         {
-            RunNameTextBox.Focus();
-            RunNameTextBox.SelectAll();
+            RunNameComboBox.Focus();
         };
+    }
+
+    private void OnRunNameComboBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers == KeyModifiers.None && HandleRunNameKey(e.Key))
+            e.Handled = true;
+    }
+
+    internal bool HandleRunNameKey(Key key)
+    {
+        if (key == Key.Down && PreviousRunNames.Count > 0)
+        {
+            var nextIndex = (_runNameSuggestionIndex + 1) % PreviousRunNames.Count;
+            RunName = PreviousRunNames[nextIndex];
+            _runNameSuggestionIndex = nextIndex;
+            return true;
+        }
+
+        if (key != Key.Right)
+            return false;
+
+        var currentName = RunName ?? string.Empty;
+        for (var index = 0; index < PreviousRunNames.Count; index++)
+        {
+            var suggestion = PreviousRunNames[index];
+            if (suggestion.Length <= currentName.Length ||
+                !suggestion.StartsWith(currentName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            RunName = suggestion;
+            _runNameSuggestionIndex = index;
+            return true;
+        }
+        return false;
     }
 
     private void RegisterEscapeClose() =>

@@ -409,7 +409,8 @@ public class RunController : IDisposable
         string runName,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
-        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Normal, LocalEndpointId, out id, out error);
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Normal, LocalEndpointId,
+            clearRunDirectoryBeforeRun: false, out id, out error);
 
     public bool SendRun(
         Project projectSession,
@@ -420,7 +421,21 @@ public class RunController : IDisposable
         string endpointId,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
-        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Normal, endpointId, out id, out error);
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Normal, endpointId,
+            clearRunDirectoryBeforeRun: false, out id, out error);
+
+    public bool SendRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        string endpointId,
+        bool clearRunDirectoryBeforeRun,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Normal, endpointId,
+            clearRunDirectoryBeforeRun, out id, out error);
 
     /// <summary>
     /// Sends an estimation run (Nelder-Mead loop) to the client process.
@@ -433,7 +448,8 @@ public class RunController : IDisposable
         string runName,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
-        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Estimation, LocalEndpointId, out id, out error);
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Estimation, LocalEndpointId,
+            clearRunDirectoryBeforeRun: false, out id, out error);
 
     public bool SendEstimationRun(
         Project projectSession,
@@ -444,7 +460,21 @@ public class RunController : IDisposable
         string endpointId,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
-        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Estimation, endpointId, out id, out error);
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Estimation, endpointId,
+            clearRunDirectoryBeforeRun: false, out id, out error);
+
+    public bool SendEstimationRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        string endpointId,
+        bool clearRunDirectoryBeforeRun,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Estimation, endpointId,
+            clearRunDirectoryBeforeRun, out id, out error);
 
     /// <summary>
     /// Starts an estimation run across the selected connected RunServers.
@@ -496,7 +526,13 @@ public class RunController : IDisposable
             .ToArray();
 
         var runId = Guid.NewGuid().ToString();
-        var runDirectory = Path.Combine(projectSession.ProjectDirectory, "runs", runName);
+        var runsDirectory = projectSession.RunsDirectory;
+        if (String.IsNullOrWhiteSpace(runsDirectory))
+        {
+            error = new CommandError("Project run directory is not set.");
+            return false;
+        }
+        var runDirectory = Path.Combine(runsDirectory, runName);
         using var modelStream = new MemoryStream();
         if (!msSession.Save(out error, modelStream))
             return false;
@@ -599,6 +635,7 @@ public class RunController : IDisposable
         IReadOnlyList<string> workerEndpointIds,
         IReadOnlyDictionary<string, IReadOnlyDictionary<int, string>>? basicParameterOverridesByWorker,
         IReadOnlyDictionary<string, int>? concurrentRunsByEndpoint,
+        bool clearRunDirectoryBeforeRun,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
     {
@@ -607,6 +644,17 @@ public class RunController : IDisposable
         if (!_connections.TryGet(orchestratorEndpointId, out var orchestrator) || orchestrator is null)
         {
             error = new CommandError($"RunServer '{orchestratorEndpointId}' is not connected.");
+            return false;
+        }
+        if (clearRunDirectoryBeforeRun && orchestratorEndpointId != LocalEndpointId)
+        {
+            error = new CommandError("Clearing existing run files is only supported by the local RunServer.");
+            return false;
+        }
+        var runsDirectory = projectSession.RunsDirectory;
+        if (string.IsNullOrWhiteSpace(runsDirectory))
+        {
+            error = new CommandError("Project run directory is not set.");
             return false;
         }
         var modelSystem = msSession.ModelSystem;
@@ -656,7 +704,7 @@ public class RunController : IDisposable
             basicParameterOverridesByWorker.TryGetValue(orchestratorEndpointId, out coordinatorOverrides);
         var request = new SharedEstimationCoordinatorRequest(
             new SharedEstimationRunRequest(Guid.NewGuid().ToString(),
-                Path.Combine(projectSession.ProjectDirectory!, "runs", runName),
+                Path.Combine(runsDirectory, runName),
                 startToExecute, modelStream.ToArray(), coordinatorOverrides,
                 msSession.Project.Id, msSession.ModelSystemHeader.Id, user.UserId),
             endpoints.Select(endpoint => new SharedEstimationWorkerEndpoint(
@@ -682,7 +730,8 @@ public class RunController : IDisposable
             CoordinatorConcurrentRuns: concurrentRunsByEndpoint is not null &&
                 concurrentRunsByEndpoint.TryGetValue(orchestratorEndpointId, out var coordinatorConcurrentRuns)
                     ? coordinatorConcurrentRuns
-                    : 1);
+                    : 1,
+            ClearRunDirectoryBeforeStart: clearRunDirectoryBeforeRun);
 
         if (!orchestrator.StartRemoteSharedEstimation(request, out error))
             return false;
@@ -794,7 +843,8 @@ public class RunController : IDisposable
         string runName,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
-        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Calibration, LocalEndpointId, out id, out error);
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Calibration, LocalEndpointId,
+            clearRunDirectoryBeforeRun: false, out id, out error);
 
     public bool SendCalibrationRun(
         Project projectSession,
@@ -805,7 +855,21 @@ public class RunController : IDisposable
         string endpointId,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
-        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Calibration, endpointId, out id, out error);
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Calibration, endpointId,
+            clearRunDirectoryBeforeRun: false, out id, out error);
+
+    public bool SendCalibrationRun(
+        Project projectSession,
+        ModelSystemSession msSession,
+        User user,
+        string startToExecute,
+        string runName,
+        string endpointId,
+        bool clearRunDirectoryBeforeRun,
+        [NotNullWhen(true)] out string? id,
+        [NotNullWhen(false)] out CommandError? error)
+        => SendRun(projectSession, msSession, user, startToExecute, runName, RunMode.Calibration, endpointId,
+            clearRunDirectoryBeforeRun, out id, out error);
 
     private bool SendRun(
         Project projectSession,
@@ -815,17 +879,18 @@ public class RunController : IDisposable
         string runName,
         RunMode runMode,
         string endpointId,
+        bool clearRunDirectoryBeforeRun,
         [NotNullWhen(true)] out string? id,
         [NotNullWhen(false)] out CommandError? error)
     {
-        var projectDirectory = projectSession.ProjectDirectory;
-        if (String.IsNullOrWhiteSpace(projectDirectory))
+        var runsDirectory = projectSession.RunsDirectory;
+        if (String.IsNullOrWhiteSpace(runsDirectory))
         {
             id = null;
-            error = new CommandError("Project directory is not set.");
+            error = new CommandError("Project run directory is not set.");
             return false;
         }
-        var runDirectory = Path.Combine(projectDirectory, "runs", runName);
+        var runDirectory = Path.Combine(runsDirectory, runName);
         if (!_connections.TryGet(endpointId, out var hostBus) || hostBus is null)
         {
             id = null;
@@ -853,7 +918,8 @@ public class RunController : IDisposable
                 out id,
                 out error,
                 runName,
-                user.UserId))
+                user.UserId,
+                clearRunDirectoryBeforeRun))
         {
             return false;
         }
@@ -1355,10 +1421,10 @@ public class RunController : IDisposable
             return false;
         }
 
-        var projectDirectory = session.Project.ProjectDirectory;
-        if (string.IsNullOrWhiteSpace(projectDirectory))
+        var runsDirectory = session.Project.RunsDirectory;
+        if (string.IsNullOrWhiteSpace(runsDirectory))
         {
-            error = "The selected project does not have a local directory.";
+            error = "The selected project does not have a run directory.";
             return false;
         }
         var localRunName = Path.GetFileName(snapshot.RunName.Replace('\\', '/').Trim('/'));
@@ -1367,7 +1433,7 @@ public class RunController : IDisposable
         var cachedOutputDirectory = RemoteRunOutputPaths.GetLocalDirectory(runId);
         var targetDirectory = !snapshot.ArtifactsAvailable && Directory.Exists(cachedOutputDirectory)
             ? cachedOutputDirectory
-            : Path.Combine(projectDirectory, "runs", localRunName);
+            : Path.Combine(runsDirectory, localRunName);
         HostBus? hostBus;
         lock (_sessionsByRunId)
         {

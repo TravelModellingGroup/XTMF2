@@ -3677,16 +3677,17 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return;
         }
 
-        var defaultRunName = $"{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var defaultRunName = ModelSystemHeader.Name ?? "Run";
         var runConfiguration = await ConfigureRunAsync(
             "Run Model System",
             defaultRunName,
             availableStarts.Select(start => start.Name).ToList());
         if (runConfiguration is null) return;
-        var (runName, endpointIds, startToExecute, _, _, _) = runConfiguration.Value;
+        var (runName, clearRunDirectoryBeforeRun, endpointIds, startToExecute, _, _, _) = runConfiguration.Value;
 
         var project = Session.Project;
-        if (!_runController.SendRun(project, Session, User, startToExecute, runName, endpointIds[0], out _, out var runError))
+        if (!_runController.SendRun(project, Session, User, startToExecute, runName, endpointIds[0],
+                clearRunDirectoryBeforeRun, out _, out var runError))
         {
             ShowToast($"Failed to start run: {runError?.Message}", isError: true, durationMs: 6000);
             return;
@@ -3709,7 +3710,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return;
         }
 
-        var defaultRunName = $"Estimation_{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var defaultRunName = ModelSystemHeader.Name ?? "Run";
         var selectedInputDirectoryId = Session.ModelSystem.EstimationInputDirectoryNode?.Id;
         var inputDirectory = Session.GetStringBasicParameterMeta()
             .Where(parameter => selectedInputDirectoryId is not null && parameter.nodeId == selectedInputDirectoryId)
@@ -3725,7 +3726,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             allowMultipleRunServers: true,
             inputDirectoryParameters);
         if (runConfiguration is null) return;
-        var (runName, endpointIds, startToExecute, pathOverrides, orchestratorEndpointId,
+        var (runName, clearRunDirectoryBeforeRun, endpointIds, startToExecute, pathOverrides, orchestratorEndpointId,
             concurrentRunsByEndpoint) = runConfiguration.Value;
 
         var project = Session.Project;
@@ -3733,9 +3734,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         bool started = orchestratorEndpointId is not null
             ? _runController.SendRemoteSharedEstimationRun(project, Session, User, startToExecute, runName,
                 orchestratorEndpointId, endpointIds, pathOverrides, concurrentRunsByEndpoint,
-                out _, out runError)
+                clearRunDirectoryBeforeRun, out _, out runError)
             : _runController.SendEstimationRun(project, Session, User, startToExecute, runName,
-                endpointIds[0], out _, out runError);
+                endpointIds[0], clearRunDirectoryBeforeRun, out _, out runError);
         if (!started)
         {
             ShowToast($"Failed to start estimation run: {runError?.Message}", isError: true, durationMs: 6000);
@@ -3759,16 +3760,17 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             return;
         }
 
-        var defaultRunName = $"Calibration_{ModelSystemHeader.Name ?? "Run"}_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var defaultRunName = ModelSystemHeader.Name ?? "Run";
         var runConfiguration = await ConfigureRunAsync(
             "Run Calibration",
             defaultRunName,
             availableStarts.Select(start => start.Name).ToList());
         if (runConfiguration is null) return;
-        var (runName, endpointIds, startToExecute, _, _, _) = runConfiguration.Value;
+        var (runName, clearRunDirectoryBeforeRun, endpointIds, startToExecute, _, _, _) = runConfiguration.Value;
 
         var project = Session.Project;
-        if (!_runController.SendCalibrationRun(project, Session, User, startToExecute, runName, endpointIds[0], out _, out var runError))
+        if (!_runController.SendCalibrationRun(project, Session, User, startToExecute, runName, endpointIds[0],
+                clearRunDirectoryBeforeRun, out _, out var runError))
         {
             ShowToast($"Failed to start calibration run: {runError?.Message}", isError: true, durationMs: 6000);
             return;
@@ -3778,7 +3780,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         RunStarted?.Invoke();
     }
 
-    private async Task<(string RunName, IReadOnlyList<string> EndpointIds, string StartName,
+    private async Task<(string RunName, bool ClearRunDirectoryBeforeRun, IReadOnlyList<string> EndpointIds, string StartName,
         IReadOnlyDictionary<string, IReadOnlyDictionary<int, string>> PathOverrides,
         string? OrchestratorEndpointId,
         IReadOnlyDictionary<string, int> ConcurrentRunsByEndpoint)?> ConfigureRunAsync(
@@ -3799,6 +3801,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
 
         var dialog = new RunConfigurationDialog(title, defaultRunName, endpoints, startNames,
+            GetPreviousRunNames(),
             allowMultipleRunServers, pathParameters);
         await dialog.ShowDialog(ParentWindow!);
         if (dialog.WasCancelled)
@@ -3812,10 +3815,78 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var orchestratorEndpointId = dialog.UseMultipleRunServers
             ? dialog.SelectedCoordinatorRunServer?.Id
             : null;
-        return string.IsNullOrEmpty(runName) || endpointIds.Length == 0 || string.IsNullOrEmpty(startName)
-            ? null
-            : (runName, endpointIds, startName, dialog.PathOverrides, orchestratorEndpointId,
-                dialog.ConcurrentRunsByEndpoint);
+        if (string.IsNullOrEmpty(runName) || endpointIds.Length == 0 || string.IsNullOrEmpty(startName))
+            return null;
+
+        var localRunServerSelected = dialog.UseMultipleRunServers
+            ? dialog.SelectedCoordinatorRunServer?.IsLocal == true
+            : dialog.SelectedRunServer?.IsLocal == true;
+        var clearRunDirectoryBeforeRun = false;
+        var runsDirectory = Session.Project.RunsDirectory;
+        if (localRunServerSelected && !string.IsNullOrWhiteSpace(runsDirectory))
+        {
+            var runDirectory = Path.Combine(runsDirectory, runName);
+            if (File.Exists(runDirectory))
+            {
+                ShowToast($"A file already exists at the run directory path '{runDirectory}'.",
+                    isError: true, durationMs: 6000);
+                return null;
+            }
+
+            if (Directory.Exists(runDirectory))
+            {
+                var conflictDialog = new RunDirectoryConflictDialog(runDirectory);
+                await conflictDialog.ShowDialog(ParentWindow!);
+                if (conflictDialog.WasCancelled)
+                    return null;
+                clearRunDirectoryBeforeRun = conflictDialog.OverwriteExistingFiles;
+            }
+        }
+
+        return (runName, clearRunDirectoryBeforeRun, endpointIds, startName,
+            dialog.PathOverrides, orchestratorEndpointId, dialog.ConcurrentRunsByEndpoint);
+    }
+
+    private IReadOnlyList<string> GetPreviousRunNames()
+    {
+        var project = Session.Project;
+        var runDirectories = new[] { project.RunsDirectory }
+            .Concat(project.AdditionalPreviousRunDirectories)
+            .Where(directory => !string.IsNullOrWhiteSpace(directory))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        var names = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var runDirectory in runDirectories)
+        {
+            if (!Directory.Exists(runDirectory))
+                continue;
+
+            try
+            {
+                foreach (var directory in Directory.EnumerateDirectories(runDirectory))
+                {
+                    var name = Path.GetFileName(directory.TrimEnd(Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar));
+                    if (string.IsNullOrWhiteSpace(name))
+                        continue;
+
+                    var lastWriteTime = Directory.GetLastWriteTimeUtc(directory);
+                    if (!names.TryGetValue(name, out var existingTime) || lastWriteTime > existingTime)
+                        names[name] = lastWriteTime;
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                ShowToast($"Unable to load previous run names from '{runDirectory}': {exception.Message}",
+                    isError: true, durationMs: 6000);
+            }
+        }
+
+        return names.OrderByDescending(pair => pair.Value)
+            .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(30)
+            .Select(pair => pair.Key)
+            .ToArray();
     }
 
     /// <summary>Save the model system to its project file.</summary>
