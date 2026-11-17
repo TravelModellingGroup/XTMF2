@@ -752,6 +752,65 @@ namespace XTMF2.UnitTests.Editing
         }
 
         [TestMethod]
+        public void MultiLinkToFunctionInstanceSurvivesSessionReloadInSameRuntime()
+        {
+            TestHelper.RunInProjectContext(nameof(MultiLinkToFunctionInstanceSurvivesSessionReloadInSameRuntime),
+                (runtime, user, pSession) =>
+                {
+                    runtime.Modules.Add(typeof(ModuleArrayHookTestModule));
+                    CommandError error = null;
+
+                    Assert.IsTrue(pSession.CreateNewModelSystem(user, "ModelSystem1", out var header, out error),
+                        error?.Message);
+                    Assert.IsTrue(pSession.EditModelSystem(user, header!, out var msSession, out error)
+                        .UsingIf(msSession, () =>
+                        {
+                            var boundary = msSession.ModelSystem.GlobalBoundary;
+                            Assert.IsTrue(msSession.AddNode(user, boundary, "Source",
+                                typeof(ModuleArrayHookTestModule), Rectangle.Hidden, out var source, out error),
+                                error?.Message);
+                            Assert.IsTrue(msSession.AddNode(user, boundary, "Destination",
+                                typeof(SimpleTestModule), Rectangle.Hidden, out var destination, out error),
+                                error?.Message);
+
+                            Assert.IsTrue(msSession.AddFunctionTemplate(user, boundary, "Template",
+                                out var template, out error), error?.Message);
+                            Assert.IsTrue(msSession.AddNode(user, template!.InternalModules, "Entry",
+                                typeof(SimpleTestModule), Rectangle.Hidden, out var entry, out error),
+                                error?.Message);
+                            Assert.IsTrue(msSession.SetFunctionTemplateEntryNode(user, template, entry!,
+                                out error), error?.Message);
+                            Assert.IsTrue(msSession.AddFunctionInstance(user, boundary, template, "Instance",
+                                Rectangle.Hidden, out var instance, out error), error?.Message);
+
+                            var hook = TestHelper.GetHook(source!.Hooks, "Modules");
+                            Assert.AreEqual(HookCardinality.AnyNumber, hook.Cardinality);
+                            Assert.IsTrue(msSession.AddLink(user, source, hook, destination!,
+                                out var link, out error), error?.Message);
+                            Assert.IsTrue(msSession.AddLink(user, source, hook, instance!,
+                                out _, out error), error?.Message);
+                            Assert.AreEqual(2, link!.DestinationCount);
+                            Assert.IsTrue(msSession.Save(out error), error?.Message);
+                        }), error?.Message);
+
+                    Assert.IsTrue(pSession.EditModelSystem(user, header!, out var reloadedSession, out error)
+                        .UsingIf(reloadedSession, () =>
+                        {
+                            var boundary = reloadedSession.ModelSystem.GlobalBoundary;
+                            var source = boundary.Modules.Single(node => node.Name == "Source");
+                            var link = boundary.Links.Single(candidate => ReferenceEquals(candidate.Origin, source));
+
+                            Assert.IsInstanceOfType<MultiLink>(link);
+                            var destinations = ((MultiLink)link).Destinations;
+                            Assert.HasCount(2, destinations,
+                                "The FunctionInstance destination was lost while reloading the session.");
+                            Assert.AreEqual("Destination", destinations[0].Name);
+                            Assert.AreEqual("Instance", destinations[1].Name);
+                        }), error?.Message);
+                });
+        }
+
+        [TestMethod]
         public void HideIncomingBranchesByDestinationTargetIsSingleUndoRedo()
         {
             TestHelper.RunInModelSystemContext("HideIncomingBranchesByDestinationTargetIsSingleUndoRedo", (user, pSession, msSession) =>
@@ -840,4 +899,22 @@ namespace XTMF2.UnitTests.Editing
             });
         }
     }
+
+#nullable enable
+    [Module(Name = "Module Array Hook Test", Description = "Test module with an IModule array hook.",
+        DocumentationLink = "https://tmg.utoronto.ca/doc/2.0")]
+    internal sealed class ModuleArrayHookTestModule : IModule
+    {
+        [SubModule(Name = "Modules", Description = "Modules to connect.", Index = 0)]
+        public IModule[]? Modules { get; set; }
+
+        public string? Name { get; set; }
+
+        public bool RuntimeValidation(ref string? error)
+        {
+            error = null;
+            return true;
+        }
+    }
+#nullable restore
 }
