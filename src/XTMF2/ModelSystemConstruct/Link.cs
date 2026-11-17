@@ -274,11 +274,14 @@ namespace XTMF2
             {
                 return FailWith(out link, out error, "No origin hook specified on link!");
             }
-            if (destination == null && (destinations == null || destinations.Count == 0))
+            bool hasUnresolvedDestinations = rawDestinationIndices is not null
+                ? destinations is null || rawDestinationIndices.Count != destinations.Count
+                : destination is null;
+            if (hasUnresolvedDestinations)
             {
                 // If we have a deferred-links list and the origin was found, the destination may be
                 // a FunctionInstance that hasn't been added to the node dictionary yet (they are
-                // loaded after FunctionTemplates). Defer rather than drop.
+                // loaded after FunctionTemplates). Defer rather than drop unresolved destinations.
                 if (deferredLinks is not null && containedIn is not null
                     && origin is not null && hookName is not null
                     && (rawDestinationIndex >= 0 || rawDestinationIndices is { Count: > 0 }))
@@ -289,6 +292,9 @@ namespace XTMF2
                     link = null;
                     return true;
                 }
+            }
+            if (destination == null && (destinations == null || destinations.Count == 0))
+            {
                 // Destination node(s) not found – likely skipped because their type was missing.
                 link = null;
                 warnings?.Add($"A link from '{origin!.Name}' via hook '{hookName}' could not be loaded because its destination node(s) were not found (possibly skipped due to a missing type) and will be skipped.");
