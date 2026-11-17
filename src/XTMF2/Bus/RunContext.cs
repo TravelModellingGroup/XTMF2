@@ -316,20 +316,32 @@ namespace XTMF2.Bus
             string? error = null;
             Stream? clientToRunStream = null;
             RunBus? runBus = null;
-            Task? readerTask = null;
-            CreateStreams.CreateNewTcpHost("127.0.0.1", 0, out clientToRunStream, out _, out error, port =>
+            if (!CreateStreams.CreateNewTcpHost("127.0.0.1", 0, out clientToRunStream, out _, out error, port =>
             {
-                // Start the reader task. It takes ownership of clientToRunStream and disposes it
-                // when it exits (leaveOpen=false in the BinaryReader inside StartProcessingRequestFromRun).
-                readerTask = clientBus.StartProcessingRequestFromRun(ID, clientToRunStream!);
                 if (CreateStreams.CreateTcpClient("127.0.0.1", port, out var runToClientStream, out error))
                 {
                     // Construct RunBus synchronously so that _runtime.RunBus is set before
                     // CreateRunBusLocal returns and Run.StartRun() is called.
                     runBus = new RunBus(ID, runToClientStream!, true, _runtime);
                 }
-            });
-            return (runBus!, readerTask!);
+            }))
+            {
+                runBus?.Dispose();
+                clientToRunStream?.Dispose();
+                throw new IOException(error ?? "Unable to create the local run connection.");
+            }
+
+            if (clientToRunStream is null || runBus is null)
+            {
+                runBus?.Dispose();
+                clientToRunStream?.Dispose();
+                throw new IOException(error ?? "The local run connection was not fully initialized.");
+            }
+
+            // The host stream is assigned only after CreateNewTcpHost accepts the client.
+            // Start the reader now so it receives the accepted stream rather than null.
+            var readerTask = clientBus.StartProcessingRequestFromRun(ID, clientToRunStream);
+            return (runBus, readerTask);
         }
 
         private (Stream clientToRunStream, Process runProcess) CreateRunBusRemote(IRunOutputSink clientBus)
