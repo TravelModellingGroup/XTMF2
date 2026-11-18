@@ -268,6 +268,7 @@ partial class ModelSystemCanvas
     private const double NodeCornerRadius = 4.0;
     private const double NodeBorderThickness = 2.0;
     private const double LinkThickness = 2.0;
+    private const double HoveredLinkThickness = LinkThickness + 1.5;
     private const double ArrowSize = 10.0;
     private const double NodeFontSize = 12.0;
     private const double StartFontSize = 11.0;
@@ -338,12 +339,20 @@ partial class ModelSystemCanvas
     // Link stroke
     private static readonly Pen LinkStrokePen    = new(LinkBrush,    LinkThickness);
     private static readonly Pen LinkStrokePenL   = new(LinkBrushL,   LinkThickness);
+    private static readonly Pen HoveredLinkStrokePen = new(LinkBrush, HoveredLinkThickness);
+    private static readonly Pen HoveredLinkStrokePenL = new(LinkBrushL, HoveredLinkThickness);
     private static readonly Pen LinkDisabledStrokePen = new(LinkDisabledBrush, LinkThickness, dashStyle: LinkDisabledDash);
     private static readonly Pen LinkDisabledStrokePenL = new(LinkDisabledBrushL, LinkThickness, dashStyle: LinkDisabledDash);
+    private static readonly Pen HoveredLinkDisabledStrokePen = new(LinkDisabledBrush, HoveredLinkThickness, dashStyle: LinkDisabledDash);
+    private static readonly Pen HoveredLinkDisabledStrokePenL = new(LinkDisabledBrushL, HoveredLinkThickness, dashStyle: LinkDisabledDash);
     private static readonly Pen LinkTempRevealStrokePen = new(LinkTempRevealBrush, LinkThickness, dashStyle: LinkTempRevealDash);
     private static readonly Pen LinkTempRevealStrokePenL = new(LinkTempRevealBrushL, LinkThickness, dashStyle: LinkTempRevealDash);
+    private static readonly Pen HoveredLinkTempRevealStrokePen = new(LinkTempRevealBrush, HoveredLinkThickness, dashStyle: LinkTempRevealDash);
+    private static readonly Pen HoveredLinkTempRevealStrokePenL = new(LinkTempRevealBrushL, HoveredLinkThickness, dashStyle: LinkTempRevealDash);
     private static readonly Pen LinkSelDisabledStrokePen = new(LinkSelBrush, LinkThickness, dashStyle: LinkDisabledDash);
     private static readonly Pen LinkSelStrokePen = new(LinkSelBrush, LinkThickness);
+    private static readonly Pen HoveredLinkSelDisabledStrokePen = new(LinkSelBrush, HoveredLinkThickness, dashStyle: LinkDisabledDash);
+    private static readonly Pen HoveredLinkSelStrokePen = new(LinkSelBrush, HoveredLinkThickness);
     // Link glow (outer α=0x10, inner α=0x26 — three colour variants)
     private static readonly Pen LinkGlowOuterPen    = new(new SolidColorBrush(Color.FromArgb(0x10, LinkGlowColor.R,    LinkGlowColor.G,    LinkGlowColor.B)),    LinkThickness + 8);
     private static readonly Pen LinkGlowInnerPen    = new(new SolidColorBrush(Color.FromArgb(0x26, LinkGlowColor.R,    LinkGlowColor.G,    LinkGlowColor.B)),    LinkThickness + 3);

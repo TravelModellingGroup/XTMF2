@@ -911,6 +911,7 @@ partial class ModelSystemCanvas
             if (!destinationInCurrentView) continue;
 
             bool isDisabled = link.UnderlyingLink.IsDisabled;
+            bool isHovered = IsLinkConnectedToHoveredElement(link);
             var brush = link.IsSelected
                 ? LinkSelBrush
                 : isTempRevealedHiddenBranch
@@ -919,12 +920,20 @@ partial class ModelSystemCanvas
                     ? (_isLight ? LinkDisabledBrushL : LinkDisabledBrush)
                     : (_isLight ? LinkBrushL : LinkBrush);
             var pen = link.IsSelected
-                ? isDisabled ? LinkSelDisabledStrokePen : LinkSelStrokePen
+                ? isDisabled
+                    ? isHovered ? HoveredLinkSelDisabledStrokePen : LinkSelDisabledStrokePen
+                    : isHovered ? HoveredLinkSelStrokePen : LinkSelStrokePen
                 : isTempRevealedHiddenBranch
-                    ? (_isLight ? LinkTempRevealStrokePenL : LinkTempRevealStrokePen)
+                    ? isHovered
+                        ? (_isLight ? HoveredLinkTempRevealStrokePenL : HoveredLinkTempRevealStrokePen)
+                        : (_isLight ? LinkTempRevealStrokePenL : LinkTempRevealStrokePen)
                 : isDisabled
-                    ? (_isLight ? LinkDisabledStrokePenL : LinkDisabledStrokePen)
-                    : (_isLight ? LinkStrokePenL : LinkStrokePen);
+                    ? isHovered
+                        ? (_isLight ? HoveredLinkDisabledStrokePenL : HoveredLinkDisabledStrokePen)
+                        : (_isLight ? LinkDisabledStrokePenL : LinkDisabledStrokePen)
+                    : isHovered
+                        ? (_isLight ? HoveredLinkStrokePenL : HoveredLinkStrokePen)
+                        : (_isLight ? LinkStrokePenL : LinkStrokePen);
 
             // Neon glow: two wider transparent halos drawn beneath the main link line.
             Pen glowOuter, glowInner;

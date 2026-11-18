@@ -346,23 +346,50 @@ public class ModelSystemCanvasHeadlessTests
                 Assert.IsTrue(session.AddGhostNode(
                     user, boundary, destination!, new Rectangle(250, 100, 160, 60),
                     out _, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "VisibleOrigin", typeof(LinkedGuiTestModule),
+                    new Rectangle(700, 20, 160, 60), out var visibleOrigin, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "VisibleDestination", typeof(SimpleGuiTestModule),
+                    new Rectangle(900, 20, 160, 60), out var visibleDestination, out error), error?.Message);
+                var visibleOriginHook = visibleOrigin!.Hooks!.Single(hook => hook.Name == "Child");
+                Assert.IsTrue(session.AddLink(
+                    user, visibleOrigin, visibleOriginHook, visibleDestination!,
+                    out var visibleLink, out error), error?.Message);
 
                 using var vm = new ModelSystemEditorViewModel(session, user, runController: null);
                 var sourceVm = vm.FunctionInstances.Single(instance => instance.UnderlyingInstance == source);
                 var destinationVm = vm.Nodes.Single(node => node.UnderlyingNode == destination);
                 var ghostVm = vm.GhostNodes.Single();
-                var linkVm = vm.Links.Single();
+                var linkVm = vm.Links.Single(candidate => candidate.UnderlyingLink == link);
+                var visibleOriginVm = vm.Nodes.Single(node => node.UnderlyingNode == visibleOrigin);
+                var visibleDestinationVm = vm.Nodes.Single(node => node.UnderlyingNode == visibleDestination);
+                var visibleLinkVm = vm.Links.Single(candidate => candidate.UnderlyingLink == visibleLink);
 
                 Session.Dispatch(() =>
                 {
                     var canvas = new ModelSystemCanvas { DataContext = vm };
                     canvas.BuildHookAnchorCache();
                     Assert.IsFalse(canvas.ShouldRevealHiddenDestinationBranch(linkVm));
+                    Assert.IsFalse(canvas.IsLinkConnectedToHoveredElement(visibleLinkVm));
+
+                    canvas.UpdateHoveredLinkEndpoint(new Avalonia.Point(
+                        visibleOriginVm.X + 10, visibleOriginVm.Y + 10));
+                    Assert.IsTrue(canvas.IsLinkConnectedToHoveredElement(visibleLinkVm),
+                        "Hovering a visible link's origin should emphasize that link.");
+                    Assert.IsFalse(canvas.IsLinkConnectedToHoveredElement(linkVm),
+                        "Unrelated visible links should not be emphasized.");
+
+                    canvas.UpdateHoveredLinkEndpoint(new Avalonia.Point(
+                        visibleDestinationVm.X + 10, visibleDestinationVm.Y + 10));
+                    Assert.IsTrue(canvas.IsLinkConnectedToHoveredElement(visibleLinkVm),
+                        "Hovering a visible link's destination should emphasize that link.");
 
                     canvas.UpdateHoveredLinkEndpoint(new Avalonia.Point(
                         sourceVm.X + 10, sourceVm.Y + 10));
                     Assert.IsTrue(canvas.ShouldRevealHiddenDestinationBranch(linkVm),
                         "Hovering the Function Instance source should reveal its hidden outgoing link.");
+                    Assert.IsTrue(canvas.IsLinkConnectedToHoveredElement(linkVm));
 
                     canvas.UpdateHoveredLinkEndpoint(new Avalonia.Point(
                         destinationVm.X + 10, destinationVm.Y + 10));
