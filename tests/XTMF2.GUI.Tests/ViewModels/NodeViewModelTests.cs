@@ -158,6 +158,34 @@ public class NodeViewModelTests
     }
 
     [TestMethod]
+    public void InlineAndExpand_NonParameterNode_PreservesUndoRedo()
+    {
+        TestGuiHelper.RunInModelSystemContext("Node_InlineExpand", (user, _, msSession) =>
+        {
+            var originalLocation = new Rectangle(10, 20, 200, 80);
+            Assert.IsTrue(msSession.AddNode(user, msSession.ModelSystem.GlobalBoundary,
+                "TestNode", typeof(SimpleGuiTestModule), originalLocation,
+                out var node, out var error), error?.Message);
+
+            var vm = TestGuiHelper.CreateNodeViewModel(node!, msSession, user);
+            vm.Inline();
+
+            Assert.IsTrue(vm.IsInlined);
+            Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
+            Assert.AreEqual(originalLocation, node!.Location);
+            Assert.IsTrue(msSession.Redo(user, out error), error?.Message);
+            Assert.IsTrue(vm.IsInlined);
+
+            vm.ExpandToCanvas(300, 400);
+            Assert.IsFalse(vm.IsInlined);
+            Assert.AreEqual(300f, node.Location.X);
+            Assert.AreEqual(400f, node.Location.Y);
+            Assert.IsTrue(msSession.Undo(user, out error), error?.Message);
+            Assert.IsTrue(vm.IsInlined);
+        });
+    }
+
+    [TestMethod]
     public void MoveToPreview_SetsCenterCoordinates_WithoutCommit()
     {
         TestGuiHelper.RunInModelSystemContext("Node_MoveToPreview", (user, _, msSession) =>

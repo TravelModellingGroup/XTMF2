@@ -186,24 +186,22 @@ public sealed partial class ModelSystemCanvas : Control
     private FunctionParameterViewModel? _editingDescriptionParameter;
     private double _descriptionEditorX, _descriptionEditorY, _descriptionEditorW, _descriptionEditorH;
 
-    // ── Inlined BasicParameter caches (rebuilt by BuildHookAnchorCache) ───
+    // ── Embedded-element caches (rebuilt by BuildHookAnchorCache) ────────
     /// <summary>
-    /// Maps (origin node, hook) → the BasicParameter node that is currently inlined
-    /// into that hook row (node location is <see cref="Rectangle.Hidden"/>).
+    /// Maps (origin node, hook) to an embedded destination element.
     /// </summary>
-    private readonly Dictionary<(NodeViewModel, NodeHook), NodeViewModel>
-        _hookInlinedParam = new();
+    private readonly Dictionary<(NodeViewModel, NodeHook), ICanvasElement>
+        _hookEmbeddedElement = new();
     /// <summary>
-    /// Maps (origin FunctionInstance, FunctionParameterHook) → the BasicParameter/ScriptedParameter
-    /// node that is currently inlined into that FI hook row.
+    /// Maps (origin FunctionInstance, FunctionParameterHook) to an embedded destination element.
     /// </summary>
-    private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), NodeViewModel>
-        _fiHookInlinedParam = new();
+    private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), ICanvasElement>
+        _fiHookEmbeddedElement = new();
     /// <summary>
-    /// Maps eligible visible FI hooks to the parameter node that can be collapsed into them.
+    /// Maps eligible visible FI hooks to the destination element that can be embedded into them.
     /// </summary>
-    private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), NodeViewModel>
-        _fiHookCanInlineParam = new();
+    private readonly Dictionary<(FunctionInstanceViewModel, FunctionParameterHook), ICanvasElement>
+        _fiHookCanEmbedElement = new();
     private readonly Dictionary<FunctionInstanceViewModel, IReadOnlyList<FunctionParameterHook>>
         _fiVisibleHooks = new();
     /// <summary>
@@ -212,10 +210,9 @@ public sealed partial class ModelSystemCanvas : Control
     /// </summary>
     private readonly Dictionary<CommentBlockViewModel, double> _commentMaxScrollOffsets = new();
     /// <summary>
-    /// BasicParameter nodes that are visible on the canvas AND connected via a Single (or
-    /// FunctionParameterHook) hook, so they can offer a "minimize to inline" button.
+    /// Visible Node and FunctionInstance elements that can be embedded in a connected hook row.
     /// </summary>
-    private readonly HashSet<NodeViewModel> _canInlineNodes = new();
+    private readonly HashSet<ICanvasElement> _canEmbedElements = new();
 
     // ── Canvas scale ───────────────────────────────────────────────────────
     private double _scale = 1.0;
@@ -846,6 +843,7 @@ public sealed partial class ModelSystemCanvas : Control
             }
             foreach (var fi in _vm.FunctionInstances)
             {
+                if (fi.IsInlined) continue;
                 maxX = Math.Max(maxX, fi.X + fi.Width + 400);
                 maxY = Math.Max(maxY, fi.Y + fi.Height + 400);
             }

@@ -39,6 +39,7 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
     // ── Backing fields ────────────────────────────────────────────────────────
     private string   _typeLabel        = string.Empty;
     private bool     _isBasicMode      = true;
+    private bool     _allowModeSwitching = true;
     private string   _valueText        = string.Empty;
     private string   _errorMessage     = string.Empty;
 
@@ -91,6 +92,9 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
             ErrorMessage = string.Empty;
         }
     }
+
+    /// <summary>Whether the user can switch between basic and scripted modes.</summary>
+    public bool AllowModeSwitching => _allowModeSwitching;
 
     // ── Enum properties ───────────────────────────────────────────────────────
 
@@ -176,10 +180,12 @@ public partial class ParameterEditorDialog : Window, INotifyPropertyChanged
         bool             isCurrentlyScripted,
         Func<string, string?> basicValidator,
         Func<string, string?> scriptedValidator,
-        Type?            innerType = null)
+        Type?            innerType = null,
+        bool             allowModeSwitching = true)
     {
         _basicValidator    = basicValidator;
         _scriptedValidator = scriptedValidator;
+        _allowModeSwitching = allowModeSwitching;
 
         // Set the mode BEFORE InitializeComponent so bindings see the final state.
         _isBasicMode = !isCurrentlyScripted;

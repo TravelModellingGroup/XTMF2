@@ -57,8 +57,8 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
     public double X => _previewX ?? (double)UnderlyingInstance.Location.X;
     public double Y => _previewY ?? (double)UnderlyingInstance.Location.Y;
 
-    /// <summary>Rendered width; defaults to 120 when the stored value is 0.</summary>
-    public double Width  => _previewW ?? (UnderlyingInstance.Location.Width is 0 ? DefaultWidth : (double)UnderlyingInstance.Location.Width);
+    /// <summary>Rendered width; defaults to 120 when the stored value is not positive.</summary>
+    public double Width  => _previewW ?? (UnderlyingInstance.Location.Width > 0 ? (double)UnderlyingInstance.Location.Width : DefaultWidth);
 
     /// <summary>
     /// Minimum height needed to show the FI header and all function-parameter hook rows.
@@ -70,13 +70,14 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
     {
         get
         {
-            var h = _previewH ?? (UnderlyingInstance.Location.Height is 0 ? DefaultHeight : (double)UnderlyingInstance.Location.Height);
+            var h = _previewH ?? (UnderlyingInstance.Location.Height > 0 ? (double)UnderlyingInstance.Location.Height : DefaultHeight);
             return Math.Max(h, MinimumHeight);
         }
     }
 
     public double CenterX => X + Width  / 2.0;
     public double CenterY => Y + Height / 2.0;
+    public bool IsInlined => UnderlyingInstance.Location.Equals(Rectangle.Hidden);
 
     [ObservableProperty] private string _name        = string.Empty;
     [ObservableProperty] private bool   _isSelected;
@@ -140,6 +141,7 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
                 OnPropertyChanged(nameof(Height));
                 OnPropertyChanged(nameof(CenterX));
                 OnPropertyChanged(nameof(CenterY));
+                OnPropertyChanged(nameof(IsInlined));
                 break;
         }
     }
@@ -201,8 +203,8 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
         _previewX = null;
         _previewY = null;
         var loc = UnderlyingInstance.Location;
-        var w = loc.Width is 0 ? (float)DefaultWidth : loc.Width;
-        var h = loc.Height is 0 ? (float)DefaultHeight : loc.Height;
+        var w = loc.Width > 0 ? loc.Width : (float)DefaultWidth;
+        var h = loc.Height > 0 ? loc.Height : (float)DefaultHeight;
         if (h < (float)MinimumHeight) h = (float)MinimumHeight;
         return new Rectangle((float)x, (float)y, w, h);
     }
@@ -210,9 +212,23 @@ public sealed partial class FunctionInstanceViewModel : ObservableObject, ICanva
     public void MoveTo(double x, double y)
     {
         var loc = UnderlyingInstance.Location;
-        var w = loc.Width is 0 ? (float)DefaultWidth : loc.Width;
-        var h = loc.Height is 0 ? (float)DefaultHeight : loc.Height;
+        var w = loc.Width > 0 ? loc.Width : (float)DefaultWidth;
+        var h = loc.Height > 0 ? loc.Height : (float)DefaultHeight;
         if (h < (float)MinimumHeight) h = (float)MinimumHeight;
+        _session.SetFunctionInstanceLocation(_user, UnderlyingInstance,
+            new Rectangle((float)x, (float)y, w, h), out _);
+    }
+
+    public void Inline()
+    {
+        _session.SetFunctionInstanceLocation(_user, UnderlyingInstance, Rectangle.Hidden, out _);
+    }
+
+    public void ExpandToCanvas(double x, double y)
+    {
+        var loc = UnderlyingInstance.Location;
+        var w = loc.Width > 0 ? loc.Width : (float)DefaultWidth;
+        var h = loc.Height > 0 ? loc.Height : (float)DefaultHeight;
         _session.SetFunctionInstanceLocation(_user, UnderlyingInstance,
             new Rectangle((float)x, (float)y, w, h), out _);
     }

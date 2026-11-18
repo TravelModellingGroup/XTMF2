@@ -571,7 +571,7 @@ partial class ModelSystemCanvas
                 if (_editingCommentBlock is not null) CommitCommentEdit();
                 if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
                 if (_editingNameElement is not null) CommitNameEdit();
-                minimizeHit.InlineBasicParameter();
+                InlineCanvasElement(minimizeHit);
                 InvalidateAndMeasure();
                 e.Handled = true;
                 return;
@@ -584,7 +584,7 @@ partial class ModelSystemCanvas
                 if (_editingCommentBlock is not null) CommitCommentEdit();
                 if (_editingCommentHeaderBlock is not null) CommitCommentHeaderEdit();
                 if (_editingNameElement is not null) CommitNameEdit();
-                fiInline.Parameter.InlineBasicParameter();
+                InlineCanvasElement(fiInline.Element);
                 InvalidateAndMeasure();
                 e.Handled = true;
                 return;
@@ -1262,7 +1262,8 @@ partial class ModelSystemCanvas
                         if (link.IsDestinationBranchHidden && !_vm.RenderAllHiddenDestinationLinks)
                             continue;
                         if (link.Destination is null
-                            || link.Destination is NodeViewModel destinationNode && destinationNode.IsInlined)
+                            || IsCanvasElementInlined(link.Origin)
+                            || IsCanvasElementInlined(link.Destination))
                             continue;
                         if (!LinkIntersectsSelectionRect(link, finalRect))
                             continue;
@@ -1318,6 +1319,7 @@ partial class ModelSystemCanvas
                 }
                 foreach (var fi in _vm.FunctionInstances)
                 {
+                    if (fi.IsInlined) continue;
                     var fir = new Rect(fi.X, fi.Y, fi.Width, FunctionInstanceRenderHeight(fi));
                     if (finalRect.Intersects(fir))
                     {
@@ -1783,7 +1785,7 @@ partial class ModelSystemCanvas
         elements.AddRange(_vm.CommentBlocks);
         elements.AddRange(_vm.GhostNodes);
         elements.AddRange(_vm.FunctionTemplates);
-        elements.AddRange(_vm.FunctionInstances);
+        elements.AddRange(_vm.FunctionInstances.Where(fi => !fi.IsInlined));
         elements.AddRange(_vm.FunctionParameterVMs);
 
         return elements;
@@ -2020,7 +2022,8 @@ partial class ModelSystemCanvas
         else if (_vm.CommentBlocks.Count > 0) firstElement = _vm.CommentBlocks[0];
         else if (_vm.GhostNodes.Count > 0) firstElement = _vm.GhostNodes[0];
         else if (_vm.FunctionTemplates.Count > 0) firstElement = _vm.FunctionTemplates[0];
-        else if (_vm.FunctionInstances.Count > 0) firstElement = _vm.FunctionInstances[0];
+        else if (_vm.FunctionInstances.Any(fi => !fi.IsInlined))
+            firstElement = _vm.FunctionInstances.First(fi => !fi.IsInlined);
         else if (_vm.FunctionParameterVMs.Count > 0) firstElement = _vm.FunctionParameterVMs[0];
 
         if (firstElement is not null)
@@ -2100,7 +2103,7 @@ partial class ModelSystemCanvas
 
         // Find the index of the current parameter hook.
         int currentIndex = currentHook is not null
-            ? hooks.FindIndex(h => h.Hook == currentHook)
+            ? hooks.FindIndex(h => Equals(h.Hook, currentHook))
             : -1;
 
         // For backward, if starting fresh, begin at the end; otherwise go backward.
@@ -2142,6 +2145,30 @@ partial class ModelSystemCanvas
     {
         if (element is NodeViewModel nodeVm)
         {
+            if (hook is NestedEmbeddedParameterRow nestedRow
+                && _nestedEmbeddedParameterRows.TryGetValue(nodeVm, out var nestedRows))
+            {
+                int nestedIndex = -1;
+                for (int i = 0; i < nestedRows.Count; i++)
+                {
+                    if (nestedRows[i].Equals(nestedRow))
+                    {
+                        nestedIndex = i;
+                        break;
+                    }
+                }
+                if (nestedIndex >= 0)
+                {
+                    double indent = nestedRow.Depth * NestedEmbeddedParameterIndent;
+                    double? nestedRowTop = NestedEmbeddedParameterRowTop(nodeVm, nestedIndex);
+                    if (nestedRowTop is null) return null;
+                    return (
+                        nodeVm.X + indent,
+                        nestedRowTop.Value,
+                        Math.Max(0, NodeRenderWidth(nodeVm) - indent));
+                }
+            }
+
             if (ReferenceEquals(hook, SelfParameterNavigationKey) && nodeVm.IsParameterNode)
             {
                 return (nodeVm.X, nodeVm.Y + NodeHeaderHeight, NodeRenderWidth(nodeVm));
@@ -2157,13 +2184,36 @@ partial class ModelSystemCanvas
             }
             if (hookIdx < 0) return null;
 
-            int rowOffset = nodeVm.IsParameterNode ? 1 : 0;
             double rw = NodeRenderWidth(nodeVm);
-            double rowTop = nodeVm.Y + NodeHeaderHeight + (rowOffset + hookIdx) * HookRowHeight;
+            double rowTop = NodeHookRowTop(nodeVm, hookIdx);
             return (nodeVm.X, rowTop, rw);
         }
         else if (element is FunctionInstanceViewModel fiVm)
         {
+            if (hook is NestedEmbeddedParameterRow nestedRow
+                && _nestedEmbeddedParameterRows.TryGetValue(fiVm, out var nestedRows))
+            {
+                int nestedIndex = -1;
+                for (int i = 0; i < nestedRows.Count; i++)
+                {
+                    if (nestedRows[i].Equals(nestedRow))
+                    {
+                        nestedIndex = i;
+                        break;
+                    }
+                }
+                if (nestedIndex >= 0)
+                {
+                    double indent = nestedRow.Depth * NestedEmbeddedParameterIndent;
+                    double? nestedRowTop = NestedEmbeddedParameterRowTop(fiVm, nestedIndex);
+                    if (nestedRowTop is null) return null;
+                    return (
+                        fiVm.X + indent,
+                        nestedRowTop.Value,
+                        Math.Max(0, fiVm.Width - indent));
+                }
+            }
+
             if (!_fiVisibleHooks.TryGetValue(fiVm, out var fiHooks)) return null;
 
             int hookIdx = -1;
@@ -2174,7 +2224,7 @@ partial class ModelSystemCanvas
             if (hookIdx < 0) return null;
 
             double rw = fiVm.Width;
-            double rowTop = fiVm.Y + FtHeaderHeight + hookIdx * FtHookRowHeight;
+            double rowTop = FunctionInstanceHookRowTop(fiVm, hookIdx);
             return (fiVm.X, rowTop, rw);
         }
 
@@ -2199,10 +2249,10 @@ partial class ModelSystemCanvas
 
         if (_vm is null) return;
 
-        // Search through node-based inlined parameters.
-        foreach (var (key, value) in _hookInlinedParam)
+        // Search through node-based embedded parameters.
+        foreach (var (key, value) in _hookEmbeddedElement)
         {
-            if (value == paramNode)
+            if (value is NodeViewModel embeddedParameter && embeddedParameter == paramNode)
             {
                 parentElement = key.Item1;
                 hook = key.Item2;
@@ -2210,14 +2260,27 @@ partial class ModelSystemCanvas
             }
         }
 
-        // Search through function-instance-based inlined parameters.
-        foreach (var (key, value) in _fiHookInlinedParam)
+        // Search through function-instance-based embedded parameters.
+        foreach (var (key, value) in _fiHookEmbeddedElement)
         {
-            if (value == paramNode)
+            if (value is NodeViewModel embeddedParameter && embeddedParameter == paramNode)
             {
                 parentElement = key.Item1;
                 hook = key.Item2;
                 return;
+            }
+        }
+
+        foreach (var (host, rows) in _nestedEmbeddedParameterRows)
+        {
+            foreach (var row in rows)
+            {
+                if (ReferenceEquals(row.Parameter, paramNode))
+                {
+                    parentElement = host;
+                    hook = row;
+                    return;
+                }
             }
         }
     }
@@ -2288,12 +2351,18 @@ partial class ModelSystemCanvas
             {
                 foreach (var hook in nodeHooks)
                 {
-                    var inlinedParam = _hookInlinedParam.TryGetValue((nodeVm, hook), out var param) ? param : null;
-                    if (inlinedParam is not null)
+                    if (_hookEmbeddedElement.TryGetValue((nodeVm, hook), out var embedded)
+                        && embedded is NodeViewModel inlinedParam && inlinedParam.IsParameterNode)
                     {
                         hooks.Add(new ParameterHookInfo { Hook = hook, InlinedParam = inlinedParam });
                     }
                 }
+            }
+
+            if (_nestedEmbeddedParameterRows.TryGetValue(nodeVm, out var nestedRows))
+            {
+                foreach (var nestedRow in nestedRows)
+                    hooks.Add(new ParameterHookInfo { Hook = nestedRow, InlinedParam = nestedRow.Parameter });
             }
         }
         else if (element is FunctionInstanceViewModel fiVm)
@@ -2306,13 +2375,19 @@ partial class ModelSystemCanvas
                 {
                     if (hook is FunctionParameterHook fpHook)
                     {
-                        var inlinedParam = _fiHookInlinedParam.TryGetValue((fiVm, fpHook), out var param) ? param : null;
-                        if (inlinedParam is not null)
+                        if (_fiHookEmbeddedElement.TryGetValue((fiVm, fpHook), out var embedded)
+                            && embedded is NodeViewModel inlinedParam && inlinedParam.IsParameterNode)
                         {
                             hooks.Add(new ParameterHookInfo { Hook = fpHook, InlinedParam = inlinedParam });
                         }
                     }
                 }
+            }
+
+            if (_nestedEmbeddedParameterRows.TryGetValue(fiVm, out var nestedRows))
+            {
+                foreach (var nestedRow in nestedRows)
+                    hooks.Add(new ParameterHookInfo { Hook = nestedRow, InlinedParam = nestedRow.Parameter });
             }
         }
 

@@ -470,11 +470,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
     // ── SearchItems tracking ──────────────────────────────────────────────
     private readonly HashSet<NodeViewModel> _searchTrackedNodes = new();
+    private readonly HashSet<FunctionInstanceViewModel> _searchTrackedFunctionInstances = new();
 
     /// <summary>
     /// Rebuilds <see cref="SearchItems"/> from the current boundary's VM collections.
-    /// Non-inlined nodes, ghost nodes, and all Starts, FunctionTemplates,
-    /// FunctionInstances, and FunctionParameters are included.
+    /// Non-inlined nodes and FunctionInstances, ghost nodes, and all Starts,
+    /// FunctionTemplates, and FunctionParameters are included.
     /// </summary>
     private void RebuildSearchItems()
     {
@@ -491,7 +492,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         foreach (var ftvm in FunctionTemplates)
             SearchItems.Add(ftvm);
         foreach (var fivm in FunctionInstances)
-            SearchItems.Add(fivm);
+            if (!fivm.IsInlined)
+                SearchItems.Add(fivm);
         foreach (var fpvm in FunctionParameterVMs)
             SearchItems.Add(fpvm);
     }
@@ -522,9 +524,39 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         RebuildSearchItems();
     }
 
+    private void OnFunctionInstancesCollectionChangedForSearch(
+        object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            foreach (var fivm in _searchTrackedFunctionInstances)
+                fivm.PropertyChanged -= OnTrackedFunctionInstancePropertyChanged;
+            _searchTrackedFunctionInstances.Clear();
+        }
+        else
+        {
+            if (e.NewItems is not null)
+                foreach (FunctionInstanceViewModel fivm in e.NewItems)
+                    if (_searchTrackedFunctionInstances.Add(fivm))
+                        fivm.PropertyChanged += OnTrackedFunctionInstancePropertyChanged;
+            if (e.OldItems is not null)
+                foreach (FunctionInstanceViewModel fivm in e.OldItems)
+                    if (_searchTrackedFunctionInstances.Remove(fivm))
+                        fivm.PropertyChanged -= OnTrackedFunctionInstancePropertyChanged;
+        }
+        RebuildSearchItems();
+    }
+
     private void OnTrackedNodePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(NodeViewModel.IsInlined))
+            RebuildSearchItems();
+    }
+
+    private void OnTrackedFunctionInstancePropertyChanged(
+        object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(FunctionInstanceViewModel.IsInlined))
             RebuildSearchItems();
     }
 
@@ -977,12 +1009,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         GhostNodes.CollectionChanged        += OnSearchCollectionChanged;
         Starts.CollectionChanged           += OnSearchCollectionChanged;
         FunctionTemplates.CollectionChanged += OnSearchCollectionChanged;
-        FunctionInstances.CollectionChanged += OnSearchCollectionChanged;
+        FunctionInstances.CollectionChanged += OnFunctionInstancesCollectionChangedForSearch;
         FunctionParameterVMs.CollectionChanged += OnSearchCollectionChanged;
         // Subscribe to nodes already populated by BuildFromBoundary.
         foreach (var nvm in Nodes)
             if (_searchTrackedNodes.Add(nvm))
                 nvm.PropertyChanged += OnTrackedNodePropertyChanged;
+        foreach (var fivm in FunctionInstances)
+            if (_searchTrackedFunctionInstances.Add(fivm))
+                fivm.PropertyChanged += OnTrackedFunctionInstancePropertyChanged;
         RebuildSearchItems();
     }
 
@@ -2608,6 +2643,9 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         var isCurrentlyScripted =
             nodeType.IsGenericType &&
             nodeType.GetGenericTypeDefinition() == typeof(ScriptedParameter<>);
+        var allowModeSwitching =
+            !nodeType.IsGenericType ||
+            nodeType.GetGenericTypeDefinition() != typeof(SetableParameter<>);
 
         // Basic validator: validate against the effective type (enum sub-type when applicable).
         string? BasicValidator(string v)
@@ -2626,7 +2664,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             isCurrentlyScripted: isCurrentlyScripted,
             basicValidator:     BasicValidator,
             scriptedValidator:  ScriptedValidator,
-            innerType:          effectiveInnerType);
+            innerType:          effectiveInnerType,
+            allowModeSwitching: allowModeSwitching);
 
         await dialog.ShowDialog(ParentWindow);
 
@@ -3049,6 +3088,12 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             if (canvasEl is NodeViewModel inlinedNvm && inlinedNvm.IsInlined)
             {
                 var hostLink = Links.FirstOrDefault(lvm => ReferenceEquals(lvm.Destination, inlinedNvm));
+                if (hostLink?.Origin is ICanvasElement hostEl)
+                    canvasEl = hostEl;
+            }
+            else if (canvasEl is FunctionInstanceViewModel inlinedInstance && inlinedInstance.IsInlined)
+            {
+                var hostLink = Links.FirstOrDefault(lvm => ReferenceEquals(lvm.Destination, inlinedInstance));
                 if (hostLink?.Origin is ICanvasElement hostEl)
                     canvasEl = hostEl;
             }
@@ -4827,6 +4872,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
 
         // The entire paste is a single undoable operation.
         Session.BeginBatch();
+        bool batchActive = true;
         try
         {
             var pastedTemplatesBySnapshot = new Dictionary<string, FunctionTemplate>(StringComparer.Ordinal);
@@ -4883,9 +4929,24 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 }
             }
 
-            // Pass 2: now that all nodes exist, restore inlined children and their links.
-            foreach (var (element, node) in createdNodes)
-                PasteNodeInlinedChildren(element, node);
+            // Pass 2: create embedded children recursively after their hosts exist.
+            for (int i = 0; i < createdNodes.Count; i++)
+            {
+                var (element, node) = createdNodes[i];
+                if (!PasteEmbeddedChildren(element, node, pastedTemplatesBySnapshot, createdNodes,
+                        out var embeddedPasteError))
+                {
+                    bool rolledBack = Session.AbortBatch(out var rollbackError);
+                    batchActive = false;
+                    ShowToast(
+                        rolledBack
+                            ? embeddedPasteError!
+                            : $"{embeddedPasteError} Paste rollback also failed: {rollbackError?.Message}",
+                        isError: true,
+                        durationMs: 6000);
+                    return;
+                }
+            }
 
             // Pass 3: restore links from pasted origins to pasted destinations, or to
             // existing destination nodes in the target model system matched by GUID.
@@ -4917,7 +4978,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
         }
         finally
         {
-            Session.CommitBatch();
+            if (batchActive)
+                Session.CommitBatch();
         }
     }
 
@@ -5040,38 +5102,106 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
-    /// Second-pass helper: re-creates inlined (hidden) child nodes for <paramref name="newNode"/>
-    /// and wires them to their hooks.  Must be called after all top-level nodes have been
-    /// created by <see cref="PasteNodeBodyAsync"/>.
+    /// Re-creates embedded child Nodes and FunctionInstances for <paramref name="newNode"/>
+    /// and wires them to their hooks.
     /// </summary>
-    private void PasteNodeInlinedChildren(CanvasElementDto element, Node newNode)
+    private bool PasteEmbeddedChildren(
+        CanvasElementDto element,
+        Node newNode,
+        IReadOnlyDictionary<string, FunctionTemplate> pastedTemplatesBySnapshot,
+        List<(CanvasElementDto Element, Node Node)> createdNodes,
+        out string? failure)
     {
-        // Re-create inlined (hidden) child nodes.
-        foreach (var inlined in element.InlinedChildren ?? [])
+        foreach (var embedded in element.InlinedChildren ?? [])
         {
-            if (inlined.Child.TypeName is null) continue;
-            var childType = Type.GetType(inlined.Child.TypeName);
-            if (childType is null) continue;
-
-            var hook = newNode.Hooks?.FirstOrDefault(h => h.Name == inlined.HookName);
-            if (hook is null) continue;
-            var childName = string.IsNullOrWhiteSpace(inlined.Child.Name) ? "Pasted Node" : inlined.Child.Name;
-
-            if (!Session.AddNode(User, _currentBoundary, childName, childType,
-                    Rectangle.Hidden, out var childNode, out _))
-                continue;
-
-            if (inlined.Child.ParameterValue is not null && childNode is not null)
+            var hook = newNode.Hooks?.FirstOrDefault(h => h.Name == embedded.HookName);
+            if (hook is null)
             {
-                if (inlined.Child.IsScriptedParam)
-                    Session.SetParameterExpression(User, childNode, inlined.Child.ParameterValue, out _);
-                else
-                    Session.SetParameterValue(User, childNode, inlined.Child.ParameterValue, out _);
+                failure = $"Embedded hook '{embedded.HookName}' was not found on '{newNode.Name}'.";
+                return false;
             }
 
-            if (childNode is not null)
-                Session.AddLink(User, newNode, hook, childNode, out _, out _);
+            Node? childNode = null;
+            if (embedded.Child.Kind == CanvasElementKind.Node)
+            {
+                if (embedded.Child.TypeName is null)
+                {
+                    failure = $"The embedded node '{embedded.Child.Name}' has no type.";
+                    return false;
+                }
+                var childType = Type.GetType(embedded.Child.TypeName);
+                if (childType is null)
+                {
+                    failure = $"The type for embedded node '{embedded.Child.Name}' could not be resolved.";
+                    return false;
+                }
+                var childName = string.IsNullOrWhiteSpace(embedded.Child.Name)
+                    ? "Pasted Node"
+                    : embedded.Child.Name;
+                if (!Session.AddNode(User, _currentBoundary, childName, childType,
+                        Rectangle.Hidden, out var pastedNode, out var addError))
+                {
+                    failure = addError?.Message ?? $"Could not create embedded node '{childName}'.";
+                    return false;
+                }
+                childNode = pastedNode;
+                if (embedded.Child.ParameterValue is not null)
+                {
+                    if (embedded.Child.IsScriptedParam
+                        && !Session.SetParameterExpression(
+                            User, pastedNode!, embedded.Child.ParameterValue, out var scriptedError))
+                    {
+                        failure = scriptedError?.Message ?? $"Could not restore the value for '{childName}'.";
+                        return false;
+                    }
+                    if (!embedded.Child.IsScriptedParam
+                        && !Session.SetParameterValue(
+                            User, pastedNode!, embedded.Child.ParameterValue, out var basicError))
+                    {
+                        failure = basicError?.Message ?? $"Could not restore the value for '{childName}'.";
+                        return false;
+                    }
+                }
+            }
+            else if (embedded.Child.Kind == CanvasElementKind.FunctionInstance)
+            {
+                var pastedInstance = PasteFunctionInstance(
+                    embedded.Child, 0, 0, pastedTemplatesBySnapshot);
+                if (pastedInstance is null)
+                {
+                    failure = $"Could not create embedded FunctionInstance '{embedded.Child.Name}'.";
+                    return false;
+                }
+                if (!Session.SetFunctionInstanceLocation(
+                        User, pastedInstance, Rectangle.Hidden, out var locationError))
+                {
+                    failure = locationError?.Message ?? $"Could not hide embedded FunctionInstance '{pastedInstance.Name}'.";
+                    return false;
+                }
+                childNode = pastedInstance;
+            }
+            else
+            {
+                failure = $"Unsupported embedded element kind '{embedded.Child.Kind}'.";
+                return false;
+            }
+
+            if (childNode is null)
+            {
+                failure = $"Could not create embedded element '{embedded.Child.Name}'.";
+                return false;
+            }
+            if (!Session.AddLink(User, newNode, hook, childNode, out _, out var linkError))
+            {
+                failure = linkError?.Message ?? $"Could not connect embedded element to '{embedded.HookName}'.";
+                return false;
+            }
+
+            createdNodes.Add((embedded.Child, childNode));
         }
+
+        failure = null;
+        return true;
     }
 
     private void PasteCommentBlockEntry(CanvasElementDto element, float dx, float dy)
@@ -5252,8 +5382,15 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                         new Rectangle(element.X + dx + 280f, element.Y + dy, 160f, 70f), out var instance, out _))
                     return Task.CompletedTask;
                 referencedNode = instance;
-                if (instance is not null)
-                    PasteNodeInlinedChildren(element, instance);
+                if (instance is not null
+                    && !PasteEmbeddedChildren(
+                        element,
+                        instance,
+                        new Dictionary<string, FunctionTemplate>(StringComparer.Ordinal),
+                        new List<(CanvasElementDto Element, Node Node)>(),
+                        out var embeddedError))
+                    ShowToast(embeddedError ?? "Could not restore the embedded elements.",
+                        isError: true, durationMs: 6000);
             }
         }
 

@@ -20,6 +20,7 @@
 using Avalonia.Headless;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -115,6 +116,349 @@ public class ModelSystemCanvasHeadlessTests
         Assert.AreEqual(
             "Input",
             ModelSystemCanvas.FormatHookLabel("Input", false, false, "ignored"));
+    }
+
+    [TestMethod]
+    public void EmbeddedParameters_AppearIndentedInsideNodeAndFunctionInstanceHosts()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(EmbeddedParameters_AppearIndentedInsideNodeAndFunctionInstanceHosts),
+            (user, projectSession, session) =>
+            {
+                var boundary = session.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(session.AddFunctionTemplate(
+                    user, boundary, "InputTemplate", out var template, out var error), error?.Message);
+                Assert.IsTrue(session.AddModelSystemStart(
+                    user, template!.InternalModules, "Entry", new Rectangle(10, 10, 160, 60),
+                    out var entry, out error), error?.Message);
+                Assert.IsTrue(session.SetFunctionTemplateEntryNode(user, template, entry!, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddFunctionParameter(
+                    user, template, "Input", typeof(IFunction<string>), Rectangle.Hidden,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(session.AddFunctionParameter(
+                    user, template, "Direct Input", typeof(IFunction<string>), Rectangle.Hidden,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(session.AddFunctionInstance(
+                    user, boundary, template, "FunctionHost", new Rectangle(400, 10, 160, 70),
+                    out var functionHost, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "NodeHost", typeof(EmbeddedNodeHostGuiTestModule),
+                    new Rectangle(10, 10, 160, 50), out var nodeHost, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "NodeChild", typeof(EmbeddedParameterGuiTestModule),
+                    Rectangle.Hidden, out var embedded, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "NodeValue", typeof(BasicParameter<string>),
+                    Rectangle.Hidden, out var nodeParameter, out error), error?.Message);
+                Assert.IsTrue(session.SetParameterValue(user, nodeParameter!, "node-value", out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "NodeDirectValue", typeof(BasicParameter<string>),
+                    Rectangle.Hidden, out var nodeDirectParameter, out error), error?.Message);
+                Assert.IsTrue(session.SetParameterValue(
+                    user, nodeDirectParameter!, "node-direct-value", out error), error?.Message);
+
+                var nodeHostHook = nodeHost!.Hooks!.Single(hook => hook.Name == "Embedded Child");
+                var nodeDirectHook = nodeHost.Hooks.Single(hook => hook.Name == "Direct Value");
+                var nodeChildHook = embedded!.Hooks!.Single(hook => hook.Name == "Editable Value");
+                Assert.IsTrue(session.AddLink(user, nodeHost, nodeHostHook, embedded, out _, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddLink(user, embedded, nodeChildHook, nodeParameter!, out _, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddLink(
+                    user, nodeHost, nodeDirectHook, nodeDirectParameter!, out _, out error), error?.Message);
+
+                Assert.IsTrue(session.AddFunctionInstance(
+                    user, boundary, template, "FunctionChild", Rectangle.Hidden,
+                    out var embeddedFunction, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "FunctionValue", typeof(BasicParameter<string>),
+                    Rectangle.Hidden, out var functionParameter, out error), error?.Message);
+                Assert.IsTrue(session.SetParameterValue(user, functionParameter!, "function-value", out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "FunctionDirectValue", typeof(BasicParameter<string>),
+                    Rectangle.Hidden, out var functionDirectParameter, out error), error?.Message);
+                Assert.IsTrue(session.SetParameterValue(
+                    user, functionDirectParameter!, "function-direct-value", out error), error?.Message);
+                var functionHostHook = functionHost!.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "Input");
+                var functionHostDirectHook = functionHost.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "Direct Input");
+                Assert.IsTrue(session.AddLink(
+                    user, functionHost, functionHostHook, embeddedFunction!, out _, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddLink(
+                    user, functionHost, functionHostDirectHook, functionDirectParameter!, out _, out error),
+                    error?.Message);
+                var embeddedFunctionHook = embeddedFunction!.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "Input");
+                Assert.IsTrue(session.AddLink(
+                    user, embeddedFunction, embeddedFunctionHook, functionParameter!, out _, out error),
+                    error?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(session, user, runController: null);
+                var nodeHostVm = vm.Nodes.Single(node => node.UnderlyingNode == nodeHost);
+                var nodeParameterVm = vm.Nodes.Single(node => node.UnderlyingNode == nodeParameter);
+                var nodeDirectParameterVm = vm.Nodes.Single(node => node.UnderlyingNode == nodeDirectParameter);
+                var functionHostVm = vm.FunctionInstances.Single(
+                    instance => instance.UnderlyingInstance == functionHost);
+                var functionParameterVm = vm.Nodes.Single(node => node.UnderlyingNode == functionParameter);
+                var functionDirectParameterVm = vm.Nodes.Single(
+                    node => node.UnderlyingNode == functionDirectParameter);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    canvas.BuildHookAnchorCache();
+
+                    CollectionAssert.AreEqual(
+                        new[] { "≡ NodeChild › Editable Value: node-value" },
+                        canvas.GetNestedEmbeddedParameterLabels(nodeHostVm).ToArray());
+                    CollectionAssert.AreEqual(
+                        new[] { "≡ FunctionChild › Input: function-value" },
+                        canvas.GetNestedEmbeddedParameterLabels(functionHostVm).ToArray());
+
+                    var nodeParameterHit = canvas.HitTestInlinedParamRow(new Avalonia.Point(
+                        nodeHostVm.X + 12,
+                        nodeHostVm.Y + 28 + 16 + 8));
+                    Assert.IsNotNull(nodeParameterHit);
+                    Assert.AreSame(nodeParameterVm, nodeParameterHit.Value.paramNode);
+
+                    var functionParameterHit = canvas.HitTestInlinedParamRow(new Avalonia.Point(
+                        functionHostVm.X + 12,
+                        functionHostVm.Y + 28 + 16 + 8));
+                    Assert.IsNotNull(functionParameterHit);
+                    Assert.AreSame(functionParameterVm, functionParameterHit.Value.paramNode);
+
+                    var nodeDirectParameterHit = canvas.HitTestInlinedParamRow(new Avalonia.Point(
+                        nodeHostVm.X + 12,
+                        nodeHostVm.Y + 28 + 2 * 16 + 8));
+                    Assert.IsNotNull(nodeDirectParameterHit);
+                    Assert.AreSame(nodeDirectParameterVm, nodeDirectParameterHit.Value.paramNode);
+
+                    var beginParameterEdit = typeof(ModelSystemCanvas).GetMethod(
+                        "BeginParamEdit", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var inlineEditorField = typeof(ModelSystemCanvas).GetField(
+                        "_inlineEditor", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var editingParameterField = typeof(ModelSystemCanvas).GetField(
+                        "_editingParamNode", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(beginParameterEdit);
+                    Assert.IsNotNull(inlineEditorField);
+                    Assert.IsNotNull(editingParameterField);
+                    beginParameterEdit!.Invoke(canvas, new object?[]
+                    {
+                        nodeDirectParameterHit.Value.paramNode,
+                        nodeDirectParameterHit.Value.rowX,
+                        nodeDirectParameterHit.Value.rowY,
+                        nodeDirectParameterHit.Value.rowW,
+                        nodeHostVm,
+                        nodeDirectParameterHit.Value.hook
+                    });
+                    var inlineEditor = (TextBox)inlineEditorField!.GetValue(canvas)!;
+                    inlineEditor.RaiseEvent(new KeyEventArgs
+                    {
+                        RoutedEvent = InputElement.KeyDownEvent,
+                        Key = Key.Tab
+                    });
+                    Assert.AreSame(nodeParameterVm, editingParameterField!.GetValue(canvas));
+                    inlineEditor.RaiseEvent(new KeyEventArgs
+                    {
+                        RoutedEvent = InputElement.KeyDownEvent,
+                        Key = Key.Tab,
+                        KeyModifiers = KeyModifiers.Shift
+                    });
+                    Assert.AreSame(nodeDirectParameterVm, editingParameterField.GetValue(canvas));
+
+                    var functionDirectParameterHit = canvas.HitTestInlinedParamRow(new Avalonia.Point(
+                        functionHostVm.X + 12,
+                        functionHostVm.Y + 28 + 2 * 16 + 8));
+                    Assert.IsNotNull(functionDirectParameterHit);
+                    Assert.AreSame(functionDirectParameterVm, functionDirectParameterHit.Value.paramNode);
+                    beginParameterEdit.Invoke(canvas, new object?[]
+                    {
+                        functionDirectParameterHit.Value.paramNode,
+                        functionDirectParameterHit.Value.rowX,
+                        functionDirectParameterHit.Value.rowY,
+                        functionDirectParameterHit.Value.rowW,
+                        functionHostVm,
+                        functionDirectParameterHit.Value.hook
+                    });
+                    inlineEditor.RaiseEvent(new KeyEventArgs
+                    {
+                        RoutedEvent = InputElement.KeyDownEvent,
+                        Key = Key.Tab
+                    });
+                    Assert.AreSame(functionParameterVm, editingParameterField.GetValue(canvas));
+                    inlineEditor.RaiseEvent(new KeyEventArgs
+                    {
+                        RoutedEvent = InputElement.KeyDownEvent,
+                        Key = Key.Tab,
+                        KeyModifiers = KeyModifiers.Shift
+                    });
+                    Assert.AreSame(functionDirectParameterVm, editingParameterField.GetValue(canvas));
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void EmbeddedElementWithExternalIncomingLink_IsNotEmbeddableUntilSourceIsEmbeddedInHost()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(EmbeddedElementWithExternalIncomingLink_IsNotEmbeddableUntilSourceIsEmbeddedInHost),
+            (user, projectSession, session) =>
+            {
+                var boundary = session.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(session.AddFunctionTemplate(
+                    user, boundary, "EmbeddingTemplate", out var template, out var error), error?.Message);
+                Assert.IsTrue(session.AddModelSystemStart(
+                    user, template!.InternalModules, "Entry", new Rectangle(10, 10, 160, 60),
+                    out var entry, out error), error?.Message);
+                Assert.IsTrue(session.SetFunctionTemplateEntryNode(user, template, entry!, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddFunctionParameter(
+                    user, template, "Target", typeof(IFunction<string>), Rectangle.Hidden,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(session.AddFunctionParameter(
+                    user, template, "Nested", typeof(IFunction<string>), Rectangle.Hidden,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(session.AddFunctionParameter(
+                    user, template, "NestedFunction", typeof(IFunction<string>), Rectangle.Hidden,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(session.AddFunctionInstance(
+                    user, boundary, template, "Host", new Rectangle(10, 10, 160, 70),
+                    out var host, out error), error?.Message);
+                Assert.IsTrue(session.AddFunctionInstance(
+                    user, boundary, template, "NestedFunction", new Rectangle(240, 110, 160, 70),
+                    out var nestedFunction, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "NestedNode", typeof(LinkedGuiTestModule),
+                    new Rectangle(240, 10, 160, 70), out var nestedNode, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "SharedTarget", typeof(BasicParameter<string>),
+                    new Rectangle(460, 10, 160, 70), out var target, out error), error?.Message);
+
+                var targetHook = host!.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "Target");
+                var nestedHook = host.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "Nested");
+                var nestedFunctionHostHook = host.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "NestedFunction");
+                var nestedFunctionTargetHook = nestedFunction!.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "Target");
+                var nestedNodeHook = nestedNode!.Hooks!.Single(hook => hook.Name == "Child");
+                Assert.IsTrue(session.AddLink(user, host, targetHook, target!, out _, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddLink(user, host, nestedHook, nestedNode, out _, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddLink(user, host, nestedFunctionHostHook, nestedFunction, out _, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddLink(user, nestedNode, nestedNodeHook, target!, out _, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddLink(
+                    user, nestedFunction, nestedFunctionTargetHook, target!, out _, out error),
+                    error?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(session, user, runController: null);
+                var hostVm = vm.FunctionInstances.Single(instance => instance.UnderlyingInstance == host);
+                var nestedNodeVm = vm.Nodes.Single(node => node.UnderlyingNode == nestedNode);
+                var nestedFunctionVm = vm.FunctionInstances.Single(
+                    instance => instance.UnderlyingInstance == nestedFunction);
+                var targetVm = vm.Nodes.Single(node => node.UnderlyingNode == target);
+                var canvas = new ModelSystemCanvas { DataContext = vm };
+
+                Session.Dispatch(() =>
+                {
+                    canvas.BuildHookAnchorCache();
+                    Assert.IsFalse(canvas.CanEmbedElement(targetVm),
+                        "A provider shared with an external node must not be embeddable.");
+
+                    nestedNodeVm.Inline();
+                    canvas.BuildHookAnchorCache();
+                    Assert.IsFalse(canvas.CanEmbedElement(targetVm),
+                        "A provider shared with an external FunctionInstance must not be embeddable.");
+
+                    nestedFunctionVm.Inline();
+                    canvas.BuildHookAnchorCache();
+                    Assert.IsTrue(canvas.CanEmbedElement(targetVm),
+                        "A provider may be embedded when its other consumers are embedded in the host.");
+
+                    targetVm.Inline();
+                    canvas.BuildHookAnchorCache();
+                    Assert.IsTrue(canvas.IsEmbeddedInHost(hostVm, targetVm),
+                        "An already embedded provider must remain mapped when embedded descendants also consume it.");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void FunctionInstanceWithExternalProvider_IsNotEmbeddableUntilProviderIsEmbedded()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(FunctionInstanceWithExternalProvider_IsNotEmbeddableUntilProviderIsEmbedded),
+            (user, projectSession, session) =>
+            {
+                var boundary = session.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(session.AddFunctionTemplate(
+                    user, boundary, "HostTemplate", out var hostTemplate, out var error), error?.Message);
+                Assert.IsTrue(session.AddModelSystemStart(
+                    user, hostTemplate!.InternalModules, "HostEntry", new Rectangle(10, 10, 160, 60),
+                    out var hostEntry, out error), error?.Message);
+                Assert.IsTrue(session.SetFunctionTemplateEntryNode(user, hostTemplate, hostEntry!, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddFunctionParameter(
+                    user, hostTemplate, "Content", typeof(IFunction<string>), Rectangle.Hidden,
+                    out _, out error), error?.Message);
+
+                Assert.IsTrue(session.AddFunctionTemplate(
+                    user, boundary, "CandidateTemplate", out var candidateTemplate, out error), error?.Message);
+                Assert.IsTrue(session.AddModelSystemStart(
+                    user, candidateTemplate!.InternalModules, "CandidateEntry", new Rectangle(10, 10, 160, 60),
+                    out var candidateEntry, out error), error?.Message);
+                Assert.IsTrue(session.SetFunctionTemplateEntryNode(
+                    user, candidateTemplate, candidateEntry!, out error), error?.Message);
+                Assert.IsTrue(session.AddFunctionParameter(
+                    user, candidateTemplate, "Input", typeof(IFunction<string>), Rectangle.Hidden,
+                    out _, out error), error?.Message);
+
+                Assert.IsTrue(session.AddFunctionInstance(
+                    user, boundary, hostTemplate, "Host", new Rectangle(10, 10, 160, 70),
+                    out var host, out error), error?.Message);
+                Assert.IsTrue(session.AddFunctionInstance(
+                    user, boundary, candidateTemplate, "Candidate", new Rectangle(240, 10, 160, 70),
+                    out var candidate, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "ExternalProvider", typeof(BasicParameter<string>),
+                    new Rectangle(460, 10, 160, 70), out var provider, out error), error?.Message);
+
+                var hostContentHook = host!.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "Content");
+                var candidateInputHook = candidate!.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "Input");
+                Assert.IsTrue(session.AddLink(user, host, hostContentHook, candidate, out _, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddLink(user, candidate, candidateInputHook, provider!, out _, out error),
+                    error?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(session, user, runController: null);
+                var candidateVm = vm.FunctionInstances.Single(
+                    instance => instance.UnderlyingInstance == candidate);
+                var providerVm = vm.Nodes.Single(node => node.UnderlyingNode == provider);
+                var canvas = new ModelSystemCanvas { DataContext = vm };
+
+                Session.Dispatch(() =>
+                {
+                    canvas.BuildHookAnchorCache();
+                    Assert.IsFalse(canvas.CanEmbedElement(candidateVm),
+                        "A FunctionInstance with an external input provider must not be embeddable.");
+
+                    providerVm.Inline();
+                    canvas.BuildHookAnchorCache();
+                    Assert.IsTrue(canvas.CanEmbedElement(candidateVm),
+                        "The FunctionInstance can be embedded after its input provider is embedded inside it.");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
     }
 
     [TestMethod]

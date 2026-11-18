@@ -51,3 +51,28 @@ public sealed class OptionalThenParameterGuiTestModule : BaseFunction<string>
 
     public override string Invoke() => EditableValue?.Invoke() ?? string.Empty;
 }
+
+[Module(Name = "Embedded Parameter GUI Test Module",
+    DocumentationLink = "http://example.com",
+    Description = "A module with a required parameter hook for embedded-row GUI tests.")]
+public sealed class EmbeddedParameterGuiTestModule : BaseFunction<string>
+{
+    [Parameter(Name = "Editable Value", Description = "An editable parameter hook", Required = true, Index = 0)]
+    public IFunction<string>? EditableValue { get; set; }
+
+    public override string Invoke() => EditableValue?.Invoke() ?? string.Empty;
+}
+
+[Module(Name = "Embedded Node Host GUI Test Module",
+    DocumentationLink = "http://example.com",
+    Description = "A module with a required child hook for embedded-row GUI tests.")]
+public sealed class EmbeddedNodeHostGuiTestModule : BaseFunction<string>
+{
+    [SubModule(Name = "Embedded Child", Description = "The embedded child", Required = true, Index = 0)]
+    public EmbeddedParameterGuiTestModule? Child { get; set; }
+
+    [Parameter(Name = "Direct Value", Description = "A direct parameter hook", Required = true, Index = 1)]
+    public IFunction<string>? DirectValue { get; set; }
+
+    public override string Invoke() => (Child?.Invoke() ?? string.Empty) + (DirectValue?.Invoke() ?? string.Empty);
+}
