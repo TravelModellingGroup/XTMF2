@@ -814,7 +814,7 @@ partial class ModelSystemCanvas
         _orthogonalTrunkDrawn.Clear();
         _orthogonalTrunkRange.Clear();
         var orthogonalGroups = _vm!.Links
-            .Where(l => (!l.IsDestinationBranchHidden || _vm.RenderAllHiddenDestinationLinks)
+            .Where(l => (!l.IsDestinationBranchHidden || ShouldRevealHiddenDestinationBranch(l))
                         && l.UnderlyingLink.IsOrthogonal && l.Destination is not null
                         && l.UnderlyingLink is MultiLink)
             .GroupBy(l => l.UnderlyingLink, ReferenceEqualityComparer.Instance);
@@ -884,8 +884,9 @@ partial class ModelSystemCanvas
 
         foreach (var link in _vm!.Links)
         {
-            bool isTempRevealedHiddenBranch = link.IsDestinationBranchHidden && _vm.RenderAllHiddenDestinationLinks;
-            if (link.IsDestinationBranchHidden && !_vm.RenderAllHiddenDestinationLinks) continue;
+            bool isTempRevealedHiddenBranch = link.IsDestinationBranchHidden
+                && ShouldRevealHiddenDestinationBranch(link);
+            if (link.IsDestinationBranchHidden && !isTempRevealedHiddenBranch) continue;
 
             // Don't render links whose destination is in a different boundary
             // or whose destination node is inlined (value shown in hook row instead).

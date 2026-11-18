@@ -302,13 +302,13 @@ partial class ModelSystemCanvas
 
                 // Track hooks whose link destination lies to the left of the origin node.
                 // Such links will exit from the node's left face rather than the right.
-                if ((!link.IsDestinationBranchHidden || _vm.RenderAllHiddenDestinationLinks)
+                if ((!link.IsDestinationBranchHidden || ShouldRevealHiddenDestinationBranch(link))
                     && link.Destination is not null && link.X2 < originVm.X)
                     _leftGoingHooks.Add((originVm, link.UnderlyingLink.OriginHook));
             }
             if (link.Origin is GhostNodeViewModel ghostOriginVm
                 && link.Destination is not null
-                && (!link.IsDestinationBranchHidden || _vm.RenderAllHiddenDestinationLinks)
+                && (!link.IsDestinationBranchHidden || ShouldRevealHiddenDestinationBranch(link))
                 && link.X2 < ghostOriginVm.X)
             {
                 _leftGoingGhostHooks.Add((ghostOriginVm, link.UnderlyingLink.OriginHook));
@@ -322,7 +322,7 @@ partial class ModelSystemCanvas
                 fiSet.Add(fphConnected);
 
                 // Same leftward check for FunctionInstance hooks.
-                if ((!link.IsDestinationBranchHidden || _vm.RenderAllHiddenDestinationLinks)
+                if ((!link.IsDestinationBranchHidden || ShouldRevealHiddenDestinationBranch(link))
                     && link.Destination is not null && link.X2 < fiOriginVm.X)
                     _leftGoingFiHooks.Add((fiOriginVm, fphConnected));
             }

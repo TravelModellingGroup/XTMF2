@@ -303,6 +303,97 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void HiddenDestinationBranches_AppearWhenHoveringEitherEndpointOrGhost()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(HiddenDestinationBranches_AppearWhenHoveringEitherEndpointOrGhost),
+            (user, projectSession, session) =>
+            {
+                var boundary = session.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(session.AddFunctionTemplate(
+                    user, boundary, "HoverTemplate", out var template, out var error), error?.Message);
+                Assert.IsTrue(session.AddModelSystemStart(
+                    user, template!.InternalModules, "Entry", Rectangle.Hidden,
+                    out var entry, out error), error?.Message);
+                Assert.IsTrue(session.SetFunctionTemplateEntryNode(user, template, entry!, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddFunctionParameter(
+                    user, template, "Input", typeof(IFunction<string>),
+                    new Rectangle(350, 200, 160, 68), out var functionParameter, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, template.InternalModules, "ParameterSource",
+                    typeof(EmbeddedNodeHostGuiTestModule), new Rectangle(20, 200, 160, 60),
+                    out var parameterSource, out error), error?.Message);
+                var parameterSourceHook = parameterSource!.Hooks!.Single(hook => hook.Name == "Direct Value");
+                Assert.IsTrue(session.AddLink(
+                    user, parameterSource, parameterSourceHook, functionParameter!,
+                    out var parameterLink, out error), error?.Message);
+                Assert.IsTrue(session.SetLinkDestinationHidden(user, parameterLink!, 0, true, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddFunctionInstance(
+                    user, boundary, template, "HoverSource", new Rectangle(500, 20, 160, 60),
+                    out var source, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "HoverDestination", typeof(EmbeddedParameterGuiTestModule),
+                    new Rectangle(10, 20, 160, 60), out var destination, out error), error?.Message);
+
+                var sourceHook = source!.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "Input");
+                Assert.IsTrue(session.AddLink(
+                    user, source, sourceHook, destination!, out var link, out error), error?.Message);
+                Assert.IsTrue(session.SetLinkDestinationHidden(user, link!, 0, true, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddGhostNode(
+                    user, boundary, destination!, new Rectangle(250, 100, 160, 60),
+                    out _, out error), error?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(session, user, runController: null);
+                var sourceVm = vm.FunctionInstances.Single(instance => instance.UnderlyingInstance == source);
+                var destinationVm = vm.Nodes.Single(node => node.UnderlyingNode == destination);
+                var ghostVm = vm.GhostNodes.Single();
+                var linkVm = vm.Links.Single();
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    canvas.BuildHookAnchorCache();
+                    Assert.IsFalse(canvas.ShouldRevealHiddenDestinationBranch(linkVm));
+
+                    canvas.UpdateHoveredLinkEndpoint(new Avalonia.Point(
+                        sourceVm.X + 10, sourceVm.Y + 10));
+                    Assert.IsTrue(canvas.ShouldRevealHiddenDestinationBranch(linkVm),
+                        "Hovering the Function Instance source should reveal its hidden outgoing link.");
+
+                    canvas.UpdateHoveredLinkEndpoint(new Avalonia.Point(
+                        destinationVm.X + 10, destinationVm.Y + 10));
+                    Assert.IsTrue(canvas.ShouldRevealHiddenDestinationBranch(linkVm),
+                        "Hovering the Node destination should reveal its hidden incoming link.");
+
+                    canvas.UpdateHoveredLinkEndpoint(new Avalonia.Point(
+                        ghostVm.X + 10, ghostVm.Y + 10));
+                    Assert.IsTrue(canvas.ShouldRevealHiddenDestinationBranch(linkVm),
+                        "Hovering a GhostNode representing the destination should reveal its link.");
+
+                    canvas.UpdateHoveredLinkEndpoint(new Avalonia.Point(10000, 10000));
+                    Assert.IsFalse(canvas.ShouldRevealHiddenDestinationBranch(linkVm));
+
+                    var templateVm = vm.FunctionTemplates.Single(
+                        candidate => candidate.UnderlyingTemplate == template);
+                    vm.NavigateIntoFunctionTemplate(templateVm);
+                    var functionParameterVm = vm.FunctionParameterVMs.Single(
+                        parameter => parameter.UnderlyingParameter == functionParameter);
+                    var hiddenParameterLinkVm = vm.Links.Single(
+                        candidate => candidate.UnderlyingLink == parameterLink);
+                    canvas.BuildHookAnchorCache();
+                    canvas.UpdateHoveredLinkEndpoint(new Avalonia.Point(
+                        functionParameterVm.X + 10, functionParameterVm.Y + 10));
+                    Assert.IsTrue(canvas.ShouldRevealHiddenDestinationBranch(hiddenParameterLinkVm),
+                        "Hovering a FunctionParameter should reveal its hidden incoming link.");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void EmbeddedElementWithExternalIncomingLink_IsNotEmbeddableUntilSourceIsEmbeddedInHost()
     {
         TestGuiHelper.RunInModelSystemContext(

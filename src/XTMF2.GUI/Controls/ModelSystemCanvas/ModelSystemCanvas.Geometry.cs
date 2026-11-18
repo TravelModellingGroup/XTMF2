@@ -83,6 +83,23 @@ partial class ModelSystemCanvas
         }
     }
 
+    internal bool ShouldRevealHiddenDestinationBranch(LinkViewModel link)
+    {
+        if (_vm?.RenderAllHiddenDestinationLinks == true)
+            return true;
+
+        var hovered = _hoveredLinkEndpoint;
+        return hovered is not null
+            && (RepresentsSameNode(link.Origin, hovered)
+                || link.Destination is { } destination && RepresentsSameNode(destination, hovered));
+    }
+
+    private static bool RepresentsSameNode(ICanvasElement first, ICanvasElement second)
+        => ReferenceEquals(first, second)
+            || TryGetRepresentedNode(first, out var firstNode)
+                && TryGetRepresentedNode(second, out var secondNode)
+                && ReferenceEquals(firstNode, secondNode);
+
     private static double DistanceSquared(double x1, double y1, double x2, double y2)
     {
         var dx = x1 - x2;
