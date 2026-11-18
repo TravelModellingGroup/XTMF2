@@ -652,6 +652,9 @@ public class ModelSystemCanvasHeadlessTests
                     Assert.IsTrue(actions.Any(action => action.DisplayName == "Add Start…"));
                     Assert.IsTrue(actions.Any(action => action.DisplayName == "Add Comment"));
                     Assert.IsTrue(actions.Any(action => action.DisplayName == "Add Module…"));
+                    Assert.AreEqual(
+                        "Create Cache<String> (linked)",
+                        actions.Single(action => action.DisplayName.Contains("Create Cache<String>")).DisplayName);
                     Assert.IsTrue(actions.Any(action => action.DisplayName.StartsWith(
                         "Hook LinkedNode.Child /", StringComparison.Ordinal)),
                         string.Join(" | ", actions.Select(action => action.DisplayName)));
@@ -1891,7 +1894,7 @@ public class ModelSystemCanvasHeadlessTests
 
                     var menu = canvas.ContextMenu!;
                     var wrapperMenu = menu.Items.OfType<MenuItem>().FirstOrDefault(
-                        item => item.Header?.ToString() == "Create linked wrapper…");
+                        item => item.Header?.ToString() == "Create Wrapper");
                     Assert.IsNotNull(wrapperMenu);
                     Assert.IsTrue(wrapperMenu!.Classes.Contains("canvas-context-menu-item"));
                     var headers = wrapperMenu!.Items.OfType<MenuItem>()
@@ -1956,7 +1959,7 @@ public class ModelSystemCanvasHeadlessTests
                     showMenu!.Invoke(canvas, new object?[] { instanceVm, null });
 
                     var wrapperMenu = canvas.ContextMenu!.Items.OfType<MenuItem>().FirstOrDefault(
-                        item => item.Header?.ToString() == "Create linked wrapper…");
+                        item => item.Header?.ToString() == "Create Wrapper");
                     Assert.IsNotNull(wrapperMenu);
                     var headers = wrapperMenu!.Items.OfType<MenuItem>()
                         .Select(item => item.Header?.ToString())

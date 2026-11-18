@@ -938,7 +938,7 @@ partial class ModelSystemCanvas
             AddMenuSeparator(menu);
         }
 
-        // ── IFunction<T> → Create linked wrappers ─────────────────────────
+        // ── IFunction<T> → Create linked wrappers ──────────────────────────
         if (GetModuleTargetFromElement(element) is { } sourceNode)
         {
             var nodeType = sourceNode.Type;
@@ -959,7 +959,7 @@ partial class ModelSystemCanvas
             if (returnType is not null)
             {
                 var capturedSourceNode = sourceNode;
-                var wrapperMenu = CreateCanvasContextMenuItem("Create linked wrapper…");
+                var wrapperMenu = CreateCanvasContextMenuItem("Create Wrapper");
                 var cacheItem = CreateCanvasContextMenuItem(
                     $"Create Cache<{returnType.Name}> (linked)");
                 cacheItem.Click += (_, _) => _ = vm.CreateCacheAsync(capturedSourceNode);
@@ -1452,7 +1452,9 @@ partial class ModelSystemCanvas
 
             if (omitOpenTemplate && header == "Open Template") continue;
 
-            var displayName = string.IsNullOrEmpty(prefix) ? header : $"{prefix} / {header}";
+            var displayName = menuItem.Classes.Contains("canvas-context-menu-item")
+                ? header
+                : string.IsNullOrEmpty(prefix) ? header : $"{prefix} / {header}";
             actions.Add(new CommandPaletteAction(displayName, () => ExecuteContextMenuItem(menuItem),
                 "Context", shortcut, menuItem.IsEnabled));
         }
