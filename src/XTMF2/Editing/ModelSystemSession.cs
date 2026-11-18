@@ -5865,6 +5865,22 @@ namespace XTMF2.Editing
                 // this point -- all validation is done above).
                 // ══════════════════════════════════════════════════════════════
 
+                static void MoveElement(Boundary source, Boundary destination, Node element)
+                {
+                    if (element is FunctionInstance functionInstance)
+                    {
+                        source.RemoveFunctionInstance(functionInstance, out _);
+                        functionInstance.UpdateContainedWithin(destination);
+                        destination.AddFunctionInstance(functionInstance, out _);
+                    }
+                    else
+                    {
+                        source.RemoveNode(element, out _);
+                        element.UpdateContainedWithin(destination);
+                        destination.AddNode(element, out _);
+                    }
+                }
+
                 // Step 1 – Create FunctionTemplate.
                 if (!boundary.AddFunctionTemplate(functionTemplateName, out var ft, out error))
                     return false;
@@ -5921,16 +5937,10 @@ namespace XTMF2.Editing
                         boundary.RemoveLink(lk, out _);
 
                     // Move node and hidden children.
-                    boundary.RemoveNode(node, out _);
-                    node.UpdateContainedWithin(internalBoundary);
-                    internalBoundary.AddNode(node, out _);
+                    MoveElement(boundary, internalBoundary, node);
 
                     foreach (var hc in hiddenChildren)
-                    {
-                        boundary.RemoveNode(hc, out _);
-                        hc.UpdateContainedWithin(internalBoundary);
-                        internalBoundary.AddNode(hc, out _);
-                    }
+                        MoveElement(boundary, internalBoundary, hc);
 
                     // Re-add outgoing links to InternalModules.
                     foreach (var lk in nodeOutgoing)
@@ -6035,16 +6045,10 @@ namespace XTMF2.Editing
                                 internalBoundary.RemoveLink(lk, out _);
 
                             // Move node and hidden children back.
-                            internalBoundary.RemoveNode(node, out _);
-                            node.UpdateContainedWithin(boundary);
-                            boundary.AddNode(node, out _);
+                            MoveElement(internalBoundary, boundary, node);
 
                             foreach (var hc in hiddenChildren)
-                            {
-                                internalBoundary.RemoveNode(hc, out _);
-                                hc.UpdateContainedWithin(boundary);
-                                boundary.AddNode(hc, out _);
-                            }
+                                MoveElement(internalBoundary, boundary, hc);
                         }
 
                         //    Pass 2: now that all destination NodeViewModels exist in the boundary,
@@ -6105,16 +6109,10 @@ namespace XTMF2.Editing
                             foreach (var lk in movedLinks)
                                 boundary.RemoveLink(lk, out _);
 
-                            boundary.RemoveNode(node, out _);
-                            node.UpdateContainedWithin(internalBoundary);
-                            internalBoundary.AddNode(node, out _);
+                            MoveElement(boundary, internalBoundary, node);
 
                             foreach (var hc in hiddenChildren)
-                            {
-                                boundary.RemoveNode(hc, out _);
-                                hc.UpdateContainedWithin(internalBoundary);
-                                internalBoundary.AddNode(hc, out _);
-                            }
+                                MoveElement(boundary, internalBoundary, hc);
 
                             foreach (var lk in movedLinks)
                                 internalBoundary.AddLink(lk, out _);

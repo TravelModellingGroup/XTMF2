@@ -140,4 +140,73 @@ public class TestFunctionInstanceToFunctionInstanceLink
                 });
             });
     }
+
+    [TestMethod]
+    public void NestedFunctionInstance_ConstructsAndRunsSuccessfully()
+    {
+        RunInModelSystemContext(
+            nameof(NestedFunctionInstance_ConstructsAndRunsSuccessfully),
+            (user, pSession, msSession) =>
+            {
+                var ms = msSession.ModelSystem;
+                var boundary = ms.GlobalBoundary;
+                CommandError error = null;
+
+                Assert.IsTrue(msSession.AddFunctionTemplate(user, boundary, "Inner",
+                    out var innerTemplate, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, innerTemplate!.InternalModules, "Provider",
+                    typeof(SimpleTestModule), Rectangle.Hidden, out var provider, out error),
+                    error?.Message);
+                Assert.IsTrue(msSession.SetFunctionTemplateEntryNode(user, innerTemplate, provider,
+                    out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddFunctionTemplate(user, boundary, "Outer",
+                    out var outerTemplate, out error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, outerTemplate!.InternalModules, "Ignore",
+                    typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignore, out error),
+                    error?.Message);
+                Assert.IsTrue(msSession.AddFunctionInstance(user, outerTemplate.InternalModules,
+                    innerTemplate, "NestedProvider", Rectangle.Hidden, out var nestedProvider, out error),
+                    error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, ignore!,
+                    TestHelper.GetHook(ignore!.Hooks, "To Ignore"), nestedProvider,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(msSession.SetFunctionTemplateEntryNode(user, outerTemplate, ignore,
+                    out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddFunctionInstance(user, boundary, outerTemplate,
+                    "OuterInstance", Rectangle.Hidden, out var outerInstance, out error),
+                    error?.Message);
+                Assert.IsTrue(msSession.AddModelSystemStart(user, boundary, "Start",
+                    Rectangle.Hidden, out var start, out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, start!, start!.Hooks[0], outerInstance!,
+                    out _, out error), error?.Message);
+
+                CreateRunClient(true, runBus =>
+                {
+                    bool success = false;
+                    CommandError runError = null;
+                    using var sem = new SemaphoreSlim(0);
+
+                    runBus.ClientFinishedModelSystem += (_, _) =>
+                    {
+                        success = true;
+                        sem.Release();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack, moduleName, elementId) =>
+                    {
+                        runError = new CommandError(e + "\r\n" + stack);
+                        sem.Release();
+                    };
+
+                    Assert.IsTrue(runBus.RunModelSystem(msSession,
+                        Path.Combine(pSession.RunsDirectory, "NestedFunctionInstance"),
+                        "Start", out _, out runError), runError?.Message);
+                    if (!sem.Wait(TestHelper.TestTimeoutMilliseconds))
+                        Assert.Fail("Model system did not complete within the time limit.");
+                    Assert.IsTrue(success,
+                        "Model system failed to run to completion: " + runError?.Message);
+                });
+            });
+    }
 }

@@ -16,8 +16,10 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
@@ -320,6 +322,90 @@ public class TestExtractToFunctionTemplate
                     .FirstOrDefault(l => l.Origin == start && l.Destination == fi);
                 Assert.IsNotNull(incomingLink,
                     "start must now link to the FunctionInstance.");
+            });
+    }
+
+    [TestMethod]
+    public void ExtractToFunctionTemplate_SelectedFunctionInstance_MovesAndUndoRedoPreservesIt()
+    {
+        TestHelper.RunInModelSystemContext(
+            nameof(ExtractToFunctionTemplate_SelectedFunctionInstance_MovesAndUndoRedoPreservesIt),
+            (user, pSess, ms) =>
+            {
+                var boundary = ms.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(ms.AddFunctionTemplate(user, boundary, "InnerTemplate",
+                    out var innerTemplate, out var error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, innerTemplate!.InternalModules, "InnerEntry",
+                    typeof(SimpleTestModule), Rectangle.Hidden, out var innerEntry, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetFunctionTemplateEntryNode(user, innerTemplate, innerEntry,
+                    out error), error?.Message);
+                Assert.IsTrue(ms.AddFunctionInstance(user, boundary, innerTemplate, "InnerInstance",
+                    FiLoc, out var innerInstance, out error), error?.Message);
+
+                Assert.IsTrue(ms.AddNode(user, boundary, "Caller", typeof(IgnoreResult<string>),
+                    CallerLoc, out var caller, out error), error?.Message);
+                Assert.IsTrue(ms.AddModelSystemStart(user, boundary, "Start",
+                    Rectangle.Hidden, out var start, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, start!,
+                    TestHelper.GetHook(start!.Hooks, "ToExecute"), caller,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, caller,
+                    TestHelper.GetHook(caller!.Hooks, "To Ignore"), innerInstance,
+                    out _, out error), error?.Message);
+
+                Assert.IsTrue(ms.ExtractToFunctionTemplate(
+                    user, boundary, new Node[] { innerInstance! },
+                    "OuterTemplate", "OuterInstance",
+                    FtLoc, FiLoc,
+                    out var outerTemplate, out var outerInstance, out error), error?.Message);
+
+                Assert.IsNotNull(outerTemplate);
+                Assert.IsNotNull(outerInstance);
+                Assert.Contains(innerInstance, outerTemplate!.InternalModules.FunctionInstances,
+                    "The selected FunctionInstance must remain a FunctionInstance inside the extracted template.");
+                Assert.DoesNotContain(innerInstance, boundary.FunctionInstances,
+                    "The selected FunctionInstance must leave its original boundary.");
+                Assert.AreSame(outerTemplate.InternalModules, innerInstance!.ContainedWithin);
+                Assert.AreSame(innerInstance, outerTemplate.EntryNode);
+
+                TestHelper.CreateRunClient(true, runBus =>
+                {
+                    bool success = false;
+                    CommandError runError = null;
+                    using var sem = new SemaphoreSlim(0);
+
+                    runBus.ClientFinishedModelSystem += (_, _) =>
+                    {
+                        success = true;
+                        sem.Release();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, e, stack, moduleName, elementId) =>
+                    {
+                        runError = new CommandError(e + "\r\n" + stack);
+                        sem.Release();
+                    };
+
+                    Assert.IsTrue(runBus.RunModelSystem(ms,
+                        Path.Combine(pSess.RunsDirectory, "ExtractedNestedFunctionInstance"),
+                        "Start", out _, out runError), runError?.Message);
+                    if (!sem.Wait(TestHelper.TestTimeoutMilliseconds))
+                        Assert.Fail("Model system did not complete within the time limit.");
+                    Assert.IsTrue(success,
+                        "Model system failed to run to completion: " + runError?.Message);
+                });
+
+                Assert.IsTrue(ms.Undo(user, out error), error?.Message);
+                Assert.Contains(innerInstance, boundary.FunctionInstances,
+                    "Undo must restore the selected FunctionInstance to its original boundary.");
+                Assert.AreSame(boundary, innerInstance.ContainedWithin);
+                Assert.DoesNotContain(innerInstance, outerTemplate.InternalModules.FunctionInstances);
+
+                Assert.IsTrue(ms.Redo(user, out error), error?.Message);
+                Assert.Contains(innerInstance, outerTemplate.InternalModules.FunctionInstances,
+                    "Redo must move the selected FunctionInstance back into the extracted template.");
+                Assert.DoesNotContain(innerInstance, boundary.FunctionInstances);
+                Assert.AreSame(outerTemplate.InternalModules, innerInstance.ContainedWithin);
             });
     }
 
