@@ -104,6 +104,7 @@ namespace XTMF2.ModelSystemConstruct
 
         // ── Entry node ───────────────────────────────────────────────────
         private Node? _entryNode;
+        private int? _deferredEntryNodeIndex;
 
         /// <summary>
         /// The node in <see cref="InternalModules"/> that defines the runtime type of this
@@ -133,6 +134,22 @@ namespace XTMF2.ModelSystemConstruct
             _entryNode = entryNode;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EntryNode)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Type)));
+        }
+
+        internal bool ResolveDeferredEntryNode(Dictionary<int, Node> nodes, out string? error)
+        {
+            if (_deferredEntryNodeIndex is int index)
+            {
+                if (!nodes.TryGetValue(index, out var entryNode))
+                {
+                    error = $"FunctionTemplate '{Name}' references missing entry node index {index}.";
+                    return false;
+                }
+                SetEntryNode(entryNode);
+                _deferredEntryNodeIndex = null;
+            }
+            error = null;
+            return true;
         }
 
         // ── Canvas location ───────────────────────────────────────────────
@@ -635,11 +652,14 @@ namespace XTMF2.ModelSystemConstruct
             }
             template.SetLocation(location);
 
-            // Resolve the entry node index.
-            if (deferredEntryNodeIndex.HasValue
-                && node.TryGetValue(deferredEntryNodeIndex.Value, out var entryNodeCandidate))
+            // FunctionInstances may be deferred until all templates have loaded, so an
+            // entry node that is itself a FunctionInstance may not exist in the index map yet.
+            if (deferredEntryNodeIndex.HasValue)
             {
-                template._entryNode = entryNodeCandidate;
+                if (node.TryGetValue(deferredEntryNodeIndex.Value, out var entryNodeCandidate))
+                    template.SetEntryNode(entryNodeCandidate);
+                else
+                    template._deferredEntryNodeIndex = deferredEntryNodeIndex.Value;
             }
 
             // Resolve local variable indices.

@@ -597,6 +597,14 @@ namespace XTMF2
                     if (pending.Index >= 0)
                         nodes[pending.Index] = instance;
                 }
+                foreach (var template in functionTemplates.Values)
+                {
+                    if (!template.ResolveDeferredEntryNode(nodes, out var entryError))
+                    {
+                        error = entryError;
+                        return null;
+                    }
+                }
                 // Resolve deferred ghost nodes now that all boundaries and nodes are loaded.
                 foreach (var (containedIn, refIndex, selfIndex, location, id) in deferredGhostNodes)
                 {

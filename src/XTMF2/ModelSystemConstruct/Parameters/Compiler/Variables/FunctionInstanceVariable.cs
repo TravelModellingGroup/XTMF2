@@ -50,7 +50,8 @@ internal sealed class FunctionInstanceVariable<T> : Variable
                 $"FunctionInstance '{_fi.Name}' has no entry node set.",
                 typeof(T));
 
-        var runtimeModule = _fi.GetRuntimeModule(entryNode);
+        var runtimeModule = FunctionInstance.Current?.GetRuntimeModule(_fi)
+            ?? _fi.GetRuntimeModule(entryNode);
         if (runtimeModule is IFunction<T> func)
         {
             var value = func.Invoke();
