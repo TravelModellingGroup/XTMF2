@@ -538,6 +538,7 @@ public sealed partial class ModelSystemCanvas : Control
     /// Used to anchor paste operations near the cursor.
     /// </summary>
     private Point? _lastCanvasMousePos;
+    private ICanvasElement? _hoveredLinkEndpoint;
     private bool _isPointerOverCanvas;
 
     // ── Copy / Paste clipboard ────────────────────────────────────────────

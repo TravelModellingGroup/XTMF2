@@ -37,12 +37,34 @@ partial class ModelSystemCanvas
     {
         _isPointerOverCanvas = true;
         base.OnPointerEntered(e);
+        UpdateHoveredLinkEndpoint(ToCanvasPos(e.GetPosition(this)));
     }
 
     protected override void OnPointerExited(PointerEventArgs e)
     {
         _isPointerOverCanvas = false;
         base.OnPointerExited(e);
+        if (_hoveredLinkEndpoint is not null)
+        {
+            _hoveredLinkEndpoint = null;
+            InvalidateVisual();
+        }
+    }
+
+    internal void UpdateHoveredLinkEndpoint(Point position)
+    {
+        var hit = HitTest(position, testComments: false);
+        ICanvasElement? endpoint = hit is NodeViewModel
+            or FunctionInstanceViewModel
+            or GhostNodeViewModel
+            or FunctionParameterViewModel
+            ? hit
+            : null;
+        if (ReferenceEquals(_hoveredLinkEndpoint, endpoint))
+            return;
+
+        _hoveredLinkEndpoint = endpoint;
+        InvalidateVisual();
     }
 
     protected override void OnKeyUp(KeyEventArgs e)
@@ -971,6 +993,7 @@ partial class ModelSystemCanvas
         var pos = e.GetCurrentPoint(this).Position;  // screen coords
         var mpos = ToCanvasPos(pos);                  // model coords
         _lastCanvasMousePos = mpos;
+        UpdateHoveredLinkEndpoint(mpos);
         UpdateHookTooltip(mpos);
 
         if (_orthogonalBreakpointDragLink is not null)
