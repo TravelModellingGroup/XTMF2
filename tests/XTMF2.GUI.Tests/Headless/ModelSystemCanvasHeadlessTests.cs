@@ -1840,6 +1840,109 @@ public class ModelSystemCanvasHeadlessTests
     }
 
     [TestMethod]
+    public void ModelSystemCanvas_ContextMenu_OffersCacheForFunctionNodes()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ContextMenu_OffersCacheForFunctionNodes),
+            (user, projectSession, session) =>
+            {
+                var boundary = session.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "Function", typeof(LinkedGuiTestModule),
+                    new Rectangle(20, 20, 160, 60), out var node, out var error), error?.Message);
+                Assert.IsNotNull(node);
+
+                using var vm = new ModelSystemEditorViewModel(session, user, runController: null);
+                var nodeVm = vm.Nodes.Single(candidate => candidate.UnderlyingNode == node);
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var showMenu = typeof(ModelSystemCanvas).GetMethod(
+                        "ShowContextMenu", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(showMenu);
+                    showMenu!.Invoke(canvas, new object?[] { nodeVm, null });
+
+                    var menu = canvas.ContextMenu!;
+                    var wrapperMenu = menu.Items.OfType<MenuItem>().FirstOrDefault(
+                        item => item.Header?.ToString() == "Create linked wrapper…");
+                    Assert.IsNotNull(wrapperMenu);
+                    Assert.IsTrue(wrapperMenu!.Classes.Contains("canvas-context-menu-item"));
+                    var headers = wrapperMenu!.Items.OfType<MenuItem>()
+                        .Select(item => item.Header?.ToString())
+                        .ToArray();
+                    CollectionAssert.Contains(headers, "Create Cache<String> (linked)");
+                    CollectionAssert.Contains(headers, "Create If<String> (linked)");
+                    CollectionAssert.Contains(headers, "Create ExecuteWithContext<String> (linked)");
+                    CollectionAssert.Contains(headers, "Create IgnoreResult<String> (linked)");
+                    Assert.IsTrue(wrapperMenu.Items.OfType<MenuItem>()
+                        .All(item => item.Classes.Contains("canvas-context-menu-item")));
+
+                    static void AssertNoEmptySeparatorGroups(object[] items)
+                    {
+                        for (int i = 0; i < items.Length; i++)
+                        {
+                            if (items[i] is not Separator)
+                                continue;
+                            Assert.IsTrue(i > 0 && i < items.Length - 1
+                                && items[i - 1] is not Separator
+                                && items[i + 1] is not Separator);
+                        }
+                    }
+
+                    AssertNoEmptySeparatorGroups(menu.Items.Cast<object>().ToArray());
+                    AssertNoEmptySeparatorGroups(wrapperMenu.Items.Cast<object>().ToArray());
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_ContextMenu_OffersWrappersForFunctionInstances()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ContextMenu_OffersWrappersForFunctionInstances),
+            (user, projectSession, session) =>
+            {
+                var boundary = session.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(session.AddFunctionTemplate(
+                    user, boundary, "FunctionTemplate", out var template, out var error), error?.Message);
+                Assert.IsNotNull(template);
+                Assert.IsTrue(session.AddNode(
+                    user, template!.InternalModules, "Entry", typeof(LinkedGuiTestModule),
+                    new Rectangle(20, 20, 160, 60), out var entryNode, out error), error?.Message);
+                Assert.IsNotNull(entryNode);
+                Assert.IsTrue(session.SetFunctionTemplateEntryNode(user, template, entryNode!, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddFunctionInstance(
+                    user, boundary, template, "FunctionInstance", new Rectangle(240, 20, 160, 60),
+                    out var instance, out error), error?.Message);
+                Assert.IsNotNull(instance);
+
+                using var vm = new ModelSystemEditorViewModel(session, user, runController: null);
+                var instanceVm = vm.FunctionInstances.Single(candidate =>
+                    candidate.UnderlyingInstance == instance);
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var showMenu = typeof(ModelSystemCanvas).GetMethod(
+                        "ShowContextMenu", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(showMenu);
+                    showMenu!.Invoke(canvas, new object?[] { instanceVm, null });
+
+                    var wrapperMenu = canvas.ContextMenu!.Items.OfType<MenuItem>().FirstOrDefault(
+                        item => item.Header?.ToString() == "Create linked wrapper…");
+                    Assert.IsNotNull(wrapperMenu);
+                    var headers = wrapperMenu!.Items.OfType<MenuItem>()
+                        .Select(item => item.Header?.ToString())
+                        .ToArray();
+                    CollectionAssert.Contains(headers, "Create Cache<String> (linked)");
+                    CollectionAssert.Contains(headers, "Create If<String> (linked)");
+                    CollectionAssert.Contains(headers, "Create ExecuteWithContext<String> (linked)");
+                    CollectionAssert.Contains(headers, "Create IgnoreResult<String> (linked)");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
     public void ModelSystemCanvas_NameEdit_IsCanceledWhenEditedNodeIsDeleted()
     {
         TestGuiHelper.RunInModelSystemContext(
