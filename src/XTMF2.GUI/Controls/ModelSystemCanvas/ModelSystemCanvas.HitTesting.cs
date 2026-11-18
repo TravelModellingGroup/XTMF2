@@ -28,6 +28,17 @@ namespace XTMF2.GUI.Controls;
 
 partial class ModelSystemCanvas
 {
+    private const double NestedEmbeddedParameterIndent = 5.0;
+
+    private readonly record struct NestedEmbeddedParameterRow(
+        NodeViewModel Parameter,
+        string Label,
+        int Depth,
+        NodeHook RootHook);
+
+    private readonly Dictionary<ICanvasElement, IReadOnlyList<NestedEmbeddedParameterRow>>
+        _nestedEmbeddedParameterRows = new(ReferenceEqualityComparer.Instance);
+
     // ── Link hit-testing ──────────────────────────────────────────────────
 
     /// <summary>
@@ -45,7 +56,9 @@ partial class ModelSystemCanvas
             // Skip inter-boundary links — they are not rendered.
             if (link.Destination is null) continue;
             // Skip links to inlined nodes — no line is drawn for them.
-            if (link.Destination is NodeViewModel dlNvm && dlNvm.IsInlined) continue;
+            if (IsCanvasElementInlined(link.Origin)
+                || link.Destination is not null && IsCanvasElementInlined(link.Destination))
+                continue;
 
             bool hit;
             if (link.UnderlyingLink.IsOrthogonal)
@@ -141,7 +154,7 @@ partial class ModelSystemCanvas
 
             for (int i = 0; i < hooks.Count; i++)
             {
-                double rowTop = node.Y + NodeHeaderHeight + i * HookRowHeight;
+                double rowTop = NodeHookRowTop(node, i);
                 if (pos.Y >= rowTop && pos.Y < rowTop + HookRowHeight)
                 {
                     var anchor = new Point(node.X + rw, rowTop + HookRowHeight / 2.0);
@@ -162,11 +175,12 @@ partial class ModelSystemCanvas
         for (int fiIndex = _vm.FunctionInstances.Count - 1; fiIndex >= 0; fiIndex--)
         {
             var fi = _vm.FunctionInstances[fiIndex];
+            if (fi.IsInlined) continue;
             if (pos.X < fi.X || pos.X > fi.X + fi.Width) continue;
             if (!_fiVisibleHooks.TryGetValue(fi, out var visibleHooks)) continue;
             for (int i = 0; i < visibleHooks.Count; i++)
             {
-                double rowTop = fi.Y + FtHeaderHeight + i * FtHookRowHeight;
+                double rowTop = FunctionInstanceHookRowTop(fi, i);
                 if (pos.Y >= rowTop && pos.Y < rowTop + FtHookRowHeight)
                     return (fi, visibleHooks[i]);
             }
@@ -259,17 +273,18 @@ partial class ModelSystemCanvas
     /// Rebuilds the per-frame lookup tables used by <see cref="RenderNodes"/>,
     /// <see cref="RenderLinks"/>, and hit-testing.
     /// </summary>
-    private void BuildHookAnchorCache()
+    internal void BuildHookAnchorCache()
     {
         _hookAnchors.Clear();
         _nodeVisibleHooks.Clear();
         _nodeConnectedHooks.Clear();
-        _hookInlinedParam.Clear();
-        _fiHookInlinedParam.Clear();
-        _fiHookCanInlineParam.Clear();
+        _hookEmbeddedElement.Clear();
+        _fiHookEmbeddedElement.Clear();
+        _fiHookCanEmbedElement.Clear();
         _fiVisibleHooks.Clear();
-        _canInlineNodes.Clear();
+        _canEmbedElements.Clear();
         _fiHookAnchors.Clear();
+        _nestedEmbeddedParameterRows.Clear();
         _fiConnectedHooks.Clear();
         _leftGoingHooks.Clear();
         _leftGoingFiHooks.Clear();
@@ -313,51 +328,94 @@ partial class ModelSystemCanvas
             }
         }
 
-        // Identify inlined BasicParameter nodes and which hook rows they occupy.
-        // Also identify canvas-visible BasicParameter nodes eligible for the minimize button.
-        // First pass: count qualifying links per destination to enforce the single-destination rule
-        // (a parameter node wired to more than one hook cannot be collapsed inline).
-        var paramDestCount = new Dictionary<NodeViewModel, int>(ReferenceEqualityComparer.Instance);
+        var incomingLinksByDestination = new Dictionary<ICanvasElement, List<LinkViewModel>>(
+            ReferenceEqualityComparer.Instance);
         foreach (var link in _vm.Links)
         {
-            if (link.Destination is not NodeViewModel dstCount || !dstCount.IsParameterNode) continue;
-            var originHookCount = link.UnderlyingLink.OriginHook;
-            bool eligible = link.Origin is NodeViewModel
-                ? originHookCount.Cardinality == HookCardinality.Single
-                : link.Origin is FunctionInstanceViewModel
-                    && originHookCount is FunctionParameterHook
-                    && originHookCount.Cardinality is HookCardinality.Single or HookCardinality.SingleOptional;
-            if (!eligible) continue;
-            paramDestCount.TryGetValue(dstCount, out var c);
-            paramDestCount[dstCount] = c + 1;
+            if (link.Destination is not { } destination)
+                continue;
+            if (!incomingLinksByDestination.TryGetValue(destination, out var incomingLinks))
+                incomingLinksByDestination[destination] = incomingLinks = [];
+            incomingLinks.Add(link);
         }
 
-        foreach (var link in _vm.Links)
-        {
-            if (link.Destination is not NodeViewModel destVm || !destVm.IsParameterNode) continue;
-            // Nodes reached by more than one qualifying link cannot be inlined.
-            if (paramDestCount.TryGetValue(destVm, out var destCnt) && destCnt > 1) continue;
+        var embeddingLinks = _vm.Links
+            .Where(link => IsEligibleEmbeddingLink(link)
+                && link.Destination is NodeViewModel or FunctionInstanceViewModel)
+            .ToArray();
 
-            if (link.Origin is NodeViewModel originVm2
-                && link.UnderlyingLink.OriginHook.Cardinality == HookCardinality.Single)
+        var embeddedLinksByHost = new Dictionary<ICanvasElement, List<LinkViewModel>>(
+            ReferenceEqualityComparer.Instance);
+        foreach (var link in embeddingLinks.Where(link =>
+                     link.Destination is { } destination && IsCanvasElementInlined(destination)))
+        {
+            if (!embeddedLinksByHost.TryGetValue(link.Origin, out var children))
+                embeddedLinksByHost[link.Origin] = children = [];
+            children.Add(link);
+        }
+
+        bool removedEmbeddedLink;
+        do
+        {
+            removedEmbeddedLink = false;
+            foreach (var link in embeddedLinksByHost.Values.SelectMany(links => links).ToArray())
             {
-                if (destVm.IsInlined)
-                    _hookInlinedParam[(originVm2, link.UnderlyingLink.OriginHook)] = destVm;
-                else
-                    _canInlineNodes.Add(destVm);
+                if (HasOnlyEmbeddedIncomingLinks(
+                        link,
+                        incomingLinksByDestination,
+                        GetEmbeddedDescendants(link.Origin, embeddedLinksByHost)))
+                    continue;
+                embeddedLinksByHost[link.Origin].Remove(link);
+                removedEmbeddedLink = true;
             }
-            else if (link.Origin is FunctionInstanceViewModel originFiVm
-                     && link.UnderlyingLink.OriginHook is FunctionParameterHook fpHookInline
-                     && fpHookInline.Cardinality is HookCardinality.Single or HookCardinality.SingleOptional)
+        } while (removedEmbeddedLink);
+
+        var existingEmbeddedChildren = new Dictionary<ICanvasElement, List<ICanvasElement>>(
+            ReferenceEqualityComparer.Instance);
+        foreach (var link in embeddedLinksByHost.Values.SelectMany(links => links))
+        {
+            if (link.Destination is not { } destination)
+                continue;
+            if (!existingEmbeddedChildren.TryGetValue(link.Origin, out var children))
+                existingEmbeddedChildren[link.Origin] = children = [];
+            children.Add(destination);
+
+            if (link.Origin is NodeViewModel originNode)
+                _hookEmbeddedElement[(originNode, link.UnderlyingLink.OriginHook)] = destination;
+            else if (link.Origin is FunctionInstanceViewModel originInstance
+                     && link.UnderlyingLink.OriginHook is FunctionParameterHook instanceHook)
+                _fiHookEmbeddedElement[(originInstance, instanceHook)] = destination;
+        }
+
+        var embeddedDescendantsByHost = new Dictionary<ICanvasElement, HashSet<ICanvasElement>>(
+            ReferenceEqualityComparer.Instance);
+        var embeddedProvidersByCandidate = new Dictionary<ICanvasElement, HashSet<ICanvasElement>>(
+            ReferenceEqualityComparer.Instance);
+        foreach (var link in embeddingLinks)
+        {
+            if (link.Destination is not { } destination
+                || IsCanvasElementInlined(destination))
+                continue;
+
+            if (!embeddedDescendantsByHost.TryGetValue(link.Origin, out var embeddedDescendants))
             {
-                if (destVm.IsInlined)
-                    _fiHookInlinedParam[(originFiVm, fpHookInline)] = destVm;
-                else
-                {
-                    _canInlineNodes.Add(destVm);
-                    _fiHookCanInlineParam[(originFiVm, fpHookInline)] = destVm;
-                }
+                embeddedDescendants = GetEmbeddedDescendants(link.Origin, embeddedLinksByHost);
+                embeddedDescendantsByHost.Add(link.Origin, embeddedDescendants);
             }
+            if (!embeddedProvidersByCandidate.TryGetValue(destination, out var embeddedProviders))
+            {
+                embeddedProviders = GetEmbeddedDescendants(destination, embeddedLinksByHost);
+                embeddedProvidersByCandidate.Add(destination, embeddedProviders);
+            }
+            if (!HasOnlyEmbeddedProviders(destination, _vm.Links, embeddedProviders)
+                || !HasOnlyEmbeddedIncomingLinks(link, incomingLinksByDestination, embeddedDescendants)
+                || WouldCreateEmbeddingCycle(link.Origin, destination, existingEmbeddedChildren))
+                continue;
+
+            _canEmbedElements.Add(destination);
+            if (link.Origin is FunctionInstanceViewModel originInstance
+                && link.UnderlyingLink.OriginHook is FunctionParameterHook instanceHook)
+                _fiHookCanEmbedElement[(originInstance, instanceHook)] = destination;
         }
 
         foreach (var node in _vm.Nodes)
@@ -387,11 +445,12 @@ partial class ModelSystemCanvas
             }
 
             _nodeVisibleHooks[node] = visible;
+            _nestedEmbeddedParameterRows[node] = BuildNestedEmbeddedParameterRows(node, visible);
 
             double rw = NodeRenderWidth(node);
             for (int i = 0; i < visible.Count; i++)
             {
-                double ay = node.Y + NodeHeaderHeight + i * HookRowHeight + HookRowHeight / 2.0;
+                double ay = NodeHookRowTop(node, i) + HookRowHeight / 2.0;
                 _hookAnchors[(node, visible[i])] = new Point(node.X + rw, ay);
             }
         }
@@ -399,6 +458,7 @@ partial class ModelSystemCanvas
         // Register FunctionInstance FunctionParameterHook anchors (right edge of each hook row).
         foreach (var fi in _vm.FunctionInstances)
         {
+            if (fi.IsInlined) continue;
             var fiHooks = fi.UnderlyingInstance.Hooks;
             _fiConnectedHooks.TryGetValue(fi, out var connectedFiHooks);
             var visibleFiHooks = fiHooks
@@ -410,13 +470,305 @@ partial class ModelSystemCanvas
                     || (connectedFiHooks is not null && connectedFiHooks.Contains(hook)))
                 .ToArray();
             _fiVisibleHooks[fi] = visibleFiHooks;
+            _nestedEmbeddedParameterRows[fi] = BuildNestedEmbeddedParameterRows(fi, visibleFiHooks);
 
             for (int i = 0; i < visibleFiHooks.Length; i++)
             {
                 var fph = visibleFiHooks[i];
-                double rowMidY = fi.Y + FtHeaderHeight + i * FtHookRowHeight + FtHookRowHeight / 2.0;
+                double rowMidY = FunctionInstanceHookRowTop(fi, i) + FtHookRowHeight / 2.0;
                 _fiHookAnchors[(fi, fph)] = new Point(fi.X + fi.Width, rowMidY);
             }
+        }
+    }
+
+    private IReadOnlyList<NestedEmbeddedParameterRow> BuildNestedEmbeddedParameterRows(
+        ICanvasElement host,
+        IEnumerable<NodeHook> visibleHooks)
+    {
+        var rows = new List<NestedEmbeddedParameterRow>();
+        var ancestry = new HashSet<ICanvasElement>(ReferenceEqualityComparer.Instance) { host };
+        foreach (var hook in visibleHooks)
+        {
+            if (!TryGetEmbeddedChild(host, hook, out var child)
+                || child is NodeViewModel { IsParameterNode: true }
+                || child is not NodeViewModel and not FunctionInstanceViewModel)
+                continue;
+
+            ancestry.Add(child);
+            AppendNestedEmbeddedParameterRows(
+                child,
+                child.Name,
+                depth: 1,
+                hook,
+                ancestry,
+                rows);
+            ancestry.Remove(child);
+        }
+        return rows;
+    }
+
+    private void AppendNestedEmbeddedParameterRows(
+        ICanvasElement parent,
+        string parentPath,
+        int depth,
+        NodeHook rootHook,
+        HashSet<ICanvasElement> ancestry,
+        List<NestedEmbeddedParameterRow> rows)
+    {
+        IEnumerable<NodeHook> hooks = parent switch
+        {
+            NodeViewModel node => node.UnderlyingNode.Hooks ?? [],
+            FunctionInstanceViewModel instance => instance.UnderlyingInstance.Hooks,
+            _ => []
+        };
+
+        foreach (var hook in hooks)
+        {
+            if (!TryGetEmbeddedChild(parent, hook, out var child))
+                continue;
+
+            if (child is NodeViewModel { IsParameterNode: true } parameter)
+            {
+                rows.Add(new NestedEmbeddedParameterRow(
+                    parameter,
+                    $"{parentPath} › {hook.Name}",
+                    depth,
+                    rootHook));
+                continue;
+            }
+
+            if (child is not NodeViewModel and not FunctionInstanceViewModel
+                || !ancestry.Add(child))
+                continue;
+
+            AppendNestedEmbeddedParameterRows(
+                child,
+                $"{parentPath} › {child.Name}",
+                depth + 1,
+                rootHook,
+                ancestry,
+                rows);
+            ancestry.Remove(child);
+        }
+    }
+
+    private bool TryGetEmbeddedChild(
+        ICanvasElement host,
+        NodeHook hook,
+        out ICanvasElement child)
+    {
+        if (host is NodeViewModel node
+            && _hookEmbeddedElement.TryGetValue((node, hook), out child!))
+            return true;
+
+        if (host is FunctionInstanceViewModel instance
+            && hook is FunctionParameterHook functionHook
+            && _fiHookEmbeddedElement.TryGetValue((instance, functionHook), out child!))
+            return true;
+
+        child = null!;
+        return false;
+    }
+
+    private int CountNestedParameterRows(ICanvasElement host, NodeHook rootHook)
+    {
+        if (!_nestedEmbeddedParameterRows.TryGetValue(host, out var rows))
+            return 0;
+        return rows.Count(row => ReferenceEquals(row.RootHook, rootHook));
+    }
+
+    private double NodeHookRowTop(NodeViewModel node, int hookIndex)
+    {
+        int rowIndex = (node.IsParameterNode ? 1 : 0) + hookIndex;
+        if (_nodeVisibleHooks.TryGetValue(node, out var hooks))
+        {
+            for (int i = 0; i < hookIndex; i++)
+                rowIndex += CountNestedParameterRows(node, hooks[i]);
+        }
+        return node.Y + NodeHeaderHeight + rowIndex * HookRowHeight;
+    }
+
+    private double FunctionInstanceHookRowTop(FunctionInstanceViewModel instance, int hookIndex)
+    {
+        int rowIndex = hookIndex;
+        if (_fiVisibleHooks.TryGetValue(instance, out var hooks))
+        {
+            for (int i = 0; i < hookIndex; i++)
+                rowIndex += CountNestedParameterRows(instance, hooks[i]);
+        }
+        return instance.Y + FtHeaderHeight + rowIndex * FtHookRowHeight;
+    }
+
+    private double? NestedEmbeddedParameterRowTop(ICanvasElement host, int targetIndex)
+    {
+        if (!_nestedEmbeddedParameterRows.TryGetValue(host, out var nestedRows))
+            return null;
+
+        IEnumerable<NodeHook> hooks;
+        double y;
+        double rowHeight;
+        int rowIndex;
+        if (host is NodeViewModel node && _nodeVisibleHooks.TryGetValue(node, out var nodeHooks))
+        {
+            hooks = nodeHooks;
+            y = node.Y + NodeHeaderHeight;
+            rowHeight = HookRowHeight;
+            rowIndex = node.IsParameterNode ? 1 : 0;
+        }
+        else if (host is FunctionInstanceViewModel instance
+                 && _fiVisibleHooks.TryGetValue(instance, out var instanceHooks))
+        {
+            hooks = instanceHooks;
+            y = instance.Y + FtHeaderHeight;
+            rowHeight = FtHookRowHeight;
+            rowIndex = 0;
+        }
+        else
+        {
+            return null;
+        }
+
+        int nestedIndex = 0;
+        foreach (var hook in hooks)
+        {
+            rowIndex++;
+            foreach (var row in nestedRows)
+            {
+                if (!ReferenceEquals(row.RootHook, hook))
+                    continue;
+                if (nestedIndex++ == targetIndex)
+                    return y + rowIndex * rowHeight;
+                rowIndex++;
+            }
+        }
+        return null;
+    }
+
+    private static bool IsEligibleEmbeddingLink(LinkViewModel link)
+        => link.Origin switch
+        {
+            NodeViewModel => link.UnderlyingLink.OriginHook.Cardinality == HookCardinality.Single,
+            FunctionInstanceViewModel => link.UnderlyingLink.OriginHook is FunctionParameterHook
+                && link.UnderlyingLink.OriginHook.Cardinality is HookCardinality.Single or HookCardinality.SingleOptional,
+            _ => false
+        };
+
+    private static bool IsCanvasElementInlined(ICanvasElement element)
+        => element switch
+        {
+            NodeViewModel node => node.IsInlined,
+            FunctionInstanceViewModel instance => instance.IsInlined,
+            _ => false
+        };
+
+    internal bool CanEmbedElement(ICanvasElement element) => _canEmbedElements.Contains(element);
+
+    internal bool IsEmbeddedInHost(ICanvasElement host, ICanvasElement child)
+        => _hookEmbeddedElement.Any(pair =>
+               ReferenceEquals(pair.Key.Item1, host) && ReferenceEquals(pair.Value, child))
+           || _fiHookEmbeddedElement.Any(pair =>
+               ReferenceEquals(pair.Key.Item1, host) && ReferenceEquals(pair.Value, child));
+
+    internal IReadOnlyList<string> GetNestedEmbeddedParameterLabels(ICanvasElement host)
+        => _nestedEmbeddedParameterRows.TryGetValue(host, out var rows)
+            ? rows.Select(row => FormatHookLabel(
+                row.Label,
+                hasInlinedParameter: true,
+                row.Parameter.IsBasicParameter,
+                row.Parameter.ParameterValueRepresentation)).ToArray()
+            : [];
+
+    private static bool HasOnlyEmbeddedProviders(
+        ICanvasElement candidate,
+        IEnumerable<LinkViewModel> links,
+        IReadOnlySet<ICanvasElement> embeddedProviders)
+    {
+        return links
+            .Where(link => ReferenceEquals(link.Origin, candidate))
+            .All(link => link.Destination is { } destination
+                && embeddedProviders.Contains(destination));
+    }
+
+    private static bool HasOnlyEmbeddedIncomingLinks(
+        LinkViewModel candidateLink,
+        IReadOnlyDictionary<ICanvasElement, List<LinkViewModel>> incomingLinksByDestination,
+        IReadOnlySet<ICanvasElement> embeddedDescendants)
+    {
+        if (candidateLink.Destination is not { } destination
+            || !incomingLinksByDestination.TryGetValue(destination, out var incomingLinks))
+            return false;
+
+        return incomingLinks.All(link =>
+            ReferenceEquals(link, candidateLink) || embeddedDescendants.Contains(link.Origin));
+    }
+
+    private static HashSet<ICanvasElement> GetEmbeddedDescendants(
+        ICanvasElement host,
+        IReadOnlyDictionary<ICanvasElement, List<LinkViewModel>> embeddedLinksByHost)
+    {
+        var descendants = new HashSet<ICanvasElement>(ReferenceEqualityComparer.Instance);
+        var pending = new Stack<ICanvasElement>();
+        pending.Push(host);
+        while (pending.TryPop(out var current))
+        {
+            if (!embeddedLinksByHost.TryGetValue(current, out var links))
+                continue;
+            foreach (var link in links)
+            {
+                if (link.Destination is not { } child
+                    || ReferenceEquals(child, host)
+                    || !descendants.Add(child))
+                    continue;
+                pending.Push(child);
+            }
+        }
+        return descendants;
+    }
+
+    private static bool WouldCreateEmbeddingCycle(
+        ICanvasElement host,
+        ICanvasElement child,
+        IReadOnlyDictionary<ICanvasElement, List<ICanvasElement>> embeddedChildren)
+    {
+        var pending = new Stack<ICanvasElement>();
+        var visited = new HashSet<ICanvasElement>(ReferenceEqualityComparer.Instance);
+        pending.Push(child);
+        while (pending.TryPop(out var current))
+        {
+            if (ReferenceEquals(current, host))
+                return true;
+            if (!visited.Add(current)
+                || !embeddedChildren.TryGetValue(current, out var children))
+                continue;
+            foreach (var nested in children)
+                pending.Push(nested);
+        }
+        return false;
+    }
+
+    private static void InlineCanvasElement(ICanvasElement element)
+    {
+        switch (element)
+        {
+            case NodeViewModel node:
+                node.Inline();
+                break;
+            case FunctionInstanceViewModel instance:
+                instance.Inline();
+                break;
+        }
+    }
+
+    private static void ExpandCanvasElement(ICanvasElement element, double x, double y)
+    {
+        switch (element)
+        {
+            case NodeViewModel node:
+                node.ExpandToCanvas(x, y);
+                break;
+            case FunctionInstanceViewModel instance:
+                instance.ExpandToCanvas(x, y);
+                break;
         }
     }
 
@@ -427,16 +779,20 @@ partial class ModelSystemCanvas
     {
         bool hasParamRow = node.IsParameterNode;
         int extraRows = hasParamRow ? 1 : 0;
+        int embeddedRows = _nestedEmbeddedParameterRows.TryGetValue(node, out var nestedRows)
+            ? nestedRows.Count
+            : 0;
         if (_nodeVisibleHooks.TryGetValue(node, out var hooks) && hooks.Count > 0)
         {
-            return Math.Max(node.Height, NodeHeaderHeight + (hooks.Count + extraRows) * HookRowHeight);
+            return Math.Max(node.Height,
+                NodeHeaderHeight + (hooks.Count + extraRows + embeddedRows) * HookRowHeight);
         }
         if (hasParamRow)
         {
-            return Math.Max(node.Height, NodeHeaderHeight + HookRowHeight);
+            return Math.Max(node.Height, NodeHeaderHeight + (1 + embeddedRows) * HookRowHeight);
         }
         // No visible hooks — keep at least NodeHeaderHeight so the name always fits.
-        return Math.Max(node.Height, NodeHeaderHeight);
+        return Math.Max(node.Height, NodeHeaderHeight + embeddedRows * HookRowHeight);
     }
 
     private double FunctionInstanceRenderHeight(FunctionInstanceViewModel fi)
@@ -447,7 +803,11 @@ partial class ModelSystemCanvas
         var storedHeight = fi.UnderlyingInstance.Location.Height is 0
             ? 50.0
             : fi.UnderlyingInstance.Location.Height;
-        return Math.Max(storedHeight, FtHeaderHeight + visibleHooks.Count * FtHookRowHeight);
+        int embeddedRows = _nestedEmbeddedParameterRows.TryGetValue(fi, out var nestedRows)
+            ? nestedRows.Count
+            : 0;
+        return Math.Max(storedHeight,
+            FtHeaderHeight + (visibleHooks.Count + embeddedRows) * FtHookRowHeight);
     }
 
     /// <summary>Returns the rendered width of any resizable canvas element.</summary>
@@ -502,6 +862,7 @@ partial class ModelSystemCanvas
             for (int index = collection.Count - 1; index >= 0; index--)
             {
                 var element = collection[index];
+                if (IsCanvasElementInlined(element)) continue;
                 // Use the same rendered dimensions used when drawing the resize handle,
                 // so that the hit-test rectangle matches the visual even when a node's
                 // stored Height is smaller than its actual rendered height (e.g. when
@@ -587,6 +948,7 @@ partial class ModelSystemCanvas
         for (int fiIndex = _vm.FunctionInstances.Count - 1; fiIndex >= 0; fiIndex--)
         {
             var fi = _vm.FunctionInstances[fiIndex];
+            if (fi.IsInlined) continue;
             if (fi.FunctionParameters.Count > 0
                 && FunctionInstanceHookToggleIconRect(fi).Contains(pos))
                 return fi;
@@ -595,8 +957,7 @@ partial class ModelSystemCanvas
     }
 
     /// <summary>
-    /// Returns the bounding rectangle of the "minimize to inline" button that appears
-    /// in the top-left header of a <see cref="_canInlineNodes"/> BasicParameter node.
+    /// Returns the bounding rectangle of the embed button in a Node header.
     /// </summary>
     /// <param name="node">The node whose minimize-to-inline button rectangle is being calculated.</param>
     /// <returns>The bounding rectangle of the minimize-to-inline button.</returns>
@@ -611,46 +972,60 @@ partial class ModelSystemCanvas
             size);
     }
 
-    private static Rect InlineFiMinimizeButtonRect(FunctionInstanceViewModel fi, int hookIndex)
+    private static Rect InlineMinimizeButtonRect(FunctionInstanceViewModel fi)
     {
         const double margin = 4.0;
         double size = InlineMinimizeButtonSize;
         return new Rect(
             fi.X + margin,
-            fi.Y + FtHeaderHeight + hookIndex * FtHookRowHeight
+            fi.Y + (FtHeaderHeight - size) / 2.0,
+            size,
+            size);
+    }
+
+    private Rect InlineFiMinimizeButtonRect(FunctionInstanceViewModel fi, int hookIndex)
+    {
+        const double margin = 4.0;
+        double size = InlineMinimizeButtonSize;
+        return new Rect(
+            fi.X + margin,
+            FunctionInstanceHookRowTop(fi, hookIndex)
                 + (FtHookRowHeight - size) / 2.0,
             size,
             size);
     }
 
     /// <summary>
-    /// Returns the <see cref="NodeViewModel"/> whose minimize-to-inline button
-    /// (top-left of header) contains <paramref name="pos"/>, or <c>null</c>.
-    /// Only nodes in <see cref="_canInlineNodes"/> have this button.
+    /// Returns the element whose embed button contains <paramref name="pos"/>, or <c>null</c>.
     /// </summary>
-    private NodeViewModel? HitTestMinimizeButton(Point pos)
+    private ICanvasElement? HitTestMinimizeButton(Point pos)
     {
         if (_vm is null) return null;
         for (int nodeIndex = _vm.Nodes.Count - 1; nodeIndex >= 0; nodeIndex--)
         {
             var node = _vm.Nodes[nodeIndex];
-            if (!_canInlineNodes.Contains(node)) continue;
+            if (!_canEmbedElements.Contains(node)) continue;
             if (InlineMinimizeButtonRect(node).Contains(pos))
-            {
                 return node;
-            }
+        }
+        for (int fiIndex = _vm.FunctionInstances.Count - 1; fiIndex >= 0; fiIndex--)
+        {
+            var fi = _vm.FunctionInstances[fiIndex];
+            if (!_canEmbedElements.Contains(fi)) continue;
+            if (InlineMinimizeButtonRect(fi).Contains(pos))
+                return fi;
         }
         return null;
     }
 
-    private (FunctionInstanceViewModel Fi, FunctionParameterHook Hook, NodeViewModel Parameter)?
+    private (FunctionInstanceViewModel Fi, FunctionParameterHook Hook, ICanvasElement Element)?
         HitTestFiMinimizeButton(Point pos)
     {
         if (_vm is null) return null;
         for (int fiIndex = _vm.FunctionInstances.Count - 1; fiIndex >= 0; fiIndex--)
         {
             var fi = _vm.FunctionInstances[fiIndex];
-            foreach (var ((mappedFi, hook), parameter) in _fiHookCanInlineParam)
+            foreach (var ((mappedFi, hook), element) in _fiHookCanEmbedElement)
             {
                 if (!ReferenceEquals(fi, mappedFi)) continue;
                 int hookIndex = -1;
@@ -664,7 +1039,7 @@ partial class ModelSystemCanvas
                     }
                 }
                 if (hookIndex >= 0 && InlineFiMinimizeButtonRect(fi, hookIndex).Contains(pos))
-                    return (fi, hook, parameter);
+                    return (fi, hook, element);
             }
         }
         return null;
@@ -677,7 +1052,7 @@ partial class ModelSystemCanvas
     /// <see cref="NodeViewModel"/> or a <see cref="FunctionInstanceViewModel"/>),
     /// or <c>null</c> when the origin could not be determined.
     /// </summary>
-    private (ICanvasElement? originEl, NodeHook hook, NodeViewModel paramNode, double rowX, double rowY, double rowW)? HitTestInlinedParamRow(Point pos)
+    internal (ICanvasElement? originEl, object hook, NodeViewModel paramNode, double rowX, double rowY, double rowW)? HitTestInlinedParamRow(Point pos)
     {
         if (_vm is null) return null;
 
@@ -719,21 +1094,48 @@ partial class ModelSystemCanvas
         {
             var originNode = _vm.Nodes[nodeIndex];
             if (!_nodeVisibleHooks.TryGetValue(originNode, out var hooks)) continue;
-            foreach (var ((mappedNode, hook), paramNode) in _hookInlinedParam)
+            foreach (var ((mappedNode, hook), embeddedElement) in _hookEmbeddedElement)
             {
                 if (!ReferenceEquals(originNode, mappedNode)) continue;
+                if (embeddedElement is not NodeViewModel paramNode || !paramNode.IsParameterNode)
+                    continue;
                 int hookIdx = -1;
                 for (int j = 0; j < hooks.Count; j++)
                     if (ReferenceEquals(hooks[j], hook)) { hookIdx = j; break; }
                 if (hookIdx < 0) continue;
 
-                int rowOffset = originNode.IsParameterNode ? 1 : 0;
                 double rw = NodeRenderWidth(originNode);
-                double rowTop = originNode.Y + NodeHeaderHeight + (rowOffset + hookIdx) * HookRowHeight;
+                double rowTop = NodeHookRowTop(originNode, hookIdx);
                 var rowRect = new Rect(originNode.X, rowTop, rw, HookRowHeight);
 
                 if (rowRect.Contains(pos))
                     return (originNode, hook, paramNode, originNode.X, rowTop, rw);
+            }
+        }
+
+        for (int nodeIndex = _vm.Nodes.Count - 1; nodeIndex >= 0; nodeIndex--)
+        {
+            var originNode = _vm.Nodes[nodeIndex];
+            if (!_nodeVisibleHooks.TryGetValue(originNode, out var hooks)
+                || !_nestedEmbeddedParameterRows.TryGetValue(originNode, out var rows))
+                continue;
+
+            int rowOffset = originNode.IsParameterNode ? 1 : 0;
+            double rw = NodeRenderWidth(originNode);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var nested = rows[i];
+                double indent = nested.Depth * NestedEmbeddedParameterIndent;
+                var rowTopValue = NestedEmbeddedParameterRowTop(originNode, i);
+                if (rowTopValue is not double rowTop) continue;
+                var rowRect = new Rect(
+                    originNode.X + indent,
+                    rowTop,
+                    Math.Max(0, rw - indent),
+                    HookRowHeight);
+                if (rowRect.Contains(pos))
+                    return (originNode, nested, nested.Parameter,
+                        originNode.X + indent, rowTop, rw - indent);
             }
         }
 
@@ -742,20 +1144,47 @@ partial class ModelSystemCanvas
         {
             var fi = _vm.FunctionInstances[fiIndex];
             if (!_fiVisibleHooks.TryGetValue(fi, out var fiHooks)) continue;
-            foreach (var ((mappedFi, fpHook), paramNode) in _fiHookInlinedParam)
+            foreach (var ((mappedFi, fpHook), embeddedElement) in _fiHookEmbeddedElement)
             {
                 if (!ReferenceEquals(fi, mappedFi)) continue;
+                if (embeddedElement is not NodeViewModel paramNode || !paramNode.IsParameterNode)
+                    continue;
                 int hookIdx = -1;
                 for (int j = 0; j < fiHooks.Count; j++)
                     if (ReferenceEquals(fiHooks[j], fpHook)) { hookIdx = j; break; }
                 if (hookIdx < 0) continue;
 
                 double rw = fi.Width;
-                double rowTop = fi.Y + FtHeaderHeight + hookIdx * FtHookRowHeight;
+                double rowTop = FunctionInstanceHookRowTop(fi, hookIdx);
                 var rowRect = new Rect(fi.X, rowTop, rw, FtHookRowHeight);
 
                 if (rowRect.Contains(pos))
                     return (fi, fpHook, paramNode, fi.X, rowTop, rw);
+            }
+        }
+
+        for (int fiIndex = _vm.FunctionInstances.Count - 1; fiIndex >= 0; fiIndex--)
+        {
+            var fi = _vm.FunctionInstances[fiIndex];
+            if (!_fiVisibleHooks.TryGetValue(fi, out var hooks)
+                || !_nestedEmbeddedParameterRows.TryGetValue(fi, out var rows))
+                continue;
+
+            double rw = fi.Width;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var nested = rows[i];
+                double indent = nested.Depth * NestedEmbeddedParameterIndent;
+                var rowTopValue = NestedEmbeddedParameterRowTop(fi, i);
+                if (rowTopValue is not double rowTop) continue;
+                var rowRect = new Rect(
+                    fi.X + indent,
+                    rowTop,
+                    Math.Max(0, rw - indent),
+                    FtHookRowHeight);
+                if (rowRect.Contains(pos))
+                    return (fi, nested, nested.Parameter,
+                        fi.X + indent, rowTop, rw - indent);
             }
         }
 
@@ -782,6 +1211,7 @@ partial class ModelSystemCanvas
             for (int index = collection.Count - 1; index >= 0; index--)
             {
                 var element = collection[index];
+                if (IsCanvasElementInlined(element)) continue;
                 if (IsPointWithinRenderedBounds(element, pos))
                     return element;
             }

@@ -432,19 +432,20 @@ partial class ModelSystemCanvas
             var capturedHook = hookEntry.Hook;
 
             // "Expand parameter to its own module" when the hook has an inlined BasicParam.
-            if (_hookInlinedParam.TryGetValue((capturedNode, capturedHook), out var inlinedParamNode))
+            if (_hookEmbeddedElement.TryGetValue((capturedNode, capturedHook), out var embeddedElement))
             {
-                var capturedParam = inlinedParamNode;
-                var expandItem = new MenuItem { Header = "Expand parameter to its own module" };
+                var capturedElement = embeddedElement;
+                var expandItem = new MenuItem { Header = "Expand embedded element to canvas" };
                 expandItem.Click += (_, _) =>
                 {
                     double rw = NodeRenderWidth(capturedNode);
-                    capturedParam.ExpandToCanvas(capturedNode.X + rw + 30.0, capturedNode.Y);
+                    ExpandCanvasElement(capturedElement, capturedNode.X + rw + 30.0, capturedNode.Y);
                 };
                 menu.Items.Add(expandItem);
 
                 // Offer switching between BasicParameter and ScriptedParameter.
-                if (capturedParam.IsBasicParameter || capturedParam.IsScriptedParameter)
+                if (capturedElement is NodeViewModel capturedParam
+                    && (capturedParam.IsBasicParameter || capturedParam.IsScriptedParameter))
                 {
                     var switchHeader = capturedParam.IsBasicParameter
                         ? "Switch to Scripted Parameter"
@@ -459,15 +460,16 @@ partial class ModelSystemCanvas
                     menu.Items.Add(switchItem);
                 }
 
-                if (vm.IsInsideFunctionTemplate
-                    && (capturedParam.IsBasicParameter || capturedParam.IsScriptedParameter))
+                if (capturedElement is NodeViewModel capturedParameter
+                    && vm.IsInsideFunctionTemplate
+                    && (capturedParameter.IsBasicParameter || capturedParameter.IsScriptedParameter))
                 {
-                    var parameterKind = capturedParam.IsBasicParameter ? "Basic" : "Scripted";
+                    var parameterKind = capturedParameter.IsBasicParameter ? "Basic" : "Scripted";
                     var convertItem = new MenuItem
                     {
                         Header = $"Create Function Parameter from {parameterKind} Parameter"
                     };
-                    convertItem.Click += (_, _) => vm.ConvertParameterToFunctionParameter(capturedParam);
+                    convertItem.Click += (_, _) => vm.ConvertParameterToFunctionParameter(capturedParameter);
                     menu.Items.Add(convertItem);
                 }
 
@@ -528,19 +530,21 @@ partial class ModelSystemCanvas
             var capturedFpHook = fiHookEntry.Hook;
 
             // "Expand parameter to its own module" when the FI hook has an inlined param.
-            if (_fiHookInlinedParam.TryGetValue((capturedFiOrigin, capturedFpHook), out var inlinedFiParamNode))
+            if (_fiHookEmbeddedElement.TryGetValue((capturedFiOrigin, capturedFpHook), out var embeddedElement))
             {
-                var capturedFiParam = inlinedFiParamNode;
-                var expandFiItem = new MenuItem { Header = "Expand parameter to its own module" };
+                var capturedFiElement = embeddedElement;
+                var expandFiItem = new MenuItem { Header = "Expand embedded element to canvas" };
                 expandFiItem.Click += (_, _) =>
                 {
                     double rw2 = capturedFiOrigin.Width;
-                    capturedFiParam.ExpandToCanvas(capturedFiOrigin.X + rw2 + 30.0, capturedFiOrigin.Y);
+                    ExpandCanvasElement(capturedFiElement,
+                        capturedFiOrigin.X + rw2 + 30.0, capturedFiOrigin.Y);
                 };
                 menu.Items.Add(expandFiItem);
 
                 // Offer switching between BasicParameter and ScriptedParameter.
-                if (capturedFiParam.IsBasicParameter || capturedFiParam.IsScriptedParameter)
+                if (capturedFiElement is NodeViewModel capturedFiParam
+                    && (capturedFiParam.IsBasicParameter || capturedFiParam.IsScriptedParameter))
                 {
                     var switchFiHeader = capturedFiParam.IsBasicParameter
                         ? "Switch to Scripted Parameter"
@@ -758,16 +762,16 @@ partial class ModelSystemCanvas
         }
 
         // ── Variable list management + inline option ────────────────────
+        if (element is ICanvasElement embeddedCandidate
+            && CanEmbedElement(embeddedCandidate))
+        {
+            var inlineItem = new MenuItem { Header = "Embed into connected hook" };
+            inlineItem.Click += (_, _) => InlineCanvasElement(embeddedCandidate);
+            menu.Items.Add(inlineItem);
+        }
+
         if (element is NodeViewModel paramNode && paramNode.IsParameterNode)
         {
-            // "Inline parameter" — only when this BasicParam is wired to a Single hook.
-            if (_canInlineNodes.Contains(paramNode))
-            {
-                var inlineItem = new MenuItem { Header = "Inline parameter into parent hook" };
-                inlineItem.Click += (_, _) => paramNode.InlineBasicParameter();
-                menu.Items.Add(inlineItem);
-            }
-
             // Offer switching between BasicParameter and ScriptedParameter.
             if (paramNode.IsBasicParameter || paramNode.IsScriptedParameter)
             {
@@ -1208,7 +1212,7 @@ partial class ModelSystemCanvas
             NodeViewModel nvm            => !nvm.IsInlined,
             CommentBlockViewModel        => true,
             FunctionTemplateViewModel    => true,
-            FunctionInstanceViewModel    => true,
+            FunctionInstanceViewModel fivm => !fivm.IsInlined,
             GhostNodeViewModel           => true,
             _                            => false,
         };
@@ -1224,7 +1228,7 @@ partial class ModelSystemCanvas
                       NodeViewModel nvm2   => !nvm2.IsInlined,
                       CommentBlockViewModel    => true,
                       FunctionTemplateViewModel => true,
-                      FunctionInstanceViewModel => true,
+                      FunctionInstanceViewModel fivm2 => !fivm2.IsInlined,
                       GhostNodeViewModel       => true,
                       _                        => false,
                   })

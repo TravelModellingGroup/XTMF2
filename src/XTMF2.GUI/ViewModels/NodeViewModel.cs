@@ -408,13 +408,15 @@ public sealed partial class NodeViewModel : ObservableObject, ICanvasElement
     /// Hides this node from the canvas by setting its location to <see cref="Rectangle.Hidden"/>.
     /// The node's value continues to be displayed inline within the connected origin node's hook row.
     /// </summary>
-    public void InlineBasicParameter()
+    public void Inline()
     {
         _session.SetNodeLocation(_user, UnderlyingNode, Rectangle.Hidden, out _);
     }
 
+    public void InlineBasicParameter() => Inline();
+
     /// <summary>
-    /// Expands this previously-inlined parameter node back onto the canvas at
+    /// Expands this previously-inlined node back onto the canvas at
     /// (<paramref name="x"/>, <paramref name="y"/>), restoring its previous width/height
     /// (or sensible defaults when the stored dimensions are invalid).
     /// </summary>

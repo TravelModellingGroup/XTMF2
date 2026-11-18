@@ -719,6 +719,121 @@ public class ModelSystemEditorViewModelClipboardTests
     }
 
     [TestMethod]
+    public void PasteElementsAsync_NodeRestoresEmbeddedNonParameterNode()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(PasteElementsAsync_NodeRestoresEmbeddedNonParameterNode),
+            (user, _, session) =>
+            {
+                using var vmEditor = new ModelSystemEditorViewModel(session, user, runController: null);
+                var payload = new CanvasClipboardPayload(
+                    Source: "XTMF2Canvas",
+                    Version: 1,
+                    Elements:
+                    [
+                        new CanvasElementDto(
+                            Kind: CanvasElementKind.Node,
+                            X: 10f,
+                            Y: 20f,
+                            W: 160f,
+                            H: 60f,
+                            Name: "Host",
+                            TypeName: typeof(LinkedGuiTestModule).AssemblyQualifiedName,
+                            InlinedChildren:
+                            [
+                                new InlinedChildDto(
+                                    "Child",
+                                    new CanvasElementDto(
+                                        Kind: CanvasElementKind.Node,
+                                        X: -1f,
+                                        Y: -1f,
+                                        W: 120f,
+                                        H: 50f,
+                                        Name: "EmbeddedChild",
+                                        TypeName: typeof(SimpleGuiTestModule).AssemblyQualifiedName))
+                            ])
+                    ]);
+
+                vmEditor.PasteElementsAsync(payload, anchorX: 0, anchorY: 0)
+                    .GetAwaiter().GetResult();
+
+                var boundary = session.ModelSystem.GlobalBoundary;
+                var host = boundary.Modules.Single(node => node.Name == "Host");
+                var child = boundary.Modules.Single(node => node.Name == "EmbeddedChild");
+                Assert.AreEqual(Rectangle.Hidden, child.Location);
+                Assert.IsTrue(boundary.Links.OfType<SingleLink>().Any(link =>
+                    ReferenceEquals(link.Origin, host)
+                    && ReferenceEquals(link.Destination, child)));
+            });
+    }
+
+    [TestMethod]
+    public void PasteElementsAsync_FunctionInstanceRestoresEmbeddedFunctionInstance()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(PasteElementsAsync_FunctionInstanceRestoresEmbeddedFunctionInstance),
+            (user, _, session) =>
+            {
+                var parentTemplate = BuildTemplate(
+                    user, session, "ParentTemplate",
+                    new Rectangle(20, 20, 260, 160),
+                    new Rectangle(30, 40, 160, 60),
+                    new Rectangle(50, 120, 150, 50));
+                var childTemplate = BuildTemplate(
+                    user, session, "ChildTemplate",
+                    new Rectangle(320, 20, 260, 160),
+                    new Rectangle(330, 40, 160, 60),
+                    new Rectangle(350, 120, 150, 50));
+                Assert.IsTrue(session.ExportFunctionTemplateSnapshot(
+                    parentTemplate, out var parentSnapshot, out var error), error?.Message);
+                Assert.IsTrue(session.ExportFunctionTemplateSnapshot(
+                    childTemplate, out var childSnapshot, out error), error?.Message);
+
+                using var vmEditor = new ModelSystemEditorViewModel(session, user, runController: null);
+                var payload = new CanvasClipboardPayload(
+                    Source: "XTMF2Canvas",
+                    Version: 1,
+                    Elements:
+                    [
+                        new CanvasElementDto(
+                            Kind: CanvasElementKind.FunctionInstance,
+                            X: 100f,
+                            Y: 120f,
+                            W: 160f,
+                            H: 70f,
+                            Name: "ParentInstance",
+                            TemplateName: "ParentTemplate",
+                            EmbeddedTemplateSnapshot: parentSnapshot!,
+                            InlinedChildren:
+                            [
+                                new InlinedChildDto(
+                                    "Input",
+                                    new CanvasElementDto(
+                                        Kind: CanvasElementKind.FunctionInstance,
+                                        X: -1f,
+                                        Y: -1f,
+                                        W: 160f,
+                                        H: 70f,
+                                        Name: "EmbeddedInstance",
+                                        TemplateName: "ChildTemplate",
+                                        EmbeddedTemplateSnapshot: childSnapshot!))
+                            ])
+                    ]);
+
+                vmEditor.PasteElementsAsync(payload, anchorX: 0, anchorY: 0)
+                    .GetAwaiter().GetResult();
+
+                var boundary = session.ModelSystem.GlobalBoundary;
+                var parent = boundary.FunctionInstances.Single(instance => instance.Name == "ParentInstance");
+                var child = boundary.FunctionInstances.Single(instance => instance.Name == "EmbeddedInstance");
+                Assert.AreEqual(Rectangle.Hidden, child.Location);
+                Assert.IsTrue(boundary.Links.OfType<SingleLink>().Any(link =>
+                    ReferenceEquals(link.Origin, parent)
+                    && ReferenceEquals(link.Destination, child)));
+            });
+    }
+
+    [TestMethod]
     public void PasteElementsAsync_FunctionInstanceReferencedTemplate_ReusesExistingEquivalentTemplate()
     {
         TestGuiHelper.RunInModelSystemContext(

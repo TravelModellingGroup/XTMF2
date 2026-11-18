@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -33,9 +34,17 @@ partial class ModelSystemCanvas
 
     /// <summary>
     /// Builds a <see cref="CanvasElementDto"/> for a <see cref="NodeViewModel"/>,
-    /// including any inlined child parameter nodes.
+    /// including any recursively embedded child elements.
     /// </summary>
     private CanvasElementDto BuildNodeDto(NodeViewModel nvm)
+    {
+        var ancestry = new HashSet<ICanvasElement>(ReferenceEqualityComparer.Instance) { nvm };
+        return BuildNodeDto(nvm, ancestry);
+    }
+
+    private CanvasElementDto BuildNodeDto(
+        NodeViewModel nvm,
+        HashSet<ICanvasElement> ancestry)
     {
         var node = nvm.UnderlyingNode;
         string? paramValue = null;
@@ -44,22 +53,6 @@ partial class ModelSystemCanvas
         {
             paramValue = pv.Representation;
             isScriptedParam = nvm.IsScriptedParameter;
-        }
-
-        // Collect inlined (hidden) child parameter nodes.
-        List<InlinedChildDto>? inlined = null;
-        foreach (var kvp in _hookInlinedParam)
-        {
-            if (!ReferenceEquals(kvp.Key.Item1, nvm)) continue;
-            inlined ??= [];
-            var childDto = BuildNodeDto(kvp.Value) with
-            {
-                X = kvp.Value.UnderlyingNode.Location.X,
-                Y = kvp.Value.UnderlyingNode.Location.Y,
-                W = (float)NodeRenderWidth(kvp.Value),
-                H = (float)NodeRenderHeight(kvp.Value),
-            };
-            inlined.Add(new InlinedChildDto(kvp.Key.Item2.Name, childDto));
         }
 
         return new CanvasElementDto(
@@ -72,8 +65,106 @@ partial class ModelSystemCanvas
             TypeName:        node.Type?.AssemblyQualifiedName,
             ParameterValue:  paramValue,
             IsScriptedParam: isScriptedParam,
-            InlinedChildren: inlined,
+            InlinedChildren: BuildEmbeddedChildren(nvm, ancestry),
             OriginalId:      node.Id);
+    }
+
+    private CanvasElementDto BuildFunctionInstanceDto(FunctionInstanceViewModel fi)
+    {
+        var ancestry = new HashSet<ICanvasElement>(ReferenceEqualityComparer.Instance) { fi };
+        return BuildFunctionInstanceDto(fi, ancestry);
+    }
+
+    private CanvasElementDto BuildFunctionInstanceDto(
+        FunctionInstanceViewModel fi,
+        HashSet<ICanvasElement> ancestry)
+    {
+        _vm!.TryExportFunctionTemplateSnapshot(fi.UnderlyingInstance.Template, out var templateSnapshot);
+        return new CanvasElementDto(
+            CanvasElementKind.FunctionInstance,
+            (float)fi.X, (float)fi.Y,
+            (float)Math.Max(fi.Width, 120.0),
+            (float)Math.Max(fi.Height, fi.MinimumHeight),
+            Name: fi.Name,
+            TemplateName: fi.TemplateName,
+            EmbeddedTemplateSnapshot: CanvasClipboardSerializer.SnapshotJson(templateSnapshot),
+            InlinedChildren: BuildEmbeddedChildren(fi, ancestry),
+            OriginalId: fi.UnderlyingInstance.Id);
+    }
+
+    private List<InlinedChildDto>? BuildEmbeddedChildren(ICanvasElement host)
+    {
+        var ancestry = new HashSet<ICanvasElement>(ReferenceEqualityComparer.Instance) { host };
+        return BuildEmbeddedChildren(host, ancestry);
+    }
+
+    private List<InlinedChildDto>? BuildEmbeddedChildren(
+        ICanvasElement host,
+        HashSet<ICanvasElement> ancestry)
+    {
+        List<InlinedChildDto>? children = null;
+        foreach (var ((origin, hook), child) in _hookEmbeddedElement)
+        {
+            if (!ReferenceEquals(origin, host)) continue;
+            if (!ancestry.Add(child)) continue;
+            children ??= [];
+            var childDto = BuildEmbeddedElementDto(child, ancestry) with
+            {
+                X = -1,
+                Y = -1,
+                W = (float)ElementRenderWidth(child),
+                H = (float)ElementRenderHeight(child)
+            };
+            children.Add(new InlinedChildDto(hook.Name, childDto));
+            ancestry.Remove(child);
+        }
+        foreach (var ((origin, hook), child) in _fiHookEmbeddedElement)
+        {
+            if (!ReferenceEquals(origin, host)) continue;
+            if (!ancestry.Add(child)) continue;
+            children ??= [];
+            var childDto = BuildEmbeddedElementDto(child, ancestry) with
+            {
+                X = -1,
+                Y = -1,
+                W = (float)ElementRenderWidth(child),
+                H = (float)ElementRenderHeight(child)
+            };
+            children.Add(new InlinedChildDto(hook.Name, childDto));
+            ancestry.Remove(child);
+        }
+        return children;
+    }
+
+    private CanvasElementDto BuildEmbeddedElementDto(
+        ICanvasElement element,
+        HashSet<ICanvasElement> ancestry)
+    {
+        var dto = element switch
+        {
+            NodeViewModel node => BuildNodeDto(node, ancestry),
+            FunctionInstanceViewModel instance => BuildFunctionInstanceDto(instance, ancestry),
+            _ => throw new InvalidOperationException("Only Nodes and FunctionInstances can be embedded.")
+        };
+
+        if (!TryGetCopyableNode(element, out var origin, out _) || _vm is null)
+            return dto;
+
+        List<CrossNodeLinkDto>? crossLinks = null;
+        foreach (var link in _vm.Links)
+        {
+            if (!ReferenceEquals(link.Origin, element)
+                || !TryGetLinkDestinationForRenderedBranch(link, out var destination)
+                || link.Destination is not null && IsCanvasElementInlined(link.Destination))
+                continue;
+
+            crossLinks ??= [];
+            crossLinks.Add(new CrossNodeLinkDto(
+                link.UnderlyingLink.OriginHook.Name,
+                destination.Name,
+                destination.Id));
+        }
+        return dto with { CrossLinks = crossLinks };
     }
 
     /// <summary>
@@ -162,32 +253,9 @@ partial class ModelSystemCanvas
                         }
                         break;
 
-                    case FunctionInstanceViewModel fi:
+                    case FunctionInstanceViewModel fi when !fi.IsInlined:
                         nodeToDtoIndex[fi.UnderlyingInstance] = dtos.Count;
-                        _vm.TryExportFunctionTemplateSnapshot(fi.UnderlyingInstance.Template, out var instanceTemplateSnapshot);
-                        List<InlinedChildDto>? embeddedParameters = null;
-                        foreach (var kvp in _fiHookInlinedParam)
-                        {
-                            if (!ReferenceEquals(kvp.Key.Item1, fi)) continue;
-                            embeddedParameters ??= [];
-                            var childDto = BuildNodeDto(kvp.Value) with
-                            {
-                                X = kvp.Value.UnderlyingNode.Location.X,
-                                Y = kvp.Value.UnderlyingNode.Location.Y,
-                                W = (float)NodeRenderWidth(kvp.Value),
-                                H = (float)NodeRenderHeight(kvp.Value),
-                            };
-                            embeddedParameters.Add(new InlinedChildDto(kvp.Key.Item2.Name, childDto));
-                        }
-                        dto = new CanvasElementDto(
-                            CanvasElementKind.FunctionInstance,
-                            (float)fi.X, (float)fi.Y,
-                            (float)fi.Width, (float)fi.Height,
-                            Name: fi.Name,
-                            TemplateName: fi.TemplateName,
-                            EmbeddedTemplateSnapshot: CanvasClipboardSerializer.SnapshotJson(instanceTemplateSnapshot),
-                            InlinedChildren: embeddedParameters,
-                            OriginalId: fi.UnderlyingInstance.Id);
+                        dto = BuildFunctionInstanceDto(fi);
                         break;
 
                     case GhostNodeViewModel ghost:
@@ -199,19 +267,7 @@ partial class ModelSystemCanvas
                             _vm.TryExportFunctionTemplateSnapshot(referencedInstance.Template, out ghostTemplateSnapshot);
                             if (ghost.ReferencedFunctionInstanceViewModel is { } referencedFiVm)
                             {
-                                foreach (var kvp in _fiHookInlinedParam)
-                                {
-                                    if (!ReferenceEquals(kvp.Key.Item1, referencedFiVm)) continue;
-                                    ghostEmbeddedParameters ??= [];
-                                    var childDto = BuildNodeDto(kvp.Value) with
-                                    {
-                                        X = kvp.Value.UnderlyingNode.Location.X,
-                                        Y = kvp.Value.UnderlyingNode.Location.Y,
-                                        W = (float)NodeRenderWidth(kvp.Value),
-                                        H = (float)NodeRenderHeight(kvp.Value),
-                                    };
-                                    ghostEmbeddedParameters.Add(new InlinedChildDto(kvp.Key.Item2.Name, childDto));
-                                }
+                                ghostEmbeddedParameters = BuildEmbeddedChildren(referencedFiVm);
                             }
                         }
                         dto = new CanvasElementDto(
@@ -274,7 +330,8 @@ partial class ModelSystemCanvas
                 if (!nodeToDtoIndex.TryGetValue(originNode, out var originIdx)) continue;
 
                 if (!TryGetLinkDestinationForRenderedBranch(lvm, out var destNode)) continue;
-                bool destIsInlined = lvm.Destination is NodeViewModel { IsInlined: true };
+                bool destIsInlined = lvm.Destination is not null
+                    && IsCanvasElementInlined(lvm.Destination);
                 if (destIsInlined) continue;
 
                 var hookName = lvm.UnderlyingLink.OriginHook.Name;
@@ -339,7 +396,7 @@ partial class ModelSystemCanvas
                 return true;
             case FunctionInstanceViewModel fivm:
                 node = fivm.UnderlyingInstance;
-                isInlined = false;
+                isInlined = fivm.IsInlined;
                 return true;
             default:
                 node = null!;

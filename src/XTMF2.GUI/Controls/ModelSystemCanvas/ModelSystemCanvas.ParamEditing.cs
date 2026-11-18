@@ -201,9 +201,6 @@ partial class ModelSystemCanvas
             HideVarDropdown();
             if (_editingParamNode is null) return;
             var node = _editingParamNode;
-            // Clear tracking fields after capturing node
-            _editingParamParentElement = null;
-            _editingParamHook = null;
             var value = _editingParamIsEnum
                 ? (_inlineEnumEditor.SelectedItem as string ?? string.Empty)
                 : (_inlineEditor.Text ?? string.Empty);
@@ -223,6 +220,8 @@ partial class ModelSystemCanvas
             // Save succeeded – close the editor.
             UnsubscribeInlineEditorScroll();
             _editingParamNode   = null;
+            _editingParamParentElement = null;
+            _editingParamHook = null;
             _editingParamIsEnum = false;
             _enumEditorLoading  = false;
             _inlineEditor.IsVisible     = false;
@@ -603,6 +602,15 @@ partial class ModelSystemCanvas
                 e.Handled = true;
                 return;
             }
+        }
+
+        if (e.Key == Key.Tab
+            && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt)) == 0)
+        {
+            bool isShiftTab = (e.KeyModifiers & KeyModifiers.Shift) != 0;
+            if (NavigateToNextParameter(isShiftTab) || _vm?.SelectedElement is not null)
+                e.Handled = true;
+            return;
         }
 
         // ── Standard inline-editor keys ───────────────────────────────────

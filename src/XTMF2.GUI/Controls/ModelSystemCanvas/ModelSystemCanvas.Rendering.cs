@@ -424,6 +424,7 @@ partial class ModelSystemCanvas
     {
         foreach (var fi in _vm!.FunctionInstances)
         {
+            if (fi.IsInlined) continue;
             double rw = fi.Width;
             double rh = FunctionInstanceRenderHeight(fi);
             var rect = new Rect(fi.X, fi.Y, rw, rh);
@@ -453,10 +454,24 @@ partial class ModelSystemCanvas
             var labelText = "\u22A1 " + fi.Name;
             var labelFtText = MakeText(labelText, FtNameFontSize,
                 isDisabled ? (_isLight ? DisabledFiTextBrushL : DisabledFiTextBrush) : (_isLight ? FiTextBrushL : FiTextBrush));
-            double lx = fi.X + 8.0;
+            bool canEmbedFi = CanEmbedElement(fi);
+            double lx = fi.X + (canEmbedFi ? InlineMinimizeButtonSize + 8.0 : 8.0);
             double ly = fi.Y + (FtHeaderHeight - labelFtText.Height) / 2.0;
             using (ctx.PushClip(new Rect(fi.X + 4, fi.Y, rw - 8, FtHeaderHeight)))
                 ctx.DrawText(labelFtText, new Point(lx, ly));
+
+            if (canEmbedFi)
+            {
+                var inlineRect = InlineMinimizeButtonRect(fi);
+                ctx.DrawRectangle(_isLight ? MinimizeBtnBgL : MinimizeBtnBg, null,
+                    inlineRect, 3.0, 3.0);
+                var inlineFt = MakeText("\u229f", HookFontSize,
+                    isDisabled ? (_isLight ? DisabledToggleTextL : DisabledToggleText)
+                               : (_isLight ? MinimizeBtnTextL : MinimizeBtnText));
+                var inlineGlyphX = inlineRect.X + (inlineRect.Width - inlineFt.Width) / 2.0;
+                var inlineGlyphY = inlineRect.Y + (inlineRect.Height - inlineFt.Height) / 2.0;
+                ctx.DrawText(inlineFt, new Point(inlineGlyphX, inlineGlyphY));
+            }
 
             if (!_vm.ShowAllHooks && fi.FunctionParameters.Count > 0)
             {
@@ -505,9 +520,9 @@ partial class ModelSystemCanvas
                 var fpHook = visibleFiHooks[fi_i];
                 var fp = fpHook.Parameter;
                 bool fpConn = fiConnected is not null && fpHook is not null && fiConnected.Contains(fpHook);
-                NodeViewModel? inlinedFiParam = null;
+                ICanvasElement? embeddedElement = null;
                 bool hasInlinedFi = fpHook is not null
-                    && _fiHookInlinedParam.TryGetValue((fi, fpHook), out inlinedFiParam);
+                    && _fiHookEmbeddedElement.TryGetValue((fi, fpHook), out embeddedElement);
                 bool fpRequired = fpHook is not null
                     && (fpHook.Cardinality == HookCardinality.Single
                         || fpHook.Cardinality == HookCardinality.AtLeastOne);
@@ -544,7 +559,7 @@ partial class ModelSystemCanvas
                 }
 
                 bool canInlineFi = fpHook is not null
-                    && _fiHookCanInlineParam.ContainsKey((fi, fpHook));
+                    && _fiHookCanEmbedElement.ContainsKey((fi, fpHook));
                 if (canInlineFi)
                 {
                     var inlineRect = InlineFiMinimizeButtonRect(fi, fi_i);
@@ -559,19 +574,17 @@ partial class ModelSystemCanvas
                 }
 
                 const double textPad = 6.0;
-                bool showInlinedFiParam = hasInlinedFi && inlinedFiParam is not null;
-                string hookLabel = FormatHookLabel(
-                    fp.Name,
-                    showInlinedFiParam,
-                    inlinedFiParam?.IsBasicParameter ?? false,
-                    inlinedFiParam?.ParameterValueRepresentation);
+                string hookLabel = hasInlinedFi && embeddedElement is not null
+                    ? FormatEmbeddedHookLabel(fp.Name, embeddedElement)
+                    : fp.Name;
+                bool scriptedFiParam = embeddedElement is NodeViewModel { IsScriptedParameter: true };
                 IBrush hookTextBrush = SelectHookTextBrush(
                     _isLight,
                     isDisabled,
                     fpUnsatisfied,
                     fpConn,
                     hasInlinedFi,
-                    hasInlinedFi && inlinedFiParam is { IsScriptedParameter: true });
+                    hasInlinedFi && scriptedFiParam);
                 var hookNameFt = MakeText(hookLabel, HookFontSize, hookTextBrush);
                 double labelLeft = canInlineFi ? InlineMinimizeButtonSize + 8.0 : textPad;
                 double maxW  = rw - labelLeft - textPad - HookDotRadius * 2;
@@ -580,6 +593,23 @@ partial class ModelSystemCanvas
                     ctx.DrawText(hookNameFt, new Point(fi.X + labelLeft, hookTy));
 
                 rowY += HookRowHeight;
+                var nestedParameters = _nestedEmbeddedParameterRows.TryGetValue(fi, out var allNestedParameters)
+                    ? allNestedParameters
+                        .Where(row => ReferenceEquals(row.RootHook, fpHook))
+                        .ToArray()
+                    : [];
+                if (nestedParameters.Length > 0)
+                {
+                    RenderNestedEmbeddedParameterRows(
+                        ctx,
+                        fi.X,
+                        rowY,
+                        rw,
+                        nestedParameters,
+                        isDisabled);
+                    rowY += nestedParameters.Length * HookRowHeight;
+                }
+
                 if (fi_i < visibleFiHooks.Count - 1)
                 {
                     ctx.DrawLine(isDisabled ? (_isLight ? DisabledDividerPenThinL : DisabledDividerPenThin) : (_isLight ? HookDividerPenThinL : HookDividerPenThin),
@@ -859,8 +889,9 @@ partial class ModelSystemCanvas
 
             // Don't render links whose destination is in a different boundary
             // or whose destination node is inlined (value shown in hook row instead).
-            if (link.Destination is null) continue;
-            if (link.Destination is NodeViewModel destNvm && destNvm.IsInlined) continue;
+            if (link.Destination is null || IsCanvasElementInlined(link.Origin)
+                || IsCanvasElementInlined(link.Destination))
+                continue;
             
             // Check if the destination's underlying model belongs to the current boundary.
             // Using ContainedWithin (rather than collection membership) keeps undo working:
@@ -1279,9 +1310,8 @@ partial class ModelSystemCanvas
             }
 
             // ── Minimize-to-inline button (top-left of header) ───────────
-            // Only on BasicParameter nodes that are wired to a Single hook
-            // and can therefore be folded into the parent's hook row.
-            if (_canInlineNodes.Contains(node))
+            // Shown when this element can be folded into a connected host hook.
+            if (CanEmbedElement(node))
             {
                 var minRect = InlineMinimizeButtonRect(node);
                 ctx.DrawRectangle(_isLight ? MinimizeBtnBgL : MinimizeBtnBg, null, minRect, 3.0, 3.0);
@@ -1347,21 +1377,22 @@ partial class ModelSystemCanvas
                 continue;
 
             _nodeConnectedHooks.TryGetValue(node, out var connected);
+            double rowY = node.Y + NodeHeaderHeight + rowOffset * HookRowHeight;
 
             for (int i = 0; i < hooks!.Count; i++)
             {
                 var hook = hooks[i];
                 bool conn = connected is not null && connected.Contains(hook);
                 // Is this hook occupied by an inlined BasicParameter?
-                bool hasInlined = _hookInlinedParam.TryGetValue((node, hook), out var inlinedParam);
+                bool hasInlined = _hookEmbeddedElement.TryGetValue((node, hook), out var embeddedElement);
 
                 // Unsatisfied: required cardinality with no connection at all.
                 bool isRequired = hook.Cardinality == HookCardinality.Single
                                 || hook.Cardinality == HookCardinality.AtLeastOne;
                 bool unsatisfied = isRequired && !conn && !hasInlined;
 
-                double rowMidY = node.Y + NodeHeaderHeight + (rowOffset + i) * HookRowHeight + HookRowHeight / 2.0;
-                double rowTopY = node.Y + NodeHeaderHeight + (rowOffset + i) * HookRowHeight;
+                double rowTopY = rowY;
+                double rowMidY = rowY + HookRowHeight / 2.0;
 
                 // Tinted background: red for unsatisfied required hooks, amber for inlined params.
                 if (!isDisabled && unsatisfied)
@@ -1397,36 +1428,123 @@ partial class ModelSystemCanvas
                 }
 
                 const double textPad = 6.0;
-                bool showInlinedParam = hasInlined && inlinedParam is not null;
-                string hookLabel = FormatHookLabel(
-                    hook.Name,
-                    showInlinedParam,
-                    inlinedParam?.IsBasicParameter ?? false,
-                    inlinedParam?.ParameterValueRepresentation);
+                string hookLabel = hasInlined && embeddedElement is not null
+                    ? FormatEmbeddedHookLabel(hook.Name, embeddedElement)
+                    : hook.Name;
+                bool scriptedParam = embeddedElement is NodeViewModel { IsScriptedParameter: true };
                 IBrush hookTextBrush = SelectHookTextBrush(
                     _isLight,
                     isDisabled,
                     unsatisfied,
                     conn,
                     hasInlined,
-                    hasInlined && inlinedParam is { IsScriptedParameter: true });
+                    hasInlined && scriptedParam);
                 var hookFt = MakeText(hookLabel, HookFontSize, hookTextBrush);
                 double maxW = rw - textPad * 2 - HookDotRadius * 2;
                 double hookTy = rowMidY - hookFt.Height / 2.0;
                 using (ctx.PushClip(new Rect(node.X + textPad, hookTy, Math.Max(0, maxW), hookFt.Height + 1)))
                     ctx.DrawText(hookFt, new Point(node.X + textPad, hookTy));
 
-                // Row separator (skip after last row)
+                rowY += HookRowHeight;
+                var nestedParameters = _nestedEmbeddedParameterRows.TryGetValue(node, out var allNestedParameters)
+                    ? allNestedParameters
+                        .Where(row => ReferenceEquals(row.RootHook, hook))
+                        .ToArray()
+                    : [];
+                if (nestedParameters.Length > 0)
+                {
+                    RenderNestedEmbeddedParameterRows(
+                        ctx,
+                        node.X,
+                        rowY,
+                        rw,
+                        nestedParameters,
+                        isDisabled);
+                    rowY += nestedParameters.Length * HookRowHeight;
+                }
+
                 if (i < hooks.Count - 1)
                 {
-                    double sepY = node.Y + NodeHeaderHeight + (rowOffset + i + 1) * HookRowHeight;
                     ctx.DrawLine(isDisabled ? (_isLight ? DisabledDividerPenThinL : DisabledDividerPenThin) : (_isLight ? HookDividerPenThinL : HookDividerPenThin),
-                        new Point(node.X + 1, sepY),
-                        new Point(node.X + rw - 1, sepY));
+                        new Point(node.X + 1, rowY),
+                        new Point(node.X + rw - 1, rowY));
                 }
             }
         }
     }
+
+    private void RenderNestedEmbeddedParameterRows(
+        DrawingContext ctx,
+        double x,
+        double firstRowY,
+        double width,
+        IReadOnlyList<NestedEmbeddedParameterRow> rows,
+        bool isDisabled)
+    {
+        ctx.DrawLine(
+            isDisabled ? (_isLight ? DisabledDividerPenThinL : DisabledDividerPenThin)
+                : (_isLight ? HookDividerPenThinL : HookDividerPenThin),
+            new Point(x + 1, firstRowY),
+            new Point(x + width - 1, firstRowY));
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            double rowY = firstRowY + i * HookRowHeight;
+            ctx.DrawRectangle(
+                isDisabled ? (_isLight ? DisabledDividerBrushL : DisabledDividerBrush) : InlineParamRowBg,
+                null,
+                new Rect(x + 1, rowY, width - 2, HookRowHeight));
+
+            var label = FormatHookLabel(
+                row.Label,
+                hasInlinedParameter: true,
+                isBasicParameter: row.Parameter.IsBasicParameter,
+                row.Parameter.ParameterValueRepresentation);
+            var text = MakeText(
+                label,
+                HookFontSize,
+                SelectHookTextBrush(
+                    _isLight,
+                    isDisabled,
+                    isUnsatisfied: false,
+                    isConnected: true,
+                    hasInlinedParameter: true,
+                    row.Parameter.IsScriptedParameter));
+            double textX = x + 6 + row.Depth * NestedEmbeddedParameterIndent;
+            double textY = rowY + (HookRowHeight - text.Height) / 2.0;
+            using (ctx.PushClip(new Rect(
+                       textX,
+                       rowY,
+                       Math.Max(0, x + width - HookDotRadius * 2 - textX),
+                       HookRowHeight)))
+            {
+                ctx.DrawText(text, new Point(textX, textY));
+            }
+
+            if (i < rows.Count - 1)
+            {
+                ctx.DrawLine(
+                    isDisabled ? (_isLight ? DisabledDividerPenThinL : DisabledDividerPenThin)
+                        : (_isLight ? HookDividerPenThinL : HookDividerPenThin),
+                    new Point(x + 1, rowY + HookRowHeight),
+                    new Point(x + width - 1, rowY + HookRowHeight));
+            }
+        }
+    }
+
+    private static string FormatEmbeddedHookLabel(string hookName, ICanvasElement embeddedElement)
+        => embeddedElement switch
+        {
+            NodeViewModel { IsParameterNode: true } parameter => FormatHookLabel(
+                hookName,
+                hasInlinedParameter: true,
+                isBasicParameter: parameter.IsBasicParameter,
+                parameter.ParameterValueRepresentation),
+            NodeViewModel node => $"{hookName}: {node.Name} ({node.TypeName})",
+            FunctionInstanceViewModel instance => $"{hookName}: {instance.Name} ({instance.TemplateName})",
+            _ => hookName
+        };
 
     /// <summary>
     /// Draws ghost nodes — placeholder representations of nodes that live in another
