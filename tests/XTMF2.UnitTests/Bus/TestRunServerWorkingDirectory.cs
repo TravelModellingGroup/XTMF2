@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using XTMF2.Bus;
 using XTMF2.Configuration;
@@ -93,5 +95,50 @@ public class TestRunServerWorkingDirectory
             if (Directory.Exists(root))
                 Directory.Delete(root, recursive: true);
         }
+    }
+
+    [TestMethod]
+    public void RunContextStartsLocalReaderWithAcceptedHostStream()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "XTMF2-LocalRunBus-" + Guid.NewGuid().ToString("N"));
+        var sink = new RecordingRunOutputSink();
+
+        try
+        {
+            Assert.IsTrue(RunContext.CreateRunContext(CreateRuntime(), "local-run", [], root,
+                "Start", RunMode.Normal, out var context));
+
+            context.RunInCurrentProcess(sink);
+
+            Assert.IsNotNull(sink.ReceivedStream);
+        }
+        finally
+        {
+            sink.ReceivedStream?.Dispose();
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private sealed class RecordingRunOutputSink : IRunOutputSink
+    {
+        public IReadOnlyList<string> ExtraDlls => Array.Empty<string>();
+        public Stream ReceivedStream { get; private set; }
+
+        public Task StartProcessingRequestFromRun(string id, Stream clientToRunStream)
+        {
+            ReceivedStream = clientToRunStream;
+            return Task.CompletedTask;
+        }
+
+        public void ModelRunFailedValidation(string runId, string error, string moduleName = null, string elementId = null) { }
+        public void ModelRunFailed(string runId, string message, string stackTrace, string moduleName = null, string elementId = null) { }
+        public void SendStatusMessage(string runId, string message) { }
+        public void SendOptimizationResults(string runId, IReadOnlyList<(int nodeIndex, double value)> results) { }
+        public void SendIterationProgress(string runId, int iteration, double fitness,
+            int fitnessTestsThisIteration, IReadOnlyList<(int nodeIndex, double value)> values) { }
+        public void ModelRunComplete(string runId) { }
+        public void ModelRunCancelled(string runId) { }
+        public void SendRunArtifacts(string runId, string runDirectory) { }
     }
 }

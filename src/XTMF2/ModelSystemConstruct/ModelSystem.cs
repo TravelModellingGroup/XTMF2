@@ -643,11 +643,17 @@ namespace XTMF2
                             pendingLink.Orthogonal, pendingLink.SingleHiddenDestination, pendingLink.LinkId, pendingLink.BreakpointX);
                     pendingLink.ContainedIn.AddLink(link, out _);
                 }
-                // Expose the node index mapping for the optimisation loop.
-                modelSystem.NodesByLoadIndex = new System.Collections.ObjectModel.ReadOnlyDictionary<int, Node>(nodes);
+                if (!RemoveUnconnectedHiddenNodes(modelSystem, nodes, out var removedNodes, ref error))
+                {
+                    return null;
+                }
                 // Now that all of the modules have been loaded we can process the scripted parameters
                 foreach (var (toAssignTo, parameterExpression) in scriptedParameters)
                 {
+                    if (removedNodes.Contains(toAssignTo))
+                    {
+                        continue;
+                    }
                     // Nodes inside a FunctionTemplate's InternalModules have template-local
                     // variables that shadow the global ones; combine them (local first).
                     var localVars = toAssignTo.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
@@ -656,9 +662,12 @@ namespace XTMF2
                         : (IList<Node>)modelSystem.Variables;
                     if (!toAssignTo.SetParameterExpression(allVars, parameterExpression, out CommandError? cmdError))
                     {
-                        // TODO: Think about what to do in order to heal the model system
+                        error = $"Unable to load scripted parameter '{toAssignTo.ContainedWithin?.FullPath}.{toAssignTo.Name}' with expression '{parameterExpression}': {cmdError.Message}";
+                        return null;
                     }
                 }
+                // Expose the remaining node index mapping for the optimisation loop.
+                modelSystem.NodesByLoadIndex = new System.Collections.ObjectModel.ReadOnlyDictionary<int, Node>(nodes);
                 return modelSystem;
             }
             catch (JsonException e)
@@ -670,6 +679,126 @@ namespace XTMF2
                 error = e.Message;
             }
             return null;
+        }
+
+        private static bool RemoveUnconnectedHiddenNodes(ModelSystem modelSystem,
+            Dictionary<int, Node> nodeLookup, out HashSet<Node> removedNodes,
+            [NotNullWhen(false)] ref string? error)
+        {
+            var boundaries = new List<Boundary>();
+            void CollectBoundaries(Boundary boundary)
+            {
+                boundaries.Add(boundary);
+                foreach (var child in boundary.Boundaries)
+                {
+                    CollectBoundaries(child);
+                }
+                foreach (var template in boundary.FunctionTemplates)
+                {
+                    CollectBoundaries(template.InternalModules);
+                }
+            }
+            CollectBoundaries(modelSystem.GlobalBoundary);
+
+            var referencedNodes = new HashSet<Node>(modelSystem.Variables);
+            if (modelSystem.EstimationFitnessNode is { } fitnessNode)
+                referencedNodes.Add(fitnessNode);
+            if (modelSystem.EstimationInputDirectoryNode is { } inputDirectoryNode)
+                referencedNodes.Add(inputDirectoryNode);
+
+            foreach (var template in boundaries.SelectMany(boundary => boundary.FunctionTemplates))
+            {
+                if (template.EntryNode is { } entryNode)
+                    referencedNodes.Add(entryNode);
+                foreach (var localVariable in template.LocalVariables)
+                    referencedNodes.Add(localVariable);
+            }
+            foreach (var group in modelSystem.EstimationGroups)
+            {
+                foreach (var entry in group.Parameters)
+                    referencedNodes.Add(entry.Node);
+            }
+            foreach (var group in modelSystem.CalibrationGroups)
+            {
+                foreach (var entry in group.Parameters)
+                {
+                    referencedNodes.Add(entry.Node);
+                    if (entry.ModelOutputNode is { } modelOutputNode)
+                        referencedNodes.Add(modelOutputNode);
+                    if (entry.TargetOutputNode is { } targetOutputNode)
+                        referencedNodes.Add(targetOutputNode);
+                }
+            }
+
+            var ghostReferencedNodes = new HashSet<Node>(
+                boundaries.SelectMany(boundary => boundary.GhostNodes).Select(ghost => ghost.ReferencedNode));
+            var connectedNodes = new HashSet<Node>();
+            foreach (var link in boundaries.SelectMany(boundary => boundary.Links))
+            {
+                AddEndpoint(link.Origin, connectedNodes);
+                if (link is SingleLink singleLink)
+                {
+                    AddEndpoint(singleLink.Destination, connectedNodes);
+                }
+                else if (link is MultiLink multiLink)
+                {
+                    foreach (var destination in multiLink.Destinations)
+                        AddEndpoint(destination, connectedNodes);
+                }
+            }
+
+            var removed = new HashSet<Node>();
+            removedNodes = removed;
+            foreach (var boundary in boundaries)
+            {
+                foreach (var node in boundary.Modules.ToArray())
+                {
+                    if (node.Location == Rectangle.Hidden
+                        && !referencedNodes.Contains(node)
+                        && !ghostReferencedNodes.Contains(node)
+                        && !connectedNodes.Contains(node))
+                    {
+                        if (!boundary.RemoveNode(node, out var removeError))
+                        {
+                            error = $"Unable to remove unconnected hidden node '{boundary.FullPath}.{node.Name}': {removeError.Message}";
+                            return false;
+                        }
+                        removed.Add(node);
+                    }
+                }
+                foreach (var functionInstance in boundary.FunctionInstances.ToArray())
+                {
+                    if (functionInstance.Location == Rectangle.Hidden
+                        && !referencedNodes.Contains(functionInstance)
+                        && !ghostReferencedNodes.Contains(functionInstance)
+                        && !connectedNodes.Contains(functionInstance))
+                    {
+                        if (!boundary.RemoveFunctionInstance(functionInstance, out var removeError))
+                        {
+                            error = $"Unable to remove unconnected hidden FunctionInstance '{boundary.FullPath}.{functionInstance.Name}': {removeError.Message}";
+                            return false;
+                        }
+                        removed.Add(functionInstance);
+                    }
+                }
+            }
+
+            foreach (var index in nodeLookup
+                .Where(entry => removed.Contains(entry.Value))
+                .Select(entry => entry.Key)
+                .ToArray())
+            {
+                nodeLookup.Remove(index);
+            }
+            error = null;
+            return true;
+
+            static void AddEndpoint(Node endpoint, HashSet<Node> connected)
+            {
+                connected.Add(endpoint);
+                if (endpoint is GhostNode ghost)
+                    connected.Add(ghost.ReferencedNode);
+            }
         }
 
         private static bool FailWith(out string error, string message)

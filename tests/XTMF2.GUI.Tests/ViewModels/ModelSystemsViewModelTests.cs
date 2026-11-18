@@ -37,7 +37,7 @@ public class ModelSystemsViewModelTests
                 using (modelSystemSession)
                 {
                     Assert.IsTrue(modelSystemSession.AddNode(user, modelSystemSession.ModelSystem.GlobalBoundary,
-                        "TestNode", typeof(SimpleGuiTestModule), Rectangle.Hidden, out _, out error), error?.Message);
+                        "TestNode", typeof(SimpleGuiTestModule), new Rectangle(0, 0), out _, out error), error?.Message);
                     Assert.IsTrue(modelSystemSession.Save(out error), error?.Message);
                 }
 
