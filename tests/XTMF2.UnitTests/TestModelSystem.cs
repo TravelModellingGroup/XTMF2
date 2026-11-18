@@ -87,7 +87,7 @@ namespace XTMF2.UnitTests
                 Assert.IsTrue(session.EditModelSystem(user, modelSystemHeader, out var modelSystemSession, out error).UsingIf(modelSystemSession, () =>
                 {
                     Assert.IsTrue(modelSystemSession.AddNode(user, modelSystemSession.ModelSystem.GlobalBoundary,
-                        "TestNode", typeof(SimpleTestModule), Rectangle.Hidden, out _, out error), error?.Message);
+                        "TestNode", typeof(SimpleTestModule), new Rectangle(0, 0), out _, out error), error?.Message);
                     Assert.IsTrue(modelSystemSession.Save(out error), error?.Message);
                 }), error?.Message);
                 Assert.IsTrue(session.RenameModelSystem(user, modelSystemHeader, renamedModelSystemName, out error), error?.Message);
@@ -254,7 +254,7 @@ namespace XTMF2.UnitTests
                 // initialization
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), Rectangle.Hidden, out var mss, out error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), new Rectangle(0, 0), out var mss, out error));
                 Assert.AreEqual("MyMSS", mss.Name);
             }, (user, pSession, mSession) =>
             {
@@ -272,7 +272,7 @@ namespace XTMF2.UnitTests
                 // initialization
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), Rectangle.Hidden, out var mss, out error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), new Rectangle(0, 0), out var mss, out error));
                 Assert.IsTrue(mSession.AddModelSystemStart(user, ms.GlobalBoundary, "FirstStart", Rectangle.Hidden, out var start, out error), error?.Message);
                 Assert.AreEqual("MyMSS", mss.Name);
             }, (user, pSession, mSession) =>

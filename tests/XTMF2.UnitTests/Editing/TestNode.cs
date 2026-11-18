@@ -530,7 +530,7 @@ namespace XTMF2.UnitTests.Editing
                 // initialization
                 var ms = mSession.ModelSystem;
                 CommandError error = null;
-                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), Rectangle.Hidden, out var mss, out error));
+                Assert.IsTrue(mSession.AddNode(user, ms.GlobalBoundary, "MyMSS", typeof(SimpleTestModule), new Rectangle(0, 0), out var mss, out error));
                 Assert.AreEqual("MyMSS", mss.Name);
                 Assert.IsFalse(mss.IsDisabled, "The node started out as disabled!");
                 Assert.IsTrue(mSession.SetNodeDisabled(user, mss, true, out error), error?.Message);
