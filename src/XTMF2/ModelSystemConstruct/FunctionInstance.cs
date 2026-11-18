@@ -348,6 +348,9 @@ namespace XTMF2.ModelSystemConstruct
         {
             _parameterBindings ??= new(ReferenceEqualityComparer.Instance);
             _parameterBindings[parameter] = module;
+            if (module is not null && (parameter.Template.LocalVariables.Contains(parameter)
+                || parameter.UsesTemplateVariableScope))
+                WrapScriptedModuleExpression(module);
         }
 
         /// <summary>
@@ -359,6 +362,8 @@ namespace XTMF2.ModelSystemConstruct
         {
             if (_runtimeModules is not null && _runtimeModules.TryGetValue(templateNode, out var module))
                 return module;
+            if (templateNode is FunctionParameter parameter)
+                return GetBoundModule(parameter);
             if (templateNode is FunctionInstance nested
                 && _nestedRuntimeInstances?.TryGetValue(nested, out var runtimeNested) == true
                 && runtimeNested.Template.EntryNode is { } entryNode)
@@ -449,9 +454,15 @@ namespace XTMF2.ModelSystemConstruct
         private void WrapScriptedExpression(Node node, IModule module)
         {
             if (node.ParameterValue is not ScriptedParameter) return;
+            WrapScriptedModuleExpression(module);
+        }
+
+        private void WrapScriptedModuleExpression(IModule module)
+        {
             var exprField = module.GetType().GetField("Expression",
                 BindingFlags.Public | BindingFlags.Instance);
-            if (exprField?.GetValue(module) is ParameterExpression inner)
+            if (exprField?.GetValue(module) is ParameterExpression inner
+                && inner is not FunctionInstanceExpression)
                 exprField.SetValue(module, new FunctionInstanceExpression(inner, this));
         }
 
@@ -512,7 +523,14 @@ namespace XTMF2.ModelSystemConstruct
                 return true;
             }
             if (_runtimeModules is null) { error = null; return true; }
-            foreach (var link in Template.InternalModules.Links)
+            var links = Template.InternalModules.Links;
+            foreach (var link in links.Where(link =>
+                link.Origin is FunctionInstance && link.OriginHook is FunctionParameterHook))
+            {
+                if (!ConstructRuntimeLink(link, ref error)) return false;
+            }
+            foreach (var link in links.Where(link =>
+                link.Origin is not FunctionInstance || link.OriginHook is not FunctionParameterHook))
             {
                 if (!ConstructRuntimeLink(link, ref error)) return false;
             }

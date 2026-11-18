@@ -233,6 +233,265 @@ public class TestFunctionTemplateVariables
             });
     }
 
+    [TestMethod]
+    public void ConvertBasicParameterToFunctionParameter_PreservesLocalVariableAndUndoRedo()
+    {
+        TestHelper.RunInModelSystemContext(
+            nameof(ConvertBasicParameterToFunctionParameter_PreservesLocalVariableAndUndoRedo),
+            (user, _, ms) =>
+            {
+                CommandError error = null;
+                var modelSystem = ms.ModelSystem;
+                Assert.IsTrue(ms.AddFunctionTemplate(user, modelSystem.GlobalBoundary, "LocalParameterFT",
+                    out var template, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, template.InternalModules, "Value",
+                    typeof(BasicParameter<string>), Rectangle.Hidden, out var source, out error), error?.Message);
+                Assert.IsTrue(ms.SetParameterValue(user, source, "original", out error), error?.Message);
+                Assert.IsTrue(ms.AddFunctionTemplateVariable(user, template, source!, out error), error?.Message);
+
+                var instances = new List<FunctionInstance>();
+                foreach (var name in new[] { "FI1", "FI2" })
+                {
+                    Assert.IsTrue(ms.AddFunctionInstance(user, modelSystem.GlobalBoundary, template, name,
+                        Rectangle.Hidden, out var instance, out error), error?.Message);
+                    instances.Add(instance!);
+                }
+
+                Assert.IsTrue(ms.ConvertParameterToFunctionParameter(user, source!,
+                    out var parameter, out error), error?.Message);
+                Assert.IsNotNull(parameter);
+                Assert.AreEqual(typeof(IFunction<string>), parameter.Type);
+                Assert.Contains(parameter, template.LocalVariables);
+                Assert.DoesNotContain(source!, template.InternalModules.Modules);
+
+                var providers = instances.Select(instance =>
+                {
+                    var link = modelSystem.GlobalBoundary.Links.Single(candidate =>
+                        candidate.Origin == instance
+                        && candidate.OriginHook is FunctionParameterHook hook
+                        && ReferenceEquals(hook.Parameter, parameter));
+                    Assert.IsInstanceOfType<SingleLink>(link);
+                    return ((SingleLink)link).Destination;
+                }).ToList();
+                Assert.HasCount(2, providers);
+                Assert.IsTrue(providers.All(provider =>
+                    provider.ParameterValue?.Representation == "original"));
+
+                Assert.IsTrue(ms.Undo(user, out error), error?.Message);
+                Assert.Contains(source!, template.InternalModules.Modules);
+                Assert.DoesNotContain(parameter, template.FunctionParameters);
+                Assert.Contains(source!, template.LocalVariables);
+                Assert.IsEmpty(modelSystem.GlobalBoundary.Modules);
+
+                Assert.IsTrue(ms.Redo(user, out error), error?.Message);
+                Assert.Contains(parameter, template.LocalVariables);
+                Assert.HasCount(2, modelSystem.GlobalBoundary.Modules);
+                Assert.IsTrue(modelSystem.GlobalBoundary.Modules.All(provider =>
+                    provider.ParameterValue?.Representation == "original"));
+            });
+    }
+
+    [TestMethod]
+    public void ConvertMultipleParametersToFunctionParameters_IsOneUndoRedoOperation()
+    {
+        TestHelper.RunInModelSystemContext(
+            nameof(ConvertMultipleParametersToFunctionParameters_IsOneUndoRedoOperation),
+            (user, _, ms) =>
+            {
+                CommandError error = null;
+                var modelSystem = ms.ModelSystem;
+                var global = modelSystem.GlobalBoundary;
+                Assert.IsTrue(ms.AddFunctionTemplate(user, global, "BulkParameterFT",
+                    out var template, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, template.InternalModules, "BasicValue",
+                    typeof(BasicParameter<string>), Rectangle.Hidden, out var basicSource, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetParameterValue(user, basicSource, "original", out error), error?.Message);
+                Assert.IsTrue(ms.AddFunctionTemplateVariable(user, template, basicSource!, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.AddNode(user, template.InternalModules, "ScriptedValue",
+                    typeof(ScriptedParameter<int>), Rectangle.Hidden, out var scriptedSource, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetParameterExpression(user, scriptedSource, "1", out error), error?.Message);
+
+                var instances = new List<FunctionInstance>();
+                foreach (var name in new[] { "FI1", "FI2" })
+                {
+                    Assert.IsTrue(ms.AddFunctionInstance(user, global, template, name,
+                        Rectangle.Hidden, out var instance, out error), error?.Message);
+                    instances.Add(instance!);
+                }
+
+                Assert.IsTrue(ms.ConvertParametersToFunctionParameters(
+                    user, new[] { basicSource!, scriptedSource! }, out error), error?.Message);
+
+                var basicParameter = template.FunctionParameters.Single(parameter => parameter.Name == "BasicValue");
+                var scriptedParameter = template.FunctionParameters.Single(parameter => parameter.Name == "ScriptedValue");
+                Assert.AreEqual(typeof(IFunction<string>), basicParameter.Type);
+                Assert.AreEqual(typeof(IFunction<int>), scriptedParameter.Type);
+                Assert.Contains(basicParameter, template.LocalVariables);
+                Assert.DoesNotContain(scriptedParameter, template.LocalVariables);
+                Assert.HasCount(4, global.Modules);
+
+                foreach (var instance in instances)
+                {
+                    Node GetProvider(FunctionParameter parameter)
+                    {
+                        var link = global.Links.Single(candidate =>
+                            ReferenceEquals(candidate.Origin, instance)
+                            && candidate.OriginHook is FunctionParameterHook hook
+                            && ReferenceEquals(hook.Parameter, parameter));
+                        Assert.IsInstanceOfType<SingleLink>(link);
+                        return ((SingleLink)link).Destination;
+                    }
+
+                    var basicProvider = GetProvider(basicParameter);
+                    var scriptedProvider = GetProvider(scriptedParameter);
+                    Assert.AreEqual(typeof(BasicParameter<string>), basicProvider.Type);
+                    Assert.AreEqual("original", basicProvider.ParameterValue?.Representation);
+                    Assert.AreEqual(typeof(ScriptedParameter<int>), scriptedProvider.Type);
+                    Assert.AreEqual("1", scriptedProvider.ParameterValue?.Representation);
+                }
+
+                Assert.IsTrue(ms.Undo(user, out error), error?.Message);
+                Assert.IsEmpty(template.FunctionParameters);
+                Assert.Contains(basicSource!, template.InternalModules.Modules);
+                Assert.Contains(scriptedSource!, template.InternalModules.Modules);
+                Assert.Contains(basicSource!, template.LocalVariables);
+                Assert.IsEmpty(global.Modules);
+
+                Assert.IsTrue(ms.Redo(user, out error), error?.Message);
+                Assert.HasCount(2, template.FunctionParameters);
+                Assert.Contains(basicParameter, template.LocalVariables);
+                Assert.HasCount(4, global.Modules);
+            });
+    }
+
+    [TestMethod]
+    public void ConvertMultipleParametersToFunctionParameters_RollsBackIfAnyNodeIsInvalid()
+    {
+        TestHelper.RunInModelSystemContext(
+            nameof(ConvertMultipleParametersToFunctionParameters_RollsBackIfAnyNodeIsInvalid),
+            (user, _, ms) =>
+            {
+                CommandError error = null;
+                Assert.IsTrue(ms.AddFunctionTemplate(user, ms.ModelSystem.GlobalBoundary, "BulkFailureFT",
+                    out var template, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, template.InternalModules, "ValidValue",
+                    typeof(BasicParameter<string>), Rectangle.Hidden, out var validSource, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetParameterValue(user, validSource, "original", out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, template.InternalModules, "NotAParameter",
+                    typeof(SimpleParameterModule), Rectangle.Hidden, out var invalidSource, out error),
+                    error?.Message);
+
+                Assert.IsFalse(ms.ConvertParametersToFunctionParameters(
+                    user, new[] { validSource!, invalidSource! }, out error));
+                Assert.IsNotNull(error);
+                Assert.IsEmpty(template.FunctionParameters);
+                Assert.Contains(validSource!, template.InternalModules.Modules);
+                Assert.Contains(invalidSource!, template.InternalModules.Modules);
+                Assert.IsEmpty(template.LocalVariables);
+            });
+    }
+
+    [TestMethod]
+    public void ConvertScriptedParameterToFunctionParameter_PreservesExpressionAtRuntime()
+    {
+        TestHelper.RunInModelSystemContext(
+            nameof(ConvertScriptedParameterToFunctionParameter_PreservesExpressionAtRuntime),
+            (user, projectSession, ms) =>
+            {
+                CommandError error = null;
+                var modelSystem = ms.ModelSystem;
+                var global = modelSystem.GlobalBoundary;
+                Assert.IsTrue(ms.AddFunctionTemplate(user, global, "ScriptedLocalParameterFT",
+                    out var template, out error), error?.Message);
+                Assert.IsTrue(ms.AddFunctionParameter(user, template, "Input", typeof(IFunction<string>),
+                    Rectangle.Hidden, out var input, out error), error?.Message);
+                Assert.IsTrue(ms.AddFunctionTemplateVariable(user, template, input!, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, template.InternalModules, "Converted",
+                    typeof(ScriptedParameter<string>), Rectangle.Hidden, out var source, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.SetParameterExpression(user, source, "Input", out error), error?.Message);
+                Assert.IsTrue(ms.SetFunctionTemplateEntryNode(user, template, source!, out error), error?.Message);
+
+                var instances = new List<FunctionInstance>();
+                foreach (var (name, value) in new[] { ("FI1", "first"), ("FI2", "second") })
+                {
+                    Assert.IsTrue(ms.AddFunctionInstance(user, global, template, name,
+                        Rectangle.Hidden, out var instance, out error), error?.Message);
+                    Assert.IsTrue(ms.AddNode(user, global, $"{name}Input",
+                        typeof(BasicParameter<string>), Rectangle.Hidden, out var provider, out error),
+                        error?.Message);
+                    Assert.IsTrue(ms.SetParameterValue(user, provider, value, out error), error?.Message);
+                    var inputHook = instance!.Hooks.OfType<FunctionParameterHook>()
+                        .Single(hook => ReferenceEquals(hook.Parameter, input));
+                    Assert.IsTrue(ms.AddLink(user, instance, inputHook, provider!,
+                        out _, out error), error?.Message);
+                    instances.Add(instance);
+                }
+
+                Assert.IsTrue(ms.ConvertParameterToFunctionParameter(user, source!,
+                    out var convertedParameter, out error), error?.Message);
+                Assert.IsNotNull(convertedParameter);
+                Assert.AreEqual(typeof(IFunction<string>), convertedParameter.Type);
+                Assert.DoesNotContain(convertedParameter, template.LocalVariables);
+                var convertedProviders = instances.Select(instance =>
+                {
+                    var link = global.Links.Single(candidate =>
+                        candidate.Origin == instance
+                        && candidate.OriginHook is FunctionParameterHook hook
+                        && ReferenceEquals(hook.Parameter, convertedParameter));
+                    Assert.IsInstanceOfType<SingleLink>(link);
+                    return ((SingleLink)link).Destination;
+                }).ToList();
+                Assert.HasCount(2, convertedProviders);
+                Assert.IsTrue(convertedProviders.All(provider =>
+                    provider.ParameterValue?.Representation == "Input"));
+
+                Assert.AreSame(convertedParameter, template.EntryNode,
+                    "Converting the entry parameter should preserve the template's output designation.");
+                Assert.IsTrue(ms.AddModelSystemStart(user, global, "Start",
+                    Rectangle.Hidden, out var start, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, global, "Ignore",
+                    typeof(IgnoreResult<string>), Rectangle.Hidden, out var ignore, out error), error?.Message);
+                Assert.IsTrue(ms.AddNode(user, global, "SimpleParameter",
+                    typeof(SimpleParameterModule), Rectangle.Hidden, out var simpleParameter, out error),
+                    error?.Message);
+                Assert.IsTrue(ms.AddLink(user, start, start!.Hooks[0], ignore!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, ignore!, ignore!.Hooks[0], simpleParameter!,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(ms.AddLink(user, simpleParameter!, simpleParameter!.Hooks[0], instances[0],
+                    out _, out error), error?.Message);
+
+                TestHelper.CreateRunClient(true, runBus =>
+                {
+                    CommandError runError = null;
+                    bool success = false;
+                    using var semaphore = new SemaphoreSlim(0);
+                    runBus.ClientFinishedModelSystem += (_, _) =>
+                    {
+                        success = true;
+                        semaphore.Release();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, message, stack, _, _) =>
+                    {
+                        runError = new CommandError(message + "\r\n" + stack);
+                        semaphore.Release();
+                    };
+                    Assert.IsTrue(ms.Save(out error), error?.Message);
+                    Assert.IsTrue(runBus.RunModelSystem(ms,
+                        Path.Combine(projectSession.RunsDirectory, "ScriptedLocalParameterRuntime"),
+                        "Start", out _, out runError), runError?.Message);
+                    Assert.IsTrue(semaphore.Wait(TestHelper.TestTimeoutMilliseconds),
+                        "Model system did not complete in time.");
+                    Assert.IsTrue(success, "Model system failed: " + runError?.Message);
+                });
+            });
+    }
+
     // ── Scoping: local before global ──────────────────────────────────────
 
     [TestMethod]

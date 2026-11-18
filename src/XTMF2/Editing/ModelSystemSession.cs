@@ -4611,9 +4611,97 @@ namespace XTMF2.Editing
         /// </summary>
         public bool ConvertBasicParameterToFunctionParameter(User user, Node basicParameter,
             out FunctionParameter? parameter, [NotNullWhen(false)] out CommandError? error)
+            => ConvertParameterToFunctionTemplateParameter(
+                user, basicParameter, out parameter, out error);
+
+        /// <summary>
+        /// Replaces a BasicParameter or ScriptedParameter inside a function template with a
+        /// FunctionParameter. If the source node is a template-local variable, that membership
+        /// is transferred to the new parameter. Each existing function instance receives a
+        /// provider containing the original value or expression.
+        /// </summary>
+        public bool ConvertParameterToFunctionParameter(User user, Node parameterNode,
+            out FunctionParameter? parameter, [NotNullWhen(false)] out CommandError? error)
+            => ConvertParameterToFunctionTemplateParameter(
+                user, parameterNode, out parameter, out error);
+
+        /// <summary>
+        /// Converts multiple parameters from the same function template into
+        /// FunctionParameters as one undoable operation.
+        /// </summary>
+        public bool ConvertParametersToFunctionParameters(User user, IReadOnlyList<Node> parameterNodes,
+            [NotNullWhen(false)] out CommandError? error)
         {
             ArgumentNullException.ThrowIfNull(user);
-            ArgumentNullException.ThrowIfNull(basicParameter);
+            ArgumentNullException.ThrowIfNull(parameterNodes);
+
+            lock (_sessionLock)
+            {
+                if (!_session.HasAccess(user))
+                {
+                    error = new CommandError("The user does not have access to this project.", true);
+                    return false;
+                }
+                if (parameterNodes.Count < 2)
+                {
+                    error = new CommandError("Select at least two BasicParameter or ScriptedParameter nodes.");
+                    return false;
+                }
+
+                var uniqueNodes = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+                FunctionTemplate? template = null;
+                foreach (var node in parameterNodes)
+                {
+                    if (node is null || !uniqueNodes.Add(node))
+                    {
+                        error = new CommandError("The selection contains a null or duplicate parameter node.");
+                        return false;
+                    }
+
+                    var nodeTemplate = node.ContainedWithin?.OwningFunctionTemplate;
+                    if (nodeTemplate is null)
+                    {
+                        error = new CommandError($"Parameter '{node.Name}' must be inside a FunctionTemplate.");
+                        return false;
+                    }
+                    if (template is not null && !ReferenceEquals(template, nodeTemplate))
+                    {
+                        error = new CommandError("All selected parameters must belong to the same FunctionTemplate.");
+                        return false;
+                    }
+                    template = nodeTemplate;
+                }
+
+                var batch = new CommandBatch();
+                foreach (var node in parameterNodes)
+                {
+                    if (ConvertParameterToFunctionTemplateParameter(
+                            user, node, out _, out error, batch))
+                        continue;
+
+                    var conversionError = error;
+                    if (!batch.Undo(out var rollbackError))
+                    {
+                        error = new CommandError(
+                            $"{conversionError?.Message} Rollback failed: {rollbackError?.Message}");
+                        return false;
+                    }
+                    error = conversionError;
+                    return false;
+                }
+
+                Buffer.AddUndo(batch);
+                error = null;
+                return true;
+            }
+        }
+
+        private bool ConvertParameterToFunctionTemplateParameter(User user, Node parameterNode,
+            out FunctionParameter? parameter, [NotNullWhen(false)] out CommandError? error,
+            CommandBatch? batch = null)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(parameterNode);
             parameter = null;
 
             lock (_sessionLock)
@@ -4624,34 +4712,38 @@ namespace XTMF2.Editing
                     return false;
                 }
 
-                var type = basicParameter.Type;
-                if (type is null || !type.IsGenericType
-                    || type.GetGenericTypeDefinition() != typeof(RuntimeModules.BasicParameter<>))
+                var type = parameterNode.Type;
+                bool isBasicParameter = type is { IsGenericType: true }
+                    && type.GetGenericTypeDefinition() == typeof(RuntimeModules.BasicParameter<>);
+                bool isScriptedParameter = type is { IsGenericType: true }
+                    && type.GetGenericTypeDefinition() == typeof(RuntimeModules.ScriptedParameter<>);
+                if (!isBasicParameter && !isScriptedParameter)
                 {
-                    error = new CommandError("Only BasicParameter nodes can be converted to FunctionParameters.");
+                    error = new CommandError(
+                        "Only BasicParameter and ScriptedParameter nodes can be converted to FunctionParameters.");
                     return false;
                 }
 
-                var internalBoundary = basicParameter.ContainedWithin;
+                var internalBoundary = parameterNode.ContainedWithin;
                 var template = internalBoundary?.OwningFunctionTemplate;
                 if (internalBoundary is null || template is null)
                 {
-                    error = new CommandError("The BasicParameter must be inside a FunctionTemplate.");
+                    error = new CommandError("The parameter must be inside a FunctionTemplate.");
                     return false;
                 }
-
-                var value = basicParameter.ParameterValue?.Representation;
-                if (value is null)
+                var parameterValue = parameterNode.ParameterValue;
+                if (parameterValue is null)
                 {
-                    error = new CommandError($"BasicParameter '{basicParameter.Name}' has no value to expose.");
+                    error = new CommandError(
+                        $"Parameter '{parameterNode.Name}' has no value or expression to expose.");
                     return false;
                 }
 
                 var linked = internalBoundary.Links
-                    .Where(link => link.HasDestination(basicParameter))
+                    .Where(link => link.HasDestination(parameterNode))
                     .ToList();
-                var parameterLocation = basicParameter.Location;
-                var parameterBaseName = basicParameter.Name;
+                var parameterLocation = parameterNode.Location;
+                var parameterBaseName = parameterNode.Name;
                 if (parameterLocation.Equals(Rectangle.Hidden))
                 {
                     parameterBaseName = linked.FirstOrDefault()?.OriginHook.Name ?? parameterBaseName;
@@ -4663,104 +4755,190 @@ namespace XTMF2.Editing
                             containingElement.Location.Y, 250f, 50f)
                         : new Rectangle(40f, 40f, 250f, 50f);
                 }
-                    var parameterName = MakeUniqueFunctionParameterName(template, parameterBaseName);
-                var instances = EnumerateBoundaries(ModelSystem.GlobalBoundary)
+
+                var parameterName = MakeUniqueFunctionParameterName(template, parameterBaseName);
+                var instances = EnumerateAllBoundaries()
                     .SelectMany(boundary => boundary.FunctionInstances)
                     .Where(instance => ReferenceEquals(instance.Template, template))
                     .ToList();
-                var providers = new List<(FunctionInstance Instance, Node Provider, Link Link)>();
+                var providers = new List<(FunctionInstance Instance, Node Provider, Link? Link)>();
+                bool sourceWasLocalVariable = template.LocalVariables.Contains(parameterNode);
+                bool entryWasSource = ReferenceEquals(template.EntryNode, parameterNode);
+                Type valueType = type!.GetGenericArguments()[0];
+                Type functionType = typeof(IFunction<>).MakeGenericType(valueType);
 
-                if (!template.AddFunctionParameter(parameterName, type, parameterLocation,
+                if (!template.AddFunctionParameter(parameterName, functionType, parameterLocation,
                         out parameter, out error))
                     return false;
 
-                var capturedParameter = parameter;
+                var capturedParameter = parameter!;
+                capturedParameter.UsesTemplateVariableScope = isScriptedParameter;
+                int capturedParameterIndex = template.FunctionParameters.Count - 1;
+                CommandError? operationError = null;
+
                 bool Apply()
                 {
                     CommandError? localError;
+                    if (!template.FunctionParameters.Contains(capturedParameter))
+                        template.RestoreFunctionParameter(capturedParameter, capturedParameterIndex);
+                    if (sourceWasLocalVariable && !template.LocalVariables.Contains(capturedParameter)
+                        && !template.AddLocalVariable(capturedParameter, out localError))
+                    {
+                        operationError = localError;
+                        return false;
+                    }
+                    if (sourceWasLocalVariable)
+                        template.RemoveLocalVariable(parameterNode, out _);
+
                     foreach (var link in linked)
-                        internalBoundary.RemoveLink(link, out localError);
-                    internalBoundary.RemoveNode(basicParameter, out localError);
+                    {
+                        if (!internalBoundary.RemoveLink(link, out localError))
+                        {
+                            operationError = localError;
+                            return false;
+                        }
+                    }
+                    if (!internalBoundary.RemoveNode(parameterNode, out localError))
+                    {
+                        operationError = localError;
+                        return false;
+                    }
 
                     foreach (var link in linked)
                     {
                         if (link is SingleLink single)
                         {
-                            single.SetDestination(capturedParameter, out localError);
+                            if (!single.SetDestination(capturedParameter, out localError))
+                            {
+                                operationError = localError;
+                                return false;
+                            }
                         }
                         else if (link is MultiLink multi)
                         {
                             for (int i = 0; i < multi.Destinations.Count; i++)
                             {
-                                if (ReferenceEquals(multi.Destinations[i], basicParameter))
-                                    multi.ReplaceDestination(i, capturedParameter, out localError);
+                                if (ReferenceEquals(multi.Destinations[i], parameterNode)
+                                    && !multi.ReplaceDestination(i, capturedParameter, out localError))
+                                {
+                                    operationError = localError;
+                                    return false;
+                                }
                             }
                         }
-                        internalBoundary.AddLink(link, out localError);
+                        if (!internalBoundary.AddLink(link, out localError))
+                        {
+                            operationError = localError;
+                            return false;
+                        }
                     }
+
+                    if (entryWasSource)
+                        template.SetEntryNode(capturedParameter);
 
                     foreach (var instance in instances)
                     {
-                        var providerName = MakeUniqueNodeName(instance.ContainedWithin!, parameterName);
-                        if (!instance.ContainedWithin!.AddNode(GetModuleRepository(), providerName, type,
+                        var instanceBoundary = instance.ContainedWithin!;
+                        var providerName = MakeUniqueNodeName(instanceBoundary, parameterName);
+                        if (!instanceBoundary.AddNode(GetModuleRepository(), providerName, type,
                                 Rectangle.Hidden, out var provider, out localError))
+                        {
+                            operationError = localError;
                             return false;
-                        if (!provider!.SetParameterValue(ParameterExpression.CreateParameter(value, type.GenericTypeArguments[0]),
-                                out localError))
+                        }
+
+                        int providerIndex = providers.Count;
+                        providers.Add((instance, provider!, null));
+                        bool assigned = isScriptedParameter
+                            ? provider!.SetParameterValue(parameterValue, out localError)
+                            : provider!.SetParameterValue(
+                                ParameterExpression.CreateParameter(parameterValue.Representation, valueType),
+                                out localError);
+                        if (!assigned)
+                        {
+                            operationError = localError;
                             return false;
+                        }
 
                         var hook = instance.Hooks.OfType<FunctionParameterHook>()
                             .FirstOrDefault(candidate => ReferenceEquals(candidate.Parameter, capturedParameter));
-                        if (hook is null || !instance.ContainedWithin.AddLink(instance, hook, provider,
+                        if (hook is null || !instanceBoundary.AddLink(instance, hook, provider,
                                 out var providerLink, out localError))
+                        {
+                            operationError = localError ?? new CommandError(
+                                $"Unable to create the '{parameterName}' provider link for FunctionInstance '{instance.Name}'.");
                             return false;
-                        providers.Add((instance, provider, providerLink!));
+                        }
+                        providers[providerIndex] = (instance, provider!, providerLink!);
                     }
 
+                    operationError = null;
                     return true;
                 }
 
                 void Restore()
                 {
-                    CommandError? localError;
                     foreach (var (_, provider, providerLink) in providers)
                     {
-                        provider.ContainedWithin!.RemoveLink(providerLink, out localError);
-                        provider.ContainedWithin.RemoveNode(provider, out localError);
+                        if (providerLink is not null)
+                            provider.ContainedWithin!.RemoveLink(providerLink, out _);
+                        provider.ContainedWithin!.RemoveNode(provider, out _);
                     }
                     providers.Clear();
 
                     foreach (var link in linked)
-                        internalBoundary.RemoveLink(link, out localError);
+                        internalBoundary.RemoveLink(link, out _);
+                    if (!internalBoundary.Modules.Contains(parameterNode))
+                        internalBoundary.AddNode(parameterNode, out _);
                     foreach (var link in linked)
                     {
                         if (link is SingleLink single)
-                            single.SetDestination(basicParameter, out localError);
+                            single.SetDestination(parameterNode, out _);
                         else if (link is MultiLink multi)
                         {
                             for (int i = 0; i < multi.Destinations.Count; i++)
                             {
                                 if (ReferenceEquals(multi.Destinations[i], capturedParameter))
-                                    multi.ReplaceDestination(i, basicParameter, out localError);
+                                    multi.ReplaceDestination(i, parameterNode, out _);
                             }
                         }
-                        internalBoundary.AddLink(link, out localError);
+                        internalBoundary.AddLink(link, out _);
                     }
-                    internalBoundary.AddNode(basicParameter, out localError);
-                    template.RemoveFunctionParameter(capturedParameter, out localError);
+
+                    if (entryWasSource)
+                        template.SetEntryNode(parameterNode);
+                    if (sourceWasLocalVariable && template.LocalVariables.Contains(capturedParameter))
+                        template.RemoveLocalVariable(capturedParameter, out _);
+                    if (sourceWasLocalVariable && !template.LocalVariables.Contains(parameterNode))
+                        template.AddLocalVariable(parameterNode, out _);
+                    if (template.FunctionParameters.Contains(capturedParameter))
+                        template.RemoveFunctionParameter(capturedParameter, out _);
                 }
 
                 if (!Apply())
                 {
+                    var applyError = operationError;
                     Restore();
-                    error = new CommandError("Unable to create FunctionParameter providers for all FunctionInstances.");
+                    error = applyError ?? new CommandError(
+                        "Unable to create FunctionParameter providers for all FunctionInstances.");
                     parameter = null;
                     return false;
                 }
 
-                Buffer.AddUndo(new Command(
+                var conversionCommand = new Command(
                     () => { Restore(); return (true, null); },
-                    () => { return (Apply(), (CommandError?)null); }));
+                    () =>
+                    {
+                        if (Apply()) return (true, null);
+                        var redoError = operationError;
+                        Restore();
+                        return (false, redoError ?? new CommandError(
+                            "Unable to recreate FunctionParameter providers for all FunctionInstances."));
+                    });
+                if (batch is null)
+                    Buffer.AddUndo(conversionCommand);
+                else
+                    batch.Add(conversionCommand);
                 error = null;
                 return true;
             }

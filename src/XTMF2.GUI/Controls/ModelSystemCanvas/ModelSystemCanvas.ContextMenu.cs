@@ -341,6 +341,14 @@ partial class ModelSystemCanvas
     {
         if (_vm is null) return null;
 
+        var selectedParameters = _vm.IsInsideFunctionTemplate
+            ? _multiSelection
+                .OfType<NodeViewModel>()
+                .Where(nodeVm => nodeVm.IsBasicParameter || nodeVm.IsScriptedParameter)
+                .ToList()
+            : new List<NodeViewModel>();
+        bool multipleParametersSelected = selectedParameters.Count > 1;
+
         // ── Background context: offer Add items when nothing was hit ──
         if (element is null && link is null)
         {
@@ -451,10 +459,15 @@ partial class ModelSystemCanvas
                     menu.Items.Add(switchItem);
                 }
 
-                if (vm.IsInsideFunctionTemplate && capturedParam.IsBasicParameter)
+                if (vm.IsInsideFunctionTemplate
+                    && (capturedParam.IsBasicParameter || capturedParam.IsScriptedParameter))
                 {
-                    var convertItem = new MenuItem { Header = "Create Function Parameter from Basic Parameter" };
-                    convertItem.Click += (_, _) => vm.ConvertBasicParameterToFunctionParameter(capturedParam);
+                    var parameterKind = capturedParam.IsBasicParameter ? "Basic" : "Scripted";
+                    var convertItem = new MenuItem
+                    {
+                        Header = $"Create Function Parameter from {parameterKind} Parameter"
+                    };
+                    convertItem.Click += (_, _) => vm.ConvertParameterToFunctionParameter(capturedParam);
                     menu.Items.Add(convertItem);
                 }
 
@@ -772,11 +785,17 @@ partial class ModelSystemCanvas
                 menu.Items.Add(switchItem);
             }
 
-            if (vm.IsInsideFunctionTemplate && paramNode.IsBasicParameter)
+            if (vm.IsInsideFunctionTemplate
+                && !multipleParametersSelected
+                && (paramNode.IsBasicParameter || paramNode.IsScriptedParameter))
             {
-                var capturedBasicParameter = paramNode;
-                var convertItem = new MenuItem { Header = "Create Function Parameter from Basic Parameter" };
-                convertItem.Click += (_, _) => vm.ConvertBasicParameterToFunctionParameter(capturedBasicParameter);
+                var capturedParamNode = paramNode;
+                var parameterKind = paramNode.IsBasicParameter ? "Basic" : "Scripted";
+                var convertItem = new MenuItem
+                {
+                    Header = $"Create Function Parameter from {parameterKind} Parameter"
+                };
+                convertItem.Click += (_, _) => vm.ConvertParameterToFunctionParameter(capturedParamNode);
                 menu.Items.Add(convertItem);
             }
 
@@ -788,22 +807,22 @@ partial class ModelSystemCanvas
                 if (FunctionTemplate.IsValidLocalVariableNode(paramNode.UnderlyingNode, out _))
                 {
                     bool alreadyLocalVar = vm.IsNodeInLocalVariables(paramNode);
-                    var localVarHeader = alreadyLocalVar
-                        ? "Remove from Local Variables"
-                        : "Add as Local Variable";
-                    var localVarItem = new MenuItem { Header = localVarHeader };
-                    localVarItem.Click += (_, _) =>
+                    if (alreadyLocalVar)
                     {
-                        if (vm.IsNodeInLocalVariables(paramNode))
-                        {
+                        var removeLocalItem = new MenuItem { Header = "Remove from Local Variables" };
+                        removeLocalItem.Click += (_, _) =>
                             _ = vm.RemoveNodeFromLocalVariablesAsync(paramNode);
-                        }
-                        else
+                        menu.Items.Add(removeLocalItem);
+                    }
+                    else
+                    {
+                        var localVarItem = new MenuItem { Header = "Add as Local Variable" };
+                        localVarItem.Click += (_, _) =>
                         {
                             _ = vm.AddNodeToLocalVariablesAsync(paramNode);
-                        }
-                    };
-                    menu.Items.Add(localVarItem);
+                        };
+                        menu.Items.Add(localVarItem);
+                    }
                     menu.Items.Add(new Separator());
                 }
             }
@@ -1235,6 +1254,18 @@ partial class ModelSystemCanvas
             var selectedForBulkLink = _multiSelectionOrder.ToList();
             bulkLinkItem.Click += (_, _) => _ = vm.BulkLinkSelectedAsync(selectedForBulkLink);
             menu.Items.Add(bulkLinkItem);
+        }
+
+        if (multipleParametersSelected)
+        {
+            var capturedParameters = selectedParameters;
+            var convertParametersItem = new MenuItem
+            {
+                Header = $"Create Function Parameters from {capturedParameters.Count} Selected Parameters"
+            };
+            convertParametersItem.Click += (_, _) =>
+                vm.ConvertParametersToFunctionParameters(capturedParameters);
+            menu.Items.Add(convertParametersItem);
         }
 
         // ── Align (multi-selection only) ──────────────────────────────────────

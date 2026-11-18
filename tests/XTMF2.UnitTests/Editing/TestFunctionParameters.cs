@@ -332,7 +332,7 @@ namespace XTMF2.UnitTests.Editing
 
                 Assert.IsNotNull(parameter);
                 Assert.AreEqual("Real Function", parameter!.Name);
-                Assert.AreEqual(typeof(XTMF2.RuntimeModules.BasicParameter<string>), parameter!.Type);
+                Assert.AreEqual(typeof(XTMF2.IFunction<string>), parameter!.Type);
                 Assert.AreEqual(160f, parameter.Location.X);
                 Assert.AreEqual(20f, parameter.Location.Y);
                 Assert.AreEqual(250f, parameter.Location.Width);
@@ -352,6 +352,11 @@ namespace XTMF2.UnitTests.Editing
                 Assert.Contains(basicParameter!, template.InternalModules.Modules);
                 Assert.DoesNotContain(parameter, template.FunctionParameters);
                 Assert.IsEmpty(ms.GlobalBoundary.Modules);
+
+                Assert.IsTrue(mSession.Redo(user, out error), error?.Message);
+                Assert.DoesNotContain(basicParameter!, template.InternalModules.Modules);
+                Assert.Contains(parameter, template.FunctionParameters);
+                Assert.HasCount(1, ms.GlobalBoundary.Modules);
             });
         }
 

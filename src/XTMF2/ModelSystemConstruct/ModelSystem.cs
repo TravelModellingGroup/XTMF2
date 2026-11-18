@@ -655,6 +655,26 @@ namespace XTMF2
                 {
                     return null;
                 }
+                var localParameterProviderScopes = new Dictionary<Node, FunctionTemplate>();
+                foreach (var boundary in EnumerateBoundaries(modelSystem.GlobalBoundary))
+                foreach (var link in boundary.Links)
+                {
+                    if (link.Origin is not FunctionInstance instance
+                        || link.OriginHook is not FunctionParameterHook hook
+                        || (!instance.Template.LocalVariables.Contains(hook.Parameter)
+                            && !hook.Parameter.UsesTemplateVariableScope))
+                        continue;
+
+                    if (link is SingleLink single)
+                    {
+                        localParameterProviderScopes[single.Destination] = instance.Template;
+                    }
+                    else if (link is MultiLink multi)
+                    {
+                        foreach (var destination in multi.Destinations)
+                            localParameterProviderScopes[destination] = instance.Template;
+                    }
+                }
                 // Now that all of the modules have been loaded we can process the scripted parameters
                 foreach (var (toAssignTo, parameterExpression) in scriptedParameters)
                 {
@@ -664,7 +684,10 @@ namespace XTMF2
                     }
                     // Nodes inside a FunctionTemplate's InternalModules have template-local
                     // variables that shadow the global ones; combine them (local first).
-                    var localVars = toAssignTo.ContainedWithin?.OwningFunctionTemplate?.LocalVariables;
+                    var localTemplate = toAssignTo.ContainedWithin?.OwningFunctionTemplate;
+                    if (localTemplate is null)
+                        localParameterProviderScopes.TryGetValue(toAssignTo, out localTemplate);
+                    var localVars = localTemplate?.LocalVariables;
                     IList<Node> allVars = localVars is { Count: > 0 }
                         ? localVars.Concat(modelSystem.Variables).ToList()
                         : (IList<Node>)modelSystem.Variables;
@@ -687,6 +710,21 @@ namespace XTMF2
                 error = e.Message;
             }
             return null;
+        }
+
+        private static IEnumerable<Boundary> EnumerateBoundaries(Boundary root)
+        {
+            var stack = new Stack<Boundary>();
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                var boundary = stack.Pop();
+                yield return boundary;
+                foreach (var child in boundary.Boundaries)
+                    stack.Push(child);
+                foreach (var template in boundary.FunctionTemplates)
+                    stack.Push(template.InternalModules);
+            }
         }
 
         private static bool RemoveUnconnectedHiddenNodes(ModelSystem modelSystem,
