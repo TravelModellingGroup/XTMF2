@@ -357,17 +357,34 @@ namespace XTMF2.ModelSystemConstruct
         }
 
         /// <summary>
-        /// If <paramref name="type"/> is <c>IFunction&lt;T&gt;</c> for a basic supported T,
-        /// returns T; otherwise returns null.
+        /// If <paramref name="type"/> implements <c>IFunction&lt;T&gt;</c> for a basic
+        /// supported T, returns T; otherwise returns null.
         /// </summary>
         public static Type? ExtractIFunctionInnerType(Type? type)
         {
-            if (type is null || !type.IsGenericType) return null;
-            if (type.GetGenericTypeDefinition() != typeof(IFunction<>)) return null;
-            var inner = type.GetGenericArguments()[0];
-            return (inner == typeof(bool) || inner == typeof(int)
-                 || inner == typeof(float) || inner == typeof(string))
-                ? inner : null;
+            if (type is null) return null;
+            if (TryGetInnerType(type, out var directInner))
+                return directInner;
+            foreach (var implementedInterface in type.GetInterfaces())
+            {
+                if (TryGetInnerType(implementedInterface, out var inner))
+                    return inner;
+            }
+            return null;
+
+            static bool TryGetInnerType(Type candidate, [NotNullWhen(true)] out Type? inner)
+            {
+                inner = null;
+                if (!candidate.IsGenericType
+                    || candidate.GetGenericTypeDefinition() != typeof(IFunction<>))
+                    return false;
+                var typeArgument = candidate.GetGenericArguments()[0];
+                if (typeArgument != typeof(bool) && typeArgument != typeof(int)
+                    && typeArgument != typeof(float) && typeArgument != typeof(string))
+                    return false;
+                inner = typeArgument;
+                return true;
+            }
         }
 
         /// <summary>

@@ -3573,15 +3573,33 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             await ShowError("Create Link Failed", linkError);
     }
 
-            /// <summary>Converts a BasicParameter node in the current template into a FunctionParameter.</summary>
-            public void ConvertBasicParameterToFunctionParameter(NodeViewModel nodeVm)
-            {
-            if (!IsInsideFunctionTemplate) return;
+    /// <summary>
+    /// Converts a BasicParameter or ScriptedParameter in the current template into a
+    /// FunctionParameter.
+    /// </summary>
+    public void ConvertParameterToFunctionParameter(NodeViewModel nodeVm)
+    {
+        if (!IsInsideFunctionTemplate) return;
 
-            if (!Session.ConvertBasicParameterToFunctionParameter(User, nodeVm.UnderlyingNode,
+        if (!Session.ConvertParameterToFunctionParameter(User, nodeVm.UnderlyingNode,
                 out _, out var error))
-                ShowToast(error?.Message ?? "Unable to create Function Parameter.", isError: true, durationMs: 6000);
-            }
+            ShowToast(error?.Message ?? "Unable to create Function Parameter.",
+                isError: true, durationMs: 6000);
+    }
+
+    /// <summary>
+    /// Converts multiple BasicParameter or ScriptedParameter nodes in the current
+    /// function template into FunctionParameters as one undoable operation.
+    /// </summary>
+    public void ConvertParametersToFunctionParameters(IReadOnlyList<NodeViewModel> nodeVms)
+    {
+        if (!IsInsideFunctionTemplate) return;
+
+        var nodes = nodeVms.Select(nodeVm => nodeVm.UnderlyingNode).ToList();
+        if (!Session.ConvertParametersToFunctionParameters(User, nodes, out var error))
+            ShowToast(error?.Message ?? "Unable to create Function Parameters.",
+                isError: true, durationMs: 6000);
+    }
 
     /// <summary>
     /// Removes a <see cref="FunctionParameter"/> from the current function template.

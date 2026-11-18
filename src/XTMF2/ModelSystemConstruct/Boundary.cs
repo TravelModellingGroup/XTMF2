@@ -718,7 +718,14 @@ namespace XTMF2.ModelSystemConstruct
         {
             lock (_writeLock)
             {
-                foreach (var link in _links)
+                foreach (var link in _links.Where(link =>
+                    link.Origin is FunctionInstance && link.OriginHook is FunctionParameterHook))
+                {
+                    if (!link.Construct(ref error, ref elementId))
+                        return false;
+                }
+                foreach (var link in _links.Where(link =>
+                    link.Origin is not FunctionInstance || link.OriginHook is not FunctionParameterHook))
                 {
                     if (!link.Construct(ref error, ref elementId))
                     {

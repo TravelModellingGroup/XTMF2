@@ -53,11 +53,14 @@ namespace XTMF2.ModelSystemConstruct
         internal const string FpYProperty     = "Y";
         internal const string FpWProperty     = "Width";
         internal const string FpHProperty     = "Height";
+        internal const string FpUsesTemplateVariableScopeProperty = "UsesTemplateVariableScope";
 
         /// <summary>
         /// The <see cref="FunctionTemplate"/> that owns this parameter.
         /// </summary>
         public FunctionTemplate Template { get; }
+
+        internal bool UsesTemplateVariableScope { get; set; }
 
         /// <summary>
         /// Whether at least one internal destination of this parameter requires a module.
@@ -112,6 +115,8 @@ namespace XTMF2.ModelSystemConstruct
             writer.WriteNumber(FpYProperty, Location.Y);
             writer.WriteNumber(FpWProperty, Location.Width);
             writer.WriteNumber(FpHProperty, Location.Height);
+            if (UsesTemplateVariableScope)
+                writer.WriteBoolean(FpUsesTemplateVariableScopeProperty, true);
             writer.WriteEndObject();
         }
 
@@ -140,6 +145,7 @@ namespace XTMF2.ModelSystemConstruct
             Type?   type     = null;
             int     fpIndex  = -1;
             Guid    id       = Guid.Empty;
+            bool usesTemplateVariableScope = false;
             float   x = 80f, y = 80f, w = 140f, h = 40f;
 
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -180,6 +186,11 @@ namespace XTMF2.ModelSystemConstruct
                 else if (reader.ValueTextEquals(FpYProperty)) { reader.Read(); y = reader.GetSingle(); }
                 else if (reader.ValueTextEquals(FpWProperty)) { reader.Read(); w = reader.GetSingle(); }
                 else if (reader.ValueTextEquals(FpHProperty)) { reader.Read(); h = reader.GetSingle(); }
+                else if (reader.ValueTextEquals(FpUsesTemplateVariableScopeProperty))
+                {
+                    reader.Read();
+                    usesTemplateVariableScope = reader.GetBoolean();
+                }
                 else reader.Skip();
             }
 
@@ -200,6 +211,7 @@ namespace XTMF2.ModelSystemConstruct
             }
 
             parameter = new FunctionParameter(name, type, owningTemplate, new Rectangle(x, y, w, h), id);
+            parameter.UsesTemplateVariableScope = usesTemplateVariableScope;
             parameter.SetDescription(description);
             nodeDictionary[fpIndex] = parameter;
             error = null;
