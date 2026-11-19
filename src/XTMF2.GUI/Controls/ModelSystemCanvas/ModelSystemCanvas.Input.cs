@@ -229,21 +229,15 @@ partial class ModelSystemCanvas
                 e.Handled = true;
             }
         }
-        else if ((e.Key is Key.O) && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        else if ((e.Key is Key.O or Key.F) && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
-            if (_vm?.SelectedElement is NodeViewModel nvm
-                && (nvm.IsParameterNode || nvm.UnderlyingNode.Type == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile)))
+            if (TryGetFilePathActionTargets(
+                    _vm?.SelectedElement, out var directFileTarget, out var embeddedFilePathTargets))
             {
-                _ = TryOpenOpenReadStreamFromFileParameterAsync();
-                e.Handled = true;
-            }
-        }
-        else if( e.Key == Key.F && (e.KeyModifiers & KeyModifiers.Control) != 0)
-        {
-            if (_vm?.SelectedElement is NodeViewModel nvm
-                && (nvm.IsParameterNode || nvm.UnderlyingNode.Type == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile)))
-            {
-                _ = TryUpdateOpenReadStreamFromFileParameterAsync(false);
+                _ = RunFilePathShortcutAsync(
+                    directFileTarget,
+                    embeddedFilePathTargets,
+                    setFile: e.Key == Key.F);
                 e.Handled = true;
             }
         }

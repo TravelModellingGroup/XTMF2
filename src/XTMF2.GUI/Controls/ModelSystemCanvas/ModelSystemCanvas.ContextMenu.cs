@@ -685,24 +685,58 @@ partial class ModelSystemCanvas
             AddMenuSeparator(menu);
         }
 
-        if (element is NodeViewModel fileNodeVm && IsFilePathTargetNode(fileNodeVm))
+        NodeViewModel? directFileTarget = element is NodeViewModel fileNode && IsFilePathTargetNode(fileNode)
+            ? fileNode
+            : null;
+        IReadOnlyList<EmbeddedFilePathParameterChoice> embeddedFilePathTargets =
+            directFileTarget is null && element is NodeViewModel or FunctionInstanceViewModel
+                ? GetEmbeddedFilePathParameterTargets(element)
+                : [];
+        if (directFileTarget is not null || embeddedFilePathTargets.Count > 0)
         {
             var fileMenu = new MenuItem { Header = "File" };
 
             var openFileItem = new MenuItem { Header = "Open" };
-            openFileItem.Click += async (_, _) => await TryOpenOpenReadStreamFromFileParameterAsync(fileNodeVm);
+            openFileItem.Click += async (_, _) =>
+            {
+                var target = await ResolveFilePathActionTargetAsync(
+                    directFileTarget, embeddedFilePathTargets, "Select the embedded parameter to open:");
+                if (target is not null)
+                    await TryOpenOpenReadStreamFromFileParameterAsync(target);
+            };
             fileMenu.Items.Add(openFileItem);
 
             var openParentDirectoryItem = new MenuItem { Header = "Open Parent Directory" };
-            openParentDirectoryItem.Click += async (_, _) => await TryOpenOpenReadStreamFromFileParentDirectoryAsync(fileNodeVm);
+            openParentDirectoryItem.Click += async (_, _) =>
+            {
+                var target = await ResolveFilePathActionTargetAsync(
+                    directFileTarget, embeddedFilePathTargets,
+                    "Select the embedded parameter whose parent directory to open:");
+                if (target is not null)
+                    await TryOpenOpenReadStreamFromFileParentDirectoryAsync(target);
+            };
             fileMenu.Items.Add(openParentDirectoryItem);
 
             var setFileItem = new MenuItem { Header = "Set File…" };
-            setFileItem.Click += async (_, _) => await TryUpdateOpenReadStreamFromFileParameterAsync(false, fileNodeVm);
+            setFileItem.Click += async (_, _) =>
+            {
+                var target = await ResolveFilePathActionTargetAsync(
+                    directFileTarget, embeddedFilePathTargets,
+                    "Select the embedded parameter whose file path to set:");
+                if (target is not null)
+                    await TryUpdateOpenReadStreamFromFileParameterAsync(false, target);
+            };
             fileMenu.Items.Add(setFileItem);
 
             var setDirectoryItem = new MenuItem { Header = "Set Directory…" };
-            setDirectoryItem.Click += async (_, _) => await TryUpdateOpenReadStreamFromFileParameterAsync(true, fileNodeVm);
+            setDirectoryItem.Click += async (_, _) =>
+            {
+                var target = await ResolveFilePathActionTargetAsync(
+                    directFileTarget, embeddedFilePathTargets,
+                    "Select the embedded parameter whose directory path to set:");
+                if (target is not null)
+                    await TryUpdateOpenReadStreamFromFileParameterAsync(true, target);
+            };
             fileMenu.Items.Add(setDirectoryItem);
 
             menu.Items.Add(fileMenu);
