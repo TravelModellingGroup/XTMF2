@@ -134,6 +134,13 @@ partial class ModelSystemCanvas
         return grid;
     }
 
+    private static MenuItem CreateCanvasContextMenuItem(string header)
+    {
+        var item = new MenuItem { Header = header };
+        item.Classes.Add("canvas-context-menu-item");
+        return item;
+    }
+
     private List<Link> GetDisableTargetsForClickedLink(LinkViewModel clickedLink)
     {
         if (_multiLinkSelection.Count <= 1 || !_multiLinkSelection.Contains(clickedLink.UnderlyingLink))
@@ -332,6 +339,21 @@ partial class ModelSystemCanvas
         menu.Open(this);
     }
 
+    private static void AddMenuSeparator(ItemsControl menu)
+    {
+        var items = menu.Items;
+        if (items.Count == 0 || items[items.Count - 1] is Separator)
+            return;
+
+        items.Add(new Separator());
+    }
+
+    private static void TrimTrailingMenuSeparators(ItemsControl menu)
+    {
+        while (menu.Items.Count > 0 && menu.Items[menu.Items.Count - 1] is Separator)
+            menu.Items.RemoveAt(menu.Items.Count - 1);
+    }
+
     private ContextMenu? BuildContextMenu(
         ICanvasElement? element,
         LinkViewModel? link,
@@ -376,7 +398,7 @@ partial class ModelSystemCanvas
 
             if (_vm.IsInsideFunctionTemplate)
             {
-                bgMenu.Items.Add(new Separator());
+                AddMenuSeparator(bgMenu);
                 var addFpItem = new MenuItem { Header = "Add Function Parameter…" };
                 addFpItem.Click += (_, _) => _ = _vm.AddFunctionParameterDirectAsync(spawnPt.X, spawnPt.Y);
                 bgMenu.Items.Add(addFpItem);
@@ -386,12 +408,12 @@ partial class ModelSystemCanvas
                 return bgMenu;
 
             // ── Paste (always available; reads system clipboard at click-time) ────
-            bgMenu.Items.Add(new Separator());
+            AddMenuSeparator(bgMenu);
             var pasteItem = new MenuItem { Header = CreateShortcutMenuHeader("Paste", "Ctrl+V") };
             pasteItem.Click += (_, _) => _ = PasteElementsAsync(spawnPt.X, spawnPt.Y);
             bgMenu.Items.Add(pasteItem);
 
-            bgMenu.Items.Add(new Separator());
+            AddMenuSeparator(bgMenu);
             var showHiddenTempItem = new MenuItem
             {
                 Header = "Show Hidden Destination Links (Temporary)",
@@ -473,7 +495,7 @@ partial class ModelSystemCanvas
                     menu.Items.Add(convertItem);
                 }
 
-                menu.Items.Add(new Separator());
+                AddMenuSeparator(menu);
             }
 
             var interBoundaryItem = new MenuItem { Header = "Link to node in another boundary…" };
@@ -517,11 +539,14 @@ partial class ModelSystemCanvas
                 menu.Items.Add(clearHookItem);
             }
 
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
         }
 
         if (hookOnly && _rightClickHookHit is not null)
+        {
+            TrimTrailingMenuSeparators(menu);
             return menu;
+        }
 
         // ── FunctionInstance hook right-click items ────────────────────────────
         if (_rightClickFiHookHit is { } fiHookEntry)
@@ -577,11 +602,14 @@ partial class ModelSystemCanvas
                 menu.Items.Add(clearFiHookItem);
             }
 
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
         }
 
         if (hookOnly && _rightClickFiHookHit is not null)
+        {
+            TrimTrailingMenuSeparators(menu);
             return menu;
+        }
 
         // ── Link routing style ────────────────────────────────────────────────
         if (link is not null)
@@ -644,7 +672,7 @@ partial class ModelSystemCanvas
                 InvalidateVisual();
             };
             menu.Items.Add(toggleDisableItem);
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
         }
 
         // ── MultiLink: reorder destinations ──────────────────────────────────
@@ -654,7 +682,7 @@ partial class ModelSystemCanvas
             var reorderLinkItem = new MenuItem { Header = "Reorder Destinations…" };
             reorderLinkItem.Click += (_, _) => _ = vm.ReorderLinkDestinationsAsync(capturedReorderMl);
             menu.Items.Add(reorderLinkItem);
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
         }
 
         if (element is NodeViewModel fileNodeVm && IsFilePathTargetNode(fileNodeVm))
@@ -678,7 +706,7 @@ partial class ModelSystemCanvas
             fileMenu.Items.Add(setDirectoryItem);
 
             menu.Items.Add(fileMenu);
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
         }
 
         // ── Standard Delete ───────────────────────────────────────────────
@@ -708,7 +736,7 @@ partial class ModelSystemCanvas
                 InvalidateAndMeasure();
             };
             menu.Items.Add(descriptionItem);
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
         }
 
         var deleteItem = new MenuItem { Header = "Delete" };
@@ -741,7 +769,7 @@ partial class ModelSystemCanvas
                     InvalidateVisual();
                 };
                 menu.Items.Add(toggleIncomingItem);
-                menu.Items.Add(new Separator());
+                AddMenuSeparator(menu);
             }
 
             var disableTargets = GetDisableTargetsForClickedElement(disableNodeVm, disableNodeVm.UnderlyingNode);
@@ -758,7 +786,7 @@ partial class ModelSystemCanvas
                 InvalidateVisual();
             };
             menu.Items.Add(disableNodeItem);
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
         }
 
         // ── Variable list management + inline option ────────────────────
@@ -803,7 +831,7 @@ partial class ModelSystemCanvas
                 menu.Items.Add(convertItem);
             }
 
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
 
             if (vm.IsInsideFunctionTemplate)
             {
@@ -827,7 +855,7 @@ partial class ModelSystemCanvas
                         };
                         menu.Items.Add(localVarItem);
                     }
-                    menu.Items.Add(new Separator());
+                    AddMenuSeparator(menu);
                 }
             }
             else
@@ -849,7 +877,7 @@ partial class ModelSystemCanvas
                     }
                 };
                 menu.Items.Add(varItem);
-                menu.Items.Add(new Separator());
+                AddMenuSeparator(menu);
 
                 // ── Estimation / Calibration (float or double BasicParameter only) ──
                 if (paramNode.IsNumericBasicParameter)
@@ -883,7 +911,7 @@ partial class ModelSystemCanvas
                             _ = vm.AddNodeToCalibrationAsync(capturedCalNode);
                     };
                     menu.Items.Add(calItem);
-                    menu.Items.Add(new Separator());
+                    AddMenuSeparator(menu);
                 }
             }
         }
@@ -907,13 +935,13 @@ partial class ModelSystemCanvas
                     _ = vm.AddFunctionInstanceToVariablesAsync(capturedFiVar);
             };
             menu.Items.Add(fiVarItem);
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
         }
 
-        // ── IFunction<T> → Create linked ExecuteWithContext ───────────────
-        if (element is NodeViewModel funcNode)
+        // ── IFunction<T> → Create linked wrappers ──────────────────────────
+        if (GetModuleTargetFromElement(element) is { } sourceNode)
         {
-            var nodeType = funcNode.UnderlyingNode.Type;
+            var nodeType = sourceNode.Type;
             var iFunctionOpen = typeof(IFunction<>);
             Type? returnType = null;
             if (nodeType is not null)
@@ -930,14 +958,30 @@ partial class ModelSystemCanvas
 
             if (returnType is not null)
             {
-                var capturedFuncNode = funcNode;
-                var wrapItem = new MenuItem
-                {
-                    Header = $"Create ExecuteWithContext<{returnType.Name}> (linked)"
-                };
-                wrapItem.Click += (_, _) => _ = vm.CreateExecuteWithContextAsync(capturedFuncNode);
-                menu.Items.Add(wrapItem);
-                menu.Items.Add(new Separator());
+                var capturedSourceNode = sourceNode;
+                var wrapperMenu = CreateCanvasContextMenuItem("Create Wrapper");
+                var cacheItem = CreateCanvasContextMenuItem(
+                    $"Create Cache<{returnType.Name}> (linked)");
+                cacheItem.Click += (_, _) => _ = vm.CreateCacheAsync(capturedSourceNode);
+                wrapperMenu.Items.Add(cacheItem);
+
+                var ifItem = CreateCanvasContextMenuItem(
+                    $"Create If<{returnType.Name}> (linked)");
+                ifItem.Click += (_, _) => _ = vm.CreateIfAsync(capturedSourceNode);
+                wrapperMenu.Items.Add(ifItem);
+
+                var wrapItem = CreateCanvasContextMenuItem(
+                    $"Create ExecuteWithContext<{returnType.Name}> (linked)");
+                wrapItem.Click += (_, _) => _ = vm.CreateExecuteWithContextAsync(capturedSourceNode);
+                wrapperMenu.Items.Add(wrapItem);
+
+                var ignoreItem = CreateCanvasContextMenuItem(
+                    $"Create IgnoreResult<{returnType.Name}> (linked)");
+                ignoreItem.Click += (_, _) => _ = vm.CreateIgnoreResultAsync(capturedSourceNode);
+                wrapperMenu.Items.Add(ignoreItem);
+
+                menu.Items.Add(wrapperMenu);
+                AddMenuSeparator(menu);
             }
         }
 
@@ -966,7 +1010,7 @@ partial class ModelSystemCanvas
                 InvalidateAndMeasure();
             };
 
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
             menu.Items.Add(ghostItem);
             menu.Items.Add(moveNodeItem);
         }
@@ -984,7 +1028,7 @@ partial class ModelSystemCanvas
                     (int)capturedGhostSource.Width, (int)capturedGhostSource.Height);
             };
 
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
             menu.Items.Add(ghostItem);
         }
 
@@ -1013,7 +1057,7 @@ partial class ModelSystemCanvas
             var capturedExtractElements = selElements;
             var extractItem = new MenuItem { Header = CreateShortcutMenuHeader(extractDescription, "Ctrl+Shift+M") };
             extractItem.Click += (_, _) => _ = vm.ExtractSelectionToFunctionTemplateAsync(capturedExtractElements);
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
             menu.Items.Add(extractItem);
         }
 
@@ -1036,7 +1080,7 @@ partial class ModelSystemCanvas
                 await vm.MoveSelectedElementsToBoundaryAsync(capturedGhost, _multiSelection);
                 InvalidateAndMeasure();
             };
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
             menu.Items.Add(goToRepresentedItem);
             menu.Items.Add(moveGhostItem);
         }
@@ -1068,7 +1112,7 @@ partial class ModelSystemCanvas
                 InvalidateAndMeasure();
             };
 
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
             menu.Items.Add(enterItem);
             menu.Items.Add(renameItem);
             menu.Items.Add(moveFtItem);
@@ -1093,7 +1137,7 @@ partial class ModelSystemCanvas
                         "Unable to change incoming link visibility.");
                     InvalidateVisual();
                 };
-                menu.Items.Add(new Separator());
+                AddMenuSeparator(menu);
                 menu.Items.Add(toggleIncomingItem);
             }
 
@@ -1139,7 +1183,7 @@ partial class ModelSystemCanvas
                 InvalidateVisual();
             };
 
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
             menu.Items.Add(openTemplateItem);
             menu.Items.Add(expandItem);
             menu.Items.Add(renameItem);
@@ -1168,7 +1212,7 @@ partial class ModelSystemCanvas
                     await vm.ToggleFunctionTemplateVariableAsync(fpvm.UnderlyingParameter);
                     InvalidateAndMeasure();
                 };
-                menu.Items.Add(new Separator());
+                AddMenuSeparator(menu);
                 menu.Items.Add(localVarItem);
             }
 
@@ -1185,7 +1229,7 @@ partial class ModelSystemCanvas
                 vm.RemoveFunctionParameterAsync(fpvm.UnderlyingParameter);
                 InvalidateAndMeasure();
             };
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
             menu.Items.Add(fpRenameItem);
             menu.Items.Add(removeItem);
         }
@@ -1202,7 +1246,7 @@ partial class ModelSystemCanvas
                 await vm.SetFunctionTemplateEntryNodeAsync(capturedEntryCandidate);
                 InvalidateAndMeasure();
             };
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
             menu.Items.Add(entryItem);
         }
 
@@ -1219,7 +1263,7 @@ partial class ModelSystemCanvas
         if (isCopyable)
         {
             var capturedElement = element;
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
 
             // Count copyable elements in the active selection.
             int copyCount = _multiSelection.Count > 0 && _multiSelection.Contains(capturedElement!)
@@ -1275,7 +1319,7 @@ partial class ModelSystemCanvas
         // ── Align (multi-selection only) ──────────────────────────────────────
         if (_multiSelection.Count > 1)
         {
-            menu.Items.Add(new Separator());
+            AddMenuSeparator(menu);
             var alignMenu = new MenuItem { Header = "Align" };
 
             void AddAlignItem(string header, AlignMode m)
@@ -1287,10 +1331,10 @@ partial class ModelSystemCanvas
 
             AddAlignItem("Align Left Edges",          AlignMode.Left);
             AddAlignItem("Align Right Edges",         AlignMode.Right);
-            alignMenu.Items.Add(new Separator());
+            AddMenuSeparator(alignMenu);
             AddAlignItem("Align Top Edges",           AlignMode.Top);
             AddAlignItem("Align Bottom Edges",        AlignMode.Bottom);
-            alignMenu.Items.Add(new Separator());
+            AddMenuSeparator(alignMenu);
             AddAlignItem("Center on Vertical Axis",   AlignMode.CenterVertical);
             AddAlignItem("Center on Horizontal Axis", AlignMode.CenterHorizontal);
             menu.Items.Add(alignMenu);
@@ -1408,7 +1452,9 @@ partial class ModelSystemCanvas
 
             if (omitOpenTemplate && header == "Open Template") continue;
 
-            var displayName = string.IsNullOrEmpty(prefix) ? header : $"{prefix} / {header}";
+            var displayName = menuItem.Classes.Contains("canvas-context-menu-item")
+                ? header
+                : string.IsNullOrEmpty(prefix) ? header : $"{prefix} / {header}";
             actions.Add(new CommandPaletteAction(displayName, () => ExecuteContextMenuItem(menuItem),
                 "Context", shortcut, menuItem.IsEnabled));
         }

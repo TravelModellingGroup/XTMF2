@@ -1869,43 +1869,71 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
     /// via <c>IFunction&lt;T&gt;</c>.  The new node is positioned to the right of
     /// <paramref name="sourceNode"/> and its <em>Context</em> hook is linked back to the source.
     /// </summary>
-    public async Task CreateExecuteWithContextAsync(NodeViewModel sourceNode)
+    public async Task CreateExecuteWithContextAsync(Node sourceNode)
+        => await CreateLinkedFunctionWrapperAsync(
+            sourceNode, typeof(ExecuteWithContext<>), "Execute With Context", "Get Context");
+
+    /// <summary>
+    /// Creates a new <see cref="Cache{T}"/> node whose generic parameter matches the return type
+    /// that <paramref name="sourceNode"/>'s module implements via <see cref="IFunction{T}"/>,
+    /// then links the cache's Source hook to that node.
+    /// </summary>
+    public async Task CreateCacheAsync(Node sourceNode)
+        => await CreateLinkedFunctionWrapperAsync(
+            sourceNode, typeof(Cache<>), "Cache", "Source");
+
+    /// <summary>
+    /// Creates an <see cref="IfF{T}"/> node and links the source to its true branch.
+    /// </summary>
+    public async Task CreateIfAsync(Node sourceNode)
+        => await CreateLinkedFunctionWrapperAsync(
+            sourceNode, typeof(IfF<>), "If", "If True");
+
+    /// <summary>
+    /// Creates an <see cref="IgnoreResult{T}"/> action and links its input to the source.
+    /// </summary>
+    public async Task CreateIgnoreResultAsync(Node sourceNode)
+        => await CreateLinkedFunctionWrapperAsync(
+            sourceNode, typeof(IgnoreResult<>), "Ignore Result", "To Ignore");
+
+    private async Task CreateLinkedFunctionWrapperAsync(
+        Node sourceNode,
+        Type openWrapperType,
+        string wrapperName,
+        string sourceHookName)
     {
         if (ParentWindow is null) return;
 
-        var returnType = GetIFunctionReturnType(sourceNode.UnderlyingNode.Type);
+        var returnType = GetIFunctionReturnType(sourceNode.Type);
         if (returnType is null) return;
 
-        var executeWithContextType = typeof(ExecuteWithContext<>).MakeGenericType(returnType);
-
+        var wrapperType = openWrapperType.MakeGenericType(returnType);
         var nameDialog = new InputDialog(
-            title: $"Add Execute With Context<{returnType.Name}> Module",
+            title: $"Add {wrapperName}<{returnType.Name}> Module",
             prompt: "Enter module name:",
-            defaultText: executeWithContextType.Name);
+            defaultText: wrapperType.Name);
         await nameDialog.ShowDialog(ParentWindow);
         var name = nameDialog.InputText?.Trim();
         if (string.IsNullOrEmpty(name) || nameDialog.WasCancelled) return;
 
         const float PlacementGap = 30f;
         var location = new Rectangle(
-            sourceNode.UnderlyingNode.Location.X + sourceNode.UnderlyingNode.Location.Width + PlacementGap,
-            sourceNode.UnderlyingNode.Location.Y,
+            sourceNode.Location.X + sourceNode.Location.Width + PlacementGap,
+            sourceNode.Location.Y,
             120f, 50f);
 
-        if (!Session.AddNodeGenerateParameters(User, _currentBoundary, name, executeWithContextType,
+        if (!Session.AddNodeGenerateParameters(User, _currentBoundary, name, wrapperType,
                 location, out var newNode, out _, out var nodeError))
         {
             await ShowError("Add Module Failed", nodeError);
             return;
         }
 
-        // Find the "Context" hook on the new ExecuteWithContext node and link it to sourceNode.
-        var contextHook = newNode!.Hooks.FirstOrDefault(h => h.Name == "Get Context");
-        if (contextHook is not null)
-        {
-            if (!Session.AddLink(User, newNode, contextHook, sourceNode.UnderlyingNode, out _, out var linkError))
-                await ShowError("Create Link Failed", linkError);
-        }
+        var sourceHook = newNode!.Hooks.FirstOrDefault(hook => hook.Name == sourceHookName);
+        if (sourceHook is not null
+            && !Session.AddLink(User, newNode, sourceHook, sourceNode,
+                out _, out var linkError))
+            await ShowError("Create Link Failed", linkError);
     }
 
     /// <summary>

@@ -66,6 +66,16 @@
                     <SolidColorBrush x:Key="CtxPressed">#5200D4FF</SolidColorBrush>
                     <SolidColorBrush x:Key="CtxDisabled">#66A0B8C8</SolidColorBrush>
                     <SolidColorBrush x:Key="CtxSep">#5500D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutPresenterBackground">#F20A1120</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush">#AA00D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemBackground">Transparent</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver">#3000D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed">#5200D4FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundDisabled">Transparent</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemForeground">#FFF2FCFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemForegroundPointerOver">#FFF2FCFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemForegroundPressed">#FFF2FCFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemForegroundDisabled">#66A0B8C8</SolidColorBrush>
                     <SolidColorBrush x:Key="MenuBarBg">#E60A1424</SolidColorBrush>
                     <SolidColorBrush x:Key="MenuBarBorder">#AA00D4FF</SolidColorBrush>
                     <SolidColorBrush x:Key="MenuBarFg">#FFF2FCFF</SolidColorBrush>
@@ -108,6 +118,16 @@
                     <SolidColorBrush x:Key="CtxPressed">#440066CC</SolidColorBrush>
                     <SolidColorBrush x:Key="CtxDisabled">#88637790</SolidColorBrush>
                     <SolidColorBrush x:Key="CtxSep">#550066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutPresenterBackground">#F7F4FAFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush">#AA0066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemBackground">Transparent</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver">#220066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed">#440066CC</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundDisabled">Transparent</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemForeground">#FF001830</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemForegroundPointerOver">#FF001830</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemForegroundPressed">#FF001830</SolidColorBrush>
+                    <SolidColorBrush x:Key="MenuFlyoutItemForegroundDisabled">#88637790</SolidColorBrush>
                     <SolidColorBrush x:Key="MenuBarBg">#F2F7FFFF</SolidColorBrush>
                     <SolidColorBrush x:Key="MenuBarBorder">#660066CC</SolidColorBrush>
                     <SolidColorBrush x:Key="MenuBarFg">#FF001830</SolidColorBrush>
@@ -195,6 +215,28 @@
             <Setter Property="Background" Value="{DynamicResource CtxPressed}"/>
         </Style>
         <Style Selector="ContextMenu MenuItem:disabled">
+            <Setter Property="Foreground" Value="{DynamicResource CtxDisabled}"/>
+        </Style>
+        <Style Selector="MenuItem.canvas-context-menu-item">
+            <Setter Property="Foreground" Value="{DynamicResource CtxFg}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="MenuItem.canvas-context-menu-item /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="MenuItem.canvas-context-menu-item:pointerover">
+            <Setter Property="Background" Value="{DynamicResource CtxHover}"/>
+        </Style>
+        <Style Selector="MenuItem.canvas-context-menu-item:selected">
+            <Setter Property="Background" Value="{DynamicResource CtxHover}"/>
+        </Style>
+        <Style Selector="MenuItem.canvas-context-menu-item:pressed">
+            <Setter Property="Background" Value="{DynamicResource CtxPressed}"/>
+        </Style>
+        <Style Selector="MenuItem.canvas-context-menu-item:disabled">
             <Setter Property="Foreground" Value="{DynamicResource CtxDisabled}"/>
         </Style>
 

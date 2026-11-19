@@ -88,6 +88,11 @@ partial class ModelSystemCanvas
         if (_vm?.RenderAllHiddenDestinationLinks == true)
             return true;
 
+        return IsLinkConnectedToHoveredElement(link);
+    }
+
+    internal bool IsLinkConnectedToHoveredElement(LinkViewModel link)
+    {
         var hovered = _hoveredLinkEndpoint;
         return hovered is not null
             && (RepresentsSameNode(link.Origin, hovered)
