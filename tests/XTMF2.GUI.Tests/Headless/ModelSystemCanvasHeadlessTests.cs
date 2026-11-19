@@ -28,9 +28,11 @@ using XTMF2.GUI.Controls;
 using XTMF2.GUI.Tests.Modules;
 using XTMF2.GUI.Tutorials;
 using XTMF2.GUI.ViewModels;
+using XTMF2.GUI.Views;
 using XTMF2.Editing;
 using XTMF2.ModelSystemConstruct;
 using XTMF2.RuntimeModules;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System;
@@ -1865,6 +1867,155 @@ public class ModelSystemCanvasHeadlessTests
                     CollectionAssert.Contains(fileItemHeaders, "Open");
                     CollectionAssert.Contains(fileItemHeaders, "Set File…");
                     CollectionAssert.Contains(fileItemHeaders, "Set Directory…");
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_ContextMenu_ShowsFileSubmenuForHostsWithEmbeddedStringParameters()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ContextMenu_ShowsFileSubmenuForHostsWithEmbeddedStringParameters),
+            (user, projectSession, session) =>
+            {
+                var boundary = session.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "NodeHost", typeof(EmbeddedNodeHostGuiTestModule),
+                    new Rectangle(20, 20, 160, 60), out var host, out var error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "EmbeddedChild", typeof(EmbeddedParameterGuiTestModule),
+                    Rectangle.Hidden, out var child, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "DirectPath", typeof(BasicParameter<string>),
+                    Rectangle.Hidden, out var directPath, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "NestedPath", typeof(ScriptedParameter<string>),
+                    Rectangle.Hidden, out var nestedPath, out error), error?.Message);
+                Assert.IsNotNull(host);
+                Assert.IsNotNull(child);
+                Assert.IsNotNull(directPath);
+                Assert.IsNotNull(nestedPath);
+
+                Assert.IsTrue(session.AddLink(
+                    user, host!, host!.Hooks!.Single(hook => hook.Name == "Embedded Child"),
+                    child!, out _, out error), error?.Message);
+                Assert.IsTrue(session.AddLink(
+                    user, host!, host!.Hooks!.Single(hook => hook.Name == "Direct Value"),
+                    directPath!, out _, out error), error?.Message);
+                Assert.IsTrue(session.AddLink(
+                    user, child!, child!.Hooks!.Single(hook => hook.Name == "Editable Value"),
+                    nestedPath!, out _, out error), error?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(session, user, runController: null);
+                var hostVm = vm.Nodes.FirstOrDefault(node => ReferenceEquals(node.UnderlyingNode, host));
+                Assert.IsNotNull(hostVm);
+                vm.SelectedElement = hostVm;
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var getTargets = typeof(ModelSystemCanvas).GetMethod(
+                        "GetEmbeddedFilePathParameterTargets",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(getTargets);
+                    var targets = (IReadOnlyList<EmbeddedFilePathParameterChoice>)getTargets!.Invoke(
+                        canvas, new object[] { hostVm! })!;
+                    Assert.HasCount(2, targets);
+                    CollectionAssert.AreEquivalent(
+                        new[] { "Direct Value", "EmbeddedChild › Editable Value" },
+                        targets.Select(target => target.DisplayName).ToArray());
+
+                    var dialog = new EmbeddedFilePathParameterPickerDialog(
+                        targets, "Select an embedded parameter:");
+                    Assert.HasCount(2, dialog.Choices);
+                    Assert.IsTrue(dialog.Classes.Contains("neon-dialog"));
+
+                    var showMenu = typeof(ModelSystemCanvas).GetMethod(
+                        "ShowContextMenu",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(showMenu);
+                    showMenu!.Invoke(canvas, new object?[] { hostVm!, null });
+
+                    var fileMenu = canvas.ContextMenu!.Items.OfType<MenuItem>().FirstOrDefault(item =>
+                        string.Equals(item.Header?.ToString(), "File", StringComparison.Ordinal));
+                    Assert.IsNotNull(fileMenu);
+                    CollectionAssert.AreEqual(
+                        new[] { "Open", "Open Parent Directory", "Set File…", "Set Directory…" },
+                        fileMenu!.Items.OfType<MenuItem>().Select(item => item.Header?.ToString()).ToArray());
+
+                    var onKeyDown = typeof(ModelSystemCanvas).GetMethod(
+                        "OnKeyDown",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(onKeyDown);
+                    var ctrlF = new KeyEventArgs
+                    {
+                        RoutedEvent = InputElement.KeyDownEvent,
+                        Key = Key.F,
+                        KeyModifiers = KeyModifiers.Control
+                    };
+                    onKeyDown!.Invoke(canvas, new object[] { ctrlF });
+                    Assert.IsTrue(ctrlF.Handled);
+                }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            });
+    }
+
+    [TestMethod]
+    public void ModelSystemCanvas_ContextMenu_ShowsFileSubmenuForFunctionInstancesWithEmbeddedStringParameters()
+    {
+        TestGuiHelper.RunInModelSystemContext(
+            nameof(ModelSystemCanvas_ContextMenu_ShowsFileSubmenuForFunctionInstancesWithEmbeddedStringParameters),
+            (user, projectSession, session) =>
+            {
+                var boundary = session.ModelSystem.GlobalBoundary;
+                Assert.IsTrue(session.AddFunctionTemplate(
+                    user, boundary, "FilePathTemplate", out var template, out var error), error?.Message);
+                Assert.IsTrue(session.AddModelSystemStart(
+                    user, template!.InternalModules, "Entry", new Rectangle(10, 10, 160, 50),
+                    out var entry, out error), error?.Message);
+                Assert.IsTrue(session.SetFunctionTemplateEntryNode(user, template, entry!, out error),
+                    error?.Message);
+                Assert.IsTrue(session.AddFunctionParameter(
+                    user, template, "Input", typeof(IFunction<string>), Rectangle.Hidden,
+                    out _, out error), error?.Message);
+                Assert.IsTrue(session.AddFunctionInstance(
+                    user, boundary, template, "FunctionHost", new Rectangle(20, 20, 160, 60),
+                    out var host, out error), error?.Message);
+                Assert.IsTrue(session.AddNode(
+                    user, boundary, "FilePath", typeof(BasicParameter<string>),
+                    Rectangle.Hidden, out var parameter, out error), error?.Message);
+                Assert.IsNotNull(host);
+                Assert.IsNotNull(parameter);
+
+                var inputHook = host!.Hooks.OfType<FunctionParameterHook>()
+                    .Single(hook => hook.Name == "Input");
+                Assert.IsTrue(session.AddLink(user, host, inputHook, parameter!, out _, out error),
+                    error?.Message);
+
+                using var vm = new ModelSystemEditorViewModel(session, user, runController: null);
+                var hostVm = vm.FunctionInstances.FirstOrDefault(
+                    instance => ReferenceEquals(instance.UnderlyingInstance, host));
+                Assert.IsNotNull(hostVm);
+
+                Session.Dispatch(() =>
+                {
+                    var canvas = new ModelSystemCanvas { DataContext = vm };
+                    var getTargets = typeof(ModelSystemCanvas).GetMethod(
+                        "GetEmbeddedFilePathParameterTargets",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(getTargets);
+                    var targets = (IReadOnlyList<EmbeddedFilePathParameterChoice>)getTargets!.Invoke(
+                        canvas, new object[] { hostVm! })!;
+                    Assert.HasCount(1, targets);
+                    Assert.AreEqual("Input", targets[0].DisplayName);
+
+                    var showMenu = typeof(ModelSystemCanvas).GetMethod(
+                        "ShowContextMenu",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(showMenu);
+                    showMenu!.Invoke(canvas, new object?[] { hostVm!, null });
+
+                    Assert.IsTrue(canvas.ContextMenu!.Items.OfType<MenuItem>().Any(item =>
+                        string.Equals(item.Header?.ToString(), "File", StringComparison.Ordinal)));
                 }, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
             });
     }

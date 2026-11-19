@@ -31,11 +31,17 @@ using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using XTMF2.GUI.ViewModels;
+using XTMF2.GUI.Views;
+using XTMF2.ModelSystemConstruct;
 
 namespace XTMF2.GUI.Controls;
 
 partial class ModelSystemCanvas
 {
+    private static bool IsStringFilePathParameter(NodeViewModel? node)
+        => node?.ModuleType == typeof(XTMF2.RuntimeModules.BasicParameter<string>)
+            || node?.ModuleType == typeof(XTMF2.RuntimeModules.ScriptedParameter<string>);
+
     private void UnsubscribeInlineEditorScroll()
     {
         if (_inlineEditorSv is not null && _inlineEditorSvHandler is not null)
@@ -289,13 +295,106 @@ partial class ModelSystemCanvas
 
     private static bool IsFilePathTargetNode(NodeViewModel? node)
     {
-        return node is not null && (node.ModuleType switch
+        return node is not null
+            && (node.ModuleType == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile)
+                || IsStringFilePathParameter(node));
+    }
+
+    private IReadOnlyList<EmbeddedFilePathParameterChoice> GetEmbeddedFilePathParameterTargets(
+        ICanvasElement host)
+    {
+        BuildHookAnchorCache();
+
+        var choices = new List<EmbeddedFilePathParameterChoice>();
+        var seen = new HashSet<NodeViewModel>(ReferenceEqualityComparer.Instance);
+
+        void AddChoice(NodeViewModel parameter, string label)
         {
-            Type t when t == typeof(XTMF2.RuntimeModules.OpenReadStreamFromFile) => true,
-            Type t when t == typeof(XTMF2.RuntimeModules.BasicParameter<string>) => true,
-            Type t when t == typeof(XTMF2.RuntimeModules.ScriptedParameter<string>) => true,
-            _ => false
-        });
+            if (IsStringFilePathParameter(parameter) && seen.Add(parameter))
+                choices.Add(new EmbeddedFilePathParameterChoice(parameter, label));
+        }
+
+        IEnumerable<NodeHook> hooks = host switch
+        {
+            NodeViewModel node => node.UnderlyingNode.Hooks ?? [],
+            FunctionInstanceViewModel instance =>
+                instance.UnderlyingInstance.Hooks.OfType<FunctionParameterHook>(),
+            _ => []
+        };
+
+        foreach (var hook in hooks)
+        {
+            if (TryGetEmbeddedChild(host, hook, out var child)
+                && child is NodeViewModel { IsParameterNode: true } parameter)
+            {
+                AddChoice(parameter, hook.Name);
+            }
+        }
+
+        if (_nestedEmbeddedParameterRows.TryGetValue(host, out var nestedRows))
+        {
+            foreach (var row in nestedRows)
+                AddChoice(row.Parameter, row.Label);
+        }
+
+        return choices;
+    }
+
+    private bool TryGetFilePathActionTargets(
+        ICanvasElement? element,
+        out NodeViewModel? directTarget,
+        out IReadOnlyList<EmbeddedFilePathParameterChoice> embeddedTargets)
+    {
+        directTarget = element is NodeViewModel node && IsFilePathTargetNode(node) ? node : null;
+        embeddedTargets = directTarget is null && element is NodeViewModel or FunctionInstanceViewModel
+            ? GetEmbeddedFilePathParameterTargets(element)
+            : [];
+        return directTarget is not null || embeddedTargets.Count > 0;
+    }
+
+    private async Task<NodeViewModel?> ResolveFilePathActionTargetAsync(
+        NodeViewModel? directTarget,
+        IReadOnlyList<EmbeddedFilePathParameterChoice> embeddedTargets,
+        string prompt)
+    {
+        if (directTarget is not null)
+            return directTarget;
+        if (embeddedTargets.Count == 1)
+            return embeddedTargets[0].Parameter;
+        if (embeddedTargets.Count == 0)
+            return null;
+
+        if (_vm is null)
+            return null;
+        if (TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            _vm.ShowToast("Unable to display the embedded-parameter selector.", isError: true, durationMs: 3000);
+            return null;
+        }
+
+        var dialog = new EmbeddedFilePathParameterPickerDialog(embeddedTargets, prompt);
+        await dialog.ShowDialog(owner);
+        return dialog.SelectedParameter;
+    }
+
+    private async Task RunFilePathShortcutAsync(
+        NodeViewModel? directTarget,
+        IReadOnlyList<EmbeddedFilePathParameterChoice> embeddedTargets,
+        bool setFile)
+    {
+        var target = await ResolveFilePathActionTargetAsync(
+            directTarget,
+            embeddedTargets,
+            setFile
+                ? "Select the embedded parameter whose file path to set:"
+                : "Select the embedded parameter to open:");
+        if (target is null)
+            return;
+
+        if (setFile)
+            await TryUpdateOpenReadStreamFromFileParameterAsync(directory: false, target);
+        else
+            await TryOpenOpenReadStreamFromFileParameterAsync(target);
     }
 
     private bool TryGetResolvedFileSystemPath(NodeViewModel? targetNodeModel, out string currentValue, out bool isDirectory)
