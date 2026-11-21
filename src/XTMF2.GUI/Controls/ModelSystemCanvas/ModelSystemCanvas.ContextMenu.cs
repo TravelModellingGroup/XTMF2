@@ -913,40 +913,42 @@ partial class ModelSystemCanvas
                 menu.Items.Add(varItem);
                 AddMenuSeparator(menu);
 
-                // ── Estimation / Calibration (float or double BasicParameter only) ──
-                if (paramNode.IsNumericBasicParameter)
-                {
-                    bool alreadyEst = vm.IsNodeInEstimation(paramNode);
-                    var estHeader = alreadyEst
-                        ? "Remove from Estimation Parameters"
-                        : "Add to Estimation Parameters";
-                    var capturedEstNode = paramNode;
-                    var estItem = new MenuItem { Header = estHeader };
-                    estItem.Click += (_, _) =>
-                    {
-                        if (vm.IsNodeInEstimation(capturedEstNode))
-                            _ = vm.RemoveNodeFromEstimationAsync(capturedEstNode);
-                        else
-                            _ = vm.AddNodeToEstimationAsync(capturedEstNode);
-                    };
-                    menu.Items.Add(estItem);
+            }
 
-                    bool alreadyCal = vm.IsNodeInCalibration(paramNode);
-                    var calHeader = alreadyCal
-                        ? "Remove from Calibration Parameters"
-                        : "Add to Calibration Parameters";
-                    var capturedCalNode = paramNode;
-                    var calItem = new MenuItem { Header = calHeader };
-                    calItem.Click += (_, _) =>
-                    {
-                        if (vm.IsNodeInCalibration(capturedCalNode))
-                            _ = vm.RemoveNodeFromCalibrationAsync(capturedCalNode);
-                        else
-                            _ = vm.AddNodeToCalibrationAsync(capturedCalNode);
-                    };
-                    menu.Items.Add(calItem);
-                    AddMenuSeparator(menu);
-                }
+            // A template's parameter node is one shared optimization target for all instances.
+            if (paramNode.IsNumericBasicParameter)
+            {
+                var scopeLabel = vm.IsInsideFunctionTemplate ? " (shared across instances)" : string.Empty;
+                bool alreadyEst = vm.IsNodeInEstimation(paramNode);
+                var estHeader = alreadyEst
+                    ? "Remove from Estimation Parameters"
+                    : "Add to Estimation Parameters" + scopeLabel;
+                var capturedEstNode = paramNode;
+                var estItem = new MenuItem { Header = estHeader };
+                estItem.Click += (_, _) =>
+                {
+                    if (vm.IsNodeInEstimation(capturedEstNode))
+                        _ = vm.RemoveNodeFromEstimationAsync(capturedEstNode);
+                    else
+                        _ = vm.AddNodeToEstimationAsync(capturedEstNode);
+                };
+                menu.Items.Add(estItem);
+
+                bool alreadyCal = vm.IsNodeInCalibration(paramNode);
+                var calHeader = alreadyCal
+                    ? "Remove from Calibration Parameters"
+                    : "Add to Calibration Parameters" + scopeLabel;
+                var capturedCalNode = paramNode;
+                var calItem = new MenuItem { Header = calHeader };
+                calItem.Click += (_, _) =>
+                {
+                    if (vm.IsNodeInCalibration(capturedCalNode))
+                        _ = vm.RemoveNodeFromCalibrationAsync(capturedCalNode);
+                    else
+                        _ = vm.AddNodeToCalibrationAsync(capturedCalNode);
+                };
+                menu.Items.Add(calItem);
+                AddMenuSeparator(menu);
             }
         }
 
