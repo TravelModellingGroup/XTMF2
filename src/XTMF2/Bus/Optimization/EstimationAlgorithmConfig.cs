@@ -329,7 +329,7 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
     public override string AlgorithmId => Id;
     public override string DisplayName  => "Particle Swarm Optimisation";
     public override string AlgorithmDescription =>
-        "Particle Swarm Optimisation (PSO) is a population-based global search. The swarm explores the parameter space via velocity updates.";
+        "Particle Swarm Optimisation (PSO) is a population-based global search. Configure how particles handle parameter bounds and optionally reduce inertia over the run.";
 
     private int    _swarmSize            = 30;
     private int    _maxIterations        = 300;
@@ -338,6 +338,8 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
     private double _socialCoeff          = 1.49;
     private double _convergenceTolerance = 1e-6;
     private int    _noImprovementLimit   = 5;
+    private ParticleSwarmBoundaryStrategy _boundaryStrategy = ParticleSwarmBoundaryStrategy.Absorb;
+    private double _movementReduction = 0.0;
 
     /// <summary>Number of particles in the swarm.</summary>
     public int SwarmSize
@@ -390,6 +392,34 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
         set { _noImprovementLimit = Math.Max(0, value); Raise(nameof(NoImprovementLimit)); }
     }
 
+    /// <summary>How particles are handled when their positions cross parameter bounds.</summary>
+    public ParticleSwarmBoundaryStrategy BoundaryStrategy
+    {
+        get => _boundaryStrategy;
+        set
+        {
+            if (!Enum.IsDefined(value))
+                throw new ArgumentOutOfRangeException(nameof(value));
+            if (_boundaryStrategy == value) return;
+            _boundaryStrategy = value;
+            Raise(nameof(BoundaryStrategy));
+        }
+    }
+
+    /// <summary>Fraction of the inertia term removed by the final scheduled iteration, from 0 to 1.</summary>
+    public double MovementReduction
+    {
+        get => _movementReduction;
+        set
+        {
+            if (!double.IsFinite(value) || value < 0 || value > 1)
+                throw new ArgumentOutOfRangeException(nameof(value), "Movement reduction must be between 0 and 1.");
+            if (_movementReduction == value) return;
+            _movementReduction = value;
+            Raise(nameof(MovementReduction));
+        }
+    }
+
     public override IReadOnlyList<AlgorithmParameterDescriptor> GetParameters() =>
     [
         CreateRandomSeedParameter(),
@@ -414,6 +444,19 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
         new() { Key = "NoImprovementLimit",   Label = "No-Improvement Limit",
                 Hint  = "Stop after this many consecutive iterations with no improvement (0 = disabled)",
                 Value = _noImprovementLimit.ToString(CultureInfo.InvariantCulture) },
+        new() { Key = "BoundaryStrategy",     Label = "Boundary Strategy",
+                Hint  = "How particles respond when they cross a parameter bound",
+                Value = _boundaryStrategy switch
+                {
+                    ParticleSwarmBoundaryStrategy.Absorb => "Absorb",
+                    ParticleSwarmBoundaryStrategy.Reflect => "Reflect",
+                    ParticleSwarmBoundaryStrategy.RandomRelocate => "Random Relocate",
+                    _ => throw new InvalidOperationException($"Unknown PSO boundary strategy '{_boundaryStrategy}'.")
+                },
+                Options = ["Absorb", "Reflect", "Random Relocate"] },
+        new() { Key = "MovementReduction",    Label = "Movement Reduction",
+                Hint  = "Fraction of inertia removed by the final scheduled iteration (0 = disabled, 1 = full)",
+                Value = _movementReduction.ToString("G", CultureInfo.InvariantCulture) },
     ];
 
     public override string? ApplyParameters(IReadOnlyList<AlgorithmParameterDescriptor> parameters)
@@ -423,6 +466,8 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
         var inv = CultureInfo.InvariantCulture;
         int swarm = _swarmSize, maxIter = _maxIterations, noImprove = _noImprovementLimit;
         double inertia = _inertia, cog = _cognitiveCoeff, soc = _socialCoeff, tol = _convergenceTolerance;
+        double movementReduction = _movementReduction;
+        var boundaryStrategy = _boundaryStrategy;
         foreach (var p in parameters)
         {
             switch (p.Key)
@@ -455,11 +500,31 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
                     if (!int.TryParse(p.Value, NumberStyles.Integer, inv, out noImprove) || noImprove < 0)
                         return "No-Improvement Limit must be a non-negative integer (0 disables).";
                     break;
+                case "BoundaryStrategy":
+                    boundaryStrategy = p.Value switch
+                    {
+                        "Absorb" => ParticleSwarmBoundaryStrategy.Absorb,
+                        "Reflect" => ParticleSwarmBoundaryStrategy.Reflect,
+                        "Random Relocate" => ParticleSwarmBoundaryStrategy.RandomRelocate,
+                        _ => (ParticleSwarmBoundaryStrategy)(-1)
+                    };
+                    if (!Enum.IsDefined(boundaryStrategy))
+                        return "Boundary Strategy must be Absorb, Reflect, or Random Relocate.";
+                    break;
+                case "MovementReduction":
+                    if (!double.TryParse(p.Value, NumberStyles.Float, inv, out movementReduction)
+                        || !double.IsFinite(movementReduction)
+                        || movementReduction < 0
+                        || movementReduction > 1)
+                        return "Movement Reduction must be a number between 0 and 1.";
+                    break;
             }
         }
         _swarmSize = swarm; _maxIterations = maxIter; _inertia = inertia;
         _cognitiveCoeff = cog; _socialCoeff = soc; _convergenceTolerance = tol;
         _noImprovementLimit = noImprove;
+        BoundaryStrategy = boundaryStrategy;
+        MovementReduction = movementReduction;
         RandomSeed = randomSeed;
         return null;
     }
@@ -469,7 +534,7 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
         bool isMaximize = false)
     {
         var alg = new ParticleSwarmAlgorithm(_swarmSize, _inertia, _cognitiveCoeff, _socialCoeff,
-            _noImprovementLimit, RandomSeed);
+            _noImprovementLimit, RandomSeed, _boundaryStrategy, _movementReduction);
         alg.Initialize(dimensions, lower, upper, initial, _maxIterations, _convergenceTolerance, isMaximize);
         return alg;
     }
@@ -483,6 +548,8 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
         writer.WriteNumber("SocialCoeff",          _socialCoeff);
         writer.WriteNumber("ConvergenceTolerance", _convergenceTolerance);
         writer.WriteNumber("NoImprovementLimit",   _noImprovementLimit);
+        writer.WriteString("BoundaryStrategy",     _boundaryStrategy.ToString());
+        writer.WriteNumber("MovementReduction",    _movementReduction);
     }
 
     protected override void LoadProperty(string propertyName, ref Utf8JsonReader reader)
@@ -496,6 +563,14 @@ public sealed class ParticleSwarmConfig : EstimationAlgorithmConfig
             case "SocialCoeff":          _socialCoeff          = reader.GetDouble(); break;
             case "ConvergenceTolerance": _convergenceTolerance = reader.GetDouble(); break;
             case "NoImprovementLimit":   _noImprovementLimit   = reader.GetInt32();  break;
+            case "BoundaryStrategy":
+                var strategyValue = reader.GetString();
+                if (!Enum.TryParse(strategyValue, out ParticleSwarmBoundaryStrategy strategy)
+                    || !Enum.IsDefined(strategy))
+                    throw new JsonException($"Unknown PSO boundary strategy '{strategyValue}'.");
+                BoundaryStrategy = strategy;
+                break;
+            case "MovementReduction": MovementReduction = reader.GetDouble(); break;
             default: reader.Skip(); break;
         }
     }

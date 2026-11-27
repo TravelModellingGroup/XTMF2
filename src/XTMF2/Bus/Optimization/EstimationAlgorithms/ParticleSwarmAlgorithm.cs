@@ -21,16 +21,22 @@ using System.Collections.Generic;
 
 namespace XTMF2.Bus.Optimization;
 
+/// <summary>How PSO handles a particle position that crosses a parameter bound.</summary>
+public enum ParticleSwarmBoundaryStrategy
+{
+    Absorb,
+    Reflect,
+    RandomRelocate
+}
+
 /// <summary>
 /// Standard Particle Swarm Optimisation (PSO) for derivative-free minimisation.
 /// </summary>
 /// <remarks>
 /// Uses the inertia-weight formulation (Shi &amp; Eberhart 1998).
-/// Proposed positions are clamped to the per-dimension bounds supplied during
-/// <see cref="Initialize"/>.  Velocities are clamped to ±(upper−lower)/2 to
-/// prevent explosion.  The initial swarm is seeded from a uniform distribution
-/// over <c>[lower, upper]</c> with the supplied <paramref name="initialPoint"/>
-/// used as one of the particles.
+/// Velocities are clamped to ±(upper−lower)/2 to prevent explosion. The initial
+/// swarm is seeded from a uniform distribution over <c>[lower, upper]</c> with
+/// the supplied <paramref name="initialPoint"/> used as one of the particles.
 /// </remarks>
 public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
 {
@@ -40,6 +46,8 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
     private readonly double _c2;   // social coefficient
     private readonly int    _noImprovementLimit;
     private readonly int    _randomSeed;
+    private readonly ParticleSwarmBoundaryStrategy _boundaryStrategy;
+    private readonly double _movementReduction;
 
     private int      _n;
     private double[] _lower   = [];
@@ -70,17 +78,28 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
     /// <param name="noImprovementLimit">Stop after this many consecutive iterations
     /// without improvement in the global best (default 5). Set to 0 to disable.</param>
     /// <param name="randomSeed">Seed used for reproducible swarm initialization and updates.</param>
+    /// <param name="boundaryStrategy">Strategy used when a particle crosses a bound.</param>
+    /// <param name="movementReduction">Fraction of the inertia term removed by the final scheduled iteration.</param>
     public ParticleSwarmAlgorithm(
         int swarmSize = 29, double inertia = -0.4438,
         double cognitiveCoeff = -0.2699, double socialCoeff = 3.3950,
-        int noImprovementLimit = 5, int randomSeed = 42)
+        int noImprovementLimit = 5, int randomSeed = 42,
+        ParticleSwarmBoundaryStrategy boundaryStrategy = ParticleSwarmBoundaryStrategy.Absorb,
+        double movementReduction = 0.0)
     {
+        if (!Enum.IsDefined(boundaryStrategy))
+            throw new ArgumentOutOfRangeException(nameof(boundaryStrategy));
+        if (!double.IsFinite(movementReduction) || movementReduction < 0 || movementReduction > 1)
+            throw new ArgumentOutOfRangeException(nameof(movementReduction), "Movement reduction must be between 0 and 1.");
+
         _swarmSize          = Math.Max(2, swarmSize);
         _inertia            = inertia;
         _c1                 = cognitiveCoeff;
         _c2                 = socialCoeff;
         _noImprovementLimit = Math.Max(0, noImprovementLimit);
         _randomSeed         = randomSeed;
+        _boundaryStrategy   = boundaryStrategy;
+        _movementReduction  = movementReduction;
     }
 
     /// <inheritdoc/>
@@ -170,6 +189,9 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
         {
             if (shouldCancel?.Invoke() == true) break;
 
+            double progress = _maxIter <= 1 ? 0.0 : (double)iter / (_maxIter - 1);
+            double inertia = _inertia * (1.0 - _movementReduction * progress);
+
             for (int i = 0; i < _swarmSize; i++)
             {
                 for (int d = 0; d < _n; d++)
@@ -177,17 +199,59 @@ public sealed class ParticleSwarmAlgorithm : IEstimationAlgorithm
                     double r1 = rng.NextDouble();
                     double r2 = rng.NextDouble();
                     velocities[i][d] =
-                        _inertia * velocities[i][d]
+                        inertia * velocities[i][d]
                         + _c1 * r1 * (pBest[i][d]      - positions[i][d])
                         + _c2 * r2 * (BestParameters[d] - positions[i][d]);
 
                     // Clamp velocity.
                     velocities[i][d] = Math.Max(-velMax[d], Math.Min(velMax[d], velocities[i][d]));
 
-                    positions[i][d] = Math.Max(_lower[d], Math.Min(_upper[d],
-                        positions[i][d] + velocities[i][d]));
-                }
+                    double proposedPosition = positions[i][d] + velocities[i][d];
+                    double lower = _lower[d];
+                    double upper = _upper[d];
+                    if (lower == upper)
+                    {
+                        positions[i][d] = lower;
+                        velocities[i][d] = 0;
+                        continue;
+                    }
 
+                    switch (_boundaryStrategy)
+                    {
+                        case ParticleSwarmBoundaryStrategy.Absorb:
+                            positions[i][d] = Math.Max(lower, Math.Min(upper, proposedPosition));
+                            break;
+                        case ParticleSwarmBoundaryStrategy.Reflect:
+                            while (proposedPosition < lower || proposedPosition > upper)
+                            {
+                                if (proposedPosition < lower)
+                                {
+                                    proposedPosition = lower + (lower - proposedPosition);
+                                    velocities[i][d] = -velocities[i][d];
+                                }
+                                else
+                                {
+                                    proposedPosition = upper - (proposedPosition - upper);
+                                    velocities[i][d] = -velocities[i][d];
+                                }
+                            }
+                            positions[i][d] = proposedPosition;
+                            break;
+                        case ParticleSwarmBoundaryStrategy.RandomRelocate:
+                            if (proposedPosition < lower || proposedPosition > upper)
+                            {
+                                positions[i][d] = lower + rng.NextDouble() * (upper - lower);
+                                velocities[i][d] = 0;
+                            }
+                            else
+                            {
+                                positions[i][d] = proposedPosition;
+                            }
+                            break;
+                        default:
+                            throw new InvalidOperationException($"Unknown PSO boundary strategy '{_boundaryStrategy}'.");
+                    }
+                }
             }
 
             var populationFitness = batchFitnessEvaluator(positions);

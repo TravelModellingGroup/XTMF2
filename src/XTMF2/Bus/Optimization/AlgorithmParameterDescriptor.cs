@@ -16,13 +16,15 @@
     You should have received a copy of the GNU General Public License
     along with XTMF2.  If not, see <http://www.gnu.org/licenses/>.
 */
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 
 namespace XTMF2.Bus.Optimization;
 
 /// <summary>
 /// Describes a single editable hyperparameter for use in the algorithm configuration dialog.
-/// The <see cref="Value"/> property is observable so it can be bound directly to a dialog TextBox.
+/// The <see cref="Value"/> property is observable so it can be bound directly to a dialog editor.
 /// </summary>
 public sealed class AlgorithmParameterDescriptor : INotifyPropertyChanged
 {
@@ -37,9 +39,15 @@ public sealed class AlgorithmParameterDescriptor : INotifyPropertyChanged
     /// <summary>Short description shown below the label.</summary>
     public required string Hint { get; init; }
 
+    /// <summary>Optional choices; when present, the dialog displays a selection control instead of a text box.</summary>
+    public IReadOnlyList<string> Options { get; init; } = Array.Empty<string>();
+
+    /// <summary>Whether this parameter should be rendered as a choice selector.</summary>
+    public bool HasOptions => Options.Count > 0;
+
     private string _value = string.Empty;
 
-    /// <summary>Current string value, editable by the dialog's TextBox.</summary>
+    /// <summary>Current string value, edited by the dialog's text box or choice selector.</summary>
     public string Value
     {
         get => _value;
