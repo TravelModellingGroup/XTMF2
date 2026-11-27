@@ -20,6 +20,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using XTMF2.Bus;
 using XTMF2.Bus.Optimization;
@@ -178,6 +179,96 @@ public class TestOptimizationRun
                 Assert.HasCount(1, results);
                 Assert.AreEqual(0.2, results[0].value, 0.05,
                     "The best parameter should be near the known fitness minimum.");
+            });
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public void EstimationRun_CancelledRunCanApplyBestParameters()
+    {
+        RunInModelSystemContext(
+            nameof(EstimationRun_CancelledRunCanApplyBestParameters),
+            (user, pSession, msSession) =>
+            {
+                var modelSystem = msSession.ModelSystem;
+                Assert.IsTrue(msSession.AddModelSystemStart(user, modelSystem.GlobalBoundary, "Start",
+                    Rectangle.Hidden, out var start, out var error), error?.Message);
+                Assert.IsTrue(msSession.AddNode(user, modelSystem.GlobalBoundary, "EstimatedValue",
+                    typeof(BasicParameter<float>), Rectangle.Hidden, out var estimatedValue, out error),
+                    error?.Message);
+                Assert.IsNotNull(estimatedValue);
+                Assert.IsTrue(msSession.SetParameterValue(user, estimatedValue!, "0.8", out error), error?.Message);
+                Assert.IsTrue(msSession.AddVariable(user, estimatedValue!, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddNode(user, modelSystem.GlobalBoundary, "Fitness",
+                    typeof(ScriptedParameter<float>), Rectangle.Hidden, out var fitness, out error),
+                    error?.Message);
+                Assert.IsTrue(msSession.SetParameterExpression(user, fitness!,
+                    "(EstimatedValue - 0.2) * (EstimatedValue - 0.2)", out error), error?.Message);
+                Assert.IsTrue(msSession.SetEstimationFitnessNode(user, fitness!, out error), error?.Message);
+                Assert.IsTrue(msSession.AddEstimationGroup(user, "Default", out var group, out error), error?.Message);
+                Assert.IsTrue(msSession.AddEstimationParameter(user, group!, estimatedValue!,
+                    0.0, 1.0, 0.8, out _, out error), error?.Message);
+
+                Assert.IsTrue(msSession.AddNodeGenerateParameters(user, modelSystem.GlobalBoundary,
+                    "SlowEvaluation", typeof(Sleep), Rectangle.Hidden, out var sleep, out var sleepParameters, out error),
+                    error?.Message);
+                var sleepDuration = sleepParameters!.Single(parameter => parameter.Type == typeof(BasicParameter<int>));
+                Assert.IsTrue(msSession.SetParameterValue(user, sleepDuration, "100", out error), error?.Message);
+                Assert.IsTrue(msSession.AddLink(user, start!, start!.Hooks[0], sleep!, out _, out error), error?.Message);
+
+                IReadOnlyList<(int nodeIndex, double value)> results = null;
+                string terminalState = string.Empty;
+                CommandError cancellationError = null;
+                bool cancellationAccepted = false;
+                int cancellationRequested = 0;
+                using var terminal = new ManualResetEventSlim();
+                CreateRunClient(true, runBus =>
+                {
+                    runBus.ClientIterationProgressAvailable += (_, runId, _, _, fitnessTestsThisIteration, _) =>
+                    {
+                        if (fitnessTestsThisIteration >= 3 && Interlocked.Exchange(ref cancellationRequested, 1) == 0)
+                            cancellationAccepted = runBus.CancelModelRun(runId, out cancellationError);
+                    };
+                    runBus.ClientOptimizationResultsAvailable += (_, _, values) => results = values;
+                    runBus.ClientRunCancelled += (_, _) =>
+                    {
+                        terminalState = "Cancelled";
+                        terminal.Set();
+                    };
+                    runBus.ClientFinishedModelSystem += (_, _) =>
+                    {
+                        terminalState = "Finished";
+                        terminal.Set();
+                    };
+                    runBus.ClientErrorWhenRunningModelSystem += (_, _, message, _, _, _) =>
+                    {
+                        terminalState = $"Failed: {message}";
+                        terminal.Set();
+                    };
+
+                    Assert.IsTrue(runBus.RunModelSystem(msSession,
+                        Path.Combine(pSession.RunsDirectory, nameof(EstimationRun_CancelledRunCanApplyBestParameters)),
+                        "Start", RunMode.Estimation, out _, out error), error?.Message);
+                    Assert.IsTrue(terminal.Wait(TestHelper.TestTimeoutMilliseconds),
+                        "The cancelled estimation did not report a terminal state.");
+                });
+
+                Assert.IsTrue(cancellationAccepted, cancellationError?.Message);
+                Assert.AreEqual("Cancelled", terminalState);
+                Assert.IsNotNull(results, "The cancelled estimation did not return its best-so-far parameters.");
+                Assert.HasCount(1, results!);
+                Assert.AreNotEqual(0.8, results![0].value, 1e-6,
+                    "The result should contain an evaluated improvement over the initial parameter.");
+                Assert.AreEqual(0.8f, float.Parse(estimatedValue!.ParameterValue!.Representation,
+                    System.Globalization.CultureInfo.InvariantCulture), 1e-6f,
+                    "Cancelling should not apply results automatically.");
+
+                Assert.IsTrue(msSession.ApplyOptimizationResults(user, results!, out error), error?.Message);
+                Assert.AreEqual((float)results[0].value,
+                    float.Parse(estimatedValue.ParameterValue!.Representation,
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    1e-5f, "The cancelled run's best parameter should be applicable to the model system.");
             });
     }
 

@@ -544,6 +544,7 @@ namespace XTMF2.Bus
             var algorithm = algorithmConfig.CreateAlgorithm(n, lower, upper, initial, isMaximize);
 
             int iterationCount = 0;
+            int successfulEvaluationCount = 0;
             int fitnessTestsThisIteration = 0;
             int currentIteration = 1;
             double lastReportedFitness = double.NaN;
@@ -586,6 +587,8 @@ namespace XTMF2.Bus
                 }
                 latestValues = (double[])values.Clone();
                 double fitness = fitnessReader();
+                if (double.IsFinite(fitness))
+                    successfulEvaluationCount++;
                 report.Write(currentIteration, values, fitness);
                 lastReportedFitness = fitness;
                 var progressValues = paramEntries
@@ -643,7 +646,16 @@ namespace XTMF2.Bus
             }
 
             if (_cancelRequested)
+            {
+                if (successfulEvaluationCount > 0)
+                {
+                    var cancelledResults = paramEntries
+                        .Select((p, i) => (p.nodeIndex, algorithm.BestParameters[i]))
+                        .ToList();
+                    client.SendOptimizationResults(ID, cancelledResults);
+                }
                 return;
+            }
 
             if (firstRunError != null)
             {
