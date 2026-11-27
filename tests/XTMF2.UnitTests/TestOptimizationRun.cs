@@ -655,6 +655,103 @@ public class TestOptimizationRun
     }
 
     [TestMethod]
+    [DoNotParallelize]
+    public void CalibrationRun_CancelledRunCanApplyCurrentParameters()
+    {
+        RunInModelSystemContext(
+            nameof(CalibrationRun_CancelledRunCanApplyCurrentParameters),
+            (user, pSession, msSession) =>
+        {
+            CommandError error = null;
+            var modelSystem = msSession.ModelSystem;
+
+            Assert.IsTrue(msSession.AddModelSystemStart(user, modelSystem.GlobalBoundary, "Start",
+                Rectangle.Hidden, out Start start, out error), error?.Message);
+            Assert.IsTrue(msSession.AddNode(user, modelSystem.GlobalBoundary, "Scale",
+                typeof(BasicParameter<float>), Rectangle.Hidden, out var scaleNode, out error), error?.Message);
+            Assert.IsTrue(msSession.SetParameterValue(user, scaleNode, "0.25", out error), error?.Message);
+            Assert.IsTrue(msSession.AddVariable(user, scaleNode, out error), error?.Message);
+            Assert.IsTrue(msSession.AddNode(user, modelSystem.GlobalBoundary, "ModelOutput",
+                typeof(ScriptedParameter<float>), Rectangle.Hidden, out var modelOutputNode, out error), error?.Message);
+            Assert.IsTrue(msSession.SetParameterExpression(user, modelOutputNode, "Scale + Scale", out error),
+                error?.Message);
+            Assert.IsTrue(msSession.AddNode(user, modelSystem.GlobalBoundary, "ObservedTarget",
+                typeof(BasicParameter<float>), Rectangle.Hidden, out var targetNode, out error), error?.Message);
+            Assert.IsTrue(msSession.SetParameterValue(user, targetNode, "0.8", out error), error?.Message);
+
+            Assert.IsTrue(msSession.AddCalibrationGroup(user, "Default", out var group, out error), error?.Message);
+            Assert.IsTrue(msSession.AddCalibrationParameter(user, group!, scaleNode!, 0.0, 1.0,
+                out var entry, out error), error?.Message);
+            Assert.IsTrue(msSession.SetCalibrationEntryModelOutputNode(user, entry!, modelOutputNode!, out error),
+                error?.Message);
+            Assert.IsTrue(msSession.SetCalibrationEntryTargetOutputNode(user, entry!, targetNode!, out error),
+                error?.Message);
+            Assert.IsTrue(msSession.UpdateCalibrationParameter(user, entry!, 0.0, 1.0, true,
+                1e-4, 1.0, new ProportionalScalingAlgorithm(), out error), error?.Message);
+
+            Assert.IsTrue(msSession.AddNodeGenerateParameters(user, modelSystem.GlobalBoundary,
+                "SlowIteration", typeof(Sleep), Rectangle.Hidden, out var sleep, out var sleepParameters, out error),
+                error?.Message);
+            var sleepDuration = sleepParameters!.Single(parameter => parameter.Type == typeof(BasicParameter<int>));
+            Assert.IsTrue(msSession.SetParameterValue(user, sleepDuration, "100", out error), error?.Message);
+            Assert.IsTrue(msSession.AddLink(user, start, start.Hooks[0], sleep!, out _, out error), error?.Message);
+
+            IReadOnlyList<(int nodeIndex, double value)> receivedResults = null;
+            string terminalState = string.Empty;
+            CommandError cancellationError = null;
+            bool cancellationAccepted = false;
+            int cancellationRequested = 0;
+            using var terminal = new ManualResetEventSlim();
+            CreateRunClient(true, runBus =>
+            {
+                runBus.ClientIterationProgressAvailable += (_, runId, iteration, _, _, _) =>
+                {
+                    if (iteration == 1 && Interlocked.Exchange(ref cancellationRequested, 1) == 0)
+                        cancellationAccepted = runBus.CancelModelRun(runId, out cancellationError);
+                };
+                runBus.ClientOptimizationResultsAvailable += (_, _, results) => receivedResults = results;
+                runBus.ClientRunCancelled += (_, _) =>
+                {
+                    terminalState = "Cancelled";
+                    terminal.Set();
+                };
+                runBus.ClientFinishedModelSystem += (_, _) =>
+                {
+                    terminalState = "Finished";
+                    terminal.Set();
+                };
+                runBus.ClientErrorWhenRunningModelSystem += (_, _, message, _, _, _) =>
+                {
+                    terminalState = $"Failed: {message}";
+                    terminal.Set();
+                };
+
+                Assert.IsTrue(runBus.RunModelSystem(msSession,
+                    Path.Combine(pSession.RunsDirectory, nameof(CalibrationRun_CancelledRunCanApplyCurrentParameters)),
+                    "Start", RunMode.Calibration, out _, out error), error?.Message);
+                Assert.IsTrue(terminal.Wait(TestHelper.TestTimeoutMilliseconds),
+                    "The cancelled calibration did not report a terminal state.");
+            });
+
+            Assert.IsTrue(cancellationAccepted, cancellationError?.Message);
+            Assert.AreEqual("Cancelled", terminalState);
+            Assert.IsNotNull(receivedResults, "The cancelled calibration did not return its current parameters.");
+            Assert.HasCount(1, receivedResults!);
+            Assert.AreEqual(0.4, receivedResults![0].value, 1e-3,
+                "The result should contain the update produced by the first calibration iteration.");
+            Assert.AreEqual(0.25f, float.Parse(scaleNode!.ParameterValue!.Representation,
+                System.Globalization.CultureInfo.InvariantCulture), 1e-6f,
+                "Cancelling should not apply results automatically.");
+
+            Assert.IsTrue(msSession.ApplyOptimizationResults(user, receivedResults!, out error), error?.Message);
+            Assert.AreEqual((float)receivedResults[0].value,
+                float.Parse(scaleNode.ParameterValue!.Representation,
+                    System.Globalization.CultureInfo.InvariantCulture),
+                1e-5f, "The cancelled calibration's current parameter should be applicable.");
+        });
+    }
+
+    [TestMethod]
     public void CalibrationRun_FunctionTemplateParameterUpdatesEveryInstanceAndAppliesToTemplate()
     {
         RunInModelSystemContext(

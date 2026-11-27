@@ -818,7 +818,13 @@ namespace XTMF2.Bus
             }
 
             if (_cancelRequested)
+            {
+                var cancelledResults = paramEntries
+                    .Select((p, i) => (p.nodeIndex, current[i]))
+                    .ToList();
+                client.SendOptimizationResults(ID, cancelledResults);
                 return;
+            }
 
             client.SendStatusMessage(ID,
                 $"[Calibration] complete. Final parameters: " +

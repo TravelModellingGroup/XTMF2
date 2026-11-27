@@ -214,7 +214,7 @@ public sealed class HostBus : IDisposable
 
     /// <summary>
     /// Fired before the terminal run event when an estimation or calibration run has parameter
-    /// results to offer, including the best-so-far values when an estimation is cancelled.
+    /// results to offer, including best-so-far estimation or current calibration values on cancel.
     /// </summary>
     public event OptimizationResultsAvailable? ClientOptimizationResultsAvailable;
 
