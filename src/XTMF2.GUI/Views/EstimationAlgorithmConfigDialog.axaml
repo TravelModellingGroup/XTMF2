@@ -32,33 +32,42 @@
         </StackPanel>
 
         <!-- ── Algorithm parameters (dynamic) ─────────────────────────────── -->
-        <ItemsControl Grid.Row="1" ItemsSource="{Binding Parameters}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Spacing="10"/>
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="opt:AlgorithmParameterDescriptor">
-                    <Grid ColumnDefinitions="180,*">
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"/>
-                            <TextBlock Text="{Binding Hint}"
-                                       FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
-                        </StackPanel>
-                        <TextBox Grid.Column="1"
-                                 Text="{Binding Value, Mode=TwoWay}"
-                                 FontSize="12" VerticalAlignment="Center"
-                                 IsVisible="{Binding !HasOptions}"/>
-                        <ComboBox Grid.Column="1"
-                                  ItemsSource="{Binding Options}"
-                                  SelectedItem="{Binding Value, Mode=TwoWay}"
-                                  FontSize="12" VerticalAlignment="Center"
-                                  IsVisible="{Binding HasOptions}"/>
-                    </Grid>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <ScrollViewer Grid.Row="1"
+                      MaxHeight="400"
+                      VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Parameters}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="10"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="opt:AlgorithmParameterDescriptor">
+                        <Grid ColumnDefinitions="180,*">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding Hint}"
+                                           FontSize="10" Opacity="0.5" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding Value, Mode=TwoWay}"
+                                     FontSize="12" VerticalAlignment="Center"
+                                     IsVisible="{Binding !HasOptions}"/>
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding Options}"
+                                      SelectedItem="{Binding Value, Mode=TwoWay}"
+                                      FontSize="12" VerticalAlignment="Center"
+                                      IsVisible="{Binding HasOptions}">
+                                <ToolTip.Tip>
+                                    <TextBlock MaxWidth="320" TextWrapping="Wrap"
+                                               Text="Absorb: clamp the position at the bound. Reflect: bounce back into range and reverse velocity. Random Relocate: choose a new in-range position and reset velocity."/>
+                                </ToolTip.Tip>
+                            </ComboBox>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
         <!-- Footer -->
         <StackPanel Grid.Row="2"
