@@ -897,7 +897,18 @@ namespace XTMF2.Bus
                     || node.Type.GetGenericTypeDefinition() != typeof(BasicParameter<>)
                     || node.Type.GetGenericArguments()[0] != typeof(string))
                 {
-                    error = $"Shared-estimation parameter override node {pair.Key} is not a BasicParameter<string>.";
+                    var targetDescription = node switch
+                    {
+                        FunctionParameter parameter =>
+                            $"function parameter '{parameter.Name}' in function template '{parameter.Template.Name}'",
+                        FunctionInstance instance =>
+                            $"function instance '{instance.Name}' of function template '{instance.Template.Name}' " +
+                            $"in boundary '{instance.ContainedWithin.FullPath}'",
+                        _ => $"node '{node.Name}' in boundary '{node.ContainedWithin.FullPath}'"
+                    };
+                    var actualType = node.Type?.FullName ?? "<unknown>";
+                    error = $"Shared-estimation parameter override for {targetDescription} (node index {pair.Key}) " +
+                        $"is not a BasicParameter<string>; actual type is '{actualType}'.";
                     return false;
                 }
                 if (!node.SetParameterValue(ParameterExpression.CreateParameter(pair.Value, typeof(string)), out var setError))
