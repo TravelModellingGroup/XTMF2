@@ -3,7 +3,6 @@
         xmlns:vm="clr-namespace:XTMF2.GUI.ViewModels"
         xmlns:local="clr-namespace:XTMF2.GUI.Views"
     xmlns:controls="clr-namespace:XTMF2.GUI.Controls"
-        xmlns:xtmf2="clr-namespace:XTMF2.ModelSystemConstruct;assembly=XTMF2"
         x:Class="XTMF2.GUI.Views.CalibrationDialog"
         x:DataType="local:CalibrationDialog"
         x:CompileBindings="True"
@@ -236,7 +235,6 @@
 
         <!-- ── Output nodes for selected entry ───────────────────────────────── -->
         <Border Grid.Row="2"
-                IsVisible="{Binding HasSelectedEntry}"
                 BorderBrush="{DynamicResource DlgSep}"
                 BorderThickness="0,1,0,0"
                 Padding="4,8,4,4"
@@ -244,42 +242,46 @@
             <StackPanel Spacing="6">
                 <TextBlock Text="{Binding SelectedEntryHeader}"
                            FontSize="11" Opacity="0.6" Margin="0,0,0,2"/>
-                <!-- Model Output node row -->
-                <Grid ColumnDefinitions="120,*,Auto">
-                    <TextBlock Grid.Column="0" Text="Model Output:" VerticalAlignment="Center"
-                               FontSize="12" Margin="0,0,6,0"/>
-                    <ComboBox Grid.Column="1"
-                              ItemsSource="{Binding FunctionNodes}"
-                              SelectedItem="{Binding SelectedModelOutputNode, Mode=TwoWay}"
-                              PlaceholderText="(none)"
-                              FontSize="12">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="xtmf2:Node">
-                                <TextBlock Text="{Binding Name}"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button Grid.Column="2" Content="Clear"
-                            Click="ClearModelOutputNode_Click" Margin="4,0,0,0" Padding="10,5"/>
-                </Grid>
-                <!-- Target Output node row -->
-                <Grid ColumnDefinitions="120,*,Auto">
-                    <TextBlock Grid.Column="0" Text="Target Output:" VerticalAlignment="Center"
-                               FontSize="12" Margin="0,0,6,0"/>
-                    <ComboBox Grid.Column="1"
-                              ItemsSource="{Binding FunctionNodes}"
-                              SelectedItem="{Binding SelectedTargetOutputNode, Mode=TwoWay}"
-                              PlaceholderText="(none)"
-                              FontSize="12">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="xtmf2:Node">
-                                <TextBlock Text="{Binding Name}"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button Grid.Column="2" Content="Clear"
-                            Click="ClearTargetOutputNode_Click" Margin="4,0,0,0" Padding="10,5"/>
-                </Grid>
+                <StackPanel Spacing="6" IsEnabled="{Binding HasSelectedEntry}">
+                    <!-- Model Output node row -->
+                    <Grid ColumnDefinitions="120,*,Auto,Auto">
+                        <TextBlock Grid.Column="0" Text="Model Output:" VerticalAlignment="Center"
+                                   FontSize="12" Margin="0,0,6,0"/>
+                        <Border Grid.Column="1" Classes="dlg-list" Padding="6,4">
+                            <StackPanel Spacing="1">
+                                <TextBlock Text="{Binding SelectedModelOutputNodeName}"
+                                           FontSize="12"/>
+                                <TextBlock Text="{Binding SelectedModelOutputBoundaryPath}"
+                                           IsVisible="{Binding HasSelectedModelOutputNode}"
+                                           FontSize="10" Opacity="0.6"/>
+                            </StackPanel>
+                        </Border>
+                        <Button Grid.Column="2" Content="Choose..."
+                                Click="PickModelOutputNode_Click" Margin="4,0,0,0" Padding="10,5"/>
+                        <Button Grid.Column="3" Content="Clear"
+                                Click="ClearModelOutputNode_Click" Margin="4,0,0,0" Padding="10,5"
+                                IsEnabled="{Binding HasSelectedModelOutputNode}"/>
+                    </Grid>
+                    <!-- Target Output node row -->
+                    <Grid ColumnDefinitions="120,*,Auto,Auto">
+                        <TextBlock Grid.Column="0" Text="Target Output:" VerticalAlignment="Center"
+                                   FontSize="12" Margin="0,0,6,0"/>
+                        <Border Grid.Column="1" Classes="dlg-list" Padding="6,4">
+                            <StackPanel Spacing="1">
+                                <TextBlock Text="{Binding SelectedTargetOutputNodeName}"
+                                           FontSize="12"/>
+                                <TextBlock Text="{Binding SelectedTargetOutputBoundaryPath}"
+                                           IsVisible="{Binding HasSelectedTargetOutputNode}"
+                                           FontSize="10" Opacity="0.6"/>
+                            </StackPanel>
+                        </Border>
+                        <Button Grid.Column="2" Content="Choose..."
+                                Click="PickTargetOutputNode_Click" Margin="4,0,0,0" Padding="10,5"/>
+                        <Button Grid.Column="3" Content="Clear"
+                                Click="ClearTargetOutputNode_Click" Margin="4,0,0,0" Padding="10,5"
+                                IsEnabled="{Binding HasSelectedTargetOutputNode}"/>
+                    </Grid>
+                </StackPanel>
             </StackPanel>
         </Border>
 

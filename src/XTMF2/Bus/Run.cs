@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using XTMF2.ModelSystemConstruct;
 
@@ -377,33 +378,18 @@ namespace XTMF2.Bus
 
                 foreach (var fi in boundary.FunctionInstances)
                 {
+                    if (fi.TryResolveRuntimeModule(failingModule, out var templateNode, out var instancePath))
+                    {
+                        moduleName = string.Join(".", instancePath.Select(instance => instance.Name)
+                            .Append(templateNode!.Name));
+                        elementId = templateNode!.Id;
+                        return true;
+                    }
                     if (ReferenceEquals(fi.Module, failingModule))
                     {
                         moduleName = fi.Name;
                         elementId = fi.Id;
                         return true;
-                    }
-
-                    // Runtime failures from internal template modules are surfaced on the
-                    // function-instance canvas element because internals are not visible at
-                    // the boundary scope where the instance is placed.
-                    foreach (var internalStart in fi.Template.InternalModules.Starts)
-                    {
-                        if (ReferenceEquals(fi.GetRuntimeModule(internalStart), failingModule))
-                        {
-                            moduleName = fi.Name;
-                            elementId = fi.Id;
-                            return true;
-                        }
-                    }
-                    foreach (var internalNode in fi.Template.InternalModules.Modules)
-                    {
-                        if (ReferenceEquals(fi.GetRuntimeModule(internalNode), failingModule))
-                        {
-                            moduleName = fi.Name;
-                            elementId = fi.Id;
-                            return true;
-                        }
                     }
                 }
             }
@@ -445,11 +431,8 @@ namespace XTMF2.Bus
                 }
                 foreach (var fi in current.FunctionInstances)
                 {
-                    if (!fi.ValidateRuntimeModules(ref moduleName, ref errorMessage))
-                    {
-                        elementId = fi.Id;
+                    if (!fi.ValidateRuntimeModules(ref moduleName, ref errorMessage, ref elementId))
                         return false;
-                    }
                 }
             }
             return true;

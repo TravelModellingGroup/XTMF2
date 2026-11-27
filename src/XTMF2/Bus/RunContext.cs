@@ -225,7 +225,8 @@ namespace XTMF2.Bus
                 {
                     if (!entry.IsEnabled || !nodeToIndex.ContainsKey(entry.Node))
                         continue;
-                    if (BuildDoubleSetter(entry.Node) is { } setter)
+                    var targetModules = GetOptimizationParameterModules(ms, entry.Node);
+                    if (BuildDoubleSetter(entry.Node, targetModules) is { } setter)
                         setters.Add(setter);
                 }
 
@@ -486,7 +487,8 @@ namespace XTMF2.Bus
             if (!BuildAndValidateModelSystem(out var ms, out var start, out var buildError))
             {
                 if (buildError!.Type is RunErrorType.Validation or RunErrorType.RuntimeValidation)
-                    client.ModelRunFailedValidation(ID, buildError.Message ?? "Estimation setup failed");
+                    client.ModelRunFailedValidation(ID, buildError.Message ?? "Estimation setup failed",
+                        buildError.ModuleName, buildError.ElementId?.ToString());
                 else
                     client.ModelRunFailed(ID, buildError.Message, buildError.StackTrace, buildError.ModuleName, buildError.ElementId?.ToString());
                 return;
@@ -506,7 +508,8 @@ namespace XTMF2.Bus
                 {
                     if (!entry.IsEnabled) continue;
                     if (!nodeToIndex.TryGetValue(entry.Node, out var idx)) continue;
-                    var setter = BuildDoubleSetter(entry.Node);
+                    var targetModules = GetOptimizationParameterModules(ms, entry.Node);
+                    var setter = BuildDoubleSetter(entry.Node, targetModules);
                     if (setter is null) continue;
                     paramEntries.Add((idx, entry, setter));
                 }
@@ -541,6 +544,7 @@ namespace XTMF2.Bus
             var algorithm = algorithmConfig.CreateAlgorithm(n, lower, upper, initial, isMaximize);
 
             int iterationCount = 0;
+            int successfulEvaluationCount = 0;
             int fitnessTestsThisIteration = 0;
             int currentIteration = 1;
             double lastReportedFitness = double.NaN;
@@ -583,6 +587,8 @@ namespace XTMF2.Bus
                 }
                 latestValues = (double[])values.Clone();
                 double fitness = fitnessReader();
+                if (double.IsFinite(fitness))
+                    successfulEvaluationCount++;
                 report.Write(currentIteration, values, fitness);
                 lastReportedFitness = fitness;
                 var progressValues = paramEntries
@@ -640,12 +646,22 @@ namespace XTMF2.Bus
             }
 
             if (_cancelRequested)
+            {
+                if (successfulEvaluationCount > 0)
+                {
+                    var cancelledResults = paramEntries
+                        .Select((p, i) => (p.nodeIndex, algorithm.BestParameters[i]))
+                        .ToList();
+                    client.SendOptimizationResults(ID, cancelledResults);
+                }
                 return;
+            }
 
             if (firstRunError != null)
             {
                 if (firstRunError.Type is RunErrorType.Validation or RunErrorType.RuntimeValidation)
-                    client.ModelRunFailedValidation(ID, firstRunError.Message ?? "Unknown validation error");
+                    client.ModelRunFailedValidation(ID, firstRunError.Message ?? "Unknown validation error",
+                        firstRunError.ModuleName, firstRunError.ElementId?.ToString());
                 else
                     client.ModelRunFailed(ID, firstRunError.Message, firstRunError.StackTrace, firstRunError.ModuleName, firstRunError.ElementId?.ToString());
                 return;
@@ -675,7 +691,8 @@ namespace XTMF2.Bus
             if (!BuildAndValidateModelSystem(out var ms, out var start, out var buildError))
             {
                 if (buildError!.Type is RunErrorType.Validation or RunErrorType.RuntimeValidation)
-                    client.ModelRunFailedValidation(ID, buildError.Message ?? "Calibration setup failed");
+                    client.ModelRunFailedValidation(ID, buildError.Message ?? "Calibration setup failed",
+                        buildError.ModuleName, buildError.ElementId?.ToString());
                 else
                     client.ModelRunFailed(ID, buildError.Message, buildError.StackTrace, buildError.ModuleName, buildError.ElementId?.ToString());
                 return;
@@ -687,17 +704,19 @@ namespace XTMF2.Bus
                 : nodesByIndex.ToDictionary(kv => kv.Value, kv => kv.Key);
 
             // Ordered list of (nodeIndex, entry, setter, modelOutputReader, targetOutputReader) for all enabled parameters.
-            var paramEntries = new List<(int nodeIndex, CalibrationEntry entry, Action<double> setter, Func<double> modelOutputReader, Func<double> targetOutputReader)>();
+            var paramEntries = new List<(int nodeIndex, CalibrationEntry entry, Action<double> setter,
+                IReadOnlyList<IModule> targetModules, Func<double> modelOutputReader, Func<double> targetOutputReader)>();
             foreach (var group in ms.CalibrationGroups)
                 foreach (var entry in group.Parameters)
                 {
                     if (!entry.IsEnabled || entry.ModelOutputNode is null || entry.TargetOutputNode is null) continue;
                     if (!nodeToIndex.TryGetValue(entry.Node, out var idx)) continue;
-                    var setter            = BuildDoubleSetter(entry.Node);
+                    var targetModules = GetOptimizationParameterModules(ms, entry.Node);
+                    var setter            = BuildDoubleSetter(entry.Node, targetModules);
                     var modelOutputReader = BuildSignalReader(entry.ModelOutputNode);
                     var targetOutputReader = BuildSignalReader(entry.TargetOutputNode);
                     if (setter is null || modelOutputReader is null || targetOutputReader is null) continue;
-                    paramEntries.Add((idx, entry, setter, modelOutputReader, targetOutputReader));
+                    paramEntries.Add((idx, entry, setter, targetModules, modelOutputReader, targetOutputReader));
                 }
 
             if (paramEntries.Count == 0)
@@ -715,7 +734,7 @@ namespace XTMF2.Bus
 
             // Starting values: read from the current module parameter values.
             double[] current = paramEntries
-                .Select(p => GetInitialParameterValue(p.entry.Node))
+                .Select(p => GetInitialParameterValue(p.entry.Node, p.targetModules))
                 .ToArray();
 
             var originalDir = Directory.GetCurrentDirectory();
@@ -799,7 +818,13 @@ namespace XTMF2.Bus
             }
 
             if (_cancelRequested)
+            {
+                var cancelledResults = paramEntries
+                    .Select((p, i) => (p.nodeIndex, current[i]))
+                    .ToList();
+                client.SendOptimizationResults(ID, cancelledResults);
                 return;
+            }
 
             client.SendStatusMessage(ID,
                 $"[Calibration] complete. Final parameters: " +
@@ -858,7 +883,7 @@ namespace XTMF2.Bus
 
             if (!RuntimeValidateAll(ms, ref moduleName, ref errorMsg, ref elementId))
             {
-                RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, errorMsg);
+                RunResults.WriteValidationError(_currentWorkingDirectory, moduleName, errorMsg, elementId);
                 error = new RunError(RunErrorType.RuntimeValidation,
                     errorMsg ?? "Runtime validation failed.", moduleName, string.Empty, elementId);
                 return false;
@@ -890,7 +915,18 @@ namespace XTMF2.Bus
                     || node.Type.GetGenericTypeDefinition() != typeof(BasicParameter<>)
                     || node.Type.GetGenericArguments()[0] != typeof(string))
                 {
-                    error = $"Shared-estimation parameter override node {pair.Key} is not a BasicParameter<string>.";
+                    var targetDescription = node switch
+                    {
+                        FunctionParameter parameter =>
+                            $"function parameter '{parameter.Name}' in function template '{parameter.Template.Name}'",
+                        FunctionInstance instance =>
+                            $"function instance '{instance.Name}' of function template '{instance.Template.Name}' " +
+                            $"in boundary '{instance.ContainedWithin.FullPath}'",
+                        _ => $"node '{node.Name}' in boundary '{node.ContainedWithin.FullPath}'"
+                    };
+                    var actualType = node.Type?.FullName ?? "<unknown>";
+                    error = $"Shared-estimation parameter override for {targetDescription} (node index {pair.Key}) " +
+                        $"is not a BasicParameter<string>; actual type is '{actualType}'.";
                     return false;
                 }
                 if (!node.SetParameterValue(ParameterExpression.CreateParameter(pair.Value, typeof(string)), out var setError))
@@ -969,9 +1005,15 @@ namespace XTMF2.Bus
         /// Reads the current numeric value from a parameter node's module.  Falls back to
         /// parsing <see cref="Node.ParameterValue"/>, and ultimately defaults to 1.0.
         /// </summary>
-        private static double GetInitialParameterValue(Node node)
+        private static double GetInitialParameterValue(Node node, IReadOnlyList<IModule> targetModules)
         {
-            var module = node.Module;
+            if (IsInsideFunctionTemplate(node)
+                && node.ParameterValue is { } templateValue
+                && double.TryParse(templateValue.ToString(), System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var templateInitial))
+                return templateInitial;
+
+            var module = node.Module ?? targetModules.FirstOrDefault();
             if (module is IFunction<double> fd) return fd.Invoke();
             if (module is IFunction<float>  ff) return (double)ff.Invoke();
             if (node.ParameterValue is { } pv &&
@@ -986,34 +1028,67 @@ namespace XTMF2.Bus
         /// <see cref="ISetableValue{T}"/> module attached to <paramref name="node"/>.
         /// Returns <c>null</c> if the module does not implement a settable interface.
         /// </summary>
-        private static Action<double>? BuildDoubleSetter(Node node)
+        private static IReadOnlyList<IModule> GetOptimizationParameterModules(ModelSystem modelSystem, Node node)
         {
-            var module = node.Module;
+            var modules = new List<IModule>();
+            if (node.Module is { } module)
+                modules.Add(module);
+            modelSystem.GlobalBoundary.CollectRuntimeModulesForNode(node, modules);
+            return modules;
+        }
 
-            if (module is null) return null;
-
-            if (module is ISetableValue<double> sd) return v =>
+        private static bool IsInsideFunctionTemplate(Node node)
+        {
+            for (var boundary = node.ContainedWithin; boundary is not null; boundary = boundary.Parent)
             {
-                 sd.Set(v);
-                _ = node.SetParameterValue(ParameterExpression.CreateParameter(v.ToString(CultureInfo.InvariantCulture), typeof(double)), out var _);
-            };
-            if (module is ISetableValue<float> sf) return v => 
-            {
-                sf.Set((float)v);
-                _ = node.SetParameterValue(ParameterExpression.CreateParameter(((float)v).ToString(CultureInfo.InvariantCulture), typeof(float)), out var _);
-            };
-            if (module is BasicParameter<double> bd) return v => 
-            { 
-                bd.Value = v;
-                _ = node.SetParameterValue(ParameterExpression.CreateParameter(v.ToString(CultureInfo.InvariantCulture), typeof(double)), out var _); 
-            };
-            if (module is BasicParameter<float> bf) return v => 
-            { 
-                bf.Value = (float)v;
-                _ = node.SetParameterValue(ParameterExpression.CreateParameter(((float)v).ToString(CultureInfo.InvariantCulture), typeof(float)), out var _); 
-            };
+                if (boundary.OwningFunctionTemplate is not null)
+                    return true;
+            }
+            return false;
+        }
 
-            // Fallback for any other ISetableValue<T> via reflection.
+        private static Action<double>? BuildDoubleSetter(Node node, IReadOnlyList<IModule> modules)
+        {
+            if (modules.Count == 0) return null;
+            var setters = new Action<double>[modules.Count];
+            for (var i = 0; i < modules.Count; i++)
+            {
+                var setter = BuildModuleDoubleSetter(modules[i]);
+                if (setter is null) return null;
+                setters[i] = setter;
+            }
+
+            return value =>
+            {
+                foreach (var setter in setters)
+                    setter(value);
+
+                var valueType = node.Type.GetGenericArguments()[0];
+                if (valueType == typeof(double))
+                {
+                    if (!node.SetParameterValue(
+                            ParameterExpression.CreateParameter(value.ToString(CultureInfo.InvariantCulture), valueType),
+                            out var error))
+                        throw new InvalidOperationException(error?.Message ?? "Unable to update the parameter node value.");
+                }
+                else if (valueType == typeof(float))
+                {
+                    var floatValue = (float)value;
+                    if (!node.SetParameterValue(
+                            ParameterExpression.CreateParameter(floatValue.ToString(CultureInfo.InvariantCulture), valueType),
+                            out var error))
+                        throw new InvalidOperationException(error?.Message ?? "Unable to update the parameter node value.");
+                }
+            };
+        }
+
+        private static Action<double>? BuildModuleDoubleSetter(IModule module)
+        {
+            if (module is ISetableValue<double> sd) return sd.Set;
+            if (module is ISetableValue<float> sf) return v => sf.Set((float)v);
+            if (module is BasicParameter<double> bd) return v => bd.Value = v;
+            if (module is BasicParameter<float> bf) return v => bf.Value = (float)v;
+
             foreach (var iface in module.GetType().GetInterfaces())
             {
                 if (iface.IsGenericType &&

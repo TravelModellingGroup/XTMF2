@@ -213,8 +213,8 @@ public sealed class HostBus : IDisposable
         object sender, string runID, IReadOnlyList<(int nodeIndex, double value)> results);
 
     /// <summary>
-    /// Fired immediately before <see cref="ClientFinishedModelSystem"/> when an estimation or
-    /// calibration run completes, carrying the final optimised parameter values.
+    /// Fired before the terminal run event when an estimation or calibration run has parameter
+    /// results to offer, including best-so-far estimation or current calibration values on cancel.
     /// </summary>
     public event OptimizationResultsAvailable? ClientOptimizationResultsAvailable;
 

@@ -3092,8 +3092,8 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
             if (ftvm is not null)
                 NavigateIntoFunctionTemplate(ftvm);
         }
-        else if (containingBoundary is not null &&
-                 !ReferenceEquals(_currentBoundary, containingBoundary))
+        if (containingBoundary is not null &&
+            !ReferenceEquals(_currentBoundary, containingBoundary))
         {
             SwitchToBoundary(containingBoundary);
         }
@@ -3165,7 +3165,7 @@ public sealed partial class ModelSystemEditorViewModel : ObservableObject, IDisp
                 queue.Enqueue((ft.InternalModules, ft));
             }
             foreach (var sub in b.Boundaries)
-                queue.Enqueue((sub, null));
+                queue.Enqueue((sub, sourceFt));
         }
         containingBoundary = null; ftToEnter = null; element = null;
         return false;

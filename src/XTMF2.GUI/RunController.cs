@@ -364,6 +364,16 @@ public class RunController : IDisposable
             return;
         if (!completion.Succeeded)
         {
+            if (completion.FailureReason == SharedEstimationCoordinatorRun.CancellationFailureReason &&
+                completion.TotalEvaluations > 0 &&
+                completion.BestParameters.Count == metadata.Count)
+            {
+                var cancelledResults = metadata
+                    .Select((item, index) => (item.nodeIndex, completion.BestParameters[index]))
+                    .ToArray();
+                RunsViewModel.NotifyOptimizationResults(completion.RunId, session, user, cancelledResults);
+                OptimizationResultsAvailable?.Invoke(completion.RunId, session, cancelledResults);
+            }
             RunsViewModel.NotifySharedEstimationFailed(completion.RunId,
                 completion.FailureReason ?? "Remote estimation failed.");
             return;
@@ -597,6 +607,17 @@ public class RunController : IDisposable
                     cancellationToken: cancellation.Token);
                 if (!completion.Succeeded)
                 {
+                    if (cancellation.IsCancellationRequested &&
+                        completion.TotalEvaluations > 0 &&
+                        completion.BestParameters.Count == parameterEntries.Length)
+                    {
+                        var cancelledResults = parameterEntries
+                            .Select((item, index) => (nodeIndex: item.nodeIndex,
+                                value: completion.BestParameters[index]))
+                            .ToArray();
+                        RunsViewModel.NotifyOptimizationResults(runId, msSession, user, cancelledResults);
+                        OptimizationResultsAvailable?.Invoke(runId, msSession, cancelledResults);
+                    }
                     RunsViewModel.NotifySharedEstimationFailed(runId,
                         completion.FailureReason ?? "Shared estimation failed.");
                     return;

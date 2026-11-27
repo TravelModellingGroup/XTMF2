@@ -374,12 +374,79 @@ namespace XTMF2.ModelSystemConstruct
         internal IModule? GetRuntimeModule(FunctionInstance templateInstance)
             => GetRuntimeModule((Node)templateInstance);
 
+        internal void CollectRuntimeModulesForNode(Node templateNode, List<IModule> modules)
+        {
+            if (_runtimeModules?.TryGetValue(templateNode, out var module) == true)
+                modules.Add(module);
+
+            if (_nestedRuntimeInstances is null)
+                return;
+
+            foreach (var nested in _nestedRuntimeInstances.Values)
+                nested.CollectRuntimeModulesForNode(templateNode, modules);
+        }
+
+        internal bool TryResolveRuntimeModule(IModule failingModule, out Node? templateNode,
+            out IReadOnlyList<FunctionInstance> instancePath)
+        {
+            if (_runtimeModules is not null)
+            {
+                foreach (var (node, module) in _runtimeModules)
+                {
+                    if (ReferenceEquals(module, failingModule))
+                    {
+                        templateNode = node;
+                        instancePath = [this];
+                        return true;
+                    }
+                }
+            }
+
+            if (_nestedRuntimeInstances is not null)
+            {
+                foreach (var nested in _nestedRuntimeInstances.Values)
+                {
+                    if (nested.TryResolveRuntimeModule(failingModule, out templateNode, out var nestedPath))
+                    {
+                        instancePath = new[] { this }.Concat(nestedPath).ToArray();
+                        return true;
+                    }
+                }
+            }
+
+            templateNode = null;
+            instancePath = Array.Empty<FunctionInstance>();
+            return false;
+        }
+
         private FunctionInstance CreateRuntimeClone()
         {
             var clone = new FunctionInstance(Name, Template, ContainedWithin, Location, Id, isRuntimeClone: true);
             if (IsDisabled)
                 _ = clone.SetDisabled(true, out _);
             return clone;
+        }
+
+        private static (List<Start> Starts, List<Node> Nodes, List<FunctionInstance> FunctionInstances,
+            List<Link> Links) CollectTemplateRuntimeElements(Boundary root)
+        {
+            var starts = new List<Start>();
+            var nodes = new List<Node>();
+            var functionInstances = new List<FunctionInstance>();
+            var links = new List<Link>();
+
+            void Collect(Boundary boundary)
+            {
+                starts.AddRange(boundary.Starts);
+                nodes.AddRange(boundary.Modules);
+                functionInstances.AddRange(boundary.FunctionInstances);
+                links.AddRange(boundary.Links);
+                foreach (var child in boundary.Boundaries)
+                    Collect(child);
+            }
+
+            Collect(root);
+            return (starts, nodes, functionInstances, links);
         }
 
         /// <summary>
@@ -401,11 +468,13 @@ namespace XTMF2.ModelSystemConstruct
             _parameterBindings = new Dictionary<FunctionParameter, IModule?>(ReferenceEqualityComparer.Instance);
             _nestedRuntimeInstances = new Dictionary<FunctionInstance, FunctionInstance>(ReferenceEqualityComparer.Instance);
             var internals = Template.InternalModules;
-            foreach (var start in internals.Starts)
+            var elements = CollectTemplateRuntimeElements(internals);
+            foreach (var start in elements.Starts)
             {
                 if (!start.ConstructModuleInstance(runtime, out var m, ref error))
                 {
                     elementId = start.Id;
+                    error = $"Function instance '{Name}', internal start '{start.Name}': {error}";
                     return false;  
                 } 
                 if (m is RuntimeModules.GetFunctionInstanceName getInstanceName)
@@ -413,11 +482,12 @@ namespace XTMF2.ModelSystemConstruct
                 _runtimeModules[start] = m!;
                 WrapScriptedExpression(start, m!);
             }
-            foreach (var node in internals.Modules)
+            foreach (var node in elements.Nodes)
             {
                 if (!node.ConstructModuleInstance(runtime, out var m, ref error)) 
                 {
                     elementId = node.Id;
+                    error = $"Function instance '{Name}', internal node '{node.Name}': {error}";
                     return false;
                 }
                 if (m is RuntimeModules.GetFunctionInstanceName getInstanceName)
@@ -425,13 +495,13 @@ namespace XTMF2.ModelSystemConstruct
                 _runtimeModules[node] = m!;
                 WrapScriptedExpression(node, m!);
             }
-            foreach (var nested in internals.FunctionInstances)
+            foreach (var nested in elements.FunctionInstances)
             {
                 var runtimeNested = nested.CreateRuntimeClone();
                 _nestedRuntimeInstances[nested] = runtimeNested;
                 if (!runtimeNested.ConstructRuntimeModules(runtime, ref error, ref elementId))
                 {
-                    elementId = nested.Id;
+                    error = $"Function instance '{Name}', nested instance '{nested.Name}': {error}";
                     return false;
                 }
             }
@@ -523,7 +593,7 @@ namespace XTMF2.ModelSystemConstruct
                 return true;
             }
             if (_runtimeModules is null) { error = null; return true; }
-            var links = Template.InternalModules.Links;
+            var links = CollectTemplateRuntimeElements(Template.InternalModules).Links;
             foreach (var link in links.Where(link =>
                 link.Origin is FunctionInstance && link.OriginHook is FunctionParameterHook))
             {
@@ -709,6 +779,10 @@ namespace XTMF2.ModelSystemConstruct
         }
 
         internal bool ValidateRuntimeModules(ref string? moduleName, ref string? error, ref Guid? elementId)
+            => ValidateRuntimeModules(ref moduleName, ref error, ref elementId, Name);
+
+        private bool ValidateRuntimeModules(ref string? moduleName, ref string? error,
+            ref Guid? elementId, string instancePath)
         {
             if (_runtimeModules is null) { error = null; return true; }
             foreach (var (node, module) in _runtimeModules)
@@ -717,17 +791,15 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     if (!module.RuntimeValidation(ref error))
                     {
-                        moduleName = Name + "." + node.Name;
-                        // Internal template nodes are not directly visible from the boundary;
-                        // navigate to the owning FunctionInstance on the canvas.
-                        elementId = Id;
+                        moduleName = instancePath + "." + node.Name;
+                        elementId = node.Id;
                         return false;
                     }
                 }
                 catch (Exception e)
                 {
-                    moduleName = Name + "." + node.Name;
-                    elementId = Id;
+                    moduleName = instancePath + "." + node.Name;
+                    elementId = node.Id;
                     error = e.Message;
                     return false;
                 }
@@ -736,7 +808,8 @@ namespace XTMF2.ModelSystemConstruct
             {
                 foreach (var nested in _nestedRuntimeInstances.Values)
                 {
-                    if (!nested.ValidateRuntimeModules(ref moduleName, ref error, ref elementId))
+                    if (!nested.ValidateRuntimeModules(ref moduleName, ref error, ref elementId,
+                            instancePath + "." + nested.Name))
                         return false;
                 }
             }

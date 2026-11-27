@@ -284,13 +284,21 @@ namespace XTMF2.ModelSystemConstruct
                 {
                     if (!fi.ConstructRuntimeModules(runtime, ref error, ref elementId))
                     {
-                        elementId = fi.Id;
+                        elementId ??= fi.Id;
                         return false;
                     }
                 }
                 error = null;
                 return true;
             }
+        }
+
+        internal void CollectRuntimeModulesForNode(Node templateNode, List<IModule> modules)
+        {
+            foreach (var fi in _functionInstances)
+                fi.CollectRuntimeModulesForNode(templateNode, modules);
+            foreach (var child in _boundaries)
+                child.CollectRuntimeModulesForNode(templateNode, modules);
         }
 
         internal bool HasChildWithName(string name)

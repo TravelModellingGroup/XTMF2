@@ -12,6 +12,8 @@ namespace XTMF2.Bus.Optimization;
 /// </summary>
 public sealed class SharedEstimationCoordinatorRun
 {
+    public const string CancellationFailureReason = "Shared estimation was cancelled.";
+
     private readonly SharedEstimationCoordinator _coordinator;
     private readonly IEstimationAlgorithm _algorithm;
     private readonly string _runId;
@@ -107,14 +109,16 @@ public sealed class SharedEstimationCoordinatorRun
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            var bestFitness = _hasObservedFitness ? _lastReportedFitness : _algorithm.BestFitness;
+            var bestParameters = _hasObservedFitness ? _bestObservedParameters : _algorithm.BestParameters;
             return new SharedEstimationCompletion(
                 _runId,
                 false,
-                _algorithm.BestFitness,
-                _algorithm.BestParameters,
+                bestFitness,
+                bestParameters,
                 _evaluationsCompleted,
                 _iterations,
-                "Shared estimation was cancelled.");
+                CancellationFailureReason);
         }
         catch (Exception exception)
         {

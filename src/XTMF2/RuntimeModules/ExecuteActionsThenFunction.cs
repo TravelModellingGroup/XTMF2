@@ -28,7 +28,7 @@ Description = "Allows you to execute actions before calling a function.  This al
     public class ExecuteActionsThenFunction<Return> : BaseFunction<Return>
     {
         [SubModule(Index = 0, Name = "Invoke First", Description = "Actions to invoke before invoking the function.", PassesExecution = true)]
-        public IAction[]? InvokeFirst;
+        public IAction[] InvokeFirst = null!;
 
         [Parameter(Index = 1, Name = "Invoke Actions in Parallel", Description = "Should the actions be invoked in parallel?", DefaultValue = "false")]
         public IFunction<bool>? InvokeActionsInParallel;
@@ -36,23 +36,34 @@ Description = "Allows you to execute actions before calling a function.  This al
         [SubModule(Index = 2, Required = true, Name = "End With", Description = "The function to invoke and return the value of.", PassesExecution = true)]
         public IFunction<Return>? EndWith;
 
+        [SubModule(Index = 3, Name = "After Function", Description = "Actions to invoke after invoking the function.", PassesExecution = true)]
+        public IAction[] AfterFunction = null!;
+
         public override Return Invoke()
         {
-            if (InvokeActionsInParallel!.Invoke())
+            var parallel = InvokeActionsInParallel?.Invoke() ?? false;
+            InvokeActions(InvokeFirst, parallel);
+            var ret = EndWith!.Invoke();
+            InvokeActions(AfterFunction, parallel);
+            return ret;
+        }
+
+        private void InvokeActions(IAction[] actions, bool parallel)
+        {
+            if (parallel)
             {
-                Parallel.ForEach(InvokeFirst!, (module) =>
+                Parallel.ForEach(actions, (module) =>
                 {
                     module.Invoke();
                 });
             }
             else
             {
-                foreach (var module in InvokeFirst!)
+                foreach (var module in actions)
                 {
                     module.Invoke();
                 }
             }
-            return EndWith!.Invoke();
         }
     }
 

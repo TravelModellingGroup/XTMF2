@@ -431,7 +431,22 @@ public sealed partial class RunViewModel : ObservableObject
             if (!completion.Succeeded)
             {
                 if (IsCancellationRequested)
+                {
+                    if (completion.TotalEvaluations > 0 &&
+                        completion.BestParameters.Count == parameters.Count)
+                    {
+                        _optimizationResults = completion.BestParameters
+                            .Select((value, index) => (parameters[index].NodeIndex, value))
+                            .ToArray();
+                        if (_session is not null && _user is not null)
+                        {
+                            _optimizationSession = _session;
+                            _optimizationUser = _user;
+                        }
+                        HasOptimizationResults = _optimizationResults.Count > 0;
+                    }
                     MarkCancelled();
+                }
                 else
                     MarkError(completion.FailureReason ?? "Remote estimation failed.", string.Empty, null, null);
                 return;
@@ -961,7 +976,7 @@ public sealed partial class RunViewModel : ObservableObject
         _optimizationUser = user;
         _optimizationResults = results;
         HasOptimizationResults = true;
-        AppendStatus($"[Optimization complete] {results.Count} parameter(s) ready to apply.");
+        AppendStatus($"[Optimization results] {results.Count} parameter(s) ready to apply.");
     }
 
     private bool CanApplyOptimizationResults()

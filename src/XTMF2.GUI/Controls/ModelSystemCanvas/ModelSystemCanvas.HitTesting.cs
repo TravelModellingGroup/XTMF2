@@ -800,13 +800,10 @@ partial class ModelSystemCanvas
         if (!_fiVisibleHooks.TryGetValue(fi, out var visibleHooks))
             return fi.Height;
 
-        var storedHeight = fi.UnderlyingInstance.Location.Height is 0
-            ? 50.0
-            : fi.UnderlyingInstance.Location.Height;
         int embeddedRows = _nestedEmbeddedParameterRows.TryGetValue(fi, out var nestedRows)
             ? nestedRows.Count
             : 0;
-        return Math.Max(storedHeight,
+        return Math.Max(fi.Height,
             FtHeaderHeight + (visibleHooks.Count + embeddedRows) * FtHookRowHeight);
     }
 

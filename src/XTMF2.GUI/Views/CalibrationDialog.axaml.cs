@@ -55,6 +55,7 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
     public ModelSystemEditorViewModel EditorVm { get; }
 
     private bool _allowClose;
+    private bool _outputPickerOpen;
     private readonly ObservableCollection<CalibrationGroupViewModel> _filteredGroupVms = [];
     private readonly ObservableCollection<CalibrationEntryViewModel> _filteredEntryVms = [];
     private readonly HashSet<CalibrationGroupViewModel> _hookedGroups = [];
@@ -99,10 +100,8 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
     private void ClearSelectedGroup()
     {
         _selectedEntry = null;
-        _suppressCommands = true;
         _selectedModelOutputNode  = null;
         _selectedTargetOutputNode = null;
-        _suppressCommands = false;
     }
 
     public CalibrationGroupViewModel? SelectedGroup
@@ -122,8 +121,12 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
             Raise(nameof(SelectedEntry));
             Raise(nameof(HasSelectedEntry));
             Raise(nameof(SelectedEntryHeader));
-            Raise(nameof(SelectedModelOutputNode));
-            Raise(nameof(SelectedTargetOutputNode));
+            Raise(nameof(SelectedModelOutputNodeName));
+            Raise(nameof(SelectedTargetOutputNodeName));
+            Raise(nameof(SelectedModelOutputBoundaryPath));
+            Raise(nameof(SelectedTargetOutputBoundaryPath));
+            Raise(nameof(HasSelectedModelOutputNode));
+            Raise(nameof(HasSelectedTargetOutputNode));
             RefreshFilteredEntries();
         }
     }
@@ -173,59 +176,38 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
             _selectedEntry = value;
             if (value is not null)
             {
-                _suppressCommands = true;
                 _selectedModelOutputNode  = value.Entry.ModelOutputNode;
                 _selectedTargetOutputNode = value.Entry.TargetOutputNode;
-                _suppressCommands = false;
             }
             Raise(nameof(SelectedEntry));
             Raise(nameof(HasSelectedEntry));
             Raise(nameof(SelectedEntryHeader));
-            Raise(nameof(SelectedModelOutputNode));
-            Raise(nameof(SelectedTargetOutputNode));
+            Raise(nameof(SelectedModelOutputNodeName));
+            Raise(nameof(SelectedTargetOutputNodeName));
+            Raise(nameof(SelectedModelOutputBoundaryPath));
+            Raise(nameof(SelectedTargetOutputBoundaryPath));
+            Raise(nameof(HasSelectedModelOutputNode));
+            Raise(nameof(HasSelectedTargetOutputNode));
         }
     }
 
     public bool HasSelectedEntry => _selectedEntry is not null;
 
     public string SelectedEntryHeader =>
-        _selectedEntry is null ? string.Empty : $"Editing: {_selectedEntry.NodeName}";
+        _selectedEntry is null
+            ? "Select a parameter to edit its model and target outputs."
+            : $"Editing: {_selectedEntry.NodeName}";
 
     // ── Output nodes ───────────────────────────────────────────────────────
 
     private Node? _selectedModelOutputNode;
     private Node? _selectedTargetOutputNode;
-    private bool _suppressCommands;
-
-    public Node? SelectedModelOutputNode
-    {
-        get => _selectedModelOutputNode;
-        set
-        {
-            if (_selectedModelOutputNode == value) return;
-            _selectedModelOutputNode = value;
-            Raise(nameof(SelectedModelOutputNode));
-            if (!_suppressCommands && _selectedEntry is not null)
-                EditorVm.Session.SetCalibrationEntryModelOutputNode(
-                    EditorVm.User, _selectedEntry.Entry, value, out _);
-        }
-    }
-
-    public Node? SelectedTargetOutputNode
-    {
-        get => _selectedTargetOutputNode;
-        set
-        {
-            if (_selectedTargetOutputNode == value) return;
-            _selectedTargetOutputNode = value;
-            Raise(nameof(SelectedTargetOutputNode));
-            if (!_suppressCommands && _selectedEntry is not null)
-                EditorVm.Session.SetCalibrationEntryTargetOutputNode(
-                    EditorVm.User, _selectedEntry.Entry, value, out _);
-        }
-    }
-
-    public List<Node> FunctionNodes => EditorVm?.GetFunctionNodes() ?? new();
+    public string SelectedModelOutputNodeName => _selectedModelOutputNode?.Name ?? "(none)";
+    public string SelectedTargetOutputNodeName => _selectedTargetOutputNode?.Name ?? "(none)";
+    public string SelectedModelOutputBoundaryPath => _selectedModelOutputNode?.ContainedWithin.FullPath ?? string.Empty;
+    public string SelectedTargetOutputBoundaryPath => _selectedTargetOutputNode?.ContainedWithin.FullPath ?? string.Empty;
+    public bool HasSelectedModelOutputNode => _selectedModelOutputNode is not null;
+    public bool HasSelectedTargetOutputNode => _selectedTargetOutputNode is not null;
 
     // ── Edit fields ───────────────────────────────────────────────────────
 
@@ -254,6 +236,13 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
 
     private void OnDialogKeyDown(object? sender, KeyEventArgs e)
     {
+        if (_outputPickerOpen)
+        {
+            if (e.Key == Key.Escape)
+                e.Handled = true;
+            return;
+        }
+
         if (DialogKeyboardNavigation.TrySwitchPane(
                 this, GroupPane, TargetPane, GroupSearchBox, TargetSearchBox, HasSelectedGroup, e))
             return;
@@ -539,26 +528,82 @@ public partial class CalibrationDialog : Window, INotifyPropertyChanged
 
     // ── Entry event handlers ──────────────────────────────────────────────
 
-    private void ClearModelOutputNode_Click(object? sender, RoutedEventArgs e)
+    private async void PickModelOutputNode_Click(object? sender, RoutedEventArgs e)
     {
         if (_selectedEntry is null) return;
-        EditorVm.Session.SetCalibrationEntryModelOutputNode(
-            EditorVm.User, _selectedEntry.Entry, null, out _);
-        _suppressCommands = true;
-        _selectedModelOutputNode = null;
-        _suppressCommands = false;
-        Raise(nameof(SelectedModelOutputNode));
+        await PickOutputNodeAsync(isModelOutput: true);
     }
 
-    private void ClearTargetOutputNode_Click(object? sender, RoutedEventArgs e)
+    private async void PickTargetOutputNode_Click(object? sender, RoutedEventArgs e)
     {
         if (_selectedEntry is null) return;
-        EditorVm.Session.SetCalibrationEntryTargetOutputNode(
-            EditorVm.User, _selectedEntry.Entry, null, out _);
-        _suppressCommands = true;
-        _selectedTargetOutputNode = null;
-        _suppressCommands = false;
-        Raise(nameof(SelectedTargetOutputNode));
+        await PickOutputNodeAsync(isModelOutput: false);
+    }
+
+    private async Task PickOutputNodeAsync(bool isModelOutput)
+    {
+        if (_selectedEntry is null) return;
+
+        var currentNode = isModelOutput
+            ? _selectedEntry.Entry.ModelOutputNode
+            : _selectedEntry.Entry.TargetOutputNode;
+        var label = isModelOutput ? "model output node" : "target output node";
+        var picker = new FunctionNodePickerDialog(EditorVm.GetFunctionNodes(), currentNode, label);
+        _outputPickerOpen = true;
+        try
+        {
+            await picker.ShowDialog(this);
+        }
+        finally
+        {
+            _outputPickerOpen = false;
+        }
+
+        if (!picker.Confirmed || picker.SelectedNode is not { } selectedNode)
+            return;
+
+        await SetOutputNodeAsync(isModelOutput, selectedNode);
+    }
+
+    private async void ClearModelOutputNode_Click(object? sender, RoutedEventArgs e)
+        => await SetOutputNodeAsync(isModelOutput: true, node: null);
+
+    private async void ClearTargetOutputNode_Click(object? sender, RoutedEventArgs e)
+        => await SetOutputNodeAsync(isModelOutput: false, node: null);
+
+    private async Task SetOutputNodeAsync(bool isModelOutput, Node? node)
+    {
+        if (_selectedEntry is null) return;
+
+        if (isModelOutput)
+        {
+            if (!EditorVm.Session.SetCalibrationEntryModelOutputNode(
+                    EditorVm.User, _selectedEntry.Entry, node, out var error))
+            {
+                await new MessageDialog("Update Failed", error.Message).ShowDialog(this);
+                return;
+            }
+
+            _selectedModelOutputNode = node;
+        }
+        else
+        {
+            if (!EditorVm.Session.SetCalibrationEntryTargetOutputNode(
+                    EditorVm.User, _selectedEntry.Entry, node, out var error))
+            {
+                await new MessageDialog("Update Failed", error.Message).ShowDialog(this);
+                return;
+            }
+
+            _selectedTargetOutputNode = node;
+        }
+
+        Raise(nameof(SelectedModelOutputNodeName));
+        Raise(nameof(SelectedTargetOutputNodeName));
+        Raise(nameof(SelectedModelOutputBoundaryPath));
+        Raise(nameof(SelectedTargetOutputBoundaryPath));
+        Raise(nameof(HasSelectedModelOutputNode));
+        Raise(nameof(HasSelectedTargetOutputNode));
     }
 
     private async void RemoveEntry_Click(object? sender, RoutedEventArgs e)
