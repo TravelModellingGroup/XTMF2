@@ -862,6 +862,8 @@ public class TestOptimization
                     CognitiveCoeff = 1.2,
                     SocialCoeff = 1.3,
                     ConvergenceTolerance = 1e-8,
+                    BoundaryStrategy = ParticleSwarmBoundaryStrategy.RandomRelocate,
+                    MovementReduction = 0.35,
                     RandomSeed = 202402
                 };
                 Assert.IsTrue(msSession.SetEstimationAlgorithmConfig(user, cfg, out error), error?.Message);
@@ -877,6 +879,8 @@ public class TestOptimization
                 Assert.AreEqual(1.2,  loaded.CognitiveCoeff);
                 Assert.AreEqual(1.3,  loaded.SocialCoeff);
                 Assert.AreEqual(1e-8, loaded.ConvergenceTolerance);
+                Assert.AreEqual(ParticleSwarmBoundaryStrategy.RandomRelocate, loaded.BoundaryStrategy);
+                Assert.AreEqual(0.35, loaded.MovementReduction);
                 Assert.AreEqual(202402, loaded.RandomSeed);
             });
     }
